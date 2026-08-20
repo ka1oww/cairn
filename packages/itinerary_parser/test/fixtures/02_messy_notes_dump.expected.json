@@ -1,0 +1,113 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": "Kyoto",
+      "stops": [
+        {
+          "text": "fushimi inari early before crowds",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "-fushimi inari early before crowds"
+          }
+        },
+        {
+          "text": "lunch @ nishiki market",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 5,
+            "text": "- lunch @ nishiki market"
+          }
+        },
+        {
+          "text": "kiyomizu dera in the afternoon, maybe 4pm?",
+          "time": {
+            "hour": 16,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 6,
+            "text": "kiyomizu dera in the afternoon, maybe 4pm?"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 3,
+        "text": "Day 1 - Kyoto"
+      }
+    },
+    {
+      "index": 2,
+      "date": null,
+      "place": "osaka",
+      "stops": [
+        {
+          "text": "osaka castle",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 10,
+            "text": "osaka castle"
+          }
+        },
+        {
+          "text": "dotonbori at night 7pm",
+          "time": {
+            "hour": 19,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 11,
+            "text": "- dotonbori at night 7pm"
+          }
+        },
+        {
+          "text": "don't forget to check hotel wifi password",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 12,
+            "text": "don't forget to check hotel wifi password"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 9,
+        "text": "Day 2 osaka"
+      }
+    }
+  ],
+  "unplacedLines": [
+    {
+      "sourceLine": {
+        "lineNumber": 1,
+        "text": "JAPAN TRIP NOV 2026"
+      },
+      "reason": "preamble"
+    },
+    {
+      "sourceLine": {
+        "lineNumber": 13,
+        "text": "http://maps.google.com/xyz"
+      },
+      "reason": "url"
+    },
+    {
+      "sourceLine": {
+        "lineNumber": 16,
+        "text": "sent from my iPhone"
+      },
+      "reason": "signature-line"
+    }
+  ],
+  "overallConfidence": "medium",
+  "usedHeaderlessFallback": false
+}

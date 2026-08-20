@@ -1,0 +1,70 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": "Arrival day",
+      "stops": [
+        {
+          "text": "Land at Kansai Airport",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "- Land at Kansai Airport"
+          }
+        },
+        {
+          "text": "19:00 Check in to hotel",
+          "time": {
+            "hour": 19,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "- 19:00 Check in to hotel"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "3/11 - Arrival day"
+      }
+    },
+    {
+      "index": 2,
+      "date": "2026-11-04",
+      "place": null,
+      "stops": [
+        {
+          "text": "Osaka Castle",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 6,
+            "text": "- Osaka Castle"
+          }
+        },
+        {
+          "text": "Kuromon Market for lunch",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 7,
+            "text": "- Kuromon Market for lunch"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 5,
+        "text": "2026-11-04"
+      }
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "medium",
+  "usedHeaderlessFallback": false
+}

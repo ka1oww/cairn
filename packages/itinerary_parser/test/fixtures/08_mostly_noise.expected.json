@@ -1,0 +1,61 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Trip stuff",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 1,
+            "text": "Trip stuff"
+          }
+        }
+      ],
+      "confidence": "low",
+      "headerSourceLine": null
+    }
+  ],
+  "unplacedLines": [
+    {
+      "sourceLine": {
+        "lineNumber": 3,
+        "text": "Confirmation code: XJ29KQ"
+      },
+      "reason": "hotel-booking-reference"
+    },
+    {
+      "sourceLine": {
+        "lineNumber": 4,
+        "text": "https://www.airline.com/checkin?ref=XJ29KQ"
+      },
+      "reason": "url"
+    },
+    {
+      "sourceLine": {
+        "lineNumber": 5,
+        "text": "[03/11/2026, 08:02] Zhehang: <Media omitted>"
+      },
+      "reason": "whatsapp-media"
+    },
+    {
+      "sourceLine": {
+        "lineNumber": 6,
+        "text": "Sent from my iPhone"
+      },
+      "reason": "signature-line"
+    },
+    {
+      "sourceLine": {
+        "lineNumber": 7,
+        "text": "Booking Reference: HTL-88213"
+      },
+      "reason": "hotel-booking-reference"
+    }
+  ],
+  "overallConfidence": "low",
+  "usedHeaderlessFallback": true
+}

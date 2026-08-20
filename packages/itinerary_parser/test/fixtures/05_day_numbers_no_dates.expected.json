@@ -1,0 +1,91 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Check in to hotel",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "- Check in to hotel"
+          }
+        },
+        {
+          "text": "Explore old town",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "- Explore old town"
+          }
+        },
+        {
+          "text": "19:00 Dinner at izakaya",
+          "time": {
+            "hour": 19,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "- 19:00 Dinner at izakaya"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "Day 1"
+      }
+    },
+    {
+      "index": 2,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Day trip to Nara",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 7,
+            "text": "- Day trip to Nara"
+          }
+        },
+        {
+          "text": "14:00 Feed the deer",
+          "time": {
+            "hour": 14,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 8,
+            "text": "- 14:00 Feed the deer"
+          }
+        },
+        {
+          "text": "Return to Kyoto",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 9,
+            "text": "- Return to Kyoto"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 6,
+        "text": "Day 2"
+      }
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "high",
+  "usedHeaderlessFallback": false
+}
