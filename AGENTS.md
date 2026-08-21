@@ -4,6 +4,12 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - Add durable project-specific notes here as they are discovered through real work.
 
+## Layout
+
+- `learning/` — throwaway demos built to make a technical decision, not the app.
+- `supabase/` — the backend (see below).
+- `packages/` — standalone Dart packages (own `pubspec.yaml`, tested with `dart test`) that back the Flutter app but must stay Flutter-free. Keep new packages under this pattern rather than pulling their logic into the Flutter app directly.
+
 ## Backend (`supabase/`)
 
 The backend is Supabase (Postgres: accounts, trip membership, photo index)
@@ -27,6 +33,14 @@ Sharp edges worth knowing before touching this directory again:
   Supabase CLI/Docker/psql was available in the worktree that authored
   this). Before trusting the schema, run `supabase db push` against a
   throwaway project.
+
+## Packages
+
+- `packages/itinerary_parser/` — pure-Dart package (no Flutter dependency) that parses pasted free-text trip plans into structured days/stops. Test with `dart test` from inside that directory; see its `README.md` for the public API, confidence semantics, and documented parsing limitations.
+- `packages/trip_moments/` — pure-Dart, offline notification-timing library; see its `README.md` for why it needs no server. Test with `dart test` from inside that directory.
+  - It derives its instants with multiplication and addition, not bitwise shifts, deliberately: Dart's `int` bitwise operators are 32-bit when compiled to JavaScript, so the shift form silently diverges on web while the arithmetic form is exact on every backend. `test/golden_values_test.dart` pins this -- do not "simplify" the arithmetic back to shifts.
+- `packages/photo_day_assignment/` — pure-Dart package that decides which day of a trip a photo belongs to, using GPS-derived timezone over EXIF timestamps where possible (see its `README.md` for the full degradation ladder). Test with `dart test` from inside that directory.
+  - It calls `timezone_finder`'s `findLocation(longitude, latitude)` -- longitude first, the opposite of the usual lat/lng convention and a standing trap when wiring up callers.
 
 ## Maintaining this file
 

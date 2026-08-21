@@ -1,0 +1,91 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": "Kyoto",
+      "stops": [
+        {
+          "text": "Fushimi Inari",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "- Fushimi Inari"
+          }
+        },
+        {
+          "text": "Kinkaku-ji",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "* Kinkaku-ji"
+          }
+        },
+        {
+          "text": "Kiyomizu-dera",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "• Kiyomizu-dera"
+          }
+        },
+        {
+          "text": "Gion district walk",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 5,
+            "text": "– Gion district walk"
+          }
+        },
+        {
+          "text": "Nishiki Market",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 6,
+            "text": "1. Nishiki Market"
+          }
+        },
+        {
+          "text": "Arashiyama bamboo grove",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 7,
+            "text": "2) Arashiyama bamboo grove"
+          }
+        },
+        {
+          "text": "Sagano scenic railway",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 8,
+            "text": "(3) Sagano scenic railway"
+          }
+        },
+        {
+          "text": "Philosopher's Path",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 9,
+            "text": "Philosopher's Path"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "Day 1: Kyoto"
+      }
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "high",
+  "usedHeaderlessFallback": false
+}

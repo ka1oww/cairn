@@ -1,0 +1,79 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Fushimi Inari Shrine early morning",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 1,
+            "text": "Fushimi Inari Shrine early morning"
+          }
+        },
+        {
+          "text": "Bamboo grove in Arashiyama",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "Bamboo grove in Arashiyama"
+          }
+        },
+        {
+          "text": "Lunch somewhere near the station",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "Lunch somewhere near the station"
+          }
+        }
+      ],
+      "confidence": "low",
+      "headerSourceLine": null
+    },
+    {
+      "index": 2,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Osaka Castle",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 5,
+            "text": "Osaka Castle"
+          }
+        },
+        {
+          "text": "Dotonbori for dinner",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 6,
+            "text": "Dotonbori for dinner"
+          }
+        },
+        {
+          "text": "Maybe catch the Glico sign at night",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 7,
+            "text": "Maybe catch the Glico sign at night"
+          }
+        }
+      ],
+      "confidence": "low",
+      "headerSourceLine": null
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "low",
+  "usedHeaderlessFallback": true
+}

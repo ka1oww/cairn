@@ -1,0 +1,97 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": "2026-11-03",
+      "place": "Kyoto",
+      "stops": [
+        {
+          "text": "9:00am Fushimi Inari Shrine",
+          "time": {
+            "hour": 9,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "1. 9:00am Fushimi Inari Shrine"
+          }
+        },
+        {
+          "text": "Lunch at Nishiki Market",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "2. Lunch at Nishiki Market"
+          }
+        },
+        {
+          "text": "4:00pm Kiyomizu-dera Temple",
+          "time": {
+            "hour": 16,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "3. 4:00pm Kiyomizu-dera Temple"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "Day 1: Kyoto"
+      }
+    },
+    {
+      "index": 2,
+      "date": "2026-11-04",
+      "place": "Osaka",
+      "stops": [
+        {
+          "text": "10:00am Osaka Castle",
+          "time": {
+            "hour": 10,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 7,
+            "text": "1. 10:00am Osaka Castle"
+          }
+        },
+        {
+          "text": "Dotonbori food crawl",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 8,
+            "text": "2. Dotonbori food crawl"
+          }
+        },
+        {
+          "text": "7:30pm Dinner at Umeda Sky Building",
+          "time": {
+            "hour": 19,
+            "minute": 30
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 9,
+            "text": "3. 7:30pm Dinner at Umeda Sky Building"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 6,
+        "text": "Day 2: Osaka"
+      }
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "high",
+  "usedHeaderlessFallback": false
+}

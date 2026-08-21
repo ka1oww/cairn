@@ -1,0 +1,15 @@
+name: itinerary_parser
+description: >
+  Deterministic, offline parser that turns pasted free-text trip plans into
+  structured days and stops. No network calls, no model calls.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^4.0.0

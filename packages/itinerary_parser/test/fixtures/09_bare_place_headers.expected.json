@@ -1,0 +1,112 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": "Kyoto",
+      "stops": [
+        {
+          "text": "Fushimi Inari Taisha",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "- Fushimi Inari Taisha"
+          }
+        },
+        {
+          "text": "Kinkaku-ji",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "- Kinkaku-ji"
+          }
+        },
+        {
+          "text": "18:00 Kaiseki dinner",
+          "time": {
+            "hour": 18,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "- 18:00 Kaiseki dinner"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "Kyoto"
+      }
+    },
+    {
+      "index": 2,
+      "date": null,
+      "place": "Nara",
+      "stops": [
+        {
+          "text": "Todai-ji Temple",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 7,
+            "text": "- Todai-ji Temple"
+          }
+        },
+        {
+          "text": "Feed the deer in the park",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 8,
+            "text": "- Feed the deer in the park"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "headerSourceLine": {
+        "lineNumber": 6,
+        "text": "Nara"
+      }
+    },
+    {
+      "index": 3,
+      "date": null,
+      "place": "Osaka",
+      "stops": [
+        {
+          "text": "Dotonbori",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 11,
+            "text": "- Dotonbori"
+          }
+        },
+        {
+          "text": "20:30 Umeda Sky Building",
+          "time": {
+            "hour": 20,
+            "minute": 30
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 12,
+            "text": "- 20:30 Umeda Sky Building"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "headerSourceLine": {
+        "lineNumber": 10,
+        "text": "Osaka"
+      }
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "medium",
+  "usedHeaderlessFallback": false
+}

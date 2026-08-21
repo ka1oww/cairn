@@ -1,0 +1,67 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": "Tokyo",
+      "stops": [
+        {
+          "text": "16:40 Arrive Narita Airport",
+          "time": {
+            "hour": 16,
+            "minute": 40
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "- 16:40 Arrive Narita Airport"
+          }
+        },
+        {
+          "text": "Check in around 4.40 PM",
+          "time": {
+            "hour": 16,
+            "minute": 40
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "- Check in around 4.40 PM"
+          }
+        },
+        {
+          "text": "0900 Tsukiji breakfast market",
+          "time": {
+            "hour": 9,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "- 0900 Tsukiji breakfast market"
+          }
+        },
+        {
+          "text": "14:00-16:00 Free time at the hotel pool",
+          "time": {
+            "hour": 14,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 5,
+            "text": "- 14:00-16:00 Free time at the hotel pool"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "Day 1: Tokyo"
+      }
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "high",
+  "usedHeaderlessFallback": false
+}

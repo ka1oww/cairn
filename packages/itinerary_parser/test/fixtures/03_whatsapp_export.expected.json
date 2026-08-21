@@ -1,0 +1,76 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": "2026-11-03",
+      "place": "Osaka",
+      "stops": [
+        {
+          "text": "9am Osaka Castle",
+          "time": {
+            "hour": 9,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "[03/11/2026, 09:15] Mum: - 9am Osaka Castle"
+          }
+        },
+        {
+          "text": "lunch near Dotonbori",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "[03/11/2026, 09:16] Mum: - lunch near Dotonbori"
+          }
+        },
+        {
+          "text": "sounds good, I'll book the 16:40 train",
+          "time": {
+            "hour": 16,
+            "minute": 40
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 6,
+            "text": "[03/11/2026, 09:20] Dad: sounds good, I'll book the 16:40 train"
+          }
+        },
+        {
+          "text": "great, see everyone at breakfast",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 7,
+            "text": "[03/11/2026, 09:21] Mum: great, see everyone at breakfast"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 2,
+        "text": "[03/11/2026, 09:15] Mum: Day 2 - Osaka"
+      }
+    }
+  ],
+  "unplacedLines": [
+    {
+      "sourceLine": {
+        "lineNumber": 1,
+        "text": "[03/11/2026, 09:14] Mum: morning! here's the plan for tomorrow"
+      },
+      "reason": "preamble"
+    },
+    {
+      "sourceLine": {
+        "lineNumber": 5,
+        "text": "[03/11/2026, 09:16] Dad: <Media omitted>"
+      },
+      "reason": "whatsapp-media"
+    }
+  ],
+  "overallConfidence": "medium",
+  "usedHeaderlessFallback": false
+}

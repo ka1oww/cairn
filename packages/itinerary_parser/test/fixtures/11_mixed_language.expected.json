@@ -1,0 +1,52 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": "Kyoto",
+      "stops": [
+        {
+          "text": "9:00 伏見稲荷大社 (Fushimi Inari)",
+          "time": {
+            "hour": 9,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "- 9:00 伏見稲荷大社 (Fushimi Inari)"
+          }
+        },
+        {
+          "text": "Déjeuner au marché de Nishiki",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "- Déjeuner au marché de Nishiki"
+          }
+        },
+        {
+          "text": "18:00 Dîner à Gion, réservation sous le nom Zhehang",
+          "time": {
+            "hour": 18,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "- 18:00 Dîner à Gion, réservation sous le nom Zhehang"
+          }
+        }
+      ],
+      "confidence": "high",
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "Day 1: Kyoto"
+      }
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "high",
+  "usedHeaderlessFallback": false
+}

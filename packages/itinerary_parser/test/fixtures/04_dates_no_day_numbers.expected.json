@@ -1,0 +1,73 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Arrive at Kansai airport",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "- Arrive at Kansai airport"
+          }
+        },
+        {
+          "text": "18:00 check in to hotel",
+          "time": {
+            "hour": 18,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "- 18:00 check in to hotel"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "Mon 3 Nov"
+      }
+    },
+    {
+      "index": 2,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "9:00 Fushimi Inari",
+          "time": {
+            "hour": 9,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 6,
+            "text": "- 9:00 Fushimi Inari"
+          }
+        },
+        {
+          "text": "Explore Gion in the evening",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 7,
+            "text": "- Explore Gion in the evening"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "headerSourceLine": {
+        "lineNumber": 5,
+        "text": "Tue 4 Nov"
+      }
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "medium",
+  "usedHeaderlessFallback": false
+}
