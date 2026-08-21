@@ -1,251 +1,325 @@
 # trip_moments
 
-A pure-Dart, offline library that decides *when* to ping people on a trip.
-No Flutter, no network, no server. Given a trip ID and a date, it derives
-notification times that every phone on the trip computes identically, with
-zero coordination.
+A pure-Dart, offline library that decides *when* each person on a trip is
+interrupted. No Flutter, no network, no server. Given a trip, its party and
+a date, it deals one ping to each person, and every phone on the trip
+derives the same deal with zero coordination.
 
 ## What it computes
 
-Two kinds of ping, both confined to a **quiet window** (default 09:00-21:00,
-**in the trip's own timezone**), and never more than two pings per day:
+**One ping per person per day. Never two, never a shared instant.**
 
-1. **The daily moment** — one instant per day, shared by everyone on the
-   trip. Every device computes the same answer from nothing but the trip ID
-   and the calendar date.
-2. **The scattered ping** — one instant per day, *per device*, different
-   from everyone else's on the same trip, but reproducible by that same
-   device if it recomputes it later.
+The waking day is cut into as many equal slots as there are people, and the
+party is dealt across them, one person per slot. At 11:40 exactly one phone
+buzzes; that person is the only one interrupted and therefore the only one
+holding a phone, so they look up and photograph everyone else. The camera
+turns around by itself. That is the whole mechanic, and the reasoning is in
+[`docs/decisions/2026-08-22-the-moment.md`](../../docs/decisions/2026-08-22-the-moment.md).
 
-`tripSchedule(...)` combines both into a full day-by-day schedule for a
-trip (or the remainder of one), so the app can register local notifications
-for every remaining day in a single pass and then go fully offline.
+```
+08:00                                                            22:30
+  |------|------|------|------|------|------|------|------|
+   gita    bob    hal   carla   dan    eve   alice  frank
+   09:19  10:18  12:30  14:38  16:34  17:38  19:58  22:08
+```
 
-## How the derivation works, in plain English
+(A real day from `test/golden_values_test.dart`: eight people, one each.)
 
-Both kinds of ping are computed the same way:
+Four properties, all of them load-bearing:
 
-1. Build a seed string out of the inputs that should determine the
-   result — for the daily moment, that's just the trip ID and the date
-   (`trip_moments/v1/daily/<tripId>/<YYYY-MM-DD>`); for a scattered ping,
-   it also includes a per-device ID
-   (`trip_moments/v1/scatter/<tripId>/<YYYY-MM-DD>/<deviceId>`).
-2. Hash that string with **SHA-256**.
-3. Take the first 6 bytes (48 bits) of the digest and treat them as a
-   big-endian integer, then divide by `2^48 - 1` to get a number in
-   `[0, 1)`.
-4. Use that number as "how far into the quiet window" the ping falls,
-   measured against local midnight *in the trip's timezone*.
+1. **Exactly one interruption per person per day.** Cairn interrupts once
+   and never otherwise, which is the cleanest permission ask in the app.
+2. **No two people collide, ever.** Not "collides with negligible
+   probability" — the deal is a permutation, so two people landing on the
+   same minute is structurally impossible.
+3. **The party does not bunch up.** One person per equal slot means the
+   pings cover breakfast through dinner instead of clustering in the
+   afternoon by hash luck.
+4. **The deal reshuffles every day.** Nobody owns the breakfast slot for a
+   whole trip.
 
-That's the whole trick. There's no randomness anywhere — `Random()` never
-appears in this package. What looks like a random time of day is really a
-cryptographic hash of `(trip, date[, device])`, and a hash is a pure
-function: same input, same output, always, on any machine, because SHA-256
-is a fully specified algorithm with no platform-dependent behaviour.
+## Why the party is an input
 
-## Why this needs no server
+This is the part worth understanding before changing anything.
 
-Because the derivation is a **pure function** of data every device already
-has locally (the trip ID it joined, today's date, and — for the scattered
-ping — its own stable device ID), any two phones that plug in the same
-inputs get the same output, without ever needing to ask a server or each
-other what the answer is. There is nothing to synchronize, no round trip,
-no risk of "device A saw an old value" — there's no value to see; every
-device *derives* it fresh, offline, and always arrives at the same place.
+A device could hash only its own member id, which is what this package used
+to do. That derivation cannot see the other seven draws, so it permits two
+people to land on the same minute and permits the whole party to pile into
+one part of the day. Nothing coordinates independent draws.
 
-`test/determinism_test.dart` is the proof: it simulates several
-independent "devices" that only share a trip ID and a date, and asserts
-they compute bit-for-bit identical daily moments. That test alone can't
-prove agreement *across platforms*, though — every simulated device in it
-still runs on the same Dart VM. See "Verified cross-platform" below for
-what actually backs the cross-platform half of this claim.
+So the **party is an input**, and each device computes the whole day's
+assignment — everyone's slot, not just its own — from the party plus the
+date. Because every device runs that same pure function over the same
+inputs, they all arrive at the same permutation without asking each other
+or a server anything.
 
-## The quiet window, in the trip's timezone
+The roster is data the app already holds offline: the backend's
+`trip_members_select_co_member` policy lets every member read the full
+roster of any trip they belong to, and the app needs it anyway to credit
+photos by name. Nothing new has to be fetched to schedule a day.
 
-Every ping is placed inside a `QuietWindow` (default `09:00`-`21:00`)
-measured against midnight **in the trip's timezone**
-(`tripUtcOffset`), not the device's home timezone. A trip to Auckland
-booked from a phone on US Pacific time still gets pings at 9am-9pm
-Auckland time, not 9am-9pm Pacific time translated into some other part of
-the Auckland day. This is deliberate: nobody should be pinged mid-flight
-or at 3am local-to-the-trip because their phone still thinks in home time.
+## The waking day: 08:00 to 22:30
 
-This package models a trip's timezone as a fixed UTC offset
-(`Duration`), not a full IANA timezone. See "What this cannot do" below.
+In the trip's own clock, never the phone's home clock. A trip to Auckland
+booked from a phone on US Pacific time still gets pings at 08:00–22:30
+Auckland time.
 
-## The ceiling: two pings a day, hard maximum
+The `22:30` close is deliberate and is not a rounding of `22:00`: it pushes
+the whole last slot later so the person holding it is interrupted *during*
+dinner rather than before it. Dinner is the part of a trip day most worth a
+photograph and the part a 22:00 close reliably missed. The `08:00` open is
+the same judgement at the other end — early enough for breakfast, late
+enough not to wake anyone.
 
-`maxPingsPerDay` is `2`, and it's not just a documented convention —
-`DayPings`, the type `tripSchedule()` returns one of per day, has exactly
-two `DateTime` fields (`dailyMoment` and `scatteredPing`), not a
-`List<DateTime>`. There is nowhere to `.add()` a third ping. Extending
-this package to a third kind of ping requires deliberately widening that
-type (and its tests), not just pushing onto a collection by accident.
+### Where inside a slot the ping lands
 
-## What must never change (read this before touching the hash)
+Somewhere in the middle three fifths of it, chosen by hashing the slot
+index. The outer fifth at each end is held back, which does two things:
+consecutive pings can never crowd each other across a slot boundary (the
+floor is 40% of a slot — about 43 minutes for a party of eight), and the
+very first and last minutes of the day stay empty.
 
-The one property this package exists to guarantee is: **two people on the
-same trip, on two different app versions, still land on the same daily
-moment.** That only holds as long as the derivation is byte-for-byte
-identical across every version that might be installed on the trip at the
-same time. If it ever changes silently, two phones stop agreeing and the
-"one shared moment" quietly becomes two different moments — with no error,
-no crash, nothing that would show up in a stack trace. It would just look
-like the feature is "randomly" a little broken for some people.
+The jitter is not decoration. A schedule that fired at 08:00, 09:48, 11:36
+every single day would be learnable, and a ping you can see coming is a
+ping you can pose for. The entire value of the mechanic is that the
+photograph is one nobody planned.
 
-Concretely, changing **any** of the following after this package ships
-breaks that guarantee for anyone whose two devices aren't on the exact
-same app version mid-trip:
+## The first and last day follow the itinerary
+
+These are the only two days where a fixed window is reliably wrong: you
+were on a plane for half of each. `TripDay.opensAt` and
+`TripDay.closesAt` take the real arrival and departure times.
+
+Land at 16:00 and that day runs 16:00–22:30, its slots compressed to fit.
+Fly out at 11:00 and the day runs 08:00–11:00, which at a 30-minute floor
+is six slots for a party of eight — **fewer slots on a short day is the
+correct answer, not a shortfall to pad.** The two who miss out are named in
+`DayAssignment.unpingedMemberIds`, and because the deal reshuffles, who
+misses out rotates too.
+
+Itinerary bounds only ever *narrow* the day. A 05:40 red-eye landing does
+not buy anyone an 05:40 ping, and a 23:50 departure does not extend the day
+past 22:30. Land at 23:00 and nobody is pinged that day at all.
+
+## A day that changes country keeps the clock it started in
+
+`TripDay.utcOffset` is the offset in force **where the day begins**, and it
+holds for the whole day even if the party crosses a border at noon. The
+clock moves at the next day boundary.
+
+A day is an artefact, not a measurement. The day's page is one page, and
+slots that shifted an hour sideways halfway through it would leave two
+people pinged at the same wall-clock minute, or a gap where the clock
+jumped. One clock start to finish keeps the slots stable.
+
+Build the itinerary with `tripDays(...)` for a trip that stays in one
+clock; construct `TripDay`s directly when it does not, so each day can
+carry its own offset.
+
+## How the deal works, in plain English
+
+1. Build a seed out of the inputs that should determine the result:
+   `trip_moments/v2/slots/<tripId>/<partyFingerprint>/<YYYY-MM-DD>`. The
+   party is folded in as a 16-character fingerprint so the seed stays a
+   predictable size however large the party is.
+2. Deal the party into slot order with **Fisher–Yates**, drawing each swap
+   partner from `stableIndex(...)` instead of a random number generator.
+   The result is a permutation, which is what makes collisions impossible
+   rather than merely unlikely.
+3. Cut the day from its open to its close into one equal slot per person —
+   or into however many 30-minute slots fit, on a day too short for
+   everyone.
+4. For each slot, hash the slot index to pick a minute inside its middle
+   three fifths.
+5. Add that minute to local midnight in the day's own clock.
+
+`Random()` never appears in this package. What looks like a random time of
+day is a SHA-256 hash of `(trip, party, date, slot)`, and a hash is a pure
+function: same input, same output, always, on any machine.
+
+**Everything after the hash is integer arithmetic on minutes-since-
+midnight.** Nothing is rounded from a float into a time, so there is no
+step where two backends could disagree by a microsecond.
+
+## When devices disagree
+
+The assignment is a pure function of the party it is given, so two devices
+holding *different* rosters compute different permutations. A mid-trip join
+is the case that matters: until every phone has seen the new member, phones
+disagree about the deal.
+
+This package deliberately does not paper over that — there is no fallback
+that would let a stale device be quietly wrong. It is the app layer's job
+to resync the roster before scheduling, and to reschedule the remaining
+days when the roster changes. Scheduling at the day boundary rather than
+once at trip start makes the window for disagreement small.
+
+## What must never change (read this before touching the derivation)
+
+The property this package exists to guarantee is: **two people on the same
+trip, on two different app versions, still compute the same deal.** That
+holds only as long as the derivation is byte-for-byte identical across
+every version installed on the trip at once. If it changes silently, two
+phones stop agreeing — with no error, no crash, nothing in a stack trace.
+It would just look like the app is "randomly" a little broken for some
+people.
+
+Changing any of these breaks that guarantee:
 
 - The hash algorithm (`sha256` in `lib/src/stable_hash.dart`).
 - The seed string format: field order, delimiters (`/`), casing, or the
-  `trip_moments/v1/...` namespace prefixes.
+  `trip_moments/v2/...` namespace prefix.
 - The date format (`YYYY-MM-DD` via `dateKey()`).
-- How many digest bytes are read (currently the first 6 / 48 bits) or
-  their byte order (big-endian).
-- The divisor used to normalize into `[0, 1)` (`2^48 - 1`, i.e.
-  `281474976710655`) — or the arithmetic used to assemble/apply it.
-  Multiplication/addition only, never a bitwise `<<`/`|`/`(1 << 48)`: see
-  "Why only 48 bits of the digest" for why that distinction is load-bearing,
-  not stylistic.
-- The default `QuietWindow` (09:00-21:00) — for anyone not overriding it.
-- How the window offset is combined with local midnight
-  (`_placeInWindow` in `lib/src/daily_moment.dart`).
+- How many digest bytes are read (the first 6 / 48 bits) or their byte
+  order (big-endian) — **or the arithmetic used to assemble them.**
+- The party's canonical form (sorted, de-duplicated) or its fingerprint.
+- The shuffle: Fisher–Yates, descending, with `.../swap/<i>` seeds.
+- The slot geometry: equal division, the 30-minute floor, the 20% inset.
+- The default `PingWindow` (08:00–22:30), for anyone not overriding it.
 
-If any of these genuinely need to change, bump the namespace
-(`trip_moments/v1/...` → `.../v2/...`) so the old and new derivations are
-at least *guaranteed* to disagree everywhere, loudly and consistently,
-rather than agreeing for some trips/dates and silently splitting for
-others depending on hash-space luck. That's a real user-facing migration
-(e.g. "everyone update before your next trip"), not a transparent one —
-there is no way to make a change like this invisible.
-
-`test/determinism_test.dart` and `test/stable_hash_test.dart` each pin a
-regression value computed from the current implementation; a change to
-any of the above will fail those tests immediately, which is the point.
+If one of these genuinely has to change, bump the namespace
+(`trip_moments/v2/...` → `.../v3/...`) so old and new builds are
+*guaranteed* to disagree everywhere, loudly and consistently, rather than
+agreeing on some trips and splitting on others depending on hash-space
+luck. That is a real user-facing migration ("everyone update before your
+next trip"), not a transparent one.
 
 ### Why SHA-256 specifically
 
-Dart's built-in `Object.hashCode` / `Object.hash()` are explicitly *not*
-guaranteed stable across Dart versions, isolates, or even separate runs of
-the same program — they exist for in-memory data structures like `HashMap`,
-not for values you persist or need to reproduce elsewhere. SHA-256 is a
-fully specified, versionless algorithm (`package:crypto`'s implementation
-is a straightforward encoding of the FIPS 180-4 spec); its output for a
-given input can never change, on any platform, in any future Dart SDK.
+Dart's `Object.hashCode` / `Object.hash()` are explicitly *not* guaranteed
+stable across Dart versions, isolates, or even separate runs of the same
+program — they exist for in-memory structures like `HashMap`, not for
+values you need to reproduce on someone else's phone. SHA-256 is a fully
+specified, versionless algorithm; its output for a given input can never
+change, on any platform, in any future SDK. A seeded PRNG would have the
+same problem as `hashCode`: Dart does not promise its stream is stable
+across versions.
 
-### Why only 48 bits of the digest
+### Why only 48 bits, and why multiplication
 
-Dart compiled to JavaScript (web) represents `int` as a double, which can
-only represent integers exactly up to `2^53`. Using the full 64-bit range
-would work fine on the Dart VM/AOT but silently lose precision — and
-therefore diverge from the VM's answer — if this package were ever used
-on a web target. 48 bits stays exact on every backend while still giving
-about 2.8 × 10^14 distinct buckets, far more resolution than a time-of-day
-scheduling problem needs.
+Dart compiled to JavaScript represents `int` as a double, exact only up to
+2^53. A 64-bit value would be correct on the Dart VM and silently lose
+precision on web, so two people on the same trip would derive different
+schedules depending on which backend built their app. 48 bits stays exact
+on every backend while still giving ~2.8 × 10^14 distinct values.
 
-**The bit count alone isn't enough — the arithmetic to assemble those 48
-bits has to be backend-portable too.** `lib/src/stable_hash.dart`
-deliberately builds the value with `value = value * 256 + byte`
-(multiplication and addition) rather than `value = (value << 8) | byte`
-(bitwise shift/or), and writes the divisor as the literal
-`281474976710655` rather than computing it with `(1 << 48) - 1`. This
-isn't cosmetic: dart2js specifies `int` bitwise operators (`<<`, `|`,
-`&`, ...) as **32-bit**, so a shift-based accumulation of 48 bits silently
-truncates on web while working correctly on the VM — a real, previously
-shipped bug in this file, caught by compiling it rather than reading it.
-Multiplication and addition on numbers this size stay exact on every
-backend (they never leave the `2^53`-safe range described above), so
-that's the only arithmetic this function uses to combine bytes or to
-normalize into `[0, 1)`.
+**The bit count alone is not enough — the arithmetic has to be portable
+too.** `lib/src/stable_hash.dart` builds the value with
+`value = value * 256 + byte`, never `value = (value << 8) | byte`, and
+writes the 48-bit ceiling as the literal `281474976710655` rather than
+`(1 << 48) - 1`. This is not cosmetic. dart2js specifies `int` bitwise
+operators as **32-bit**, so a shift-based accumulation of 48 bits silently
+truncates on web while working fine on the VM — a bug this file has
+actually shipped.
 
-### Verified cross-platform
+Accumulating the six bytes `DE AD BE EF 12 34` both ways, compiled for each
+backend, reproduces it exactly:
 
-Because `test/determinism_test.dart` runs entirely on the Dart VM, it
-cannot by itself detect a VM-vs-web divergence — every "device" it
-simulates shares one backend. The actual cross-platform guarantee is
-backed by two things together:
+|                    | Dart VM           | dart2js / Node          |
+| ------------------ | ----------------- | ----------------------- |
+| `(value << 8) \| b` | `244837814047284` | `3203338804` *truncated* |
+| `value * 256 + b`  | `244837814047284` | `244837814047284`       |
+| `(1 << 48) - 1`    | `281474976710655` | `-1`                    |
 
-1. **Portable arithmetic**, described just above — no bitwise operators
-   anywhere in the derivation, so there is no known mechanism for the VM
-   and dart2js to disagree.
-2. **`test/golden_values_test.dart`**, a small table of `(tripId, date)`
-   pairs pinned to exact literal `unit` values and instants. Each literal
-   in that table was computed once on the VM and then independently
-   re-verified by compiling the same call with `dart compile js` and
-   running the output under Node — confirming bit-for-bit agreement, not
-   just VM self-consistency. The golden table is what a future regression
-   in `stable_hash.dart` (e.g. someone reintroducing a bitwise shift) would
-   actually be caught by, on the VM, in CI, without needing a web test
-   runner. It does not re-verify web on every `dart test` run — a genuine
-   web-specific regression tool would need to run the JS build under Node
-   in CI to close that gap; today that check is manual (see this file's
-   git history for how it was done) rather than automated.
+Note the last row: the ceiling constant does not merely lose precision on
+web, it changes sign. Do not "simplify" the arithmetic back to shifts.
+
+### Verified cross-platform, and reproducibly
+
+`test/determinism_test.dart` runs entirely on the Dart VM, so it cannot by
+itself detect a VM-vs-web divergence — every device it simulates shares one
+backend. The cross-platform half is backed by a command anyone can re-run:
+
+```
+dart run tool/print_goldens.dart > /tmp/vm.txt
+dart compile js -O0 -o /tmp/goldens.js tool/print_goldens.dart
+node /tmp/goldens.js > /tmp/js.txt
+diff /tmp/vm.txt /tmp/js.txt
+```
+
+An empty diff is the proof. `tool/print_goldens.dart` and
+`test/golden_values_test.dart` both read the same `goldenLines()` from
+`test/golden_fixture.dart`, so the values the test pins and the values this
+check compares cannot drift apart. Re-run it whenever
+`lib/src/stable_hash.dart` or `lib/src/slots.dart` changes; it is not
+automated, so a genuinely web-specific regression would still need this
+diff (or a Node step in CI) to be caught.
 
 ## What this cannot do
 
-- **No true IANA timezones, no DST.** The trip's timezone is a fixed UTC
-  offset for the whole trip. A trip that spans a DST transition, or that
-  needs "wall clock 9am-9pm even as the offset itself changes," is not
-  modeled — the app layer would need to supply the correct offset per day
-  if that matters, or this package would need real timezone data
-  (e.g. `package:timezone`) to support it properly.
-- **No guaranteed non-collision, only overwhelming improbability.** Two
-  devices getting the exact same scattered ping instant isn't structurally
-  impossible, just as unlikely as a SHA-256 collision on two different
-  inputs — astronomically unlikely, not proven impossible. Don't build
-  logic elsewhere that assumes strict uniqueness is guaranteed.
+- **No true IANA timezones, no DST.** A day's clock is a fixed UTC offset,
+  supplied per day by the app layer. That is enough to fix the clock where
+  a day starts, but the app is where a DST transition or a real zone
+  lookup has to be resolved.
+- **A party larger than the day can hold is not fully pinged.** At the
+  30-minute floor a full waking day holds 29 slots, so a trip of more than
+  29 people leaves some unpinged each day — rotating, like a short day.
+  Cairn is built for a party of about eight.
+- **No cross-day fairness.** Someone who misses out on a short arrival day
+  is not compensated on the next one. Each day is dealt independently, and
+  fairness is the reshuffle averaging out, not a ledger.
 - **No enforcement that a phone actually fires the notification.** This
-  package hands the app a list of instants; whether the OS actually wakes
-  the app and shows something (permissions, battery optimization, the
-  device being off) is entirely outside this package's control.
-- **No cross-device knowledge.** A device only ever computes its own
-  scattered ping and the shared daily moment; it has no way to know what
-  time other devices' scattered pings landed on, and this package doesn't
-  try to give it one (by design — that's what would require a server).
-- **No trip metadata.** This package doesn't know what a trip "is" beyond
-  a string ID, a date, a UTC offset, and (optionally) a per-device ID. It
-  doesn't validate that a trip ID is real, load timezones from anywhere, or
-  know when a trip starts or ends — the app layer supplies all of that.
+  package hands the app a list of instants; whether the OS wakes the app
+  (permissions, battery optimization, the device being off) is outside its
+  control.
+- **No knowledge of who answered.** The schedule is derived, not recorded.
+  Late contributions, the thirty-minute answering window and the day's page
+  belong to the app layer.
+- **No trip metadata.** This package does not know what a trip "is" beyond
+  a string id, a party of member ids, dates and offsets. It does not
+  validate that a trip exists, load timezones, or know when a trip starts —
+  the app supplies all of that.
 
 ## API
 
 ```dart
 import 'package:trip_moments/trip_moments.dart';
 
-// The shared instant everyone on the trip agrees on for this date.
-final moment = dailyMoment(
-  tripId: 'trip-abc123',
-  date: DateTime(2026, 9, 3),
-  tripUtcOffset: const Duration(hours: 8), // the trip's timezone
-);
+final party = Party(['alice', 'bob', 'carla', 'dan', 'eve', 'frank',
+                     'gita', 'hal']);
 
-// This device's own instant for the same date.
-final ping = scatteredPing(
-  tripId: 'trip-abc123',
-  date: DateTime(2026, 9, 3),
-  deviceId: myStableDeviceId,
-  tripUtcOffset: const Duration(hours: 8),
-);
-
-// The whole remaining trip, in one offline pass.
+// A trip that stays in one clock: eight days, landing at 16:00 on the
+// first and flying out at 11:00 on the last.
 final schedule = tripSchedule(
-  tripId: 'trip-abc123',
-  deviceId: myStableDeviceId,
-  fromDate: DateTime.now(),
-  toDate: tripEndDate,
-  tripUtcOffset: const Duration(hours: 8),
+  tripId: 'trip-bali-2026',
+  party: party,
+  days: tripDays(
+    fromDate: DateTime(2026, 9, 3),
+    toDate: DateTime(2026, 9, 10),
+    utcOffset: const Duration(hours: 8),
+    arrival: const Duration(hours: 16),
+    departure: const Duration(hours: 11),
+  ),
 );
-for (final day in schedule) {
-  // day.dailyMoment, day.scatteredPing — hand both to your local
-  // notification scheduler and never call this package again until
-  // tomorrow (or the next time the trip's date range changes).
+
+// What this device registers with the OS: its own line through a schedule
+// it computed for the whole party.
+for (final ping in pingsForMember(schedule, myMemberId)) {
+  scheduleLocalNotification(at: ping.at);   // ping.at is a UTC instant
 }
+
+// The whole day, which is what the day's page needs.
+for (final ping in schedule.first.pings) {
+  print('${ping.localLabel}  ${ping.memberId}');   // 16:27  alice
+}
+print(schedule.last.unpingedMemberIds);            // [dan, gita]
+
+// A trip that crosses a border: give each day the offset in force where
+// that day begins.
+final asia = tripSchedule(
+  tripId: 'trip-asia',
+  party: party,
+  days: [
+    TripDay(date: DateTime(2026, 5, 3), utcOffset: const Duration(hours: 7)),
+    TripDay(date: DateTime(2026, 5, 4), utcOffset: const Duration(hours: 9)),
+  ],
+);
 ```
 
 All returned `DateTime`s are UTC instants (`.isUtc == true`); convert with
-`.toLocal()` only for display, not for scheduling — the instant itself is
-already correct regardless of what timezone the device happens to be in.
+`.toLocal()` only for display, not for scheduling — the instant is already
+correct whatever timezone the phone is in. For display in the *trip's*
+clock, use `Ping.localTimeOfDay` or `Ping.localLabel`.
 
 ## Testing
 
@@ -254,19 +328,22 @@ dart test
 ```
 
 - `test/determinism_test.dart` — the test that is the point of this
-  package: independent "devices" agree exactly, given only a trip ID and
-  a date. (Proves same-backend agreement; see `golden_values_test.dart`
-  for the cross-platform half.)
-- `test/golden_values_test.dart` — a pinned table of exact expected values,
-  each independently cross-checked against a dart2js/Node build — the
-  test that actually protects VM-vs-web agreement. See "Verified
-  cross-platform" above.
-- `test/distribution_test.dart` — daily moments spread across the window
-  rather than clustering.
-- `test/scattered_ping_test.dart` — different devices get different
-  times; the same device reproduces its own time.
-- `test/quiet_window_test.dart` — the window is honoured in the trip's
-  timezone, including a trip whose timezone is far from the device's.
-- `test/day_pings_ceiling_test.dart` — no day ever exceeds two pings.
-- `test/trip_schedule_test.dart` — whole-trip scheduling behaviour.
-- `test/stable_hash_test.dart` — the underlying hash-to-`[0,1)` helper.
+  package: independently constructed devices, sharing only the party and
+  the date, compute bit-for-bit identical assignments.
+- `test/one_ping_per_person_test.dart` — exactly one ping per person per
+  day, across a full trip.
+- `test/collision_and_spread_test.dart` — no two members ever share a
+  minute, exactly one ping per equal slot, and the party covers the day
+  edge to edge rather than clustering.
+- `test/reshuffle_test.dart` — the deal differs between consecutive days,
+  the first slot rotates, and over a long run everyone visits every slot.
+- `test/short_day_test.dart` — arrival and departure days are bounded
+  correctly, including the days too short to hold a slot for everyone.
+- `test/trip_clock_test.dart` — the trip's clock is used, not the phone's,
+  and a day that changes country keeps the clock it started in.
+- `test/golden_values_test.dart` — a pinned table, cross-checked against a
+  dart2js/Node build. See "Verified cross-platform".
+- `test/stable_hash_test.dart` — the hash primitives, the slot geometry and
+  the permutation.
+- `test/party_and_schedule_test.dart` — party canonicalisation and the
+  whole-trip helpers.

@@ -1,10 +1,10 @@
 name: trip_moments
 description: >
   Pure-Dart, offline, deterministic derivation of trip notification timing:
-  a shared "daily moment" every phone on a trip computes identically without
-  a server, plus per-device "scattered pings", both confined to a quiet
-  window in the trip's own timezone.
-version: 0.1.0
+  one ping per person per day, dealt across the party as a collision-free
+  permutation of slots over the trip's waking day, reshuffled daily, in the
+  trip's own clock. Every phone derives the same schedule with no server.
+version: 0.2.0
 publish_to: 'none'
 
 environment:
