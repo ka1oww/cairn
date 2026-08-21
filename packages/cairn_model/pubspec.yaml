@@ -1,0 +1,16 @@
+name: cairn_model
+description: >-
+  The Cairn trip domain, defined once: a trip and its shared clock, a day and
+  the clock fixed where it starts, stops, members, photo references, and the
+  gate on a day's page. Pure Dart, no Flutter, no network, no database, no I/O.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^4.0.0
