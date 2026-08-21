@@ -19,20 +19,31 @@ truth, not this file.
 
 Sharp edges worth knowing before touching this directory again:
 
-- The backend is intentionally minimal: it holds only the shared photo pool
-  and trip membership. The itinerary/trail/stars/notifications are computed
-  on the phone and must never move server-side without a deliberate
-  decision to change that.
-- Migrations in `supabase/migrations/` are numbered and dependency-ordered
-  -- several RLS policies are deferred to a later-numbered file because
-  they reference a table (usually `trip_members`) that doesn't exist yet
-  at table-creation time. Read the comments in `0003_trips.sql` /
-  `0004_trip_members.sql` before reordering anything.
-- No Supabase project has been created yet and no migration has been run
-  against a real database (verified by inspection only -- no
-  Supabase CLI/Docker/psql was available in the worktree that authored
-  this). Before trusting the schema, run `supabase db push` against a
-  throwaway project.
+- The backend is intentionally minimal: it holds the shared photo pool, trip
+  membership and the shared trip clock. The itinerary/trail/stars/ping
+  schedule are computed on the phone and must never move server-side without
+  a deliberate decision to change that.
+- **Never inline a membership subquery in an RLS policy.** Every
+  membership/ownership check goes through the `SECURITY DEFINER` helpers
+  `is_trip_member` / `is_trip_starter` in `0004_trip_members.sql`, because a
+  policy on `trip_members` that reads `trip_members` recurses infinitely and
+  takes every membership-gated read in the schema down with it. For the same
+  reason, never add `force row level security` to any table here -- it
+  re-enables the recursion. Both directions are demonstrated by
+  `supabase/tests/recursion_mechanism.py`.
+- Migrations in `supabase/migrations/` are numbered and dependency-ordered.
+  Only one forward reference remains, and it is irreducible: `0003_trips.sql`
+  defers its own RLS policies to `0004_trip_members.sql`, because `trips` must
+  exist before `trip_members` can reference it but the policies are written in
+  terms of membership. Read that comment before reordering anything.
+- The schema has been run, but only locally: `supabase/tests/` applies it to a
+  throwaway Postgres 17 and drives it as PostgREST does. Run
+  `python3 supabase/tests/rls_probe.py` (see that directory's README) after any
+  change to a policy -- RLS refuses by filtering to zero rows rather than
+  raising, so a change that silently opens or closes access looks identical to
+  one that works until something actually queries it. **No Supabase project
+  exists yet and nothing has been applied to a hosted one**; `supabase db push`
+  against a throwaway project is still the gate before anything real.
 
 ## Packages
 

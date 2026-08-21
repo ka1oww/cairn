@@ -1,6 +1,7 @@
 -- One row per photo in the shared pool. The bytes live in R2; this row is
--- the index that (a) the app queries to render the pool/trail, and (b) RLS
--- protects, since the R2 key itself carries no access control.
+-- the index that (a) the app queries to render the pool and the day's
+-- timeline, and (b) RLS protects, since the R2 key itself carries no access
+-- control.
 --
 -- Day assignment: EXIF timestamps carry no timezone, so "which day" cannot
 -- be derived from captured_at alone -- a photo taken at 11pm local time in
@@ -26,7 +27,9 @@ create table if not exists public.photos (
   height integer check (height > 0),
 
   -- Raw EXIF capture time, kept for provenance/debugging even though it is
-  -- not what day assignment is based on.
+  -- not what day assignment is based on. It is also what the day's timeline
+  -- orders by and prints in the margin, so a photo the app took itself
+  -- always carries an exact one.
   captured_at timestamptz,
 
   -- EXIF GPS, when present. Nullable: not every photo carries GPS (e.g.
@@ -39,29 +42,42 @@ create table if not exists public.photos (
   -- geo lookup.
   capture_timezone text,
 
-  -- The derived day this photo belongs to on the trip trail.
+  -- The derived day this photo belongs to on the trip trail. Nullable
+  -- deliberately: packages/photo_day_assignment can legitimately place
+  -- nothing (no EXIF time and no file time, or a time that falls outside the
+  -- trip), and such a photo waits for a person to place it by hand rather
+  -- than being clamped onto a day it does not belong to. It contributes to
+  -- no day, and opens no day's gate, until it has one.
   trip_day date,
   trip_day_is_manual boolean not null default false,
 
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create index if not exists photos_trip_id_trip_day_idx on public.photos (trip_id, trip_day);
 create index if not exists photos_contributor_id_idx on public.photos (contributor_id);
+create index if not exists photos_trip_id_updated_at_idx on public.photos (trip_id, updated_at);
+
+drop trigger if exists photos_touch_updated_at on public.photos;
+create trigger photos_touch_updated_at
+  before update on public.photos
+  for each row execute function public.touch_updated_at();
 
 alter table public.photos enable row level security;
 
+-- Membership, and only membership. There is deliberately no day-based
+-- predicate here: someone who joins on day three can scroll days one and two
+-- freely, and the gate never retroactively holds a past day shut against a
+-- late joiner. The gate is a different mechanism entirely -- it withholds the
+-- *bytes* of a day still in progress, not the rows -- see
+-- 0007_day_unlocks.sql, and note that a shut gate has to render the day's
+-- times and names, which it could not do if this policy hid the rows.
 drop policy if exists "photos_select_trip_member" on public.photos;
 create policy "photos_select_trip_member"
   on public.photos for select
   to authenticated
-  using (
-    exists (
-      select 1 from public.trip_members
-      where trip_members.trip_id = photos.trip_id
-        and trip_members.user_id = auth.uid()
-    )
-  );
+  using ( public.is_trip_member(photos.trip_id, auth.uid()) );
 
 -- A photo must be tagged with whoever is uploading it, and that person
 -- must be a member of the trip they're uploading into.
@@ -71,39 +87,35 @@ create policy "photos_insert_trip_member"
   to authenticated
   with check (
     contributor_id = auth.uid()
-    and exists (
-      select 1 from public.trip_members
-      where trip_members.trip_id = photos.trip_id
-        and trip_members.user_id = auth.uid()
-    )
+    and public.is_trip_member(photos.trip_id, auth.uid())
   );
 
--- Only the contributor or the trip owner can edit a photo row (in
--- practice: correcting trip_day by hand).
+-- Your own photo, and only your own -- in practice, correcting trip_day by
+-- hand. Nobody edits anyone else's photos or placements, the trip's starter
+-- included; their one extra power is removing a person, not curating the
+-- pool.
+--
+-- The explicit WITH CHECK matters twice over. It stops a photo being handed
+-- to someone else (the new row must still be yours), and it stops one being
+-- moved into a trip you do not belong to. Without it Postgres silently
+-- reuses USING as the check, which reads as if the trip were unconstrained.
 drop policy if exists "photos_update_contributor_or_owner" on public.photos;
-create policy "photos_update_contributor_or_owner"
+drop policy if exists "photos_update_contributor" on public.photos;
+create policy "photos_update_contributor"
   on public.photos for update
   to authenticated
-  using (
+  using ( photos.contributor_id = auth.uid() )
+  with check (
     contributor_id = auth.uid()
-    or exists (
-      select 1 from public.trip_members
-      where trip_members.trip_id = photos.trip_id
-        and trip_members.user_id = auth.uid()
-        and trip_members.role = 'owner'
-    )
+    and public.is_trip_member(photos.trip_id, auth.uid())
   );
 
+-- A person can always delete their own photo -- someone must be able to
+-- remove a photograph of themselves they hate. The day does not re-lock when
+-- they do, and leaves no gap: see 0007_day_unlocks.sql.
 drop policy if exists "photos_delete_contributor_or_owner" on public.photos;
-create policy "photos_delete_contributor_or_owner"
+drop policy if exists "photos_delete_contributor" on public.photos;
+create policy "photos_delete_contributor"
   on public.photos for delete
   to authenticated
-  using (
-    contributor_id = auth.uid()
-    or exists (
-      select 1 from public.trip_members
-      where trip_members.trip_id = photos.trip_id
-        and trip_members.user_id = auth.uid()
-        and trip_members.role = 'owner'
-    )
-  );
+  using ( photos.contributor_id = auth.uid() );
