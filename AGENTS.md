@@ -42,6 +42,10 @@ Sharp edges worth knowing before touching this directory again:
 - `packages/photo_day_assignment/` — pure-Dart package that decides which day of a trip a photo belongs to, using GPS-derived timezone over EXIF timestamps where possible (see its `README.md` for the full degradation ladder). Test with `dart test` from inside that directory.
   - It calls `timezone_finder`'s `findLocation(longitude, latitude)` -- longitude first, the opposite of the usual lat/lng convention and a standing trap when wiring up callers.
 
+## Design and decisions
+
+See `docs/decisions/` for the authoritative record of why the app is shaped the way it is, and `docs/design/` for the interface and design system. The central decision is recorded in `docs/decisions/2026-08-22-the-moment.md`: the daily ping is scattered per person rather than simultaneous, which allows the app to work offline and scales to arbitrary trip sizes.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

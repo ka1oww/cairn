@@ -37,5 +37,6 @@ here is the real app yet.
 ## Where the thinking lives
 
 The full design record — what was decided, what was rejected, and why — is kept
-outside this repo in the owner's notes, alongside three commissioned research
-reports. This README is deliberately thin; it is not the design document.
+in `docs/decisions/` and `docs/design/`. See those directories for the reasoning
+behind the architecture, the design system, and the key decisions. This README is
+deliberately thin; it is not the design document.
