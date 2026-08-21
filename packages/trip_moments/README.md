@@ -55,7 +55,10 @@ device *derives* it fresh, offline, and always arrives at the same place.
 
 `test/determinism_test.dart` is the proof: it simulates several
 independent "devices" that only share a trip ID and a date, and asserts
-they compute bit-for-bit identical daily moments.
+they compute bit-for-bit identical daily moments. That test alone can't
+prove agreement *across platforms*, though — every simulated device in it
+still runs on the same Dart VM. See "Verified cross-platform" below for
+what actually backs the cross-platform half of this claim.
 
 ## The quiet window, in the trip's timezone
 
@@ -100,7 +103,11 @@ same app version mid-trip:
 - The date format (`YYYY-MM-DD` via `dateKey()`).
 - How many digest bytes are read (currently the first 6 / 48 bits) or
   their byte order (big-endian).
-- The divisor used to normalize into `[0, 1)` (`2^48 - 1`).
+- The divisor used to normalize into `[0, 1)` (`2^48 - 1`, i.e.
+  `281474976710655`) — or the arithmetic used to assemble/apply it.
+  Multiplication/addition only, never a bitwise `<<`/`|`/`(1 << 48)`: see
+  "Why only 48 bits of the digest" for why that distinction is load-bearing,
+  not stylistic.
 - The default `QuietWindow` (09:00-21:00) — for anyone not overriding it.
 - How the window offset is combined with local midnight
   (`_placeInWindow` in `lib/src/daily_moment.dart`).
@@ -136,6 +143,44 @@ therefore diverge from the VM's answer — if this package were ever used
 on a web target. 48 bits stays exact on every backend while still giving
 about 2.8 × 10^14 distinct buckets, far more resolution than a time-of-day
 scheduling problem needs.
+
+**The bit count alone isn't enough — the arithmetic to assemble those 48
+bits has to be backend-portable too.** `lib/src/stable_hash.dart`
+deliberately builds the value with `value = value * 256 + byte`
+(multiplication and addition) rather than `value = (value << 8) | byte`
+(bitwise shift/or), and writes the divisor as the literal
+`281474976710655` rather than computing it with `(1 << 48) - 1`. This
+isn't cosmetic: dart2js specifies `int` bitwise operators (`<<`, `|`,
+`&`, ...) as **32-bit**, so a shift-based accumulation of 48 bits silently
+truncates on web while working correctly on the VM — a real, previously
+shipped bug in this file, caught by compiling it rather than reading it.
+Multiplication and addition on numbers this size stay exact on every
+backend (they never leave the `2^53`-safe range described above), so
+that's the only arithmetic this function uses to combine bytes or to
+normalize into `[0, 1)`.
+
+### Verified cross-platform
+
+Because `test/determinism_test.dart` runs entirely on the Dart VM, it
+cannot by itself detect a VM-vs-web divergence — every "device" it
+simulates shares one backend. The actual cross-platform guarantee is
+backed by two things together:
+
+1. **Portable arithmetic**, described just above — no bitwise operators
+   anywhere in the derivation, so there is no known mechanism for the VM
+   and dart2js to disagree.
+2. **`test/golden_values_test.dart`**, a small table of `(tripId, date)`
+   pairs pinned to exact literal `unit` values and instants. Each literal
+   in that table was computed once on the VM and then independently
+   re-verified by compiling the same call with `dart compile js` and
+   running the output under Node — confirming bit-for-bit agreement, not
+   just VM self-consistency. The golden table is what a future regression
+   in `stable_hash.dart` (e.g. someone reintroducing a bitwise shift) would
+   actually be caught by, on the VM, in CI, without needing a web test
+   runner. It does not re-verify web on every `dart test` run — a genuine
+   web-specific regression tool would need to run the JS build under Node
+   in CI to close that gap; today that check is manual (see this file's
+   git history for how it was done) rather than automated.
 
 ## What this cannot do
 
@@ -210,7 +255,12 @@ dart test
 
 - `test/determinism_test.dart` — the test that is the point of this
   package: independent "devices" agree exactly, given only a trip ID and
-  a date.
+  a date. (Proves same-backend agreement; see `golden_values_test.dart`
+  for the cross-platform half.)
+- `test/golden_values_test.dart` — a pinned table of exact expected values,
+  each independently cross-checked against a dart2js/Node build — the
+  test that actually protects VM-vs-web agreement. See "Verified
+  cross-platform" above.
 - `test/distribution_test.dart` — daily moments spread across the window
   rather than clustering.
 - `test/scattered_ping_test.dart` — different devices get different
