@@ -28,6 +28,8 @@
         }
       ],
       "confidence": "medium",
+      "uncertainty": "date-without-year",
+      "headerWeekday": 1,
       "headerSourceLine": {
         "lineNumber": 1,
         "text": "Mon 3 Nov"
@@ -61,6 +63,8 @@
         }
       ],
       "confidence": "medium",
+      "uncertainty": "date-without-year",
+      "headerWeekday": 2,
       "headerSourceLine": {
         "lineNumber": 5,
         "text": "Tue 4 Nov"
@@ -69,5 +73,6 @@
   ],
   "unplacedLines": [],
   "overallConfidence": "medium",
-  "usedHeaderlessFallback": false
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
 }

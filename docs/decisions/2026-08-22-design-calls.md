@@ -55,6 +55,10 @@ Front-only would undo it.
 engineering in this app. Back-only remains an acceptable fallback now that the
 camera points outward; the inset is a nice-to-have, not the mechanic.
 
+*Later the same day the dual-camera spike dissolved this cost: "like BeReal"
+turns out to mean a back-then-front sequence, not simultaneity. See
+[the camera stays BeReal-shaped](2026-08-22-camera-like-bereal.md).*
+
 ## 6. The trip view: the cairn is the trip's portrait, not its front door
 Drawn first, decided after. The design round solved the character problem —
 stone width from the day's photo count, tint drawn from that day's own prints,
@@ -70,6 +74,10 @@ somewhere else to see today's stops, which makes the pile a lobby.
 turns into — the book's cover, the spine on the shelf, the share image, and the
 binding-night animation as stones drop one by one.
 
+*The cover half of this was refined by
+[book round nine](2026-08-22-book-round-nine.md): the photograph is the
+cover's face, and the cairn signs the foot rather than fronting it.*
+
 ## 7. Thirty-minute window, late contributions always allowed
 Late photos carry their real timestamp, so a late one sits at the hour it was
 actually taken and is visibly late.
@@ -82,3 +90,8 @@ and it is funnier.
 ## Open
 The book's page design, pending a reference the captain is supplying. One spread
 per day, photos in the order they happened, digital only.
+
+*Closed since: the reference landed and round nine drew the interior — see
+[book round nine](2026-08-22-book-round-nine.md) and
+[no book editor](2026-08-22-book-no-editor.md). The treatment fork stays open
+for round ten.*

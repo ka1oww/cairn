@@ -14,19 +14,31 @@ import 'models.dart';
 /// calendar year (1900-2099), since pasted itineraries very often contain a
 /// year and almost never contain a genuine 19xx/20xx military time. This is
 /// a known, documented limitation rather than an oversight.
+///
+/// A *hedged* time is not extracted at all: `maybe 4pm?`, `around 4.40 PM`,
+/// `~7pm`, `7pm-ish`, `2pm or 3pm` all return null. An extracted time is
+/// the only thing that stars a stop, and a star must mean a real
+/// commitment, not a guess — so when the surrounding words hedge the time,
+/// the parser deliberately keeps no time. The rule is conservative on
+/// purpose: a hedge word anywhere in the same comma-separated clause
+/// *before* the time, or `ish`/`?`/`or so`/`or <another time>` right after
+/// it, suppresses extraction. See [_isHedged] for the vocabulary.
 ParsedTime? extractTime(String line) {
   final range = _rangeWithColon.firstMatch(line);
   if (range != null) {
+    if (_isHedged(line, range)) return null;
     return _fromColonMatch(range);
   }
 
   final colon = _colonOrDot.firstMatch(line);
   if (colon != null) {
+    if (_isHedged(line, colon)) return null;
     return _fromColonMatch(colon);
   }
 
   final hourOnly = _hourWithMeridiem.firstMatch(line);
   if (hourOnly != null) {
+    if (_isHedged(line, hourOnly)) return null;
     return _fromHourMeridiemMatch(hourOnly);
   }
 
@@ -37,12 +49,52 @@ ParsedTime? extractTime(String line) {
       final hour = int.parse(text.substring(0, 2));
       final minute = int.parse(text.substring(2, 4));
       if (hour <= 23 && minute <= 59) {
+        if (_isHedged(line, military)) return null;
         return ParsedTime(hour, minute);
       }
     }
   }
 
   return null;
+}
+
+/// Words that, appearing in the same clause before a time, mark it as an
+/// estimate rather than a commitment. Kept as whole words so e.g. the
+/// place name "Roundabout" does not hedge anything.
+final RegExp _hedgeWordBefore = RegExp(
+  r'\b(maybe|might|perhaps|probably|possibly|hopefully|likely|around|about|'
+  r'roughly|approx|approximately|sometime|circa|ideally|tbc|tbd)\b',
+  caseSensitive: false,
+);
+
+/// Hedging that immediately follows the time: `-ish`, a question mark,
+/// `or so`, or an alternative introduced by `or`.
+final RegExp _hedgeSuffix = RegExp(
+  r'^\s*(?:[-–—]?\s*ish\b|\?|or\b)',
+  caseSensitive: false,
+);
+
+/// Clause boundaries: hedging is only read within the comma/period/
+/// semicolon-separated clause the time itself sits in, so `Dinner 7pm,
+/// maybe karaoke after` still stars the dinner.
+final RegExp _clauseBreak = RegExp(r'[,;.!·()]');
+
+/// True when the words around [match] hedge the time it found. Errs toward
+/// hedged: an unstarred real appointment is a small loss, a starred guess
+/// devalues every star in the trip.
+bool _isHedged(String line, RegExpMatch match) {
+  var before = line.substring(0, match.start);
+  final lastBreak = before.lastIndexOf(_clauseBreak);
+  if (lastBreak >= 0) before = before.substring(lastBreak + 1);
+  if (_hedgeWordBefore.hasMatch(before)) return true;
+  if (before.trimRight().endsWith('~')) return true;
+
+  var after = line.substring(match.end);
+  final nextBreak = after.indexOf(_clauseBreak);
+  if (nextBreak >= 0) after = after.substring(0, nextBreak);
+  if (_hedgeSuffix.hasMatch(after)) return true;
+
+  return false;
 }
 
 final RegExp _rangeWithColon = RegExp(

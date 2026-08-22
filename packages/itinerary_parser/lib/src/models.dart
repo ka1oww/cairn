@@ -19,6 +19,67 @@
 ///   surface it as needing review before the trip starts.
 enum Confidence { low, medium, high }
 
+/// Why a day's [Confidence] is not [Confidence.high].
+///
+/// The confirmation screen varies its copy and its ask by cause — a
+/// weekday it wouldn't pin to a date gets a different question than a day
+/// that parsed but came up empty — so the cause is part of the public
+/// result, not something the UI should re-derive by re-parsing the header.
+///
+/// [ParsedDay.uncertainty] is null exactly when the day's confidence is
+/// [Confidence.high].
+enum DayUncertainty {
+  /// The header names only a weekday (`Monday`). The parser never guesses
+  /// which calendar occurrence of a bare weekday is meant, so the day's
+  /// `date` is null.
+  weekdayWithoutDate(
+    'weekday-without-date',
+    'The plan only calls this day a weekday, and which calendar date that '
+        'weekday means is not guessed.',
+  ),
+
+  /// The header names a day and month but no year, and no `tripStartDate`
+  /// was supplied to resolve the year against.
+  dateWithoutYear(
+    'date-without-year',
+    'This day has a day and month but no year, and no trip start date was '
+        'given to work the year out from.',
+  ),
+
+  /// The day was inferred from a bare place-name line acting as a header;
+  /// nothing in the text explicitly marked it as a day.
+  barePlaceName(
+    'bare-place-name',
+    'This day was read from a bare place name — nothing in the text '
+        'explicitly marked it as a new day.',
+  ),
+
+  /// A header was found for this day, but no stops ended up under it.
+  noStops(
+    'no-stops',
+    'The day itself was found, but nothing readable was under it.',
+  ),
+
+  /// No day headers were recognized anywhere in the paste, so this "day"
+  /// is just one blank-line-separated block of text.
+  headerlessBlock(
+    'headerless-block',
+    'No day headers were found anywhere in the paste, so this is just a '
+        'block of lines split on blank space.',
+  ),
+  ;
+
+  /// Stable, machine-readable identifier (also what `toJson` emits).
+  final String slug;
+
+  /// A person-showable sentence explaining the doubt: what the parser saw
+  /// and what it refused to guess. Written so the user can check it
+  /// against their own pasted text and act on it.
+  final String explanation;
+
+  const DayUncertainty(this.slug, this.explanation);
+}
+
 /// One line from the original pasted text, kept verbatim.
 ///
 /// Every [Stop], every day header, and every unplaced line carries one of
@@ -127,6 +188,21 @@ class ParsedDay {
 
   final Confidence confidence;
 
+  /// Why [confidence] is below [Confidence.high] — null exactly when it
+  /// isn't. Carries a person-showable [DayUncertainty.explanation] so the
+  /// confirmation screen can say what the parser was unsure of without
+  /// re-parsing the header text itself.
+  final DayUncertainty? uncertainty;
+
+  /// ISO weekday (1 = Monday … 7 = Sunday) that this day's header *named*,
+  /// if it named one — `Monday`, `Mon 3 Nov`. Null when the header carried
+  /// no weekday word (a resolved [date]'s weekday is derivable from the
+  /// date itself). For a [DayUncertainty.weekdayWithoutDate] day this is
+  /// the only structured record of what the plan called the day, and it
+  /// lets the UI check a named weekday against whatever date the day would
+  /// land on.
+  final int? headerWeekday;
+
   /// The source line that was recognized as this day's header, if any.
   /// Null in blank-line fallback mode, where a day is a text block rather
   /// than a header-introduced section.
@@ -138,6 +214,8 @@ class ParsedDay {
     this.place,
     required this.stops,
     required this.confidence,
+    this.uncertainty,
+    this.headerWeekday,
     this.headerSourceLine,
   });
 
@@ -147,12 +225,66 @@ class ParsedDay {
         'place': place,
         'stops': stops.map((s) => s.toJson()).toList(),
         'confidence': confidence.name,
+        'uncertainty': uncertainty?.slug,
+        'headerWeekday': headerWeekday,
         'headerSourceLine': headerSourceLine?.toJson(),
       };
 
   @override
   String toString() =>
       'ParsedDay(#$index, date: $date, place: $place, ${stops.length} stops, $confidence)';
+}
+
+/// Why a source line was set aside instead of placed into a day.
+///
+/// Each value carries a person-showable [explanation]: a falsifiable
+/// sentence the confirmation screen can put next to the kept line, stating
+/// what the parser saw so the user can check it against their own paste
+/// and place the line by hand if the parser was wrong. The [slug] is the
+/// stable identifier for tests and serialization.
+enum UnplacedReason {
+  /// A stop-shaped line that appeared before the first day header, so
+  /// there was no day to attach it to.
+  precedesFirstHeader(
+    'preamble',
+    'This line came before the first day I could find, so there was no '
+        'day to put it under.',
+  ),
+
+  /// After stripping its URL, nothing meaningful remained on the line.
+  urlOnly(
+    'url',
+    'This line was only a web link, with no other text to keep as a stop.',
+  ),
+
+  /// A WhatsApp export placeholder (`<Media omitted>`, `image omitted`, …)
+  /// standing in for an attachment that isn't in the text.
+  whatsAppMediaPlaceholder(
+    'whatsapp-media',
+    "This is WhatsApp's stand-in for an omitted photo, video or other "
+        'attachment — the thing itself is not in the pasted text.',
+  ),
+
+  /// An email-client signature line (`Sent from my iPhone`, …).
+  emailSignature(
+    'signature-line',
+    'This looked like an email signature, not part of the plan.',
+  ),
+
+  /// A hotel/flight booking-reference line (`Booking ref: …`, `PNR …`).
+  bookingReference(
+    'hotel-booking-reference',
+    'This looked like a booking confirmation reference, not a stop.',
+  ),
+  ;
+
+  /// Stable, machine-readable identifier (also what `toJson` emits).
+  final String slug;
+
+  /// A person-showable sentence explaining why the line was set aside.
+  final String explanation;
+
+  const UnplacedReason(this.slug, this.explanation);
 }
 
 /// A source line the parser could not confidently place into any day.
@@ -163,21 +295,20 @@ class ParsedDay {
 class UnplacedLine {
   final SourceLine sourceLine;
 
-  /// Short machine-readable-ish explanation of why this line was not
-  /// placed (e.g. `'preamble'`, `'url'`, `'hotel-booking-reference'`).
-  /// Intended for debugging and for the confirmation screen to explain
-  /// itself, not for programmatic branching.
-  final String reason;
+  /// Why this line was set aside. `reason.explanation` is written to be
+  /// shown to the user next to the kept line, not just logged.
+  final UnplacedReason reason;
 
   const UnplacedLine({required this.sourceLine, required this.reason});
 
   Map<String, dynamic> toJson() => {
         'sourceLine': sourceLine.toJson(),
-        'reason': reason,
+        'reason': reason.slug,
       };
 
   @override
-  String toString() => 'UnplacedLine($reason: ${sourceLine.text.trim()})';
+  String toString() =>
+      'UnplacedLine(${reason.slug}: ${sourceLine.text.trim()})';
 }
 
 /// The full result of parsing one pasted itinerary.
@@ -197,11 +328,20 @@ class ParseResult {
   /// text as one day. This always implies `overallConfidence == low`.
   final bool usedHeaderlessFallback;
 
+  /// True when at least one recognized numeric date header (`3/11`) could
+  /// also be read the other way round (both components were 1-12 and
+  /// differ) — i.e. re-parsing with the opposite `monthFirstNumericDates`
+  /// setting would genuinely change a date. The confirmation screen uses
+  /// this to decide whether to offer the "these are month-first dates"
+  /// one-tap re-read at all.
+  final bool hasAmbiguousNumericDates;
+
   const ParseResult({
     required this.days,
     required this.unplacedLines,
     required this.overallConfidence,
     required this.usedHeaderlessFallback,
+    this.hasAmbiguousNumericDates = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -209,6 +349,7 @@ class ParseResult {
         'unplacedLines': unplacedLines.map((u) => u.toJson()).toList(),
         'overallConfidence': overallConfidence.name,
         'usedHeaderlessFallback': usedHeaderlessFallback,
+        'hasAmbiguousNumericDates': hasAmbiguousNumericDates,
       };
 
   @override

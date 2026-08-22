@@ -2,11 +2,11 @@
   "days": [
     {
       "index": 1,
-      "date": "2026-11-03",
-      "place": "Kyoto",
+      "date": "2026-06-14",
+      "place": "Tokyo",
       "stops": [
         {
-          "text": "9:00am Fushimi Inari Shrine",
+          "text": "09:00 Tsukiji market",
           "time": {
             "hour": 9,
             "minute": 0
@@ -14,89 +14,96 @@
           "isStarred": true,
           "sourceLine": {
             "lineNumber": 2,
-            "text": "1. 9:00am Fushimi Inari Shrine"
+            "text": "- 09:00 Tsukiji market"
           }
         },
         {
-          "text": "Lunch at Nishiki Market",
+          "text": "teamLab maybe 2pm?",
           "time": null,
           "isStarred": false,
           "sourceLine": {
             "lineNumber": 3,
-            "text": "2. Lunch at Nishiki Market"
+            "text": "- teamLab maybe 2pm?"
           }
         },
         {
-          "text": "4:00pm Kiyomizu-dera Temple",
-          "time": {
-            "hour": 16,
-            "minute": 0
-          },
-          "isStarred": true,
+          "text": "dinner around 7pm",
+          "time": null,
+          "isStarred": false,
           "sourceLine": {
             "lineNumber": 4,
-            "text": "3. 4:00pm Kiyomizu-dera Temple"
+            "text": "- dinner around 7pm"
           }
         }
       ],
       "confidence": "high",
       "uncertainty": null,
-      "headerWeekday": null,
+      "headerWeekday": 6,
       "headerSourceLine": {
         "lineNumber": 1,
-        "text": "Day 1: Kyoto"
+        "text": "Sat 14 June - Tokyo"
       }
     },
     {
       "index": 2,
-      "date": "2026-11-04",
-      "place": "Osaka",
+      "date": null,
+      "place": "Kyoto",
       "stops": [
         {
-          "text": "10:00am Osaka Castle",
+          "text": "Train to Kyoto 10:12",
           "time": {
             "hour": 10,
-            "minute": 0
+            "minute": 12
           },
           "isStarred": true,
           "sourceLine": {
             "lineNumber": 7,
-            "text": "1. 10:00am Osaka Castle"
+            "text": "- Train to Kyoto 10:12"
           }
         },
         {
-          "text": "Dotonbori food crawl",
+          "text": "Fushimi Inari ~4pm",
           "time": null,
           "isStarred": false,
           "sourceLine": {
             "lineNumber": 8,
-            "text": "2. Dotonbori food crawl"
+            "text": "- Fushimi Inari ~4pm"
           }
         },
         {
-          "text": "7:30pm Dinner at Umeda Sky Building",
-          "time": {
-            "hour": 19,
-            "minute": 30
-          },
-          "isStarred": true,
+          "text": "Gion at dusk, 7pm-ish",
+          "time": null,
+          "isStarred": false,
           "sourceLine": {
             "lineNumber": 9,
-            "text": "3. 7:30pm Dinner at Umeda Sky Building"
+            "text": "- Gion at dusk, 7pm-ish"
           }
         }
       ],
-      "confidence": "high",
-      "uncertainty": null,
-      "headerWeekday": null,
+      "confidence": "medium",
+      "uncertainty": "weekday-without-date",
+      "headerWeekday": 1,
       "headerSourceLine": {
         "lineNumber": 6,
-        "text": "Day 2: Osaka"
+        "text": "Monday - Kyoto"
+      }
+    },
+    {
+      "index": 3,
+      "date": null,
+      "place": null,
+      "stops": [],
+      "confidence": "low",
+      "uncertainty": "no-stops",
+      "headerWeekday": 2,
+      "headerSourceLine": {
+        "lineNumber": 11,
+        "text": "Tuesday"
       }
     }
   ],
   "unplacedLines": [],
-  "overallConfidence": "high",
+  "overallConfidence": "low",
   "usedHeaderlessFallback": false,
   "hasAmbiguousNumericDates": false
 }

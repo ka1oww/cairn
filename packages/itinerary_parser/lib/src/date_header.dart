@@ -20,12 +20,19 @@ class DateHeaderMatch {
   /// `Mon 3 Nov - Kyoto`.
   final String? trailingText;
 
+  /// True when this match came from a numeric slash date (`3/11`) that
+  /// would also have been valid — and different — read the other way
+  /// round, i.e. both components were in 1-12 and not equal. Named month
+  /// and ISO forms are never ambiguous.
+  final bool ambiguousNumericOrder;
+
   const DateHeaderMatch({
     this.day,
     this.month,
     this.year,
     this.weekday,
     this.trailingText,
+    this.ambiguousNumericOrder = false,
   });
 
   bool get hasFullDate => day != null && month != null;
@@ -124,7 +131,16 @@ int _fullYear(int y) {
 /// Tries each recognized date-header shape against [line] (already
 /// trimmed, and already known not to be a `Day N` header or a bulleted
 /// stop). Returns null if none match.
-DateHeaderMatch? tryParseDateHeader(String line) {
+///
+/// [monthFirstNumericDates] controls how a numeric slash date (`3/11`) is
+/// read: day-first by default, month-first when true. Either way, when
+/// only one reading is valid (`25/12` has no month 25), the valid reading
+/// is used regardless of the setting. Named-month and ISO forms are
+/// unaffected.
+DateHeaderMatch? tryParseDateHeader(
+  String line, {
+  bool monthFirstNumericDates = false,
+}) {
   var m = _weekdayDayMonth.firstMatch(line);
   if (m != null) {
     final weekday = _weekday(m.group(1)!);
@@ -182,14 +198,26 @@ DateHeaderMatch? tryParseDateHeader(String line) {
 
   m = _numericDayMonth.firstMatch(line);
   if (m != null) {
-    final day = int.parse(m.group(1)!);
-    final month = int.parse(m.group(2)!);
-    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+    final first = int.parse(m.group(1)!);
+    final second = int.parse(m.group(2)!);
+    final dayFirstValid =
+        first >= 1 && first <= 31 && second >= 1 && second <= 12;
+    final monthFirstValid =
+        first >= 1 && first <= 12 && second >= 1 && second <= 31;
+    final ambiguous = dayFirstValid && monthFirstValid && first != second;
+    final bool readMonthFirst;
+    if (monthFirstNumericDates) {
+      readMonthFirst = monthFirstValid;
+    } else {
+      readMonthFirst = !dayFirstValid && monthFirstValid;
+    }
+    if (dayFirstValid || monthFirstValid) {
       return DateHeaderMatch(
-        day: day,
-        month: month,
+        day: readMonthFirst ? second : first,
+        month: readMonthFirst ? first : second,
         year: m.group(3) != null ? _fullYear(int.parse(m.group(3)!)) : null,
         trailingText: _cleanTrailing(m.group(4)),
+        ambiguousNumericOrder: ambiguous,
       );
     }
   }

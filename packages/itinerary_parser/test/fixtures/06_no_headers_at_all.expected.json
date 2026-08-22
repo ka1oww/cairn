@@ -34,6 +34,8 @@
         }
       ],
       "confidence": "low",
+      "uncertainty": "headerless-block",
+      "headerWeekday": null,
       "headerSourceLine": null
     },
     {
@@ -70,10 +72,13 @@
         }
       ],
       "confidence": "low",
+      "uncertainty": "headerless-block",
+      "headerWeekday": null,
       "headerSourceLine": null
     }
   ],
   "unplacedLines": [],
   "overallConfidence": "low",
-  "usedHeaderlessFallback": true
+  "usedHeaderlessFallback": true,
+  "hasAmbiguousNumericDates": false
 }

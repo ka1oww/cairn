@@ -25,11 +25,8 @@
         },
         {
           "text": "kiyomizu dera in the afternoon, maybe 4pm?",
-          "time": {
-            "hour": 16,
-            "minute": 0
-          },
-          "isStarred": true,
+          "time": null,
+          "isStarred": false,
           "sourceLine": {
             "lineNumber": 6,
             "text": "kiyomizu dera in the afternoon, maybe 4pm?"
@@ -37,6 +34,8 @@
         }
       ],
       "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 3,
         "text": "Day 1 - Kyoto"
@@ -79,6 +78,8 @@
         }
       ],
       "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 9,
         "text": "Day 2 osaka"
@@ -109,5 +110,6 @@
     }
   ],
   "overallConfidence": "medium",
-  "usedHeaderlessFallback": false
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
 }

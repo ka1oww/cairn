@@ -29,34 +29,60 @@ final result = parseItinerary(pastedText, tripStartDate: DateTime(2026, 11, 3));
 
 for (final day in result.days) {
   print('${day.date} — ${day.place} (${day.confidence.name})');
+  if (day.uncertainty != null) {
+    print('  unsure because: ${day.uncertainty!.explanation}');
+  }
   for (final stop in day.stops) {
     print('  ${stop.isStarred ? '★' : ' '} ${stop.text}');
   }
 }
 
 for (final line in result.unplacedLines) {
-  print('could not place: ${line.sourceLine.text} (${line.reason})');
+  print('kept aside: ${line.sourceLine.text}');
+  print('  because: ${line.reason.explanation}');
 }
 ```
 
 That's the entire public API: one function, `parseItinerary`, and the
 result types it returns (`ParseResult`, `ParsedDay`, `Stop`, `SourceLine`,
-`UnplacedLine`, `ParsedTime`, `Confidence`). `ItineraryParser.parse(...)`
-is a thin static-method alternative to `parseItinerary(...)` for callers
-who prefer that style; they behave identically.
+`UnplacedLine`, `UnplacedReason`, `ParsedTime`, `Confidence`,
+`DayUncertainty`). `ItineraryParser.parse(...)` is a thin static-method
+alternative to `parseItinerary(...)` for callers who prefer that style;
+they behave identically.
 
 `tripStartDate` is optional. Passing it lets the parser turn `Day N`
 headers and year-less dates into real calendar dates. Without it, days
 are still split out correctly — only the `date` field stays null where it
 would otherwise have to be guessed.
 
+`monthFirstNumericDates` (default false) flips how numeric slash dates
+are read: `3/11` is 3 November by default, March 11th with the flag on.
+It exists so a confirmation screen can offer "these are month-first
+dates" as one tap that re-parses the whole paste consistently —
+`ParseResult.hasAmbiguousNumericDates` says whether any recognized
+numeric date would actually change under the flip, i.e. whether the offer
+is worth showing at all.
+
 ## The star rule
 
 A stop is starred (`Stop.isStarred`) exactly when the parser found a
-clock time on its line (`Stop.time != null`). That is the *only* rule
-that creates a star anywhere in this package — there is no separate
-"important" flag, no keyword list. If a stop needs to be time-anchored in
-the app, it needs a time in the source text.
+**definite** clock time on its line (`Stop.time != null`). That is the
+*only* rule that creates a star anywhere in this package — there is no
+separate "important" flag, no keyword list. If a stop needs to be
+time-anchored in the app, it needs a time in the source text.
+
+A *hedged* time deliberately does not count: `maybe around 3pm`,
+`~7pm`, `7pm-ish`, `4pm?`, `2pm or 3pm` all leave the stop unstarred,
+with `time` null (the hedged words stay in the stop's text — nothing is
+rewritten). A star marks the one or two things a day with a real
+consequence if missed; a starred guess would devalue every real star in
+the trip. The rule errs on the side of not starring: a hedge word
+anywhere in the same comma-separated clause before the time (`maybe`,
+`around`, `about`, `roughly`, `approx`, `sometime`, `probably`,
+`possibly`, `perhaps`, `hopefully`, `likely`, `might`, `circa`,
+`ideally`, `tbc`, `tbd`, or a `~`), or `ish` / `?` / `or …` right after
+it, suppresses the time entirely. A hedge in a *different* clause does
+not: `Dinner at 7pm, maybe karaoke after` still stars the dinner.
 
 ## Confidence
 
@@ -80,6 +106,24 @@ screen, not just decorate it:
 `ParseResult.overallConfidence` is the weakest signal across the whole
 parse — it also drops when a large share of lines ended up unplaced,
 even if every day that *was* found is individually solid.
+
+### The cause, not just the level
+
+A confirmation screen that varies its copy by *why* a day is doubtful —
+"which Monday?" reads differently from "found the day, nothing in it" —
+should not have to re-parse the header text to find out. So every day
+below `high` also carries `ParsedDay.uncertainty`, a `DayUncertainty`
+naming the cause (`weekdayWithoutDate`, `dateWithoutYear`,
+`barePlaceName`, `noStops`, `headerlessBlock`), and each cause carries a
+person-showable `explanation` sentence stating what the parser saw and
+what it refused to guess. `uncertainty` is null exactly when the day's
+confidence is `high`.
+
+When a header names a weekday (`Monday`, `Mon 3 Nov`), the ISO weekday
+it named is exposed as `ParsedDay.headerWeekday` — for a
+weekday-without-date day this is the only structured record of what the
+plan called the day, and it lets the UI check the named weekday against
+whatever date the day would land on.
 
 ## What this parser cannot do
 
@@ -105,9 +149,14 @@ building UI on top of this package.
   split out), but its `date` is always null — the parser will not guess
   which occurrence of Monday you meant, even with `tripStartDate` given.
 
-- **It reads numeric dates as day/month, not month/day.** `3/11` means
-  3 November, not March 11th. There is no locale detection; if your
-  source text uses US-style month/day dates, they will be misread.
+- **It cannot tell day-first from month-first numeric dates by itself.**
+  There is no locale detection: `3/11` is read as 3 November unless the
+  caller passes `monthFirstNumericDates: true`, in which case the whole
+  paste is read month-first. The parser does flag when the choice
+  mattered (`ParseResult.hasAmbiguousNumericDates`), and a numeric date
+  that is only valid one way round (`25/12`) is read that way regardless
+  of the setting — but deciding which dialect a genuinely ambiguous paste
+  speaks is the user's call, made once for the whole paste.
 
 - **It cannot distinguish a genuine stop from chat banter that happens to
   contain a link.** In a WhatsApp-style paste, `check this out
@@ -141,9 +190,12 @@ building UI on top of this package.
 
 - **Nothing is ever silently dropped, but "unplaced" isn't "wrong."**
   Every line the parser didn't turn into a header or a stop shows up in
-  `ParseResult.unplacedLines` with a reason. A line ending up there means
-  the parser wasn't confident, not that it necessarily made a mistake —
-  always let the user see and, if needed, place it manually.
+  `ParseResult.unplacedLines` with an `UnplacedReason` whose
+  `explanation` is a sentence written to be shown to the person — what
+  the parser saw on that line, stated so they can check it against their
+  own paste. A line ending up there means the parser wasn't confident,
+  not that it necessarily made a mistake — always let the user see and,
+  if needed, place it manually.
 
 ## Testing
 
@@ -156,5 +208,6 @@ a realistic paste, each `<name>.expected.json` is the exact parse it must
 produce, and an optional `<name>.meta.json` supplies the `tripStartDate`
 used for that fixture. A change that alters parsing behavior will fail
 one of these loudly rather than silently drifting — if the new output is
-actually correct, update the matching `.expected.json` deliberately, by
-hand, after checking it.
+actually correct, regenerate with `dart run tool/regen_goldens.dart` and
+review the diff line by line before committing; the goldens are the spec,
+not a cache.

@@ -19,11 +19,8 @@
         },
         {
           "text": "Check in around 4.40 PM",
-          "time": {
-            "hour": 16,
-            "minute": 40
-          },
-          "isStarred": true,
+          "time": null,
+          "isStarred": false,
           "sourceLine": {
             "lineNumber": 3,
             "text": "- Check in around 4.40 PM"
@@ -55,6 +52,8 @@
         }
       ],
       "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 1,
         "text": "Day 1: Tokyo"
@@ -63,5 +62,6 @@
   ],
   "unplacedLines": [],
   "overallConfidence": "high",
-  "usedHeaderlessFallback": false
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
 }

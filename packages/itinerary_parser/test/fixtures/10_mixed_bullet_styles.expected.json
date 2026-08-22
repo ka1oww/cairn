@@ -79,6 +79,8 @@
         }
       ],
       "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 1,
         "text": "Day 1: Kyoto"
@@ -87,5 +89,6 @@
   ],
   "unplacedLines": [],
   "overallConfidence": "high",
-  "usedHeaderlessFallback": false
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
 }
