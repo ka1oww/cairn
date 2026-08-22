@@ -13,10 +13,12 @@ produced it and the alternatives it beat. The `.zip` is the full export.
 | 22 Aug 2026 (round 7) | `2026-08-22-round7-handoff.zip` | The retired simultaneous surfaces redrawn on the scattered model, every trip surface at eight people, and first surfaces for the alert level, the import promise, the starter and the container, and joining mid-trip |
 | 22 Aug 2026 (round 8) | `2026-08-22-round8-handoff.zip` | The screen after the paste: the confident read, the uncertain read, correcting the parse, and the paste that wouldn't parse |
 | 22 Aug 2026 (round 9) | `2026-08-22-round9-handoff.zip` | The book interior, drawn against the printed reference: the cover, the day spread in two honest treatments plus a recommended blend, the quiet and full days, the closer where the cairn appears, and the non-photo cell |
+| 22 Aug 2026 (round 10) | `2026-08-22-round10-handoff.zip` | The two surfaces the book decisions created: where a word is written (the caption line at the capture breath, words-later on your own print, the wordless book) and the page as paper (Blurb's measured 8×10 geometry, round nine re-read against the fold, the four-up, the printed colophon and the ink specimen) |
 
-`2026-08-22-round7-review.html`, `2026-08-22-round8-review.html` and
-`2026-08-22-round9-review.html` are one-page reviews of their rounds:
-every changed surface, with the decision that shaped it.
+`2026-08-22-round7-review.html`, `2026-08-22-round8-review.html`,
+`2026-08-22-round9-review.html` and `2026-08-22-round10-review.html`
+are one-page reviews of their rounds: every changed surface, with the
+decision that shaped it.
 
 ## Reading these against the decisions
 
@@ -61,11 +63,26 @@ spread and colophon cards are superseded by the turn-17 surfaces
 (`17b`/`17d` day spread, `17e`–`17f` at the volume extremes, `17g` the
 closer); `7e`'s middle card — the long-press slide-to-day correction —
 still stands as drawn. The recommended treatment is `17d`, the blend:
-treatment A warmed only by what the app already owns. Two questions are
-deliberately left open on the status file as `needs-decision`: whether
-the cover's face is the photo (`17a`, after the reference) or the cairn
-(`13e`, after decision 6), and whether people may ever write their own
-words into the book — every caption in round 9 is derived.
+treatment A warmed only by what the app already owns. Round 9's two open
+questions were both decided on 22 August: the cover's face is the
+**photograph** (`17a`, with the cairn signing the foot — `13e`'s
+pile-as-portrait cover is superseded), and **authored words are in**:
+the book generates itself and nobody edits it, but it prints words
+people had already written.
+
+Those decisions created **round 10's two surfaces** (turn 18). The word
+is written at the capture breath — one dashed line on `10d`'s
+confirmation sheet (`18a`–`18b`), skippable by construction — and stays
+writable on your own print until the trip closes (`18c`); the wordless
+book is round nine's book unchanged (`18d`). The page is designed
+against Blurb's published PDF-to-Book 8×10 geometry (`18f`): an
+eight-day trip lands exactly on the 20-page minimum, `17f`'s gutter
+caption moves to the fore-edge to survive the binding (`18g`), the
+four-up surrenders its middle column to the fold (`18h`), and the
+printed colophon replaces `17g`'s button bar with derived facts and an
+ink specimen (`18i`). One question is escalated, not decided: how a
+written line dresses — four registers drawn and priced on the captain's
+board (`18e`), flagged `needs-decision` on the status file.
 
 ## House system
 
