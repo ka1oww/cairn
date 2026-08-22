@@ -135,7 +135,7 @@ That is the layering rule paying rent.
 | **Day page & shut gate** | not built | app state | The day is the artefact: a vertical timeline, hours prominent, credit small. Shut, it shows times and names with images withheld; it seals silently at midnight. |
 | **Capture** | not built | app state (platform glue drives the camera) | Answers the ping. Back camera primary, small front inset; thirty-minute window; the late path is always open and visibly late. |
 | **Pool** | not built | app state | Plumbing: the whole trip's photos in a plain, fast grid by day. Deliberately not a destination. |
-| **Book** | not built | app state | What the trip turns into: one spread per day, cairn on the cover, digital only, works with the network off forever. Interior page design **in progress** — the captain's reference landed and round 9 is drawing against it. |
+| **Book** | not built | app state | What the trip turns into: one spread per day, the photograph as the cover's face with the cairn signing the foot (book-round-nine decision), digital only, works with the network off forever. Automatic — it generates itself and there is no editor (book-no-editor decision). Interior designed in round 9; the printed page is not. Deliberately after the first release. |
 | **Join & confirm** | not built | app state | The way in: invite code (or deep link), display-name edit, paste-the-plan, and the confirmation screen that surfaces the parser's confidence and unplaced lines instead of trusting them. |
 | **Settings & members** | not built | app state | Rename, invites, member list, leave, remove. Its affordances follow the starter-and-container decision (rename flat, delete gated, one narrow removal power, never titled "admin"). |
 
@@ -164,10 +164,12 @@ That is the layering rule paying rent.
 ### Backend (`supabase/` + Cloudflare)
 
 The backend is deliberately minimal: the shared photo pool, trip membership,
-and the shared trip clock. The itinerary, trail, stars, gate evaluation and
-ping schedule are computed on the phone and **must never move server-side
-without a deliberate decision** (`AGENTS.md`). The server records nothing
-about pings fired or who has answered today.
+the shared trip clock — and, since grill round one §2, the itinerary as a
+shared *stored* fact, edited once and propagated to every phone. The trail,
+stars, gate evaluation and ping schedule are still computed on the phone and
+**must never move server-side without a deliberate decision** (`AGENTS.md`);
+storing a shared fact is not computing on the server. The server records
+nothing about pings fired or who has answered today.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
@@ -184,7 +186,7 @@ Services know the edges; the edges know nothing of Cairn.
 | Node | State | What breaks if it changes | Why it is on the map |
 | --- | --- | --- | --- |
 | **Camera roll (PhotoKit)** | not built | The import sweep, and the honesty of the import promise | iOS never wakes a third-party app for a new photo — no background trigger, no entitlement. The sweep runs on open; the interface says exactly that. |
-| **Camera (dual capture)** | not built | Capture | Back primary + front inset is the one genuinely hard piece of engineering in the app; back-only is the accepted fallback. |
+| **Camera (dual capture)** | not built | Capture | Back primary + front inset, taken as a back-then-front sequence — the spike (`learning/dual-camera-spike/`) established that is what "like BeReal" actually means, and true simultaneous capture is explicitly not being built. Back-only ships first; the inset lands after the first release. |
 | **Local notifications** | not built | The ping reaching anyone | Registered in one offline pass from the schedule. Ordinary alert level — **never** time-sensitive, never pierces Do Not Disturb (notification-alert-level decision). Delivery is the OS's to refuse. |
 | **Location** | not built | Rung-1 day assignment for pinged photos | A GPS tag at capture time is what lets the app's own photos take the best rung of the ladder. |
 | **Sign in with Apple** | not built | The whole account path | First auth route. Web/PWA were ruled out (iOS evicts PWA storage); native + Apple sign-in is the way in. |
@@ -265,13 +267,15 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   still says "being chosen." The map draws them as the plan, flagged.
 - **One fixed clock per trip on the server, in v1.** The first/last-day
   arrival-departure windows and the country-change rule live only on the
-  phone (`trip_moments` computes them from the itinerary, which stays local by
-  decision). The server cannot express them without syncing the itinerary —
-  deliberately not done.
-- **The book's interior is in design.** The captain's printed reference
-  has landed and design round 9 is drawing the interior against it (on
-  PR #11). The cover (the cairn) was already settled; old handoffs still
-  showing the retired four-up are superseded by that round.
+  phone (`trip_moments` computes them from the itinerary). Grill round one §2
+  has since decided the itinerary becomes a shared stored fact that syncs to
+  every phone — nothing implements that yet, and until it lands the server
+  still cannot express these windows.
+- **The book's interior is designed; the printed page is not.** Round 9 drew
+  the interior against the captain's printed reference. The cover's face is
+  the photograph, with the cairn signing the foot (book-round-nine decision,
+  superseding the cairn-fronted cover); old handoffs still showing the
+  retired four-up are superseded by that round.
 - **In-transit photos on a multi-timezone day are parked.** A photo taken
   between two days' zones can be `outsideTrip` by refusal; manual placement
   is the current answer.
