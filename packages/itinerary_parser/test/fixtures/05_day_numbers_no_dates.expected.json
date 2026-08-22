@@ -37,6 +37,8 @@
         }
       ],
       "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 1,
         "text": "Day 1"
@@ -79,6 +81,8 @@
         }
       ],
       "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 6,
         "text": "Day 2"
@@ -87,5 +91,6 @@
   ],
   "unplacedLines": [],
   "overallConfidence": "high",
-  "usedHeaderlessFallback": false
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
 }
