@@ -25,11 +25,13 @@ That is the entire product. Everything below is in service of it.
 
 ## Where this is now
 
-**Foundations are done. There is no app.**
+**Foundations are done. The app is a scaffold.**
 
-There is no `lib/`, no `ios/`, no `android/`, no root `pubspec.yaml`. What exists
-is four pure-Dart libraries, a backend schema, the complete decision record, and
-the design handoffs. All of it is tested; none of it can be opened on a phone.
+The root `pubspec.yaml`, `lib/` and `ios/` exist (the app-scaffold PR): the
+Riverpod-and-Drift stack is wired end to end behind one deliberately minimal
+proving screen, and it builds for the iOS simulator. No screen from the design
+exists yet. Beneath it: four pure-Dart libraries, a backend schema, the
+complete decision record, and the design handoffs, all tested.
 
 | Piece | State |
 | --- | --- |
@@ -39,7 +41,7 @@ the design handoffs. All of it is tested; none of it can be opened on a phone.
 | `packages/trip_moments` | Rewritten to the decided ping model. In review. |
 | `packages/cairn_model` | The shared vocabulary. In review. |
 | `supabase/` | Three blockers fixed, decisions encoded, verified on real Postgres. In review. |
-| The Flutter app | **Does not exist.** |
+| The Flutter app | **Scaffold.** Builds and runs; no product screen yet. |
 
 ---
 

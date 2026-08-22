@@ -6,7 +6,9 @@ file is [`architecture.html`](architecture.html) — same nodes, same arrows,
 drawn. This file is the durable, diff-able, greppable version.
 
 Drawn 22 August 2026 from `main` (after PRs #7–#10 merged) and PR #11
-(design round 7).
+(design round 7). Updated the same day for the app scaffold
+(`fm/cairn-app-scaffold`), which turned the app bands from intention into
+first code.
 Sources: `docs/roadmap.md`, all seven files in `docs/decisions/`,
 `supabase/README.md`, `AGENTS.md`, and each package's `README.md`.
 
@@ -48,28 +50,33 @@ Two things that are *not* arrows:
 
 ## The most important fact on the map
 
-**There is no app.** No `lib/`, no `ios/`, no root `pubspec.yaml`. What exists
-is the bottom of the map (four pure-Dart packages) and the right edge (a
-backend schema verified only against a local Postgres — no hosted Supabase
-project exists, no R2 bucket has been created, nothing is deployed). Every
-node between the screens and the packages — the shell, the screens, app state,
-the repositories, the local store, all platform wiring — is **not built**.
+**The app is a scaffold.** The root `pubspec.yaml`, `lib/` and `ios/` now
+exist (the app-scaffold PR): a shell, one Riverpod provider, one repository
+and a one-table Drift store, wired end to end and proven by a deliberately
+minimal screen that reads a value through the whole stack and writes one
+back. `lib/README.md` spells this map's bands as directories — read it
+alongside this file. Everything else between the screens and the packages —
+every designed screen, the ping scheduler, the import sweep, the platform
+glue, the Supabase/R2 client adapter — is still **not built**, and the right
+edge is unchanged: the backend schema is verified only against a local
+Postgres, no hosted Supabase project exists, no R2 bucket has been created,
+nothing is deployed.
 
-The map therefore draws the *intended* architecture in full, with state marked
-per node. A map of only what exists would omit the entire product.
+The map therefore still draws the *intended* architecture in full, with state
+marked per node. A map of only what exists would omit most of the product.
 
 ```
      Trail · Day page & gate · Capture · Pool · Book · Join & confirm · Settings   SCREENS        not built
         │                          (know app state, and nothing below it)
         ▼
-     Riverpod providers · ping scheduler · import sweep · platform glue            APP STATE      not built
+     Riverpod providers · ping scheduler · import sweep · platform glue            APP STATE      partial
         │                                     │ (services also know platform
         ▼                                     ▼  edges and domain packages)
-     ╔══════════════════ REPOSITORIES — the seam ══════════════════╗               SEAM           not built
+     ╔══════════════════ REPOSITORIES — the seam ══════════════════╗               SEAM           partial
      ║  the only layer that knows both storage backends exist      ║
      ╚═══════╤══════════════════════════════════════════╤═════════╝
              ▼                                          ▼
-     Drift (local SQLite)                    Supabase/R2 client adapter            STORAGE        not built
+     Drift (local SQLite)                    Supabase/R2 client adapter            STORAGE        partial
                                               │        │         │
                                               ▼        ▼         ▼
                                             Auth   Postgres+RLS  edge fns → R2    BACKEND        partial
@@ -125,6 +132,10 @@ inward arrows), and why it exists.
 
 ### Screens — all not built; drawn in `docs/design/` (round 7 current)
 
+The scaffold's one proving screen (`lib/screens/home_screen.dart`) is
+deliberately none of these — it exists to demonstrate the wiring and is
+replaced, not extended, when the first real screen lands.
+
 Every screen knows **app state and nothing else** — no repository, no store,
 no network, no SQL. What breaks if a screen changes: nothing below it, ever.
 That is the layering rule paying rent.
@@ -139,11 +150,11 @@ That is the layering rule paying rent.
 | **Join & confirm** | not built | app state | The way in: invite code (or deep link), display-name edit, paste-the-plan, and the confirmation screen that surfaces the parser's confidence and unplaced lines instead of trusting them. |
 | **Settings & members** | not built | app state | Rename, invites, member list, leave, remove. Its affordances follow the starter-and-container decision (rename flat, delete gated, one narrow removal power, never titled "admin"). |
 
-### App state — all not built
+### App state
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Riverpod providers** | not built | repositories, `cairn_model`, `itinerary_parser` (the parse use case) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring. Validated in `learning/riverpod-drift-demo/`. |
+| **Riverpod providers** | partial — scaffold: one provider (`tripNameProvider`) proving the wiring, nothing of the product's state yet | repositories, `cairn_model`, `itinerary_parser` (the parse use case) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring. Validated in `learning/riverpod-drift-demo/`, now exercised in `lib/app_state/`. |
 | **Ping scheduler** | not built | repositories (roster, trip clock, itinerary arrival/departure), `trip_moments`, local-notifications edge | The one interruption per person per day | Feeds `trip_moments` its inputs and registers every remaining day's local notifications in one offline pass. |
 | **Import sweep** | not built | camera-roll edge, `photo_day_assignment`, repositories | The completeness of the record | Runs when the app opens — the import promise commits to exactly that and no more (iOS offers no background trigger). Extracts metadata, asks the ladder, queues uploads. |
 | **Platform glue** | not built | camera, location, Sign in with Apple edges | Capture and Join | The thin controllers that drive dual capture, tag a pinged photo with GPS so it rides rung 1, and run the sign-in flow. Kept out of widgets so screens stay platform-blind. |
@@ -152,13 +163,13 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Repositories** | not built | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
+| **Repositories** | partial — scaffold: one repository over the draft table; the remote side, and everything listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
 
 ### Storage
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Drift store** | not built | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) but **not yet recorded in a decision file**. |
+| **Drift store** | partial — scaffold: one disposable `trip_drafts` table proving the stack; no real table is typed against the vocabulary yet | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) but **not yet recorded in a decision file**. |
 | **Supabase/R2 client adapter** | not built | Supabase Auth, Postgres (PostgREST under RLS), both edge functions, R2 (presigned PUT/GET) | Repositories — nothing else in the app may import a Supabase or HTTP symbol | Wraps the session JWT, the RLS-filtered queries, the edge-function calls, and the direct-to-R2 byte transfers behind one interface the repositories consume. |
 
 ### Backend (`supabase/` + Cloudflare)
@@ -260,9 +271,10 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
 - **Sync and conflict policy is undecided** beyond three written notes
   (outbox ordering, `day_pages` insert→update fallback, deletion refetch).
   No reconciliation of rows against R2 objects exists in any direction.
-- **Riverpod and Drift are validated, not decided.** The learning demo makes
-  the argument; no decision file records the choice; the root `README.md`
-  still says "being chosen." The map draws them as the plan, flagged.
+- **Riverpod and Drift are validated and now built on, not decided.** The
+  learning demo makes the argument and the app scaffold commits code to both;
+  no decision file records the choice; the root `README.md` still says
+  "being chosen." The map draws them as the plan, flagged.
 - **One fixed clock per trip on the server, in v1.** The first/last-day
   arrival-departure windows and the country-change rule live only on the
   phone (`trip_moments` computes them from the itinerary, which stays local by
@@ -275,9 +287,10 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
 - **In-transit photos on a multi-timezone day are parked.** A photo taken
   between two days' zones can be `outsideTrip` by refusal; manual placement
   is the current answer.
-- **Thumbnails, keepalive, CI.** No thumbnail pipeline exists (phone-side
+- **Thumbnails and keepalive.** No thumbnail pipeline exists (phone-side
   work). The dormancy keepalive that protects the free tier between trips is
-  planned, not built. No CI runs any test on any PR.
+  planned, not built. (CI exists since #13 and covers the packages, the
+  JS-safety golden, the RLS probe, the learning demo and the app.)
 - **Nothing has ever touched a hosted Supabase project or a real R2 bucket.**
   The schema's verification is real but local; `supabase db push` against a
   throwaway project is still the gate before anything real.
