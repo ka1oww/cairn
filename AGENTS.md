@@ -28,9 +28,13 @@ truth, not this file.
 Sharp edges worth knowing before touching this directory again:
 
 - The backend is intentionally minimal: it holds the shared photo pool, trip
-  membership and the shared trip clock. The itinerary/trail/stars/ping
-  schedule are computed on the phone and must never move server-side without
-  a deliberate decision to change that.
+  membership and the shared trip clock. The trail/stars/ping schedule are
+  computed on the phone and must never move server-side without a deliberate
+  decision to change that. One such decision exists: the itinerary becomes a
+  *stored* shared fact that syncs to every phone
+  (`docs/decisions/2026-08-22-grill-round-one.md` §2 — storing a shared fact
+  is not computing on the server); nothing implements it yet, and
+  `supabase/README.md` still describes the pre-decision state.
 - **Never inline a membership subquery in an RLS policy.** Every
   membership/ownership check goes through the `SECURITY DEFINER` helpers
   `is_trip_member` / `is_trip_starter` in `0004_trip_members.sql`, because a
