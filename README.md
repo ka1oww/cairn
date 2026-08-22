@@ -40,3 +40,6 @@ The full design record — what was decided, what was rejected, and why — is k
 in `docs/decisions/` and `docs/design/`. See those directories for the reasoning
 behind the architecture, the design system, and the key decisions. This README is
 deliberately thin; it is not the design document.
+
+For what is actually built, what is not, and the order the rest arrives in, see
+`docs/roadmap.md`.
