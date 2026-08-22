@@ -16,9 +16,14 @@ final class ClockTime implements Comparable<ClockTime> {
   /// 0-59.
   final int minute;
 
-  const ClockTime(this.hour, this.minute)
-      : assert(hour >= 0 && hour <= 23, 'hour must be 0-23'),
-        assert(minute >= 0 && minute <= 59, 'minute must be 0-59');
+  ClockTime(this.hour, this.minute) {
+    if (hour < 0 || hour > 23) {
+      throw ArgumentError.value(hour, 'hour', 'must be 0-23');
+    }
+    if (minute < 0 || minute > 59) {
+      throw ArgumentError.value(minute, 'minute', 'must be 0-59');
+    }
+  }
 
   /// `HH:MM`, zero-padded, 24-hour — the spelling the day page prints.
   String get iso =>

@@ -20,11 +20,11 @@ void main() {
     clockOverridesByDay: {3: london},
   );
   final trip = Trip(
-    id: const TripId('trip-tokyo-london'),
+    id: TripId('trip-tokyo-london'),
     name: 'Tokyo to London',
-    startedBy: const MemberId('mum'),
+    startedBy: MemberId('mum'),
     clock: tokyo,
-    members: [Member(id: const MemberId('mum'), displayName: 'Mum')],
+    members: [Member(id: MemberId('mum'), displayName: 'Mum')],
     days: days,
   );
 
@@ -54,8 +54,8 @@ void main() {
     test('and reads at the hour the day was on, not the hour it landed at', () {
       // The whole point. 15:00 in London, printed on the day page as 23:00,
       // because that is what the clock in their pockets said all day.
-      expect(trip.day(2).clockTimeOf(afterLanding), const ClockTime(23, 0));
-      expect(trip.day(2).clockTimeOf(breakfast), const ClockTime(8, 40));
+      expect(trip.day(2).clockTimeOf(afterLanding), ClockTime(23, 0));
+      expect(trip.day(2).clockTimeOf(breakfast), ClockTime(8, 40));
     });
 
     test('the same day on the destination clock would answer differently', () {
@@ -64,7 +64,7 @@ void main() {
       // everything.
       final asIfLondon =
           TripDay(number: 2, date: CalendarDate(2026, 6, 5), clock: london);
-      expect(asIfLondon.clockTimeOf(afterLanding), const ClockTime(15, 0));
+      expect(asIfLondon.clockTimeOf(afterLanding), ClockTime(15, 0));
       expect(asIfLondon.startsAt, isNot(trip.day(2).startsAt));
     });
   });
@@ -82,16 +82,16 @@ void main() {
   test('the timeline orders by instant, so the morning photo comes first', () {
     final pool = DayPool.of(2, [
       PhotoRef(
-        id: const PhotoId('evening'),
+        id: PhotoId('evening'),
         dayNumber: 2,
-        contributor: const MemberId('mum'),
+        contributor: MemberId('mum'),
         takenAt: afterLanding,
         origin: PhotoOrigin.pinged,
       ),
       PhotoRef(
-        id: const PhotoId('breakfast'),
+        id: PhotoId('breakfast'),
         dayNumber: 2,
-        contributor: const MemberId('mum'),
+        contributor: MemberId('mum'),
         takenAt: breakfast,
         origin: PhotoOrigin.imported,
       ),
@@ -111,11 +111,11 @@ void main() {
     final honolulu = TripClock.zone('Pacific/Honolulu',
         utcOffset: const Duration(hours: -10));
     final crossing = Trip(
-      id: const TripId('trip-dateline'),
+      id: TripId('trip-dateline'),
       name: 'The long tenth',
-      startedBy: const MemberId('mum'),
+      startedBy: MemberId('mum'),
       clock: auckland,
-      members: [Member(id: const MemberId('mum'), displayName: 'Mum')],
+      members: [Member(id: MemberId('mum'), displayName: 'Mum')],
       days: [
         TripDay(number: 1, date: CalendarDate(2026, 6, 10), clock: auckland),
         TripDay(number: 2, date: CalendarDate(2026, 6, 10), clock: honolulu),

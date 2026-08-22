@@ -27,14 +27,13 @@ void main() {
 
   group('ClockTime', () {
     test('prints the way the day page does', () {
-      expect(const ClockTime(8, 40).iso, '08:40');
-      expect(const ClockTime(23, 40).iso, '23:40');
+      expect(ClockTime(8, 40).iso, '08:40');
+      expect(ClockTime(23, 40).iso, '23:40');
     });
 
     test('compares through the day', () {
-      expect(const ClockTime(8, 40).compareTo(const ClockTime(22, 10)),
-          lessThan(0));
-      expect(const ClockTime(8, 40), const ClockTime(8, 40));
+      expect(ClockTime(8, 40).compareTo(ClockTime(22, 10)), lessThan(0));
+      expect(ClockTime(8, 40), ClockTime(8, 40));
     });
   });
 
@@ -42,7 +41,7 @@ void main() {
     test('is starred exactly when it has a time, and never otherwise', () {
       expect(Stop(text: 'Nishiki Market').isStarred, isFalse);
       expect(
-        Stop(text: 'train to Osaka', time: const ClockTime(18, 40)).isStarred,
+        Stop(text: 'train to Osaka', time: ClockTime(18, 40)).isStarred,
         isTrue,
       );
     });
@@ -82,7 +81,7 @@ void main() {
           TripClock.zone('Asia/Tokyo', utcOffset: const Duration(hours: 9));
       final instant = DateTime.utc(2026, 6, 14, 23, 40);
       expect(tokyo.dateAt(instant), CalendarDate(2026, 6, 15));
-      expect(tokyo.clockTimeAt(instant), const ClockTime(8, 40));
+      expect(tokyo.clockTimeAt(instant), ClockTime(8, 40));
       expect(tokyo.startOfDay(CalendarDate(2026, 6, 15)),
           DateTime.utc(2026, 6, 14, 15));
     });
@@ -92,9 +91,9 @@ void main() {
     test('refuses a timestamp that is not UTC', () {
       expect(
         () => PhotoRef(
-          id: const PhotoId('p1'),
+          id: PhotoId('p1'),
           dayNumber: 1,
-          contributor: const MemberId('mum'),
+          contributor: MemberId('mum'),
           takenAt: DateTime(2026, 6, 14, 8, 40),
           origin: PhotoOrigin.pinged,
         ),
@@ -105,12 +104,12 @@ void main() {
 
   group('identifiers', () {
     test('of different kinds are never equal', () {
-      expect(const MemberId('x') == const MemberId('x'), isTrue);
+      expect(MemberId('x') == MemberId('x'), isTrue);
       // ignore: unrelated_type_equality_checks
-      expect(const MemberId('x') == const PhotoId('x'), isFalse);
+      expect(MemberId('x') == PhotoId('x'), isFalse);
       expect(
           <MemberId>{
-            ...[const MemberId('x'), const MemberId('x')]
+            ...[MemberId('x'), MemberId('x')]
           }.length,
           1);
     });

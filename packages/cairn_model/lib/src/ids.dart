@@ -13,8 +13,12 @@ abstract base class _Identifier {
   /// The opaque identifier, exactly as the storage layer spells it.
   final String value;
 
-  const _Identifier(this.value)
-      : assert(value != '', 'an identifier must not be empty');
+  _Identifier(this.value) {
+    if (value == '') {
+      throw ArgumentError.value(
+          value, 'value', 'an identifier must not be empty');
+    }
+  }
 
   @override
   bool operator ==(Object other) =>
@@ -31,7 +35,7 @@ abstract base class _Identifier {
 
 /// Identifies one trip.
 final class TripId extends _Identifier {
-  const TripId(super.value);
+  TripId(super.value);
 }
 
 /// Identifies one person, for the whole of their account — not per trip.
@@ -39,7 +43,7 @@ final class TripId extends _Identifier {
 /// The same person on two trips is the same [MemberId]; what differs is the
 /// [Member] row that places them on each one.
 final class MemberId extends _Identifier {
-  const MemberId(super.value);
+  MemberId(super.value);
 }
 
 /// Identifies one photo in the shared pool.
@@ -48,5 +52,5 @@ final class MemberId extends _Identifier {
 /// id (see `supabase/README.md`); resolving that key is not this package's
 /// concern.
 final class PhotoId extends _Identifier {
-  const PhotoId(super.value);
+  PhotoId(super.value);
 }

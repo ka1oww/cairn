@@ -2,8 +2,8 @@ import 'package:cairn_model/cairn_model.dart';
 import 'package:test/test.dart';
 
 void main() {
-  const jonas = MemberId('jonas');
-  const tomas = MemberId('tomas');
+  final jonas = MemberId('jonas');
+  final tomas = MemberId('tomas');
 
   PhotoRef photo(String id, MemberId by, DateTime takenAt) => PhotoRef(
         id: PhotoId(id),
@@ -34,7 +34,7 @@ void main() {
 
   test('a photo belonging to another day is refused', () {
     final elsewhere = PhotoRef(
-      id: const PhotoId('d'),
+      id: PhotoId('d'),
       dayNumber: 5,
       contributor: jonas,
       takenAt: DateTime.utc(2026, 6, 18, 2),
@@ -54,13 +54,13 @@ void main() {
     final pool = DayPool.of(4, [morning, afternoon, evening]);
 
     test('you can delete your own photo', () {
-      final after = pool.deletePhoto(const PhotoId('a'), by: jonas);
+      final after = pool.deletePhoto(PhotoId('a'), by: jonas);
       expect(after.photos.map((p) => p.id.value), ['b', 'c']);
     });
 
     test('you cannot delete someone else\'s', () {
       expect(
-        () => pool.deletePhoto(const PhotoId('a'), by: tomas),
+        () => pool.deletePhoto(PhotoId('a'), by: tomas),
         throwsA(isA<ArgumentError>()),
       );
       expect(pool.photos.length, 3, reason: 'and nothing changed');
@@ -68,16 +68,16 @@ void main() {
 
     test('deleting a photo that is not there is an error, not a no-op', () {
       expect(
-        () => pool.deletePhoto(const PhotoId('nope'), by: jonas),
+        () => pool.deletePhoto(PhotoId('nope'), by: jonas),
         throwsA(isA<ArgumentError>()),
       );
     });
 
     test('contributors survive deletion, always', () {
       final emptied = pool
-          .deletePhoto(const PhotoId('a'), by: jonas)
-          .deletePhoto(const PhotoId('c'), by: jonas)
-          .deletePhoto(const PhotoId('b'), by: tomas);
+          .deletePhoto(PhotoId('a'), by: jonas)
+          .deletePhoto(PhotoId('c'), by: jonas)
+          .deletePhoto(PhotoId('b'), by: tomas);
       expect(emptied.isEmpty, isTrue);
       expect(emptied.contributors, {jonas, tomas});
     });
@@ -88,7 +88,7 @@ void main() {
       final reloaded = DayPool.restore(
         dayNumber: 4,
         photos: const [],
-        contributors: const [jonas],
+        contributors: [jonas],
       );
       expect(reloaded.hasContributed(jonas), isTrue);
       expect(reloaded.isEmpty, isTrue);
@@ -99,7 +99,7 @@ void main() {
       // person already earned. This asserts the sharp edge exists so that
       // DayPool.restore is obviously the one to reach for on reload.
       final emptied =
-          DayPool.of(4, [morning]).deletePhoto(const PhotoId('a'), by: jonas);
+          DayPool.of(4, [morning]).deletePhoto(PhotoId('a'), by: jonas);
       expect(emptied.hasContributed(jonas), isTrue);
       expect(DayPool.of(4, emptied.photos).hasContributed(jonas), isFalse);
     });

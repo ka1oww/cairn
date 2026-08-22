@@ -2,9 +2,9 @@ import 'package:cairn_model/cairn_model.dart';
 import 'package:test/test.dart';
 
 void main() {
-  const mum = MemberId('mum');
-  const ava = MemberId('ava');
-  const stranger = MemberId('stranger');
+  final mum = MemberId('mum');
+  final ava = MemberId('ava');
+  final stranger = MemberId('stranger');
 
   final kyoto =
       TripClock.zone('Asia/Tokyo', utcOffset: const Duration(hours: 9));
@@ -12,7 +12,7 @@ void main() {
   Trip build(
           {List<Member>? members, List<TripDay>? days, MemberId? startedBy}) =>
       Trip(
-        id: const TripId('trip-japan-june'),
+        id: TripId('trip-japan-june'),
         name: 'Japan, June',
         startedBy: startedBy ?? mum,
         clock: kyoto,
@@ -171,7 +171,7 @@ void main() {
         stopsByDay: {
           2: [
             Stop(text: 'Nishiki Market'),
-            Stop(text: '★ train to Osaka', time: const ClockTime(18, 40)),
+            Stop(text: '★ train to Osaka', time: ClockTime(18, 40)),
           ],
         },
       );

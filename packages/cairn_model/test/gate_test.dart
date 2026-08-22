@@ -3,17 +3,17 @@ import 'package:test/test.dart';
 
 /// Contribution gates access, and the two things that open a day.
 void main() {
-  const mum = MemberId('mum');
-  const jonas = MemberId('jonas');
-  const tomas = MemberId('tomas');
-  const ava = MemberId('ava');
-  const stranger = MemberId('stranger');
+  final mum = MemberId('mum');
+  final jonas = MemberId('jonas');
+  final tomas = MemberId('tomas');
+  final ava = MemberId('ava');
+  final stranger = MemberId('stranger');
 
   final kyoto =
       TripClock.zone('Asia/Tokyo', utcOffset: const Duration(hours: 9));
 
   final trip = Trip(
-    id: const TripId('trip-japan-june'),
+    id: TripId('trip-japan-june'),
     name: 'Japan, June',
     startedBy: mum,
     clock: kyoto,
@@ -107,7 +107,7 @@ void main() {
           GateState.openedByContribution);
 
       final afterDelete =
-          answered.deletePhoto(const PhotoId('4-jonas-11'), by: jonas);
+          answered.deletePhoto(PhotoId('4-jonas-11'), by: jonas);
 
       expect(afterDelete.isEmpty, isTrue, reason: 'the photo really is gone');
       expect(
@@ -121,7 +121,7 @@ void main() {
 
     test('a day emptied by deletion is not a day nobody answered', () {
       final afterDelete = DayPool.of(4, [photoOn(4, jonas, hour: 11)])
-          .deletePhoto(const PhotoId('4-jonas-11'), by: jonas);
+          .deletePhoto(PhotoId('4-jonas-11'), by: jonas);
       expect(afterDelete.isEmpty, isTrue);
       expect(afterDelete.hasContributed(jonas), isTrue);
     });
