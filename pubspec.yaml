@@ -1,0 +1,48 @@
+name: cairn
+description: >-
+  Cairn - a shared trip companion. One nudge a day, and the day fills in from
+  everyone's own hour. This is the application shell; the reasoning lives in
+  docs/decisions/ and the layering in docs/architecture.md.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.1
+
+# Versions resolved from pub.dev on 2026-08-22 (see the scaffold PR for the
+# reasoning). Notably NOT copied from learning/riverpod-drift-demo, whose pins
+# are stale: the demo used flutter_riverpod 2.x (superseded by 3.x) and
+# sqlite3_flutter_libs (end-of-life; native SQLite now ships through
+# package:sqlite3 3.x's native-assets build hooks, pulled in by drift_flutter).
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # App state. docs/architecture.md: the APP STATE band.
+  flutter_riverpod: ^3.4.2
+
+  # Local database. docs/architecture.md: the STORAGE band (Drift store).
+  drift: ^2.34.3
+  drift_flutter: ^0.3.1
+
+  # The DOMAIN band: consumed, never modified, and kept Flutter-free.
+  cairn_model:
+    path: packages/cairn_model
+  itinerary_parser:
+    path: packages/itinerary_parser
+  photo_day_assignment:
+    path: packages/photo_day_assignment
+  trip_moments:
+    path: packages/trip_moments
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.16.0
+  drift_dev: ^2.34.5
+
+flutter:
+  uses-material-design: true
