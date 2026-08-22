@@ -1,0 +1,147 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  DART_SDK_VERSION: "3.13.1"
+  FLUTTER_VERSION: "3.47.1"
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  # Discovers the pure-Dart packages under packages/*/pubspec.yaml so a fifth
+  # package is picked up automatically -- the workflow never hardcodes names.
+  discover-packages:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.list.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          json=$(for f in packages/*/pubspec.yaml; do dirname "$f"; done | jq -R -s -c 'split("\n")[:-1]')
+          echo "packages=$json" >> "$GITHUB_OUTPUT"
+
+  # dart analyze + dart test for every package the discovery step found.
+  package-tests:
+    needs: discover-packages
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.discover-packages.outputs.packages) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ env.DART_SDK_VERSION }}
+      - name: Cache pub cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles(format('{0}/pubspec.lock', matrix.package)) }}
+          restore-keys: pub-${{ runner.os }}-
+      - run: dart pub get
+        working-directory: ${{ matrix.package }}
+      - run: dart analyze
+        working-directory: ${{ matrix.package }}
+      - run: dart test
+        working-directory: ${{ matrix.package }}
+
+  # trip_moments' golden test only proves the VM and dart2js schedules agree
+  # today. Reintroducing a bitwise operator in the hash (the exact failure
+  # mode packages/trip_moments/README.md and the golden test warn about)
+  # would still pass `dart test`, since that only runs on the VM. This job
+  # regenerates the same golden lines under both compilers and diffs them --
+  # see packages/trip_moments/tool/print_goldens.dart for the commands this
+  # mirrors.
+  trip-moments-js-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ env.DART_SDK_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: dart pub get
+        working-directory: packages/trip_moments
+      - name: Generate golden lines on the Dart VM
+        working-directory: packages/trip_moments
+        run: dart run tool/print_goldens.dart > /tmp/vm.txt
+      - name: Compile the same generator with dart2js
+        working-directory: packages/trip_moments
+        run: dart compile js -O0 -o /tmp/goldens.js tool/print_goldens.dart
+      - name: Generate the same golden lines under Node
+        run: node /tmp/goldens.js > /tmp/js.txt
+      - name: VM and dart2js must agree byte-for-byte
+        run: diff /tmp/vm.txt /tmp/js.txt
+
+  # Drives the schema through the real RLS engine the way PostgREST does --
+  # see supabase/README.md and supabase/tests/README.md. RLS refuses by
+  # filtering rows to zero rather than raising, so this is the check that
+  # catches an access-control regression looking exactly like a pass.
+  supabase-rls-probe:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      CAIRN_PG_HOST: 127.0.0.1
+      CAIRN_PG_PORT: 5432
+      CAIRN_PG_USER: postgres
+      CAIRN_PG_PASSWORD: postgres
+      CAIRN_PG_DB: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install pg8000
+      - name: RLS probe (55 adversarial checks)
+        working-directory: supabase/tests
+        run: python3 rls_probe.py
+      - name: Recursion mechanism check
+        working-directory: supabase/tests
+        run: python3 recursion_mechanism.py
+
+  # The Flutter learning demo, if it still has tests. See learning/README.md
+  # and learning/riverpod-drift-demo/README.md for what it is and isn't.
+  flutter-learning-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - name: Cache pub cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-flutter-${{ runner.os }}-${{ hashFiles('learning/riverpod-drift-demo/pubspec.lock') }}
+          restore-keys: pub-flutter-${{ runner.os }}-
+      - run: flutter pub get
+        working-directory: learning/riverpod-drift-demo
+      - name: Generate Drift code (database.g.dart etc. are not checked in)
+        run: dart run build_runner build
+        working-directory: learning/riverpod-drift-demo
+      - run: flutter analyze
+        working-directory: learning/riverpod-drift-demo
+      - run: flutter test
+        working-directory: learning/riverpod-drift-demo
