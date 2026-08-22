@@ -7,6 +7,14 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 ## Layout
 
 - `learning/` — throwaway demos built to make a technical decision, not the app.
+  - `learning/dual-camera-spike/` decided the moment's dual capture: build back-then-front
+    sequential capture, not true hardware-simultaneous dual camera, because the evidence says
+    that's what BeReal itself actually does and true simultaneity has no Flutter framework
+    support on either platform. See its `README.md` for the full evidence trail. One sharp edge
+    worth knowing generally: `AVCaptureMultiCamSession.isMultiCamSupported` is a device-class
+    flag, not a live-hardware probe -- it read `true` on the iOS Simulator during that spike's
+    testing, which has no camera at all. Never treat that flag alone as proof a capture session
+    will actually work, on Simulator or a real device.
 - `supabase/` — the backend (see below).
 - `packages/` — standalone Dart packages (own `pubspec.yaml`, tested with `dart test`) that back the Flutter app but must stay Flutter-free. Keep new packages under this pattern rather than pulling their logic into the Flutter app directly.
 
