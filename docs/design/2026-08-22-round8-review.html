@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cairn — Design Round 8 Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#FFF4E4; color:#43382C; font-family:'Atkinson Hyperlegible',system-ui,sans-serif; }
+  .wrap { max-width:720px; margin:0 auto; padding:56px 24px 96px; }
+  .kicker { font:700 11px 'Atkinson Hyperlegible'; letter-spacing:.12em; color:#8C7B66; }
+  h1 { font:400 34px/1.15 'Young Serif'; margin:10px 0 18px; }
+  .lede { font-size:15px; line-height:1.6; color:#43382C; max-width:600px; }
+  .lede em { font-style:normal; color:#8C7B66; }
+  h2 { font:400 22px/1.2 'Young Serif'; margin:64px 0 8px; }
+  .tnote { font-size:13.5px; line-height:1.6; color:#8C7B66; max-width:600px; margin:0 0 28px; }
+  .surface { margin:0 0 44px; }
+  .shead { display:flex; align-items:baseline; gap:10px; margin-bottom:6px; }
+  .sid { font:400 15px 'Young Serif'; color:#F4623E; }
+  .stitle { font:400 17px 'Young Serif'; color:#43382C; }
+  .snote { font-size:13.5px; line-height:1.6; color:#8C7B66; max-width:600px; margin:0 0 14px; }
+  .frame { display:inline-block; border:1px solid rgba(67,56,44,.14); border-radius:6px; overflow:hidden; background:#FFF4E4; box-shadow:0 2px 10px rgba(67,56,44,.08); max-width:100%; }
+  .foot { margin-top:64px; border-top:1px solid rgba(67,56,44,.15); padding-top:18px; font-size:13px; line-height:1.6; color:#8C7B66; max-width:600px; }
+  .day { background:#FFFDF8; border-radius:14px; padding:11px 14px 12px; box-shadow:0 1px 4px rgba(67,56,44,.14); }
+  .dhead { display:flex; align-items:baseline; gap:7px; margin-bottom:7px; }
+  .dnum { font:400 12px 'Young Serif'; color:#F4623E; }
+  .dttl { font:700 13px 'Atkinson Hyperlegible'; color:#43382C; }
+  .ddate { font:400 11px 'Atkinson Hyperlegible'; color:#8C7B66; margin-left:auto; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .chip { font:400 12.5px 'Atkinson Hyperlegible'; color:#43382C; background:#EFE3D2; border-radius:8px; padding:4px 10px; }
+  .star { font:700 12.5px 'Atkinson Hyperlegible'; color:#43382C; }
+  .time { font:700 11px 'Atkinson Hyperlegible'; color:#8A5F14; background:#FBE7C3; padding:2px 8px; border-radius:8px; }
+  .slim { display:flex; align-items:baseline; gap:7px; background:#FFFDF8; border-radius:11px; padding:8px 13px; box-shadow:0 1px 3px rgba(67,56,44,.1); }
+  .dmeta { font:400 11.5px 'Atkinson Hyperlegible'; color:#8C7B66; margin-left:auto; }
+  .pick { font:700 12px 'Atkinson Hyperlegible'; color:#43382C; border:2px solid rgba(67,56,44,.25); border-radius:10px; padding:6px 11px; }
+  @media (max-width:700px) { .frame { overflow-x:auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="kicker">CAIRN — DESIGN ROUND 8 · 22 AUGUST 2026</div>
+<h1>The screen after the paste.</h1>
+<p class="lede">Round 8 closes the one genuine gap in the coverage: what the parser understood, and how a person corrects it. Every surface with the decision that shaped it. The full canvas is in <em>2026-08-22-round8-handoff.zip</em>; the parser’s contract is <em>packages/itinerary_parser/README.md</em>.</p>
+<h2>Turn 16 — the screen after the paste</h2><p class="tnote">The itinerary parser is deterministic and runs on the phone; every day it returns carries a confidence — high, medium, or low — because the package is built to ask, not guess. A parser that can be wrong, with no screen to correct it, is a defect that stays invisible until a real trip finds it. These four surfaces are that screen: storyboard screen 3, straight after the paste box and the reading narration drawn in earlier rounds.</p><section class="surface"><div class="shead"><span class="sid">16a</span><span class="stitle">The confident read</span></div><p class="snote">Eight days read high-confidence, so the screen is a glance, not a form: no checkboxes, no per-day confirm, one coral button. Stars follow the parser’s one rule — a clock time on the line, nothing else.</p><div class="frame"><div style="width:390px;box-sizing:border-box;background:#FFF4E4;padding:16px;display:flex;flex-direction:column;gap:10px">
+  <div style="width:358px;box-sizing:border-box;background:#FFF4E4;border-radius:28px;border:1px solid rgba(67,56,44,.1);padding:24px 20px 20px;display:flex;flex-direction:column;gap:10px">
+    <div>
+      <div style="font:400 24px 'Young Serif';color:#43382C">8 days, 19 stops.</div>
+      <div style="font:400 12.5px 'Atkinson Hyperlegible';color:#8C7B66;margin-top:4px">Read right here on the phone — your plan never left it.</div>
+    </div>
+    <div class="day"><div class="dhead"><span class="dnum">01</span><span class="dttl">Sunday · Tokyo</span><span class="ddate">14 June</span></div><div class="chips"><span class="chip">Senso-ji</span><span class="chip">Ueno Park</span><span class="chip">Ramen at Ichiran</span></div></div>
+    <div class="day"><div class="dhead"><span class="dnum">02</span><span class="dttl">Monday · Tokyo</span><span class="ddate">15 June</span></div><div class="chips"><span class="chip">Shibuya crossing</span><span class="chip">teamLab</span></div></div>
+    <div class="day"><div class="dhead"><span class="dnum">03</span><span class="dttl">Tuesday · Kyoto</span><span class="ddate">16 June</span></div><div class="chips"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.3l6.1-.7z" fill="#E9A13B"></path></svg><span class="star">Train to Kyoto</span><span class="time">10:12</span><span class="chip">Fushimi Inari</span></div></div>
+    <div class="day"><div class="dhead"><span class="dnum">04</span><span class="dttl">Wednesday · Kyoto</span><span class="ddate">17 June</span></div><div class="chips"><span class="chip">Kinkaku-ji</span><span class="chip">Nishiki Market</span><span class="chip">Gion at dusk</span></div></div>
+    <div class="day"><div class="dhead"><span class="dnum">05</span><span class="dttl">Thursday · Kyoto</span><span class="ddate">18 June</span></div><div class="chips"><span class="chip">Arashiyama bamboo</span><span class="chip">Monkey park</span></div></div>
+    <div class="day"><div class="dhead"><span class="dnum">06</span><span class="dttl">Friday · Hakone</span><span class="ddate">19 June</span></div><div class="chips"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.3l6.1-.7z" fill="#E9A13B"></path></svg><span class="star">Train to Hakone</span><span class="time">09:45</span><span class="chip">Ropeway</span><span class="chip">Onsen</span></div></div>
+    <div class="day"><div class="dhead"><span class="dnum">07</span><span class="dttl">Saturday · Hakone</span><span class="ddate">20 June</span></div><div class="chips"><span class="chip">Open-air museum</span><span class="chip">Pirate ship</span></div></div>
+    <div class="day"><div class="dhead"><span class="dnum">08</span><span class="dttl">Sunday · Tokyo</span><span class="ddate">21 June</span></div><div class="chips"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.3l6.1-.7z" fill="#E9A13B"></path></svg><span class="star">Fly home</span><span class="time">17:30</span><span class="chip">Last conveyor sushi</span></div></div>
+    <div style="margin-top:6px;font:700 15px 'Atkinson Hyperlegible';color:#FFFDF8;background:#F4623E;padding:13px 0;border-radius:14px;text-align:center;box-shadow:0 2px 5px rgba(244,98,62,.3)">Looks right</div>
+    <div style="text-align:center;font:400 13px 'Atkinson Hyperlegible';color:#8C7B66">or tap anything to fix it</div>
+  </div>
+  <p style="margin:0;max-width:358px;font:400 10.5px/1.5 'Atkinson Hyperlegible';color:#8C7B66"><strong style="color:#43382C">The common case is a glance, not a form.</strong> Every day read high-confidence, so nothing asks for attention: no checkboxes, no per-day confirm, no edit affordances shown until something is touched. The stars kept their one rule — a stop is starred exactly when its line carried a clock time. One coral button, and the trip exists.</p>
+</div></div></section><section class="surface"><div class="shead"><span class="sid">16b</span><span class="stitle">The uncertain read</span></div><p class="snote">Confidence drives the layout: clean days collapse to slim rows, the medium day carries the amber rule and asks its one question with answers pre-filled, and the low day sits expanded above the button so it cannot be confirmed unseen. Unplaced lines stay one tap away, reasons kept.</p><div class="frame"><div style="width:390px;box-sizing:border-box;background:#FFF4E4;padding:16px;display:flex;flex-direction:column;gap:10px">
+  <div style="width:358px;box-sizing:border-box;background:#FFF4E4;border-radius:28px;border:1px solid rgba(67,56,44,.1);padding:24px 20px 20px;display:flex;flex-direction:column;gap:9px">
+    <div style="margin-bottom:2px">
+      <div style="font:400 24px/1.2 'Young Serif';color:#43382C">Six read clean.<br>Two need your eye.</div>
+      <div style="font:400 12.5px/1.5 'Atkinson Hyperlegible';color:#8C7B66;margin-top:5px">It knows which lines it wasn't sure of — that's the point of it.</div>
+    </div>
+    <div class="slim"><span class="dnum">01</span><span class="dttl">Sunday · Tokyo</span><span class="dmeta">14 June · 3 stops</span></div>
+    <div class="slim"><span class="dnum">02</span><span class="dttl">Monday · Tokyo</span><span class="dmeta">15 June · 2 stops</span></div>
+    <div class="slim"><span class="dnum">03</span><span class="dttl">Tuesday · Kyoto</span><span class="dmeta">16 June · 2 stops</span></div>
+    <div class="slim"><span class="dnum">04</span><span class="dttl">Wednesday · Kyoto</span><span class="dmeta">17 June · 3 stops</span></div>
+    <div style="background:#FFFDF8;border-radius:13px;padding:12px 14px;box-shadow:0 1px 4px rgba(67,56,44,.14);border-left:4px solid #E9A13B">
+      <div style="display:flex;align-items:baseline;gap:7px"><span class="dnum">05</span><span class="dttl">"Monday" · Kyoto</span><span class="dmeta">date open</span></div>
+      <div style="font:400 12px/1.5 'Atkinson Hyperlegible';color:#8C7B66;margin:6px 0 9px">The plan calls this one Monday. Where it sits, it'd be the 18th — a Thursday — and I don't guess dates. Your call:</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="pick">It's the 18th</span><span class="pick">Move it to Mon the 15th</span></div>
+    </div>
+    <div class="slim"><span class="dnum">06</span><span class="dttl">Friday · Hakone</span><span class="dmeta">19 June · 3 stops</span></div>
+    <div style="background:#FFF4E4;border:2px dashed rgba(67,56,44,.28);border-radius:13px;padding:12px 14px">
+      <div style="display:flex;align-items:baseline;gap:7px"><span class="dnum">07</span><span class="dttl">Saturday · Hakone</span><span class="dmeta">20 June</span></div>
+      <div style="font:400 12px/1.5 'Atkinson Hyperlegible';color:#8C7B66;margin:6px 0 9px">Found the day, nothing in it. A rest day — or lines I couldn't read; three are in the pocket below.</div>
+      <div style="display:flex;gap:10px;align-items:center"><span class="pick">+ Add a stop</span><span style="font:400 12px 'Atkinson Hyperlegible';color:#8C7B66">leave it empty</span></div>
+    </div>
+    <div class="slim"><span class="dnum">08</span><span class="dttl">Sunday · Tokyo</span><span class="dmeta">21 June · 3 stops</span></div>
+    <div style="display:flex;align-items:center;gap:8px;background:#EFE3D2;border-radius:11px;padding:9px 13px">
+      <div style="width:8px;height:8px;border-radius:50%;border:2px dashed #8C7B66;flex:none"></div>
+      <span style="font:400 12.5px 'Atkinson Hyperlegible';color:#43382C">3 lines I couldn't place</span>
+      <span style="font:400 11.5px 'Atkinson Hyperlegible';color:#8C7B66;margin-left:auto">kept, with reasons →</span>
+    </div>
+    <div style="margin-top:6px;font:700 15px 'Atkinson Hyperlegible';color:#FFFDF8;background:#F4623E;padding:13px 0;border-radius:14px;text-align:center;box-shadow:0 2px 5px rgba(244,98,62,.3)">Looks right</div>
+  </div>
+  <p style="margin:0;max-width:358px;font:400 10.5px/1.5 'Atkinson Hyperlegible';color:#8C7B66"><strong style="color:#43382C">Confidence drives the layout, not a badge on it.</strong> High-confidence days collapse to one line each and slide by. The medium day draws the eye with the amber rule and asks its one question with the answers pre-filled. The low day cannot be skipped unseen: it sits expanded, above the button, on the way to it. No warning triangles, no red — an unsure parser is the design working, and the screen never looks broken.</p>
+</div></div></section><section class="surface"><div class="shead"><span class="sid">16c</span><span class="stitle">Correcting it</span></div><p class="snote">Three corrections in the fewest taps there are: hold a stop and tap its day; flip day-first/month-first once for the whole paste; tap any text to retype it in place. No edit mode, no second screen, no spreadsheet.</p><div class="frame"><div style="width:620px;height:428px;overflow:hidden"><div style="width:810px;transform:scale(0.7654);transform-origin:top left"><div style="width:810px;box-sizing:border-box;background:#FFF4E4;padding:16px;display:flex;gap:14px;align-items:flex-start">
+  <div style="width:250px;flex:none;background:#FFF4E4;border-radius:24px;border:1px solid rgba(67,56,44,.1);overflow:hidden">
+    <div style="height:400px;display:flex;flex-direction:column;padding:20px 18px;box-sizing:border-box">
+      <div style="font:700 10px 'Atkinson Hyperlegible';letter-spacing:.1em;color:#8C7B66;margin-bottom:12px">A STOP ON THE WRONG DAY</div>
+      <div style="background:#FFFDF8;border-radius:13px;padding:11px 13px;box-shadow:0 1px 4px rgba(67,56,44,.14)">
+        <div style="display:flex;align-items:baseline;gap:7px;margin-bottom:7px"><span class="dnum">02</span><span class="dttl">Monday · Tokyo</span></div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px"><span class="chip">Shibuya crossing</span><span class="chip" style="opacity:.35">Nishiki Market</span></div>
+      </div>
+      <div style="align-self:center;margin:2px 0 0;transform:rotate(-3deg)"><span class="chip" style="background:#FFFDF8;box-shadow:0 6px 16px rgba(67,56,44,.3);border:1px solid rgba(67,56,44,.12);font-weight:700">Nishiki Market</span></div>
+      <div style="font:400 11.5px 'Atkinson Hyperlegible';color:#8C7B66;text-align:center;margin:10px 0 8px">held — the days line up below</div>
+      <div style="display:flex;gap:6px;justify-content:center">
+        <div style="width:30px;height:30px;border-radius:50%;background:#FFFDF8;box-shadow:0 1px 3px rgba(67,56,44,.12);display:flex;align-items:center;justify-content:center;font:400 12px 'Young Serif';color:#8C7B66">01</div>
+        <div style="width:30px;height:30px;border-radius:50%;background:#FFFDF8;box-shadow:0 1px 3px rgba(67,56,44,.12);display:flex;align-items:center;justify-content:center;font:400 12px 'Young Serif';color:#8C7B66">02</div>
+        <div style="width:30px;height:30px;border-radius:50%;background:#FFFDF8;box-shadow:0 1px 3px rgba(67,56,44,.12);display:flex;align-items:center;justify-content:center;font:400 12px 'Young Serif';color:#8C7B66">03</div>
+        <div style="width:30px;height:30px;border-radius:50%;background:#FFFDF8;border:2.5px solid #F4623E;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font:400 12px 'Young Serif';color:#F4623E">04</div>
+        <div style="width:30px;height:30px;border-radius:50%;background:#FFFDF8;box-shadow:0 1px 3px rgba(67,56,44,.12);display:flex;align-items:center;justify-content:center;font:400 12px 'Young Serif';color:#8C7B66">05</div>
+      </div>
+      <div style="font:400 11px 'Atkinson Hyperlegible';color:#8C7B66;text-align:center;margin-top:6px">… 06 · 07 · 08</div>
+      <div style="margin-top:auto;background:#FFFDF8;border-radius:13px;padding:11px 13px;box-shadow:0 1px 4px rgba(67,56,44,.14)">
+        <div style="display:flex;align-items:baseline;gap:7px;margin-bottom:7px"><span class="dnum">04</span><span class="dttl">Wednesday · Kyoto</span></div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px"><span class="chip">Kinkaku-ji</span><span class="chip" style="border:1.5px dashed rgba(67,56,44,.3);background:#FFF4E4">Nishiki Market</span></div>
+      </div>
+    </div>
+    <p style="margin:0;padding:10px 14px 12px;border-top:1px solid rgba(67,56,44,.1);font:400 10.5px/1.5 'Atkinson Hyperlegible';color:#8C7B66"><strong style="color:#43382C">Hold, then tap the day.</strong> Two touches, and the chip lands where it belongs. No drag across eight screens of scroll, no edit mode, no spreadsheet.</p>
+  </div>
+  <div style="width:250px;flex:none;background:#FFF4E4;border-radius:24px;border:1px solid rgba(67,56,44,.1);overflow:hidden">
+    <div style="height:400px;display:flex;flex-direction:column;padding:20px 18px;box-sizing:border-box">
+      <div style="font:700 10px 'Atkinson Hyperlegible';letter-spacing:.1em;color:#8C7B66;margin-bottom:12px">A DATE READ THE WRONG WAY ROUND</div>
+      <div style="background:#FFFDF8;border-radius:16px;padding:16px;box-shadow:0 2px 8px rgba(67,56,44,.14);display:flex;flex-direction:column;gap:10px">
+        <div style="font:400 13px ui-monospace,Menlo,monospace;color:#43382C">3/11 <span style="color:#8C7B66">→</span> 3 November</div>
+        <div style="font:400 12.5px/1.5 'Atkinson Hyperlegible';color:#8C7B66">Dates here read day-first. If your plan speaks month-first — March 11th — flip it once, and every date in the paste follows together.</div>
+        <div style="align-self:flex-start;font:700 13px 'Atkinson Hyperlegible';color:#43382C;border:2px solid rgba(67,56,44,.25);border-radius:12px;padding:9px 14px">These are month-first dates</div>
+      </div>
+      <div style="margin-top:auto;font:400 11px/1.5 'Atkinson Hyperlegible';color:#8C7B66">One flip for the whole paste, never a per-line correction — a plan doesn't change dialect halfway through.</div>
+    </div>
+    <p style="margin:0;padding:10px 14px 12px;border-top:1px solid rgba(67,56,44,.1);font:400 10.5px/1.5 'Atkinson Hyperlegible';color:#8C7B66"><strong style="color:#43382C">The parser has no locale detection,</strong> on purpose — so the screen owns the question. It states what it did in the plan's own characters, and the fix is one tap that re-reads everything consistently.</p>
+  </div>
+  <div style="width:250px;flex:none;background:#FFF4E4;border-radius:24px;border:1px solid rgba(67,56,44,.1);overflow:hidden">
+    <div style="height:400px;display:flex;flex-direction:column;padding:20px 18px;box-sizing:border-box">
+      <div style="font:700 10px 'Atkinson Hyperlegible';letter-spacing:.1em;color:#8C7B66;margin-bottom:12px">A NAME READ WRONG</div>
+      <div style="background:#FFFDF8;border-radius:13px;padding:11px 13px;box-shadow:0 1px 4px rgba(67,56,44,.14)">
+        <div style="display:flex;align-items:baseline;gap:7px;margin-bottom:7px"><span class="dnum">05</span><span style="font:700 13px 'Atkinson Hyperlegible';color:#43382C;border-bottom:2px solid #F4623E;padding-bottom:1px">Thursday · Nara<span style="font-weight:400;color:#F4623E">▏</span></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="align-self:center"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19l-4 1z" stroke="#8C7B66" stroke-width="2" stroke-linejoin="round"></path></svg></div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px"><span class="chip">Todai-ji</span><span class="chip">Deer park</span></div>
+      </div>
+      <div style="font:400 11.5px/1.5 'Atkinson Hyperlegible';color:#8C7B66;margin-top:12px">The paste said "kyoto (day trip!)" and the parser kept it exactly as written — it never fixes spelling or names. Tap the header, retype, done.</div>
+      <div style="margin-top:auto;font:400 11px/1.5 'Atkinson Hyperlegible';color:#8C7B66">Works the same everywhere: a stop's text, a day's place, the trip's own name.</div>
+    </div>
+    <p style="margin:0;padding:10px 14px 12px;border-top:1px solid rgba(67,56,44,.1);font:400 10.5px/1.5 'Atkinson Hyperlegible';color:#8C7B66"><strong style="color:#43382C">Everything is text, tapped in place.</strong> The parse is a starting draft the person finishes, not a verdict they appeal — so correcting never opens a second screen.</p>
+  </div>
+</div></div></div></div></section><section class="surface"><div class="shead"><span class="sid">16d</span><span class="stitle">The paste that wouldn’t parse</span></div><p class="snote">Nothing useful is not an error state — the copy blames the text’s shape, never the person, the paste is shown kept, and three doors stand open: lay the days out by hand, paste something else, or start with the trip’s dates as empty days.</p><div class="frame"><div style="width:390px;box-sizing:border-box;background:#FFF4E4;padding:16px;display:flex;flex-direction:column;gap:10px">
+  <div style="width:358px;box-sizing:border-box;background:#FFF4E4;border-radius:28px;border:1px solid rgba(67,56,44,.1);padding:24px 20px 20px;display:flex;flex-direction:column;gap:14px">
+    <div>
+      <div style="font:400 23px/1.25 'Young Serif';color:#43382C">No days in this one —<br>that I could find.</div>
+      <div style="font:400 12.5px/1.5 'Atkinson Hyperlegible';color:#8C7B66;margin-top:6px">I read it right here on the phone, and I don't guess. Nothing's thrown away either.</div>
+    </div>
+    <div style="background:#FFFDF8;border-radius:16px;padding:15px 16px;box-shadow:0 1px 4px rgba(67,56,44,.14);display:flex;flex-direction:column;gap:7px;font:400 12.5px/1.55 ui-monospace,Menlo,monospace;color:rgba(67,56,44,.45)">
+      <div>sooo excited!!</div>
+      <div>remember yen cash + passports</div>
+      <div>the ryokan looks amazing</div>
+      <div>https://tabelog.com/en/kyoto/&hellip;</div>
+      <div>see everyone at changi, gate B5</div>
+    </div>
+    <div style="font:400 12px/1.5 'Atkinson Hyperlegible';color:#8C7B66">Every line stays in the trip's pocket — tap any of them later to make it a stop.</div>
+    <div style="display:flex;flex-direction:column;gap:9px;margin-top:2px">
+      <div style="font:700 15px 'Atkinson Hyperlegible';color:#FFFDF8;background:#F4623E;padding:13px 0;border-radius:14px;text-align:center;box-shadow:0 2px 5px rgba(244,98,62,.3)">Lay the days out myself</div>
+      <div style="font:700 14px 'Atkinson Hyperlegible';color:#43382C;padding:12px 0;border-radius:14px;border:2px solid rgba(67,56,44,.25);text-align:center;box-sizing:border-box">Paste something else</div>
+      <div style="text-align:center;font:400 13px 'Atkinson Hyperlegible';color:#8C7B66">or start with <span style="font-weight:700;color:#43382C">8 empty days</span> — the plan can come later</div>
+    </div>
+  </div>
+  <p style="margin:0;max-width:358px;font:400 10.5px/1.5 'Atkinson Hyperlegible';color:#8C7B66"><strong style="color:#43382C">Not a dead end, and never the person's fault.</strong> The copy blames the text's shape, not the paster; there is no "error", no red, no empty-state illustration of failure. The paste is shown kept, and three doors stand open: build the days by hand, try a different paste, or start empty — the trip's dates already exist, so empty days are one tap. "Lay the days out myself" leads to the same day cards as a good parse, just starting blank.</p>
+</div></div></section>
+<p class="foot">Everything on these screens is read right on the phone — no surface implies a server saw the plan. The book’s interior remains untouched: the captain’s reference sits behind a login wall, so nothing here approximates it.</p>
+</div>
+</body>
+</html>
