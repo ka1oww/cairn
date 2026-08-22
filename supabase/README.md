@@ -437,7 +437,7 @@ independently built clusters — 17.10 and a Homebrew 17.11 — so the results a
 not an artefact of one machine's setup.
 
 - All nine migrations apply cleanly, and apply again cleanly on a second run.
-- 53 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 55 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
