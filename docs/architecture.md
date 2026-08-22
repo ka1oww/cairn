@@ -135,7 +135,7 @@ That is the layering rule paying rent.
 | **Day page & shut gate** | not built | app state | The day is the artefact: a vertical timeline, hours prominent, credit small. Shut, it shows times and names with images withheld; it seals silently at midnight. |
 | **Capture** | not built | app state (platform glue drives the camera) | Answers the ping. Back camera primary, small front inset; thirty-minute window; the late path is always open and visibly late. |
 | **Pool** | not built | app state | Plumbing: the whole trip's photos in a plain, fast grid by day. Deliberately not a destination. |
-| **Book** | not built | app state | What the trip turns into: one spread per day, cairn on the cover, digital only, works with the network off forever. Interior page design **undecided** — awaiting the captain's reference. |
+| **Book** | not built | app state | What the trip turns into: one spread per day, cairn on the cover, digital only, works with the network off forever. Interior page design **in progress** — the captain's reference landed and round 9 is drawing against it. |
 | **Join & confirm** | not built | app state | The way in: invite code (or deep link), display-name edit, paste-the-plan, and the confirmation screen that surfaces the parser's confidence and unplaced lines instead of trusting them. |
 | **Settings & members** | not built | app state | Rename, invites, member list, leave, remove. Its affordances follow the starter-and-container decision (rename flat, delete gated, one narrow removal power, never titled "admin"). |
 
@@ -268,10 +268,10 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   phone (`trip_moments` computes them from the itinerary, which stays local by
   decision). The server cannot express them without syncing the itinerary —
   deliberately not done.
-- **The book's interior is undecided** — awaiting the captain's printed
-  reference. The cover (the cairn) is settled; interior spreads still show
-  the retired four-up in old handoffs and are out of scope until the
-  reference lands.
+- **The book's interior is in design.** The captain's printed reference
+  has landed and design round 9 is drawing the interior against it (on
+  PR #11). The cover (the cairn) was already settled; old handoffs still
+  showing the retired four-up are superseded by that round.
 - **In-transit photos on a multi-timezone day are parked.** A photo taken
   between two days' zones can be `outsideTrip` by refusal; manual placement
   is the current answer.
