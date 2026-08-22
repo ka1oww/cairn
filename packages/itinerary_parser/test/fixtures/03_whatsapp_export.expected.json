@@ -49,6 +49,8 @@
         }
       ],
       "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 2,
         "text": "[03/11/2026, 09:15] Mum: Day 2 - Osaka"
@@ -72,5 +74,6 @@
     }
   ],
   "overallConfidence": "medium",
-  "usedHeaderlessFallback": false
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
 }

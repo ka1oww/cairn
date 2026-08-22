@@ -37,6 +37,8 @@
         }
       ],
       "confidence": "medium",
+      "uncertainty": "bare-place-name",
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 1,
         "text": "Kyoto"
@@ -67,6 +69,8 @@
         }
       ],
       "confidence": "medium",
+      "uncertainty": "bare-place-name",
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 6,
         "text": "Nara"
@@ -100,6 +104,8 @@
         }
       ],
       "confidence": "medium",
+      "uncertainty": "bare-place-name",
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 10,
         "text": "Osaka"
@@ -108,5 +114,6 @@
   ],
   "unplacedLines": [],
   "overallConfidence": "medium",
-  "usedHeaderlessFallback": false
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
 }

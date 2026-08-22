@@ -17,11 +17,22 @@ import 'time_parser.dart';
 /// headers (so days are still split out correctly), but their `date` field
 /// is left null rather than guessed.
 ///
+/// [monthFirstNumericDates] flips how numeric slash dates (`3/11`) are
+/// read: day-first (3 November) by default, month-first (March 11th) when
+/// true. It exists so a confirmation screen can offer "these are
+/// month-first dates" as a single tap that re-parses the whole paste
+/// consistently; `ParseResult.hasAmbiguousNumericDates` says whether that
+/// offer is worth making.
+///
 /// This function never throws on malformed input and never calls out to a
 /// network or a model — it is a pure, deterministic function of its
 /// arguments. See the package README for a list of paste shapes it does
 /// not handle well.
-ParseResult parseItinerary(String text, {DateTime? tripStartDate}) {
+ParseResult parseItinerary(
+  String text, {
+  DateTime? tripStartDate,
+  bool monthFirstNumericDates = false,
+}) {
   final rawLines =
       text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
   final lines = <_Line>[
@@ -31,7 +42,8 @@ ParseResult parseItinerary(String text, {DateTime? tripStartDate}) {
   ];
 
   final classified = <_Classified>[
-    for (var i = 0; i < lines.length; i++) _classifyLine(lines[i], lines, i),
+    for (var i = 0; i < lines.length; i++)
+      _classifyLine(lines[i], lines, i, monthFirstNumericDates),
   ];
 
   final headerFound = classified.any(
@@ -51,8 +63,16 @@ ParseResult parseItinerary(String text, {DateTime? tripStartDate}) {
 /// calling `parseItinerary(...)` directly; this exists for callers who
 /// prefer an explicit type to import and call a static method on.
 abstract final class ItineraryParser {
-  static ParseResult parse(String text, {DateTime? tripStartDate}) =>
-      parseItinerary(text, tripStartDate: tripStartDate);
+  static ParseResult parse(
+    String text, {
+    DateTime? tripStartDate,
+    bool monthFirstNumericDates = false,
+  }) =>
+      parseItinerary(
+        text,
+        tripStartDate: tripStartDate,
+        monthFirstNumericDates: monthFirstNumericDates,
+      );
 }
 
 class _Line {
@@ -89,7 +109,7 @@ class _Classified {
   final String? placeText;
   final String? stopText;
   final ParsedTime? stopTime;
-  final String? reason;
+  final UnplacedReason? reason;
 
   const _Classified(
     this.kind,
@@ -104,7 +124,8 @@ class _Classified {
   });
 }
 
-_Classified _classifyLine(_Line line, List<_Line> all, int index) {
+_Classified _classifyLine(
+    _Line line, List<_Line> all, int index, bool monthFirstNumericDates) {
   if (isBlank(line.raw)) {
     return _Classified(_Kind.blank, line);
   }
@@ -113,19 +134,20 @@ _Classified _classifyLine(_Line line, List<_Line> all, int index) {
   }
   if (line.hadWhatsAppPrefix && isWhatsAppPlaceholder(line.effective)) {
     return _Classified(_Kind.whatsappPlaceholder, line,
-        reason: 'whatsapp-media');
+        reason: UnplacedReason.whatsAppMediaPlaceholder);
   }
   if (isSignatureLine(line.effective)) {
-    return _Classified(_Kind.signature, line, reason: 'signature-line');
+    return _Classified(_Kind.signature, line,
+        reason: UnplacedReason.emailSignature);
   }
   if (isHotelBookingReference(line.effective)) {
     return _Classified(_Kind.hotelBooking, line,
-        reason: 'hotel-booking-reference');
+        reason: UnplacedReason.bookingReference);
   }
 
   final urlResult = stripUrls(line.effective);
   if (urlResult.hadUrl && isTriviallyEmpty(urlResult.textWithoutUrl)) {
-    return _Classified(_Kind.urlOnly, line, reason: 'url');
+    return _Classified(_Kind.urlOnly, line, reason: UnplacedReason.urlOnly);
   }
   final cleaned = urlResult.hadUrl ? urlResult.textWithoutUrl : line.effective;
 
@@ -140,7 +162,8 @@ _Classified _classifyLine(_Line line, List<_Line> all, int index) {
       );
     }
 
-    final dateMatch = tryParseDateHeader(cleaned.trim());
+    final dateMatch = tryParseDateHeader(cleaned.trim(),
+        monthFirstNumericDates: monthFirstNumericDates);
     if (dateMatch != null) {
       return _Classified(_Kind.dateHeader, line, dateMatch: dateMatch);
     }
@@ -153,7 +176,7 @@ _Classified _classifyLine(_Line line, List<_Line> all, int index) {
 
   final stopText = stripBullet(cleaned);
   if (isTriviallyEmpty(stopText)) {
-    return _Classified(_Kind.empty, line, reason: 'empty-line');
+    return _Classified(_Kind.empty, line);
   }
   return _Classified(_Kind.stop, line,
       stopText: stopText, stopTime: extractTime(stopText));
@@ -196,6 +219,8 @@ class _OpenDay {
   final DateTime? date;
   final String? place;
   final Confidence headerConfidence;
+  final DayUncertainty? headerUncertainty;
+  final int? headerWeekday;
   final SourceLine? headerSourceLine;
   final List<Stop> stops = [];
 
@@ -204,17 +229,26 @@ class _OpenDay {
     this.date,
     this.place,
     required this.headerConfidence,
+    this.headerUncertainty,
+    this.headerWeekday,
     this.headerSourceLine,
   });
 
-  ParsedDay close() => ParsedDay(
-        index: index,
-        date: date,
-        place: place,
-        stops: List.unmodifiable(stops),
-        confidence: stops.isEmpty ? Confidence.low : headerConfidence,
-        headerSourceLine: headerSourceLine,
-      );
+  ParsedDay close() {
+    // An empty day is low confidence whatever its header said, and the
+    // emptiness is then the doubt worth showing the user.
+    final empty = stops.isEmpty;
+    return ParsedDay(
+      index: index,
+      date: date,
+      place: place,
+      stops: List.unmodifiable(stops),
+      confidence: empty ? Confidence.low : headerConfidence,
+      uncertainty: empty ? DayUncertainty.noStops : headerUncertainty,
+      headerWeekday: headerWeekday,
+      headerSourceLine: headerSourceLine,
+    );
+  }
 }
 
 ParseResult _buildHeaderModeResult(
@@ -223,6 +257,7 @@ ParseResult _buildHeaderModeResult(
   final unplaced = <UnplacedLine>[];
   _OpenDay? current;
   var contentLineCount = 0;
+  var sawAmbiguousNumericDate = false;
 
   void closeCurrent() {
     if (current != null) {
@@ -260,13 +295,24 @@ ParseResult _buildHeaderModeResult(
         contentLineCount++;
         closeCurrent();
         final m = c.dateMatch!;
+        if (m.ambiguousNumericOrder) sawAmbiguousNumericDate = true;
         final resolvedDate = _resolveDateHeaderDate(m, tripStartDate);
+        final DayUncertainty? uncertainty;
+        if (resolvedDate != null) {
+          uncertainty = null;
+        } else if (m.hasFullDate) {
+          uncertainty = DayUncertainty.dateWithoutYear;
+        } else {
+          uncertainty = DayUncertainty.weekdayWithoutDate;
+        }
         current = _OpenDay(
           index: days.length + 1,
           date: resolvedDate,
           place: m.trailingText,
           headerConfidence:
               resolvedDate != null ? Confidence.high : Confidence.medium,
+          headerUncertainty: uncertainty,
+          headerWeekday: m.weekday,
           headerSourceLine: c.line.sourceLine,
         );
       case _Kind.placeHeader:
@@ -276,13 +322,15 @@ ParseResult _buildHeaderModeResult(
           index: days.length + 1,
           place: c.placeText,
           headerConfidence: Confidence.medium,
+          headerUncertainty: DayUncertainty.barePlaceName,
           headerSourceLine: c.line.sourceLine,
         );
       case _Kind.stop:
         contentLineCount++;
         if (current == null) {
-          unplaced.add(
-              UnplacedLine(sourceLine: c.line.sourceLine, reason: 'preamble'));
+          unplaced.add(UnplacedLine(
+              sourceLine: c.line.sourceLine,
+              reason: UnplacedReason.precedesFirstHeader));
         } else {
           current!.stops.add(
             Stop(
@@ -302,6 +350,7 @@ ParseResult _buildHeaderModeResult(
     unplacedLines: unplaced,
     overallConfidence: overall,
     usedHeaderlessFallback: false,
+    hasAmbiguousNumericDates: sawAmbiguousNumericDate,
   );
 }
 
@@ -317,6 +366,7 @@ ParseResult _buildFallbackResult(List<_Classified> classified) {
           index: days.length + 1,
           stops: List.unmodifiable(blockStops),
           confidence: Confidence.low,
+          uncertainty: DayUncertainty.headerlessBlock,
         ),
       );
     }

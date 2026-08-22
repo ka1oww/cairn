@@ -28,6 +28,8 @@
         }
       ],
       "confidence": "medium",
+      "uncertainty": "date-without-year",
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 1,
         "text": "3/11 - Arrival day"
@@ -58,6 +60,8 @@
         }
       ],
       "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
       "headerSourceLine": {
         "lineNumber": 5,
         "text": "2026-11-04"
@@ -66,5 +70,6 @@
   ],
   "unplacedLines": [],
   "overallConfidence": "medium",
-  "usedHeaderlessFallback": false
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": true
 }

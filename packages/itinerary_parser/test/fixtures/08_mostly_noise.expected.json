@@ -16,6 +16,8 @@
         }
       ],
       "confidence": "low",
+      "uncertainty": "headerless-block",
+      "headerWeekday": null,
       "headerSourceLine": null
     }
   ],
@@ -57,5 +59,6 @@
     }
   ],
   "overallConfidence": "low",
-  "usedHeaderlessFallback": true
+  "usedHeaderlessFallback": true,
+  "hasAmbiguousNumericDates": false
 }
