@@ -280,6 +280,15 @@ def main():
     check(status == "err", "but not one from another trip, even one it is also a member of",
           repr(rows)[:80])
 
+    print("\n== an invite cannot be repointed to another trip ==")
+    before_trip = db.run("select trip_id from public.trip_invites where code = 'FLAT2345'")[0][0]
+    status, rows = c.try_run(
+        "update public.trip_invites set trip_id = :t where code = 'FLAT2345'", t=iceland)
+    check(status == "err", "even by its own creator, to a trip she also belongs to", repr(rows)[:80])
+    after_trip = db.run("select trip_id from public.trip_invites where code = 'FLAT2345'")[0][0]
+    check(str(after_trip) == str(before_trip), "and the row's trip_id is unchanged",
+          f"{before_trip} -> {after_trip}")
+
     # ------------------------------------------------------------------- RLS
     print("\n== nothing is left open, and nothing forces RLS ==")
     unprotected = db.run("""select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace

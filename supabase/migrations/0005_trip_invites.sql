@@ -27,6 +27,27 @@ create trigger trip_invites_touch_updated_at
   before update on public.trip_invites
   for each row execute function public.touch_updated_at();
 
+-- An invite belongs to the trip it was minted for. Rotating a code means
+-- minting a new one and revoking the old, not repointing an existing one --
+-- otherwise a code already circulating for one trip could be redirected
+-- to admit people into another.
+create or replace function public.trip_invites_lock_trip_id()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.trip_id is distinct from old.trip_id then
+    raise exception 'trip_invites.trip_id cannot be changed once set';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trip_invites_lock_trip_id on public.trip_invites;
+create trigger trip_invites_lock_trip_id
+  before update on public.trip_invites
+  for each row execute function public.trip_invites_lock_trip_id();
+
 alter table public.trip_invites enable row level security;
 
 -- Inviting is flat: any member of a trip can mint a code for it and read the
