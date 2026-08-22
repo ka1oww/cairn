@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cairn — the dependency map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FFF4E4; --sticker:#FFFDF8; --ink:#43382C; --muted:#8C7B66;
+    --coral:#F4623E; --amber:#E9A13B; --blue:#3E6795;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:"Atkinson Hyperlegible",Verdana,system-ui,sans-serif;
+    font-size:16px; line-height:1.5; padding:40px 24px 64px;
+  }
+  .page{max-width:1400px;margin:0 auto}
+  h1,h2{font-family:"Young Serif",Georgia,serif;font-weight:400}
+  h1{font-size:2.4rem;line-height:1.15;margin-bottom:.35rem}
+  h2{font-size:1.35rem;margin-bottom:.6rem}
+  .dateline{color:var(--muted);font-size:.95rem;max-width:70ch}
+  .dateline a{color:var(--blue)}
+
+  /* headline fact */
+  .noapp{
+    margin:26px 0 20px; padding:16px 20px; border-radius:10px;
+    background:var(--sticker); border:1.5px solid var(--coral);
+    display:flex; gap:14px; align-items:baseline; flex-wrap:wrap;
+  }
+  .noapp>b{font-family:"Young Serif",Georgia,serif;font-weight:400;font-size:1.15rem;color:var(--coral);white-space:nowrap}
+  .noapp span{max-width:95ch}
+
+  /* legend */
+  .legend{
+    display:flex;flex-wrap:wrap;gap:10px 26px;align-items:center;
+    font-size:.86rem;color:var(--muted);margin:0 0 14px;
+  }
+  .sw{display:inline-block;width:30px;height:15px;border-radius:4px;background:var(--sticker);
+      vertical-align:-2px;margin-right:7px}
+  .sw.built{border:2.5px solid var(--blue)}
+  .sw.partial{border:2.5px solid var(--amber)}
+  .sw.nb{border:2px dashed var(--muted)}
+  .sw.arrow{border:none;background:none;position:relative;width:34px}
+  .sw.arrow::after{content:"";position:absolute;left:0;top:7px;width:26px;height:0;
+      border-top:2px solid rgba(67,56,44,.55)}
+  .sw.arrow::before{content:"";position:absolute;left:24px;top:3px;
+      border-left:7px solid rgba(67,56,44,.55);border-top:5px solid transparent;border-bottom:5px solid transparent}
+  .sw.arrow.am::after{border-top:2px dashed var(--amber)}
+  .sw.arrow.am::before{border-left-color:var(--amber)}
+  .legend .rule{color:var(--coral);font-weight:700}
+
+  /* the map */
+  .map-wrap{overflow-x:auto;background:var(--paper);border-radius:8px}
+  .map-inner{position:relative;width:1360px;height:1690px;margin:0 auto}
+  .map-inner svg{position:absolute;inset:0;z-index:0}
+
+  .band{
+    position:absolute;left:0;width:1360px;z-index:1;pointer-events:none;
+    font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+    display:flex;justify-content:space-between;align-items:baseline;
+    border-top:1px solid rgba(140,123,102,.28);padding-top:3px;
+  }
+  .band em{font-style:normal;letter-spacing:.02em;text-transform:none;font-size:.8rem}
+
+  .node{
+    position:absolute;z-index:2;background:var(--sticker);border-radius:9px;
+    padding:9px 11px 8px;box-shadow:0 1px 2px rgba(67,56,44,.10);
+  }
+  .node h4{font-family:"Atkinson Hyperlegible";font-weight:700;font-size:.95rem;line-height:1.2;margin:2px 0 3px}
+  .node p{font-size:.78rem;line-height:1.32;color:var(--muted)}
+  .node p b{color:var(--ink);font-weight:700}
+  .node .chip{
+    float:right;font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;
+    padding:1px 7px;border-radius:99px;margin:-1px -3px 2px 6px;white-space:nowrap;
+  }
+  .node.built{border:2.5px solid var(--blue)}
+  .node.built .chip{background:var(--blue);color:var(--sticker)}
+  .node.partial{border:2.5px solid var(--amber)}
+  .node.partial .chip{background:var(--amber);color:var(--sticker)}
+  .node.nb{border:2px dashed var(--muted);box-shadow:none}
+  .node.nb .chip{border:1px solid var(--muted);color:var(--muted)}
+  .node .sub{display:inline-block;font-size:.64rem;color:var(--amber);font-weight:700;margin-top:3px}
+  .node .warn{display:inline-block;font-size:.68rem;color:var(--coral);font-weight:700;margin-top:4px;line-height:1.3}
+
+  .seamnode{
+    position:absolute;z-index:2;background:var(--sticker);border:2px dashed var(--muted);
+    border-radius:12px;padding:12px 18px 10px;box-shadow:0 2px 5px rgba(67,56,44,.12);
+  }
+  .seamnode h3{font-family:"Young Serif",Georgia,serif;font-weight:400;font-size:1.15rem}
+  .seamnode p{font-size:.82rem;color:var(--muted);margin-top:2px;line-height:1.35}
+  .seamnode .chips{margin-top:7px;display:flex;gap:7px;flex-wrap:wrap}
+  .seamnode .chips i{font-style:normal;font-size:.68rem;border:1px solid rgba(140,123,102,.55);
+      color:var(--muted);border-radius:99px;padding:1px 9px}
+  .seamnode .chips i.open{border-color:var(--amber);color:var(--amber);font-weight:700}
+
+  .groupbox{
+    position:absolute;z-index:1;border:1.5px dashed rgba(140,123,102,.6);border-radius:14px;
+  }
+  .groupbox .gtitle{
+    position:absolute;top:-11px;left:16px;background:var(--paper);padding:0 9px;
+    font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  }
+
+  .rulecard{
+    position:absolute;z-index:2;background:var(--sticker);border:1.5px solid var(--coral);
+    border-radius:9px;padding:9px 12px;font-size:.78rem;line-height:1.35;color:var(--ink);
+  }
+  .rulecard b{color:var(--coral)}
+
+  .maplabel{position:absolute;z-index:1;font-size:.72rem;color:var(--muted);line-height:1.3;font-style:italic}
+
+  /* panels below the map */
+  .panels{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:30px}
+  @media (max-width:960px){.panels{grid-template-columns:1fr}}
+  .panel{background:var(--sticker);border-radius:12px;padding:20px 24px;box-shadow:0 1px 3px rgba(67,56,44,.10)}
+  .panel.gaps{border-left:5px solid var(--amber)}
+  .panel.seamp{border-left:5px solid var(--blue)}
+  .panel p{font-size:.92rem;margin-bottom:.6rem}
+  .panel p:last-child{margin-bottom:0}
+  .panel ul,.panel ol{font-size:.9rem;padding-left:1.25rem}
+  .panel li{margin-bottom:.5rem}
+  .panel li:last-child{margin-bottom:0}
+  .panel code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.83em;
+      background:rgba(140,123,102,.13);border-radius:4px;padding:0 4px}
+  .panel.full{grid-column:1/-1}
+  .panel b{font-weight:700}
+
+  footer{margin-top:34px;color:var(--muted);font-size:.88rem;max-width:100ch}
+  footer a{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>Cairn — the dependency map</h1>
+  <p class="dateline">
+    Every piece of the app as a node; an arrow means <b>“knows about”</b> and always points
+    downward. Point at any node and its inward arrows are what breaks if it changes.
+    Drawn 22 Aug 2026 from <code>main</code> (PRs #7–#10 merged) and design round 7 (PR #11).
+    The greppable twin of this page is <a href="architecture.md">architecture.md</a>.
+  </p>
+</header>
+
+<div class="noapp">
+  <b>There is no app yet.</b>
+  <span>No <code>lib/</code>, no <code>ios/</code>, no root <code>pubspec.yaml</code>. The bottom
+  band (four pure-Dart packages) and the backend column exist; <b>every node between the screens
+  and the packages is intention, drawn here so the intention is inspectable.</b></span>
+</div>
+
+<div class="legend">
+  <span><span class="sw built"></span>built — exists &amp; tested (main or open PR)</span>
+  <span><span class="sw partial"></span>partial — exists, known incomplete</span>
+  <span><span class="sw nb"></span>not built — planned only</span>
+  <span><span class="sw arrow"></span>knows about</span>
+  <span><span class="sw arrow am"></span>planned, not yet a recorded decision</span>
+  <span class="rule">nothing points up — an upward arrow is a design bug</span>
+</div>
+
+<div class="map-wrap">
+<div class="map-inner">
+
+<!-- ======================= arrows (under the nodes) ======================= -->
+<svg viewBox="0 0 1360 1690" width="1360" height="1690" aria-hidden="true">
+  <defs>
+    <marker id="mi" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#43382C" fill-opacity="0.55"/>
+    </marker>
+    <marker id="mf" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.6" markerHeight="4.6" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8C7B66" fill-opacity="0.75"/>
+    </marker>
+    <marker id="ma" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#E9A13B"/>
+    </marker>
+    <marker id="mfun" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="26" markerHeight="26" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#43382C" fill-opacity="0.30"/>
+    </marker>
+    <marker id="mc" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#F4623E"/>
+    </marker>
+  </defs>
+
+  <!-- screens fan into app state: they know app state, and nothing below it -->
+  <g stroke="#8C7B66" stroke-opacity="0.55" stroke-width="1.3" fill="none" marker-end="url(#mf)">
+    <path d="M145 152 C 200 195, 330 225, 398 247"/>
+    <path d="M327 152 C 360 185, 420 225, 448 247"/>
+    <path d="M509 152 C 505 180, 500 220, 499 247"/>
+    <path d="M691 152 C 640 185, 570 225, 551 247"/>
+    <path d="M873 152 C 780 190, 660 228, 601 247"/>
+    <path d="M1055 152 C 900 200, 720 232, 651 247"/>
+    <path d="M1237 152 C 1030 210, 770 236, 701 247"/>
+  </g>
+
+  <!-- the funnel: everything in the app-state band asks the seam -->
+  <line x1="600" y1="372" x2="600" y2="576" stroke="#43382C" stroke-opacity="0.30" stroke-width="13" marker-end="url(#mfun)"/>
+
+  <!-- services to platform edges -->
+  <g stroke="#43382C" stroke-opacity="0.55" stroke-width="1.8" fill="none" marker-end="url(#mi)">
+    <path d="M180 365 L180 441"/>                      <!-- scheduler -> local notifications -->
+    <path d="M870 365 L843 441"/>                      <!-- sweep -> camera roll -->
+    <path d="M1118 365 C 1060 400, 1000 425, 976 441"/> <!-- glue -> camera -->
+    <path d="M1170 365 L1108 441"/>                    <!-- glue -> location -->
+    <path d="M1232 365 L1250 441"/>                    <!-- glue -> sign in with apple -->
+  </g>
+
+  <!-- seam to the two storage backends -->
+  <g stroke="#43382C" stroke-opacity="0.55" stroke-width="2.6" fill="none" marker-end="url(#mi)">
+    <path d="M430 725 L392 801"/>                      <!-- seam -> drift -->
+    <path d="M940 725 L983 801"/>                      <!-- seam -> supabase/r2 client -->
+  </g>
+
+  <!-- adapter into the backend -->
+  <g stroke="#43382C" stroke-opacity="0.55" stroke-width="1.8" fill="none" marker-end="url(#mi)">
+    <path d="M860 925 L793 1026"/>                     <!-- adapter -> r2-upload-url -->
+    <path d="M1000 925 L1038 1026"/>                   <!-- adapter -> r2-download-url -->
+    <path d="M905 925 C 912 975, 915 1120, 915 1176"/> <!-- adapter -> postgres (between the fns) -->
+    <path d="M830 925 C 660 1090, 652 1230, 688 1336"/><!-- adapter -> supabase auth -->
+    <path d="M1185 925 C 1320 1030, 1330 1120, 1245 1196"/><!-- adapter -> r2, presigned -->
+  </g>
+
+  <!-- inside the backend -->
+  <g stroke="#43382C" stroke-opacity="0.55" stroke-width="1.8" fill="none" marker-end="url(#mi)">
+    <path d="M790 1158 L783 1178"/>                    <!-- upload fn -> postgres (membership) -->
+    <path d="M868 1156 C 1000 1172, 1120 1182, 1148 1222"/> <!-- upload fn -> r2 -->
+    <path d="M1105 1158 L1148 1202"/>                  <!-- download fn -> r2 -->
+    <path d="M785 1315 L785 1336"/>                    <!-- postgres -> auth (auth.uid) -->
+  </g>
+  <!-- the one coral arrow: the gate check the download fn must make -->
+  <path d="M1010 1158 L990 1178" stroke="#F4623E" stroke-width="2.4" fill="none" marker-end="url(#mc)"/>
+
+  <!-- long lanes down to the domain packages -->
+  <g stroke="#43382C" stroke-opacity="0.55" stroke-width="1.8" fill="none" marker-end="url(#mi)">
+    <path d="M72 365 C 30 430, 30 480, 30 700 L30 1400 C 30 1450, 90 1478, 175 1491"/>       <!-- scheduler -> trip_moments -->
+    <path d="M395 365 C 48 540, 48 620, 48 900 L48 1395 C 48 1452, 250 1478, 428 1491"/>     <!-- providers -> itinerary_parser -->
+    <path d="M610 725 L610 1370 C 610 1430, 640 1465, 678 1491"/>                            <!-- repositories -> cairn_model -->
+    <path d="M1038 365 C 1348 540, 1348 620, 1348 900 L1348 1400 C 1348 1455, 1290 1478, 1208 1491"/> <!-- sweep -> photo_day_assignment -->
+  </g>
+  <!-- planned but not yet decision-recorded: Drift typed against the vocabulary -->
+  <path d="M390 925 C 480 1180, 540 1350, 622 1491" stroke="#E9A13B" stroke-width="1.9"
+        stroke-dasharray="7 5" fill="none" marker-end="url(#ma)"/>
+
+  <!-- lane labels -->
+  <g font-family="Atkinson Hyperlegible" font-size="11.5" fill="#8C7B66" font-style="italic">
+    <text x="614" y="392" transform="rotate(90 614 392)">asks — never told where the answer came from</text>
+    <text x="18" y="980" transform="rotate(90 18 980)">roster · clock · windows in — schedule out</text>
+    <text x="54" y="990" transform="rotate(90 54 990)">paste in — days &amp; doubts out</text>
+    <text x="1344" y="980" transform="rotate(90 1344 980)">metadata in, day number + confidence out</text>
+    <text x="620" y="1000" transform="rotate(90 620 1000)">speaks the vocabulary</text>
+    <text x="500" y="1265" transform="rotate(64 500 1265)">rows typed against the model — planned</text>
+    <text x="1148" y="1042">presigned PUT/GET —</text>
+    <text x="1148" y="1056">bytes never transit Supabase</text>
+  </g>
+</svg>
+
+<!-- ======================= band labels ======================= -->
+<div class="band" style="top:0px"><span>Screens</span><em>not built — drawn in docs/design, round 7 current · they know app state and nothing below it</em></div>
+<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>not built · validated in learning/riverpod-drift-demo</em></div>
+<div class="band" style="top:415px"><span>Platform edges (iOS)</span><em>wiring not built · services know the platform; the platform knows nothing of Cairn</em></div>
+<div class="band" style="top:562px"><span>The repositories seam</span><em>not built · the most expensive layer to skip</em></div>
+<div class="band" style="top:772px"><span>Storage</span><em>not built — one local, one remote; only the seam knows both exist</em></div>
+<div class="band" style="top:952px"><span>Backend</span><em>partial · schema verified on local Postgres 17 — no hosted project, nothing deployed</em></div>
+<div class="band" style="top:1460px"><span>Domain — pure Dart</span><em>built · four siblings: none imports another, none imports cairn_model — the app layer translates</em></div>
+
+<!-- ======================= screens ======================= -->
+<div class="node nb" style="left:60px;top:22px;width:170px;height:130px">
+  <span class="chip">not built</span><h4>Trail</h4>
+  <p>The front door. Today’s stops, a flag on today; days advance by the clock.</p>
+</div>
+<div class="node nb" style="left:242px;top:22px;width:170px;height:130px">
+  <span class="chip">not built</span><h4>Day page &amp; gate</h4>
+  <p>Vertical timeline, hours prominent. Shut: times &amp; names, images withheld.</p>
+</div>
+<div class="node nb" style="left:424px;top:22px;width:170px;height:130px">
+  <span class="chip">not built</span><h4>Capture</h4>
+  <p>Answers the ping. Back camera + front inset; 30-min window; late path open.</p>
+</div>
+<div class="node nb" style="left:606px;top:22px;width:170px;height:130px">
+  <span class="chip">not built</span><h4>Pool</h4>
+  <p>Plumbing: the trip’s photos in a plain, fast grid by day. Not a destination.</p>
+</div>
+<div class="node nb" style="left:788px;top:22px;width:170px;height:130px">
+  <span class="chip">not built</span><h4>Book</h4>
+  <p>One spread per day; cairn on the cover; offline forever.</p>
+  <span class="sub">interior in design — round 9</span>
+</div>
+<div class="node nb" style="left:970px;top:22px;width:170px;height:130px">
+  <span class="chip">not built</span><h4>Join &amp; confirm</h4>
+  <p>Invite code in, name edit, paste-the-plan + the confirmation screen.</p>
+</div>
+<div class="node nb" style="left:1152px;top:22px;width:170px;height:130px">
+  <span class="chip">not built</span><h4>Settings &amp; members</h4>
+  <p>Rename, invites, member list, leave, remove — per the starter decision.</p>
+</div>
+
+<!-- ======================= app state ======================= -->
+<div class="node nb" style="left:60px;top:250px;width:240px;height:115px">
+  <span class="chip">not built</span><h4>Ping scheduler</h4>
+  <p>Feeds <b>trip_moments</b> the roster, clock and first/last-day windows; registers every remaining day’s notifications in one offline pass.</p>
+</div>
+<div class="node nb" style="left:340px;top:250px;width:420px;height:115px">
+  <span class="chip">not built</span><h4>Riverpod providers</h4>
+  <p>One source of truth per question. A watched repository stream flows through a provider; writing a row updates every watching screen with no manual wiring. Calls <b>itinerary_parser</b> for the confirm flow.</p>
+</div>
+<div class="node nb" style="left:800px;top:250px;width:240px;height:115px">
+  <span class="chip">not built</span><h4>Import sweep</h4>
+  <p>Runs when the app opens — exactly what the import promise says. Asks <b>photo_day_assignment</b>, queues uploads.</p>
+</div>
+<div class="node nb" style="left:1080px;top:250px;width:240px;height:115px">
+  <span class="chip">not built</span><h4>Platform glue</h4>
+  <p>Dual capture, the GPS tag at capture, the sign-in flow. Keeps screens platform-blind.</p>
+</div>
+
+<!-- ======================= platform edges ======================= -->
+<div class="node nb" style="left:60px;top:445px;width:220px">
+  <span class="chip">not built</span><h4>Local notifications</h4>
+  <p>Ordinary alert level — never pierces Do&nbsp;Not&nbsp;Disturb. Delivery is the OS’s to refuse.</p>
+</div>
+<div class="node nb" style="left:760px;top:445px;width:140px">
+  <span class="chip">not built</span><h4>Camera roll</h4>
+  <p>Swept while open; iOS offers no background trigger.</p>
+</div>
+<div class="node nb" style="left:915px;top:445px;width:115px">
+  <span class="chip">not built</span><h4>Camera</h4>
+  <p>Dual capture — the one hard piece.</p>
+</div>
+<div class="node nb" style="left:1045px;top:445px;width:115px">
+  <span class="chip">not built</span><h4>Location</h4>
+  <p>GPS tag so pinged photos ride rung&nbsp;1.</p>
+</div>
+<div class="node nb" style="left:1175px;top:445px;width:150px">
+  <span class="chip">not built</span><h4>Sign in with Apple</h4>
+  <p>The first auth route.</p>
+</div>
+
+<!-- the rule card, in the corridor beside the funnel -->
+<div class="rulecard" style="left:330px;top:452px;width:158px">
+  <b>The rule:</b> a layer only knows the layers beneath it. Data flows up as return values; knowledge never does.
+</div>
+
+<!-- ======================= the seam ======================= -->
+<div class="seamnode" style="left:240px;top:595px;width:880px;height:130px">
+  <span class="chip" style="float:right;font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--muted);color:var(--muted);border-radius:99px;padding:1px 7px">not built</span>
+  <h3>Repositories — the seam</h3>
+  <p>The waist of the hourglass: the <b>only</b> layer that knows the phone has a local database
+  <i>and</i> that a network exists. Above it, nobody can tell where an answer came from.
+  Everything awkward about offline-first lives here so it lives nowhere else:</p>
+  <div class="chips">
+    <i>outbox: bytes first, row second</i>
+    <i>day_pages insert → update fallback</i>
+    <i>deletions need refetch</i>
+    <i>package dialects → vocabulary</i>
+    <i class="open">sync &amp; conflict policy undecided</i>
+  </div>
+</div>
+
+<!-- ======================= storage ======================= -->
+<div class="node nb" style="left:150px;top:805px;width:410px;height:120px">
+  <span class="chip">not built</span><h4>Drift store — local SQLite</h4>
+  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS.</p>
+  <span class="sub">choice validated in the demo, not yet recorded in a decision file</span>
+</div>
+<div class="node nb" style="left:800px;top:805px;width:410px;height:120px">
+  <span class="chip">not built</span><h4>Supabase / R2 client adapter</h4>
+  <p>Session JWT, RLS-filtered queries, edge-function calls, presigned byte transfers — behind one interface. Nothing else in the app may import a network symbol.</p>
+</div>
+
+<!-- ======================= backend ======================= -->
+<div class="groupbox" style="left:640px;top:985px;width:695px;height:435px">
+  <span class="gtitle">Supabase project + Cloudflare — no hosted project exists</span>
+</div>
+
+<div class="node partial" style="left:700px;top:1030px;width:180px;height:128px">
+  <span class="chip">partial</span><h4>r2-upload-url</h4>
+  <p>Re-checks membership, mints a 5-min PUT. Written, never deployed.</p>
+</div>
+<div class="node nb" style="left:950px;top:1030px;width:180px;height:128px">
+  <span class="chip">not built</span><h4>r2-download-url</h4>
+  <p>Signs every read of a private byte.</p>
+  <span class="warn">must call day_page_is_open before signing every GET</span>
+</div>
+<div class="node partial" style="left:670px;top:1180px;width:430px;height:135px">
+  <span class="chip">partial</span><h4>Postgres schema + RLS</h4>
+  <p><b>Membership is the root of every access check.</b> profiles · trips (the one shared clock)
+  · trip_members · trip_invites · photos · day_unlocks · day_pages ·
+  <code>day_page_is_open</code> · <code>redeem_trip_invite</code>.
+  Verified by a 55-probe local suite; starter-and-container decisions not yet implemented.</p>
+</div>
+<div class="node nb" style="left:670px;top:1340px;width:230px">
+  <span class="chip">not built</span><h4>Supabase Auth</h4>
+  <p>Accounts; verifies Apple identities. Dashboard config not done.</p>
+</div>
+<div class="node nb" style="left:1140px;top:1200px;width:180px">
+  <span class="chip">not built</span><h4>Cloudflare R2</h4>
+  <p>Private bucket, photo bytes, zero egress. Never listed — the photos row <b>is</b> the pointer.</p>
+</div>
+<div class="maplabel" style="left:660px;top:1005px;width:400px">
+  the server holds only the pool, membership and the shared clock — pings, gate evaluation and the itinerary never move server-side
+</div>
+
+<!-- ======================= domain ======================= -->
+<div class="node built" style="left:60px;top:1495px;width:240px;height:162px">
+  <span class="chip">built</span><h4>trip_moments <span style="font-weight:400">v2</span></h4>
+  <p>One ping per person per day, dealt as a collision-free permutation over the party, reshuffled daily, 08:00–22:30 in the trip’s clock. Offline, serverless, no fallback for disagreeing rosters.</p>
+  <span class="sub">v2 merged (#8) · derivation frozen — changes bump the namespace</span>
+</div>
+<div class="node built" style="left:330px;top:1495px;width:240px;height:162px">
+  <span class="chip">built</span><h4>itinerary_parser</h4>
+  <p>Deterministic, offline parse of a pasted plan into days and stops. Built to ask, not guess: confidence + unplaced lines exist for the confirm screen.</p>
+</div>
+<div class="node built" style="left:600px;top:1495px;width:400px;height:162px">
+  <span class="chip">built</span><h4>cairn_model — the vocabulary</h4>
+  <p>Trip, TripClock, TripDay, Stop, Member, PhotoRef, DayPool, GateState, CalendarDate, ClockTime, typed ids. Zero dependencies. Encodes: clock fixed at day start · gate is one enum · contributors survive photo deletion · no roles. Everything above the packages is written against it.</p>
+  <span class="sub">Trip.canRemove has no succession yet — decision settled, implementation queued</span>
+</div>
+<div class="node built" style="left:1030px;top:1495px;width:300px;height:162px">
+  <span class="chip">built</span><h4>photo_day_assignment</h4>
+  <p>Which day a photo belongs to: GPS-derived timezone over bare EXIF, a degradation ladder, a confidence on every answer. The authority for “which day is this instant”.</p>
+  <span class="sub">trap: findLocation(longitude, latitude) — longitude first</span>
+</div>
+
+</div><!-- /map-inner -->
+</div><!-- /map-wrap -->
+
+<!-- ======================= panels ======================= -->
+<div class="panels">
+
+  <div class="panel seamp">
+    <h2>Why the seam is the map’s centre</h2>
+    <p>Every question a screen asks funnels down through app state into one layer, and that layer
+    alone knows both storage backends exist. A provider asks “photos for day 4” and cannot tell —
+    by construction — whether the answer came off disk or over the wire.</p>
+    <p><b>Skip it and every screen grows its own opinion</b> about caching, retries and which copy
+    of a photo is real: eight opinions, all subtly different, none testable in isolation. The seam
+    is where the outbox ordering, the <code>day_pages</code> conflict fallback, deletion refetch
+    and the translation of package dialects into the vocabulary live — so they live nowhere else.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Invariants the import graph won’t show</h2>
+    <ol>
+      <li><b>“A day’s clock is fixed where it starts”</b> is encoded three times — in
+      <code>cairn_model</code>, <code>trip_moments</code> and <code>photo_day_assignment</code> —
+      by siblings that cannot see each other. Change one, change all.</li>
+      <li><b>The gate rule exists twice on purpose:</b> <code>GateState</code> on the phone,
+      <code>day_page_is_open</code> in SQL for signing downloads. They must move together.</li>
+      <li><b>The trip clock has one source</b> — the <code>trips</code> row. No phone ever infers
+      it; two phones inferring differently is silent schedule drift.</li>
+      <li><b>The ping derivation is frozen.</b> Any change splits devices mid-trip; the only safe
+      change is a loud namespace bump (v2 → v3).</li>
+      <li><b>Multiplication and addition, never bit-shifts</b> — dart2js ints are 32-bit under
+      shifts. Golden tests pin it.</li>
+      <li><b>RLS refuses by filtering, not raising.</b> Assert on table state afterwards, never on
+      whether a statement threw.</li>
+      <li><b>Membership checks only via</b> <code>is_trip_member</code>/<code>is_trip_starter</code>;
+      never <code>force row level security</code> — either revives infinite recursion.</li>
+    </ol>
+  </div>
+
+  <div class="panel gaps full">
+    <h2>Honesty about the gaps</h2>
+    <p>Drawn as open, not settled. None is a contradiction: in each case the decision record is
+    clear and the code is behind it, acknowledged and queued in <code>docs/roadmap.md</code>.</p>
+    <ul>
+      <li><b>Starter &amp; container decisions settled, unimplemented.</b> Rename and invites flat;
+      delete gated once others’ photos exist; removal power passes to the longest-standing member.
+      Today’s schema is starter-only rename/delete with no succession, and
+      <code>Trip.canRemove</code> knows nothing of it. Queued near-term.</li>
+      <li><b>No download path.</b> Only uploads exist. The requirements are written down — which is
+      exactly why the blank is the most dangerous one on the map.</li>
+      <li><b>Sync &amp; conflict policy undecided</b> beyond three written notes; nothing
+      reconciles rows against R2 objects in either direction.</li>
+      <li><b>Riverpod and Drift are validated, not decided</b> — the demo makes the argument; no
+      decision file records the choice.</li>
+      <li><b>One fixed clock per trip on the server (v1).</b> First/last-day windows and the
+      country-change rule live only on the phone, because the itinerary stays local by decision.</li>
+      <li><b>The book’s interior is in design</b> — the captain’s printed reference has landed; round 9 is drawing the interior against it (PR #11).</li>
+      <li><b>In-transit photos on a multi-zone day are parked</b> — refusal (<code>outsideTrip</code>)
+      plus manual placement is the current answer.</li>
+      <li><b>Thumbnails, keepalive, CI:</b> no thumbnail pipeline; the between-trips dormancy
+      keepalive is planned only; no CI runs any test on any PR.</li>
+      <li><b>Nothing has touched a hosted Supabase project or a real R2 bucket.</b>
+      <code>supabase db push</code> against a throwaway project is still the gate.</li>
+    </ul>
+  </div>
+
+</div>
+
+<footer>
+  Sources: <code>docs/roadmap.md</code> · all seven files in <code>docs/decisions/</code> ·
+  <code>supabase/README.md</code> · <code>AGENTS.md</code> · each package’s README · PR #11.
+  Node-by-node “what breaks if this changes” tables are in
+  <a href="architecture.md">architecture.md</a>. When a gap closes, update both files in the same
+  change — a map that looks more finished than the project is worse than no map.
+</footer>
+
+</div>
+</body>
+</html>
