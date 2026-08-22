@@ -11,9 +11,11 @@ produced it and the alternatives it beat. The `.zip` is the full export.
 | 21 Aug 2026 | `2026-08-21-handoff.zip` | Directions, the Sticker Trail system, ten stress tests, icon and wordmark, four missing surfaces, the way in, the quiet months |
 | 22 Aug 2026 | `2026-08-22-handoff.zip` | The day page, the shut gate, the capture, the trip cairn, the one notification |
 | 22 Aug 2026 (round 7) | `2026-08-22-round7-handoff.zip` | The retired simultaneous surfaces redrawn on the scattered model, every trip surface at eight people, and first surfaces for the alert level, the import promise, the starter and the container, and joining mid-trip |
+| 22 Aug 2026 (round 8) | `2026-08-22-round8-handoff.zip` | The screen after the paste: the confident read, the uncertain read, correcting the parse, and the paste that wouldn't parse |
 
-`2026-08-22-round7-review.html` is a one-page review of round 7: every
-changed surface, with the decision that shaped it.
+`2026-08-22-round7-review.html` and `2026-08-22-round8-review.html` are
+one-page reviews of their rounds: every changed surface, with the
+decision that shaped it.
 
 ## Reading these against the decisions
 
@@ -42,6 +44,14 @@ size touches is in `2026-08-22-round7-handoff.zip`:
 Still current from the 22 August handoff: `8` (day page), `9`'s composition
 at the round-7 count, `10` (capture room states), `11` (the cairn), `12`
 (the notification).
+
+The **paste-confirmation gap is closed** (round 8): what the itinerary
+parser understood now has its screens — the confident read (`16a`), the
+uncertain read built on the parser's per-day confidence (`16b`), in-place
+correction (`16c`), and the nothing-parsed path (`16d`). They are designed
+to `packages/itinerary_parser/README.md`'s contract: per-day high/medium/
+low drives the layout, unplaced lines are always shown with reasons, and
+everything is read on the phone — no surface implies a server saw the plan.
 
 The **book's interior is untouched**: a printed reference for the page
 design is still owed, and no round guesses at it. That is why captions
