@@ -34,3 +34,8 @@ android/key.properties
 .DS_Store
 .idea/
 .vscode/
+
+# Python (supabase/tests harness)
+__pycache__/
+*.pyc
+.venv/

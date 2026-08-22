@@ -65,10 +65,17 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: authHeader } } },
   );
+  // .limit(1) matters: trip_members_select_co_member returns the WHOLE roster
+  // to a member and nothing at all to anyone else, so this query is "am I a
+  // member" only once it is capped. Without the cap, maybeSingle() throws
+  // "multiple rows returned" for every trip with more than one person on it --
+  // i.e. every real trip -- and the throw is indistinguishable here from a
+  // refusal, so every member would be told they are not a member.
   const { data: membership, error: membershipError } = await userClient
     .from("trip_members")
     .select("trip_id")
     .eq("trip_id", tripId)
+    .limit(1)
     .maybeSingle();
 
   if (membershipError || !membership) {
