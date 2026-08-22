@@ -124,7 +124,8 @@ void main() {
       }
     });
 
-    test('the same date in two clocks yields the same people in the same '
+    test(
+        'the same date in two clocks yields the same people in the same '
         'slots, shifted whole', () {
       // The deal does not depend on the clock -- only on trip, party and
       // date -- so a border crossing moves the times without re-dealing
@@ -169,7 +170,8 @@ void main() {
       // slot reaches dinner. A silent revert to 21:00 would take dinner
       // back out.
       expect(PingWindow.standard.end, isNot(equals(const Duration(hours: 21))));
-      expect(PingWindow.standard.start, isNot(equals(const Duration(hours: 9))));
+      expect(
+          PingWindow.standard.start, isNot(equals(const Duration(hours: 9))));
     });
 
     test('is configurable', () {

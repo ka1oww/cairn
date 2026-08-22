@@ -45,7 +45,8 @@ class Party {
   factory Party(Iterable<String> memberIds) {
     final unique = memberIds.toSet().toList()..sort();
     if (unique.isEmpty) {
-      throw ArgumentError.value(memberIds, 'memberIds', 'party cannot be empty');
+      throw ArgumentError.value(
+          memberIds, 'memberIds', 'party cannot be empty');
     }
     if (unique.any((id) => id.isEmpty)) {
       throw ArgumentError.value(

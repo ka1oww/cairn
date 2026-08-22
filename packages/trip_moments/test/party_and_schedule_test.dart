@@ -242,8 +242,8 @@ void main() {
       expect(at(const Duration(hours: 8)).localLabel, equals('08:00'));
       expect(at(const Duration(hours: 22, minutes: 30)).localLabel,
           equals('22:30'));
-      expect(at(const Duration(hours: 9, minutes: 7)).localLabel,
-          equals('09:07'));
+      expect(
+          at(const Duration(hours: 9, minutes: 7)).localLabel, equals('09:07'));
     });
   });
 }

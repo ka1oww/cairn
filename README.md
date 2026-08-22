@@ -23,8 +23,8 @@ here is the real app yet.
 - **Flutter**, iOS first. Web and PWA were ruled out because iOS evicts PWA storage.
 - **Sign in with Apple** as the first auth route.
 - A **minimal backend** that does exactly two things: hold the shared photo pool and
-  hold trip membership. The itinerary, the trail, the stars and both notification
-  types are computed on the phone, so the app works fully offline.
+  hold trip membership. The itinerary, the trail, the stars and the daily ping are
+  computed on the phone, so the app works fully offline.
 - State management and the local database are still being chosen — see
   `learning/riverpod-drift-demo/` once it exists.
 

@@ -60,7 +60,10 @@ void main() {
       final results = List.generate(8, (device) {
         // Each "device" builds its own Party from its own shuffled view of
         // the roster, the way eight phones would after eight fetches.
-        final rotated = [...ids.skip(device % ids.length), ...ids.take(device % ids.length)];
+        final rotated = [
+          ...ids.skip(device % ids.length),
+          ...ids.take(device % ids.length)
+        ];
         return dayAssignment(
           tripId: 'trip-eight',
           party: Party(rotated),
@@ -92,7 +95,8 @@ void main() {
       final day = TripDay(date: DateTime(2026, 3, 3), utcOffset: Duration.zero);
       expect(
         _fingerprintOf(dayAssignment(tripId: 't', party: duplicated, day: day)),
-        equals(_fingerprintOf(dayAssignment(tripId: 't', party: clean, day: day))),
+        equals(
+            _fingerprintOf(dayAssignment(tripId: 't', party: clean, day: day))),
       );
     });
 

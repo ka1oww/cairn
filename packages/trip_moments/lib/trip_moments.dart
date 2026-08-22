@@ -9,7 +9,12 @@ export 'src/assignment.dart'
 export 'src/party.dart' show Party;
 export 'src/ping_window.dart' show PingWindow;
 export 'src/slots.dart'
-    show dealOrder, minimumSlotMinutes, pingMinuteForSlot, slotCountFor, slotStartMinute;
+    show
+        dealOrder,
+        minimumSlotMinutes,
+        pingMinuteForSlot,
+        slotCountFor,
+        slotStartMinute;
 export 'src/stable_hash.dart'
     show stableDigestMax, stableDigestValue, stableFingerprint, stableIndex;
 export 'src/trip_day.dart' show TripDay, dateKey;

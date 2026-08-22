@@ -146,8 +146,7 @@ void main() {
       expect(day.pings.length, equals(1));
       expect(day.pings.single.localTimeOfDay,
           greaterThanOrEqualTo(const Duration(hours: 22)));
-      expect(day.pings.single.localTimeOfDay,
-          lessThanOrEqualTo(day.closesAt));
+      expect(day.pings.single.localTimeOfDay, lessThanOrEqualTo(day.closesAt));
       expect(day.unpingedMemberIds.length, equals(7));
     });
   });
@@ -212,8 +211,8 @@ void main() {
     expect(day.opensAt, equals(const Duration(hours: 10)));
     expect(day.closesAt, equals(const Duration(hours: 18)));
     for (final ping in day.pings) {
-      expect(ping.localTimeOfDay,
-          greaterThanOrEqualTo(const Duration(hours: 10)));
+      expect(
+          ping.localTimeOfDay, greaterThanOrEqualTo(const Duration(hours: 10)));
       expect(ping.localTimeOfDay, lessThanOrEqualTo(const Duration(hours: 18)));
     }
   });

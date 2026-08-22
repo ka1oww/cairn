@@ -129,8 +129,9 @@ void main() {
                     slotCount: count,
                     slotIndex: i),
         ];
-        expect(lengths.reduce((a, b) => a > b ? a : b) -
-            lengths.reduce((a, b) => a < b ? a : b),
+        expect(
+            lengths.reduce((a, b) => a > b ? a : b) -
+                lengths.reduce((a, b) => a < b ? a : b),
             lessThanOrEqualTo(1));
       }
     });
@@ -150,8 +151,7 @@ void main() {
     test('a dealt slot is never shorter than the minimum', () {
       const open = 8 * 60;
       for (final available in [30, 45, 90, 180, 390, 870]) {
-        final count =
-            slotCountFor(partySize: 40, availableMinutes: available);
+        final count = slotCountFor(partySize: 40, availableMinutes: available);
         for (var i = 0; i < count; i++) {
           final length = slotStartMinute(
                   openMinute: open,
