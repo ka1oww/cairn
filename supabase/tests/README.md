@@ -22,13 +22,13 @@ which is a question only Postgres can answer.
 ## Running them
 
 You need a Postgres 17 (Supabase provisions new projects on 17) and `pg8000`.
-Any of these will do:
+Either of these will do:
 
 ```sh
-# whatever you already have
+# Homebrew -- note the superuser is your login name, not "postgres"
 brew install postgresql@17 && brew services start postgresql@17
 
-# or Supabase's own local stack, which is Postgres in Docker
+# or Supabase's own local stack, which is Postgres in Docker, superuser "postgres"
 supabase start        # then point CAIRN_PG_PORT at the port it prints
 ```
 
@@ -37,15 +37,27 @@ Then:
 ```sh
 python3 -m venv .venv && .venv/bin/pip install pg8000
 cd supabase/tests
-CAIRN_PG_PORT=5432 CAIRN_PG_USER=postgres ../../.venv/bin/python rls_probe.py
-CAIRN_PG_PORT=5432 CAIRN_PG_USER=postgres ../../.venv/bin/python recursion_mechanism.py
+export CAIRN_PG_HOST=127.0.0.1 CAIRN_PG_PORT=5432
+export CAIRN_PG_USER="$(whoami)"     # Homebrew; use "postgres" for Docker/Supabase
+../../.venv/bin/python rls_probe.py
+../../.venv/bin/python recursion_mechanism.py
 ```
 
 Connection settings come from `CAIRN_PG_HOST`, `CAIRN_PG_PORT`, `CAIRN_PG_USER`,
-`CAIRN_PG_PASSWORD` and `CAIRN_PG_DB`, defaulting to
-`127.0.0.1:5432/postgres` as `postgres`. Both scripts drop and recreate their
-own database (`cairn_probe`, `cairn_owned`) every run, so point them at a
-throwaway cluster and never at anything real.
+`CAIRN_PG_PASSWORD` and `CAIRN_PG_DB`, defaulting to `127.0.0.1:5432/postgres`
+as `postgres`.
+
+**That default is wrong on a Homebrew cluster**, and the way it fails is worth
+knowing, because it looks like a broken test rather than a wrong username:
+`brew install postgresql@17` creates exactly one superuser, named after your
+macOS login, and no role called `postgres` at all. Connecting without setting
+`CAIRN_PG_USER` therefore dies at the first line with `role "postgres" does not
+exist`. Both scripts need that superuser: they create and drop databases, and
+`recursion_mechanism.py` also creates a role.
+
+Both scripts drop and recreate their own database (`cairn_probe`,
+`cairn_owned`) every run, so point them at a throwaway cluster and never at
+anything real.
 
 ## The trap to know about before adding a check
 

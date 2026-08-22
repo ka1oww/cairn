@@ -428,11 +428,13 @@ Being honest about the edges:
 
 ## Verification: what was actually run
 
-Everything below was run against **Postgres 17.10** (Supabase provisions new
-projects on 17), driven the way PostgREST drives a request — `set local role
-authenticated` plus the JWT claims GUC, as a role with no `BYPASSRLS`. The
-suite lives in [`tests/`](tests/) and can be re-run against any throwaway
-Postgres; see that directory's README.
+Everything below was run against **Postgres 17** (which is what Supabase
+provisions new projects on), driven the way PostgREST drives a request — `set
+local role authenticated` plus the JWT claims GUC, as a role with no
+`BYPASSRLS`. The suite lives in [`tests/`](tests/) and can be re-run against any
+throwaway Postgres; see that directory's README. It has been run green on two
+independently built clusters — 17.10 and a Homebrew 17.11 — so the results are
+not an artefact of one machine's setup.
 
 - All nine migrations apply cleanly, and apply again cleanly on a second run.
 - 53 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
