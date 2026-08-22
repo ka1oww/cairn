@@ -39,7 +39,7 @@ void main() {
 
 /// Regenerate with: `dart run tool/print_goldens.dart`
 const _pinned = <String>[
-  'digest "" = 250348346448124',
+  'digest "" = 999999999999999',
   'digest "trip-fixture-001" = 190246294933710',
   'digest "trip-alpha/2026-06-15" = 70172693670882',
   'digest "trip-bravo-🚀" = 181497317165802',
