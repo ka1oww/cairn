@@ -141,16 +141,19 @@
   <p class="dateline">
     Every piece of the app as a node; an arrow means <b>“knows about”</b> and always points
     downward. Point at any node and its inward arrows are what breaks if it changes.
-    Drawn 22 Aug 2026 from <code>main</code> (PRs #7–#10 merged) and design round 7 (PR #11).
+    Drawn 22 Aug 2026 from <code>main</code> (PRs #7–#10 merged) and design round 7 (PR #11);
+    updated the same day for the app scaffold.
     The greppable twin of this page is <a href="architecture.md">architecture.md</a>.
   </p>
 </header>
 
 <div class="noapp">
-  <b>There is no app yet.</b>
-  <span>No <code>lib/</code>, no <code>ios/</code>, no root <code>pubspec.yaml</code>. The bottom
-  band (four pure-Dart packages) and the backend column exist; <b>every node between the screens
-  and the packages is intention, drawn here so the intention is inspectable.</b></span>
+  <b>The app is a scaffold.</b>
+  <span>Root <code>pubspec.yaml</code>, <code>lib/</code> and <code>ios/</code> exist (the
+  app-scaffold PR): a shell, one provider, one repository and a one-table Drift store, proven
+  end to end by one deliberately minimal screen. <code>lib/README.md</code> spells these bands
+  as directories. <b>Every designed screen, the three services, the platform glue and the whole
+  remote side are still intention, drawn here so the intention is inspectable.</b></span>
 </div>
 
 <div class="legend">
@@ -259,10 +262,10 @@
 
 <!-- ======================= band labels ======================= -->
 <div class="band" style="top:0px"><span>Screens</span><em>not built — drawn in docs/design, round 7 current · they know app state and nothing below it</em></div>
-<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>not built · validated in learning/riverpod-drift-demo</em></div>
+<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>partial — one scaffold provider; the services not built</em></div>
 <div class="band" style="top:415px"><span>Platform edges (iOS)</span><em>wiring not built · services know the platform; the platform knows nothing of Cairn</em></div>
-<div class="band" style="top:562px"><span>The repositories seam</span><em>not built · the most expensive layer to skip</em></div>
-<div class="band" style="top:772px"><span>Storage</span><em>not built — one local, one remote; only the seam knows both exist</em></div>
+<div class="band" style="top:562px"><span>The repositories seam</span><em>partial — scaffolded · the most expensive layer to skip</em></div>
+<div class="band" style="top:772px"><span>Storage</span><em>partial — Drift scaffolded, remote not built; only the seam knows both exist</em></div>
 <div class="band" style="top:952px"><span>Backend</span><em>partial · schema verified on local Postgres 17 — no hosted project, nothing deployed</em></div>
 <div class="band" style="top:1460px"><span>Domain — pure Dart</span><em>built · four siblings: none imports another, none imports cairn_model — the app layer translates</em></div>
 
@@ -302,9 +305,10 @@
   <span class="chip">not built</span><h4>Ping scheduler</h4>
   <p>Feeds <b>trip_moments</b> the roster, clock and first/last-day windows; registers every remaining day’s notifications in one offline pass.</p>
 </div>
-<div class="node nb" style="left:340px;top:250px;width:420px;height:115px">
-  <span class="chip">not built</span><h4>Riverpod providers</h4>
+<div class="node partial" style="left:340px;top:250px;width:420px;height:115px">
+  <span class="chip">partial</span><h4>Riverpod providers</h4>
   <p>One source of truth per question. A watched repository stream flows through a provider; writing a row updates every watching screen with no manual wiring. Calls <b>itinerary_parser</b> for the confirm flow.</p>
+  <span class="sub">scaffold: one proving provider in lib/app_state/ — nothing of the product's state yet</span>
 </div>
 <div class="node nb" style="left:800px;top:250px;width:240px;height:115px">
   <span class="chip">not built</span><h4>Import sweep</h4>
@@ -344,7 +348,7 @@
 
 <!-- ======================= the seam ======================= -->
 <div class="seamnode" style="left:240px;top:595px;width:880px;height:130px">
-  <span class="chip" style="float:right;font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--muted);color:var(--muted);border-radius:99px;padding:1px 7px">not built</span>
+  <span class="chip" style="float:right;font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;background:var(--amber);color:var(--sticker);border-radius:99px;padding:1px 7px">partial</span>
   <h3>Repositories — the seam</h3>
   <p>The waist of the hourglass: the <b>only</b> layer that knows the phone has a local database
   <i>and</i> that a network exists. Above it, nobody can tell where an answer came from.
@@ -359,10 +363,10 @@
 </div>
 
 <!-- ======================= storage ======================= -->
-<div class="node nb" style="left:150px;top:805px;width:410px;height:120px">
-  <span class="chip">not built</span><h4>Drift store — local SQLite</h4>
-  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS.</p>
-  <span class="sub">choice validated in the demo, not yet recorded in a decision file</span>
+<div class="node partial" style="left:150px;top:805px;width:410px;height:120px">
+  <span class="chip">partial</span><h4>Drift store — local SQLite</h4>
+  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Scaffold: one disposable trip_drafts table.</p>
+  <span class="sub">choice validated in the demo and now built on, not yet recorded in a decision file</span>
 </div>
 <div class="node nb" style="left:800px;top:805px;width:410px;height:120px">
   <span class="chip">not built</span><h4>Supabase / R2 client adapter</h4>

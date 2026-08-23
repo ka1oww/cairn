@@ -18,6 +18,24 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - `supabase/` — the backend (see below).
 - `packages/` — standalone Dart packages (own `pubspec.yaml`, tested with `dart test`) that back the Flutter app but must stay Flutter-free. Keep new packages under this pattern rather than pulling their logic into the Flutter app directly.
 
+## The app (root `pubspec.yaml`, `lib/`, `ios/`)
+
+The Flutter application (Riverpod for app state, Drift for the local
+database). `lib/README.md` is the authority on the layout: each directory
+under `lib/` is one band of `docs/architecture.md`, and which band may
+import what is written there, not here.
+
+- Drift's generated code (`lib/**/*.g.dart`) is not checked in (root
+  `.gitignore`): run `dart run build_runner build` after checkout, before
+  analyzing or testing the app.
+- Analyze with `flutter analyze lib test` from the root. A bare
+  `flutter analyze` also walks `learning/` and `packages/` -- separate
+  projects with their own dependency contexts -- and reports their
+  unfetched dependencies as errors.
+- iOS only, deliberately: no `android/` exists and the dev machine has no
+  Android SDK. The build gate is
+  `flutter build ios --simulator --no-codesign`.
+
 ## Backend (`supabase/`)
 
 The backend is Supabase (Postgres: accounts, trip membership, photo index)

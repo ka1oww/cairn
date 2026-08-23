@@ -68,12 +68,13 @@ estimated mid-to-late October; the slack is the point.
 
 ## Where this is now
 
-**Foundations are done. There is no app.**
+**Foundations are done. The app is a scaffold.**
 
-There is no `lib/`, no `ios/`, no `android/`, no root `pubspec.yaml`. What exists
-is four pure-Dart libraries, a backend schema, a dual-camera spike, the decision
-record, and the design handoffs. All of it is tested; none of it can be opened
-on a phone.
+The root `pubspec.yaml`, `lib/` and `ios/` exist (the app-scaffold PR): the
+Riverpod-and-Drift stack is wired end to end behind one deliberately minimal
+proving screen, and it builds for the iOS simulator. No screen from the design
+exists yet. Beneath it: four pure-Dart libraries, a backend schema, a
+dual-camera spike, the decision record, and the design handoffs, all tested.
 
 | Piece | State |
 | --- | --- |
@@ -83,9 +84,9 @@ on a phone.
 | `packages/trip_moments` | Landed. Deals one ping per person across the party. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
-| CI | Landed. Package tests, the JS-safety golden, and the RLS probe run on every pull request. |
+| CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **Does not exist.** |
+| The Flutter app | **Scaffold.** Builds and runs on the simulator; no product screen yet. |
 
 ---
 

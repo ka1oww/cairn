@@ -120,6 +120,59 @@ jobs:
         working-directory: supabase/tests
         run: python3 recursion_mechanism.py
 
+  # The application at the repository root: Drift codegen (lib/**/*.g.dart
+  # is not checked in -- see the root .gitignore), analysis, tests.
+  # `flutter analyze` is scoped to lib/ and test/ because a bare run from
+  # the root would also walk learning/ and packages/ -- separate projects
+  # with their own dependency contexts, each covered by its own job here.
+  app-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - name: Cache pub cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-flutter-app-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
+          restore-keys: pub-flutter-${{ runner.os }}-
+      # drift's NativeDatabase in the widget tests opens the host SQLite;
+      # the -dev package puts the unversioned libsqlite3.so on the loader
+      # path. Usually preinstalled on the runner image -- this is insurance,
+      # not a load-bearing assumption.
+      - run: sudo apt-get update -q && sudo apt-get install -yq libsqlite3-dev
+      - run: flutter pub get
+      - name: Generate Drift code
+        run: dart run build_runner build
+      - run: flutter analyze lib test
+      - run: flutter test
+
+  # The scaffold's claim is an app that actually builds for the phone, so CI
+  # must build it the way the definition of done does: iOS simulator,
+  # unsigned. macOS runner because the iOS toolchain exists nowhere else.
+  # Android is deliberately absent -- no android/ directory exists.
+  app-ios-simulator-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - name: Cache pub cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-flutter-app-ios-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
+          restore-keys: pub-flutter-app-ios-${{ runner.os }}-
+      - run: flutter pub get
+      - name: Generate Drift code
+        run: dart run build_runner build
+      - run: flutter build ios --simulator --no-codesign
+
   # The Flutter learning demo, if it still has tests. See learning/README.md
   # and learning/riverpod-drift-demo/README.md for what it is and isn't.
   flutter-learning-demo:
