@@ -17,23 +17,38 @@ This is a passion project, not a business. There is no monetisation goal.
 
 ## Status
 
-Pre-implementation. The decision and design records live in `docs/` (see below);
-nothing here is the real app yet.
+Under construction, and running. The app builds and opens on a phone: paste a
+rough itinerary, confirm what the parser read, and land on **Today** — the day
+screen, which is also the screen the trail will open for any other day. Four
+pure-Dart domain packages sit under it. The trail, the pool, capture, the daily
+ping and every server call are not built yet.
 
-## Planned stack
+`docs/roadmap.md` is the authority on what is built, what is not, and the order
+the rest arrives in; `docs/architecture.md` maps every node and is honest about
+the gaps.
 
-- **Flutter**, iOS first. Web and PWA were ruled out because iOS evicts PWA storage.
-- **Sign in with Apple** as the first auth route.
-- A **minimal backend** that does exactly two things: hold the shared photo pool and
-  hold trip membership. The itinerary, the trail, the stars and the daily ping are
-  computed on the phone, so the app works fully offline.
-- State management and the local database are still being chosen — see
-  `learning/riverpod-drift-demo/` once it exists.
+## Stack
+
+- **Flutter**, iOS only for now — there is no `android/` directory. Web and PWA
+  were ruled out because iOS evicts PWA storage.
+- **Riverpod** for app state and **Drift** (SQLite) for the local database.
+  Chosen, and built on: the argument is made in `learning/riverpod-drift-demo/`
+  and the app commits code to both. Writing that choice down as a decision
+  record is queued work — see the honesty section of `docs/architecture.md`.
+- **Supabase** (Postgres) and **Cloudflare R2** for the minimal backend, which
+  does exactly two things: hold the shared photo pool and hold trip membership.
+  The trail, the stars and the daily ping are computed on the phone, so the app
+  works fully offline. The schema is written and exercised against a local
+  Postgres; no hosted project exists yet.
+- **Sign in with Apple** as the first auth route. Not built.
 
 ## Layout
 
 | Path | What it is |
 | --- | --- |
+| `lib/`, `ios/` | The Flutter app. `lib/README.md` is the authority on its layout. |
+| `packages/` | Pure-Dart packages the app is written against, kept Flutter-free. |
+| `supabase/` | The backend schema and its local tests. Nothing is hosted yet. |
 | `learning/` | Throwaway demos built to make a technical decision. Not the app. |
 
 ## Where the thinking lives

@@ -295,9 +295,9 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   (outbox ordering, `day_pages` insert→update fallback, deletion refetch).
   No reconciliation of rows against R2 objects exists in any direction.
 - **Riverpod and Drift are validated and now built on, not decided.** The
-  learning demo makes the argument and the app scaffold commits code to both;
-  no decision file records the choice; the root `README.md` still says
-  "being chosen." The map draws them as the plan, flagged.
+  learning demo makes the argument and the app commits code to both, and the
+  root `README.md` now names them as the stack; what is still missing is a
+  decision file recording the choice. The map draws them as the plan, flagged.
 - **The day page derives today from the device date.** A trip has one clock
   and it follows the itinerary's leg (last-calls §4), but nothing creates a
   trip row yet, so `todayProvider` (`lib/app_state/day_view.dart`) reads the
