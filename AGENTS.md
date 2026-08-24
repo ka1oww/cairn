@@ -36,20 +36,36 @@ import what is written there, not here.
   Android SDK. The build gate is
   `flutter build ios --simulator --no-codesign`.
 - The launch surface: `RootScreen` opens on the paste box until an itinerary
-  is accepted into Drift, then on **Today**. The flow's whole brain is
-  `lib/app_state/paste_flow.dart` and the day page's is
-  `lib/app_state/day_view.dart`; screens render their view models and never
-  import the parser or `cairn_model`.
+  is accepted into Drift, then on the trip — `TripShell`, whose tabs open on
+  **Today**. Each flow's whole brain is one file in `lib/app_state/`
+  (`paste_flow.dart`, `day_view.dart`, `trail_view.dart`); screens render
+  their view models and never import the parser or `cairn_model`.
+- **The container is `lib/screens/trip_shell.dart`**: a tab per destination,
+  each owning its own `Navigator` so a day page opened from the Trail
+  survives a switch to Today and back. The design's structure is three tabs
+  (Today, Trail, Pool); the Pool is **absent, not disabled**, and slots in as
+  one entry in `_destinations`. Trip-level actions hang off the Trail's title
+  and never a fourth tab — the temporary route back to the paste box lives
+  there.
 - **There is one day screen and no separate day detail.** Today is
-  `DayPage(date)` handed today's date, and the Trail will hand it any other.
-  A second day surface is the thing to refuse in review. `todayProvider`
-  derives today from the *device* date because no trip clock is stored yet —
-  it is the one place that changes when one is, and `bootstrapApp(today:)`
-  pins it in tests.
+  `DayPage(date:)` handed today's date; the Trail opens the same widget for
+  every node, through `DayPage.planDay(n)`. Two ways in, one screen: the
+  number is the only way to reach a day whose date is still open, since
+  nothing here guesses a date. A second day surface is the thing to refuse in
+  review. `todayProvider` derives today from the *device* date because no
+  trip clock is stored yet — it is the one place that changes when one is,
+  and `bootstrapApp(today:)` pins it in tests.
+- The Trail draws **one node per day of the plan and no others**: a date the
+  plan skips gets a `GapDay` page but never a node, because every drawing
+  numbers the path over the plan's own days ("Day 4 of 8"). The winding
+  geometry is the screen's identity, not decoration.
 - Widget tests over the stack must open Drift with
   `closeStreamsSynchronously: true` or teardown hangs silently at 0% CPU —
   the header comment in `test/paste_confirm_flow_test.dart` explains the
-  mechanism. Read it before writing any test that pumps the app.
+  mechanism. Read it before writing any test that pumps the app. Since the
+  container landed, every tab stays in the tree but the unselected ones are
+  *offstage*: finders skip those by default, so a plain `find.byKey` sees
+  only the tab you are standing on, and a tap only reaches it.
 - Fixture-writing trap: a `Day 1 - Tokyo, 14 June 2027` header does *not*
   give the day a date (the whole tail becomes the place); only a date-shaped
   header (`Mon 14 June 2027 - Tokyo`, `3/11/2027 - Tokyo`) resolves

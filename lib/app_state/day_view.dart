@@ -3,8 +3,12 @@
 // One derivation serves every date. That is the point rather than a
 // convenience: Cairn has no separate "day detail" screen — the day page for
 // today *is* the day page for any day (design surface 2f, "Today / day
-// detail"), so Today is `DayPage(today)` and the Trail will later open the
-// same component on any other date without a second surface existing.
+// detail"), so Today is `DayPage(today)` and the Trail opens the same
+// component for every node it draws, without a second surface existing.
+//
+// Two families reach it: `dayViewProvider` by date, and `planDayViewProvider`
+// by the plan's own day number, which is the only way to reach a day whose
+// date is still open. Both end in the same [DayView].
 //
 // The structure and states are the design's: the identity block and the flat
 // ordered stop list of 2f, the "nothing planned" sentence of 3g, the
@@ -185,6 +189,23 @@ final dayViewProvider = Provider.family<AsyncValue<DayView?>, DateTime>(
   },
 );
 
+/// The same day page's view model, asked for by **position in the plan**
+/// rather than by date.
+///
+/// This is not a convenience: a day accepted with its date still open is not
+/// reachable by any date at all, because nothing here guesses one. Its node
+/// on the Trail still has a position, so the Trail opens it by position —
+/// which is the hole the Today slice flagged, closed. Both families end in
+/// the same [DayView] and the same screen; there is still one day surface.
+final planDayViewProvider = Provider.family<AsyncValue<DayView?>, int>(
+  (ref, number) {
+    final today = ref.watch(todayProvider);
+    return ref
+        .watch(savedItineraryProvider)
+        .whenData((plan) => dayViewForPlanDay(plan, number, today));
+  },
+);
+
 // ---------------------------------------------------------------------------
 // The derivation, kept a pure function so it can be read in one sitting.
 // ---------------------------------------------------------------------------
@@ -240,6 +261,22 @@ DayView? dayViewFor(TripPlan? plan, DateTime date, DateTime today) {
     title: weekdayName(date.weekday),
     dateLabel: dayMonthLabel(date),
   );
+}
+
+/// The numbered day [number] of [plan], as the day page shows it.
+///
+/// Deliberately never [BeforeTheTrip] or [AfterTheTrip]: those answer "what
+/// is today", and this answers "what is day four" — which has the same
+/// answer whether the trip has started or not. Whether the day is *over*
+/// still comes from the clock, as everywhere else.
+DayView? dayViewForPlanDay(TripPlan? plan, int number, DateTime today) {
+  if (plan == null) return null;
+  for (final day in plan.days) {
+    if (day.number != number) continue;
+    final date = day.date;
+    return _planned(plan, day, isOver: date != null && date.isBefore(today));
+  }
+  return null;
 }
 
 PlannedDay _planned(TripPlan plan, PlanDay day, {required bool isOver}) {

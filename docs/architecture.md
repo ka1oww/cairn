@@ -9,9 +9,11 @@ Drawn 22 August 2026 from `main` (after PRs #7–#10 merged) and PR #11
 (design round 7). Updated the same day for the app scaffold
 (`fm/cairn-app-scaffold`), which turned the app bands from intention into
 first code. Updated 24 August 2026 for the paste-and-confirm flow
-(`fm/cairn-screen-paste-confirm`), the app's first real screens, and again
+(`fm/cairn-screen-paste-confirm`), the app's first real screens, again
 the same day for Today (`fm/cairn-screen-today`), the day page that replaced
-that slice's placeholder as the launch surface.
+that slice's placeholder as the launch surface, and again for the Trail
+(`fm/cairn-screen-trail`), the trip's front door and the real tab container
+the destinations now live in.
 Sources: `docs/roadmap.md`, all seven files in `docs/decisions/`,
 `supabase/README.md`, `AGENTS.md`, and each package's `README.md`.
 
@@ -53,7 +55,7 @@ Two things that are *not* arrows:
 
 ## The most important fact on the map
 
-**The app has a way in and a front door, and only those.** The
+**The app has a way in, and a trip with two destinations in it.** The
 paste-and-confirm slice replaced the scaffold's proving screen and its
 disposable `trip_drafts` table: a person can paste a plan, see what the
 parser understood day by day with its doubt surfaced per cause, flip
@@ -61,14 +63,18 @@ ambiguous dates month-first in one tap, and accept — which persists the
 itinerary through the seam into Drift. Today (`fm/cairn-screen-today`) then
 replaced that slice's placeholder: the app opens on the day page for today's
 date, showing the day's identity and its stops in pasted order, with a time
-shown only where the plan starred one. The itinerary is **local-only**;
-syncing it as a shared fact (grill round one §2) is still not built.
-Everything else between the screens and the packages — the Trail, the Pool,
-capture, photos on the day page, the ping scheduler, the import sweep, the
-platform glue, the Supabase/R2 client adapter — is still **not built**, and
-the right edge is unchanged: the backend schema is verified only against a
-local Postgres, no hosted Supabase project exists, no R2 bucket has been
-created, nothing is deployed.
+shown only where the plan starred one. The Trail (`fm/cairn-screen-trail`)
+added the trip-level view — one node per day on the winding path, a flag on
+today, every node opening the same day page — and with it the **real
+container**: a tab bar holding Today and the Trail, built so the Pool becomes
+a third entry and shown without one until it exists. The itinerary is
+**local-only**; syncing it as a shared fact (grill round one §2) is still not
+built. Everything else between the screens and the packages — the Pool,
+capture, photos anywhere, the ping scheduler, the import sweep, the platform
+glue, the Supabase/R2 client adapter — is still **not built**, and the right
+edge is unchanged: the backend schema is verified only against a local
+Postgres, no hosted Supabase project exists, no R2 bucket has been created,
+nothing is deployed.
 `lib/README.md` spells this map's bands as directories — read it alongside
 this file.
 
@@ -150,12 +156,23 @@ page (`lib/screens/`). Round 8's by-hand corrections beyond the asks —
 holding a chip to move it between days, renaming in place, laying days out
 by hand — are still not built.
 
-**There is one day screen and no separate day detail.** `DayPage(date)` is
-the whole of it: Today is `DayPage(today)`, and the Trail will open the same
-widget on any other date. That is a structural claim, not a convenience, and
-it is what a second "day detail" surface would break. The route back to the
-paste box (`repasteRequestedProvider`) is marked temporary in code and is
-replaced by the real container when the Trail and the Pool land.
+**There is one day screen and no separate day detail.** `DayPage` is the
+whole of it: Today is `DayPage(date: today)`, and the Trail opens the same
+widget for every node it draws. That is a structural claim, not a
+convenience, and it is what a second "day detail" surface would break. The
+Trail opens it through `DayPage.planDay(n)` — by the plan's own day number
+rather than by date — because a day accepted with its date still open is
+reachable by no date at all; that is a second way *in*, not a second screen,
+and both end in the same `DayView`.
+
+**The container is the tab bar** (`lib/screens/trip_shell.dart`). The design's
+structure is three destinations — Today, the Trail, the Pool (surface 2e) —
+and the Pool is absent rather than greyed out, because a disabled tab is
+chrome for a thing that does not exist. Each tab owns a `Navigator`, so a day
+page opened from the Trail is still open when you come back from Today.
+Trip-level actions hang off the Trail's title and never off a tab (surface 6e);
+the temporary route back to the paste box (`repasteRequestedProvider`) lives
+there now, and goes when the real trip-settings sheet lands.
 
 Every screen knows **app state and nothing else** — no repository, no store,
 no network, no SQL. What breaks if a screen changes: nothing below it, ever.
@@ -163,8 +180,9 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | Why it exists |
 | --- | --- | --- | --- |
-| **Trail** | not built | app state | The trip-level front door. The cairn is the trip's portrait, not its front door (design-calls §6). It opens `DayPage` for each day rather than owning a day surface of its own. |
-| **Day page & shut gate** | partial — the plan half built (`DayPage`, `lib/screens/day_page.dart`); the photo timeline, the gate and the seal not started | app state | One screen for every day, Today included. Built: the day's identity (day n of m, date, place), the flat ordered stop list, the star and its time — the only time in the app — and the drawn edges (nothing planned, a date the plan skips, before the trip, after it, a plan with no dates). Not built: the day is also the artefact, a vertical timeline of photos with hours prominent and credit small; shut, it shows times and names with images withheld and seals silently at midnight. |
+| **Trail** | partial — the path built (`lib/screens/trail_screen.dart`): one node per day of the plan in itinerary order, past/today/ahead drawn apart, the flag on today, every node opening `DayPage.planDay(n)`; the photo-filled node, the long-trip chapters and edge scrubber, and the cat not started | app state | The trip-level front door. The cairn is the trip's portrait, not its front door (design-calls §6). It opens `DayPage` for each day rather than owning a day surface of its own. The winding is the screen's identity, not decoration; a list of days would be a different screen wearing this one's name. |
+| **The container** | built — `TripShell`: a tab per destination, one `Navigator` each | app state | Today and the Trail are tabs (surface 2e's structure minus the Pool, which is not built and so is not shown). Trip-level actions hang off the Trail's title, never a fourth tab (6e). |
+| **Day page & shut gate** | partial — the plan half built (`DayPage`, `lib/screens/day_page.dart`), reachable by date and, since the Trail, by plan-day number; the photo timeline, the gate and the seal not started | app state | One screen for every day, Today included. Built: the day's identity (day n of m, date, place), the flat ordered stop list, the star and its time — the only time in the app — and the drawn edges (nothing planned, a date the plan skips, before the trip, after it, a plan with no dates). Not built: the day is also the artefact, a vertical timeline of photos with hours prominent and credit small; shut, it shows times and names with images withheld and seals silently at midnight. |
 | **Capture** | not built | app state (platform glue drives the camera) | Answers the ping. Back camera primary, small front inset; thirty-minute window; the late path is always open and visibly late. |
 | **Pool** | not built | app state | Plumbing: the whole trip's photos in a plain, fast grid by day. Deliberately not a destination. |
 | **Book** | not built | app state | What the trip turns into: one spread per day, the photograph as the cover's face with the cairn signing the foot (book-round-nine decision), digital only, works with the network off forever. Automatic — it generates itself and there is no editor (book-no-editor decision). Interior designed in round 9; the printed page is not. Deliberately after the first release. |
@@ -175,7 +193,7 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Riverpod providers** | partial — the paste-and-confirm flow's state (`paste_flow.dart`), the saved-plan stream (`trip_providers.dart`), and the day view (`day_view.dart`: which day a date is, and whether it is behind us); nothing of the Trail, the Pool or capture yet | repositories, `cairn_model`, `itinerary_parser` (the parse use case) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring. The parser's dialect is translated to screen-facing view models here — screens never import it, and no `cairn_model` type reaches one either. |
+| **Riverpod providers** | partial — the paste-and-confirm flow's state (`paste_flow.dart`), the saved-plan stream (`trip_providers.dart`), the day view (`day_view.dart`: which day a date *or* a plan-day number is, and whether it is behind us) and the trail view (`trail_view.dart`: the whole trip as nodes, and where the flag goes); nothing of the Pool or capture yet | repositories, `cairn_model`, `itinerary_parser` (the parse use case) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring. The parser's dialect is translated to screen-facing view models here — screens never import it, and no `cairn_model` type reaches one either. |
 | **Ping scheduler** | not built | repositories (roster, trip clock, itinerary arrival/departure), `trip_moments`, local-notifications edge | The one interruption per person per day | Feeds `trip_moments` its inputs and registers every remaining day's local notifications in one offline pass. |
 | **Import sweep** | not built | camera-roll edge, `photo_day_assignment`, repositories | The completeness of the record | Runs when the app opens — the import promise commits to exactly that and no more (iOS offers no background trigger). Extracts metadata, asks the ladder, queues uploads. |
 | **Platform glue** | not built | camera, location, Sign in with Apple edges | Capture and Join | The thin controllers that drive dual capture, tag a pinged photo with GPS so it rides rung 1, and run the sign-in flow. Kept out of widgets so screens stay platform-blind. |
@@ -184,7 +202,7 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Repositories** | partial — one repository over the local itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today slice, which needed no new read; the remote side, and everything listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
+| **Repositories** | partial — one repository over the local itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; the remote side, and everything listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
 
 ### Storage
 

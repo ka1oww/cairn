@@ -316,16 +316,6 @@ void main() {
     expect(textOf(const Key('day-title')), 'Tuesday, Kyoto');
   });
 
-  testWidgets('the temporary way back reaches an empty paste box',
-      (tester) async {
-    await launch(tester, today: day(15));
-    await accept(tester, tripPaste);
-
-    await tester.tap(find.byKey(const Key('start-over')));
-    await tester.pump();
-
-    final input =
-        tester.widget<TextField>(find.byKey(const Key('paste-input')));
-    expect(input.controller!.text, '');
-  });
+  // The temporary way back moved off the day page and onto the trip's own
+  // title when the container landed; it is tested in trail_and_shell_test.dart.
 }

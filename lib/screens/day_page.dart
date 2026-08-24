@@ -2,11 +2,16 @@
 // No repository, no store, no SQL, no parser — the view models come from
 // app_state/day_view.dart.
 //
-// There is one day screen and this is it. Today is `DayPage(today)`; the
-// Trail will open the same widget on any other date, because the design
+// There is one day screen and this is it. Today is `DayPage(today)`, and the
+// Trail opens the same widget for every node it draws, because the design
 // draws one surface for both (2f, "Today / day detail"). Nothing here reads
 // the calendar: which day a date is, and whether it is behind us, are
 // decided in app state.
+//
+// Two ways in, one screen. `DayPage(date:)` asks "what is this date"; the
+// Trail's `DayPage.planDay(n)` asks "what is day n", which is the only way to
+// reach a day accepted with its date still open. Both end in the same
+// `DayView`, and a second day surface remains the thing to refuse in review.
 //
 // The structure is 2f's: the day's identity, then a flat ordered list of the
 // stops as pasted. No progress tracking, no morning/afternoon split, no
@@ -17,17 +22,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_state/day_view.dart';
-import '../app_state/paste_flow.dart';
 
 class DayPage extends ConsumerWidget {
-  const DayPage({super.key, required this.date});
+  /// The day at [date] — Today, and any dated day the Trail opens.
+  const DayPage({super.key, required DateTime this.date}) : number = null;
 
-  /// The date this page is showing, at UTC midnight.
-  final DateTime date;
+  /// The plan's day [number], whatever date it fell on and whether or not it
+  /// has one. This is the Trail's way in.
+  const DayPage.planDay(int this.number, {super.key}) : date = null;
+
+  /// The date this page is showing, at UTC midnight, or null when the page
+  /// was opened by position instead.
+  final DateTime? date;
+
+  /// The 1-based day of the plan, or null when opened by date.
+  final int? number;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final view = ref.watch(dayViewProvider(date));
+    final view = number == null
+        ? ref.watch(dayViewProvider(date!))
+        : ref.watch(planDayViewProvider(number!));
     return Scaffold(
       body: SafeArea(
         child: switch (view) {
@@ -52,14 +67,25 @@ class _Day extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        // Today is a tab's root and has nowhere to go back to; a day the
+        // Trail pushed does. Drawing the control exactly when there is
+        // somewhere to go is what lets one screen serve both.
+        if (Navigator.of(context).canPop())
+          Align(
+            alignment: Alignment.centerLeft,
+            child: IconButton(
+              key: const Key('day-back'),
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Back to the Trail',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
         ...switch (view) {
           final PlannedDay day => _plannedDay(day),
           final GapDay day => _gapDay(day),
           final BeforeTheTrip pre => _beforeTheTrip(pre),
           final AfterTheTrip post => _afterTheTrip(post),
         },
-        const SizedBox(height: 28),
-        const _StartOver(),
       ],
     );
   }
@@ -345,19 +371,4 @@ class _Label extends StatelessWidget {
       ),
     );
   }
-}
-
-/// **Temporary.** The only way back to the paste box while this is the whole
-/// app; the real container arrives with the Trail and the Pool.
-class _StartOver extends ConsumerWidget {
-  const _StartOver();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => Center(
-        child: TextButton(
-          key: const Key('start-over'),
-          onPressed: () => ref.read(pasteFlowProvider.notifier).pasteAnother(),
-          child: const Text('Paste a different plan'),
-        ),
-      );
 }
