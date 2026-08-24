@@ -68,18 +68,29 @@ estimated mid-to-late October; the slack is the point.
 
 ## Where this is now
 
-**Foundations are done. The first real screens exist.**
+**Foundations are done. The app has a way in and a front door.**
 
 The paste-and-confirm flow is built and tested: paste a plan, see what the
 parser understood day by day with its doubt surfaced per cause, flip
 ambiguous dates month-first in one tap, accept — and the itinerary persists
-locally into Drift, surviving a relaunch as the app's launch surface. It
-replaced the scaffold's proving screen and disposable `trip_drafts` demo.
+locally into Drift, surviving a relaunch. It replaced the scaffold's proving
+screen and disposable `trip_drafts` demo.
+
+**Today is built on top of it**, and it replaced that slice's placeholder as
+the launch surface: the app now opens on the day page for today's date —
+which day of the trip it is, the day itself, and the day's stops in the
+order they were pasted, with a star and a time only where the plan pinned
+one to a clock. There is no separate day-detail screen and there never will
+be: `DayPage(date)` is the whole of it, and the Trail will open the same
+widget on any other date. The drawn edges are built with it — a day with
+nothing planned, a date the plan skips, before the trip starts, after it
+ends, and a plan pasted with no dates at all.
+
 The itinerary is local-only until it becomes the shared, propagated fact of
-Phase 2; after accepting, the app lands on a deliberate placeholder — Today
-and the Trail are still not built. Beneath it: four pure-Dart libraries, a
-backend schema, a dual-camera spike, the decision record, and the design
-handoffs, all tested.
+Phase 2. Photos on the day page, the gate, the Trail and the Pool are still
+not built. Beneath it: four pure-Dart libraries, a backend schema, a
+dual-camera spike, the decision record, and the design handoffs, all
+tested.
 
 | Piece | State |
 | --- | --- |
@@ -91,7 +102,7 @@ handoffs, all tested.
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **First screens.** The paste-and-confirm flow, persisting the itinerary locally; everything after accepting is a placeholder. |
+| The Flutter app | **The way in and Today.** The paste-and-confirm flow persisting the itinerary locally, and the day page it lands on. Photos, the gate, the Trail and the Pool not started. |
 
 ---
 
@@ -141,8 +152,9 @@ local file that is never committed.*
 ### Phase 3 — the trip surfaces
 
 The Trail (the day's real path), the gate holding a day shut until you
-contribute, the day page itself, the back-only capture, and the late-photo path
-for a missed ping.
+contribute, the day page's *other* half — the photo timeline that makes the
+day an artefact, its plan half having landed early with Today — the
+back-only capture, and the late-photo path for a missed ping.
 
 **Why third:** these are the parts people actually see and the parts most likely
 to change once you have used them. Building them on top of a working pool means

@@ -3,7 +3,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../repositories/trip_repository.dart';
-import 'date_labels.dart';
 
 /// Bound to the real repository by the composition root (`bootstrap.dart`),
 /// and to fakes by tests. Left unbound it throws, loudly and immediately,
@@ -14,85 +13,75 @@ final tripRepositoryProvider = Provider<TripRepository>(
   ),
 );
 
-/// The itinerary saved on this phone, summarised for the screens — or null
-/// while none has been accepted. This is the app's launch question: the root
-/// screen watches it to choose between the paste flow and the saved trip.
-final savedItineraryProvider = StreamProvider<SavedItinerarySummary?>(
-  (ref) => ref
-      .watch(tripRepositoryProvider)
-      .watchItinerary()
-      .map(_summarise),
+/// The itinerary saved on this phone, in screen terms — or null while none
+/// has been accepted. This is the app's launch question: the root screen
+/// watches it to choose between the paste flow and Today.
+///
+/// One stream over the store serves every question the trip surfaces ask, so
+/// the day page adds no second subscription: `dayViewProvider` derives from
+/// this, and the Trail will too.
+final savedItineraryProvider = StreamProvider<TripPlan?>(
+  (ref) => ref.watch(tripRepositoryProvider).watchItinerary().map(_toPlan),
 );
 
-/// What the saved-trip surface shows, spoken in screen terms. Deliberately a
-/// summary: the surface it feeds is the placeholder that proves persistence,
-/// not the Trail — that is a later slice.
-class SavedItinerarySummary {
-  final List<SavedDayLine> days;
-  final int stopCount;
-  final int starredCount;
-  final int keptAsideCount;
+/// The accepted plan as the app state layer speaks it: days in trip order,
+/// each with its stops as pasted. Deliberately not the seam's
+/// `ConfirmedItinerary` and not `cairn_model` — nothing below this band may
+/// reach a screen.
+class TripPlan {
+  final List<PlanDay> days;
 
-  const SavedItinerarySummary({
-    required this.days,
-    required this.stopCount,
-    required this.starredCount,
-    required this.keptAsideCount,
-  });
-
-  int get dayCount => days.length;
+  const TripPlan({required this.days});
 }
 
-class SavedDayLine {
+class PlanDay {
+  /// 1-based, as the plan was pasted.
   final int number;
 
-  /// `Monday · Tokyo`, or the place, or `Day 3`.
-  final String title;
+  /// UTC midnight — a bare calendar date carried in a core type, never an
+  /// instant to do arithmetic on. Null where the person accepted the plan
+  /// with this day's date still open.
+  final DateTime? date;
 
-  /// `14 June`, or null where the date was accepted still open.
-  final String? dateLabel;
+  final String? place;
 
-  final int stopCount;
+  final List<PlanStop> stops;
 
-  const SavedDayLine({
+  const PlanDay({
     required this.number,
-    required this.title,
-    this.dateLabel,
-    required this.stopCount,
+    this.date,
+    this.place,
+    required this.stops,
   });
 }
 
-SavedItinerarySummary? _summarise(ConfirmedItinerary? itinerary) {
+class PlanStop {
+  final String text;
+
+  /// `16:40`, present exactly when the stop is starred. See [DayStop] in
+  /// `day_view.dart` for the star rule.
+  final String? timeLabel;
+
+  const PlanStop({required this.text, this.timeLabel});
+}
+
+TripPlan? _toPlan(ConfirmedItinerary? itinerary) {
   if (itinerary == null) return null;
-  var stopCount = 0;
-  var starredCount = 0;
-  final days = <SavedDayLine>[];
-  for (final day in itinerary.days) {
-    stopCount += day.stops.length;
-    starredCount += day.stops.where((s) => s.isStarred).length;
-    final date = day.date;
-    final weekday = date == null
-        ? null
-        : weekdayName(DateTime.utc(date.year, date.month, date.day).weekday);
-    final title = switch ((weekday, day.place)) {
-      (final w?, final p?) => '$w · $p',
-      (final w?, null) => w,
-      (null, final p?) => p,
-      (null, null) => 'Day ${day.number}',
-    };
-    days.add(SavedDayLine(
-      number: day.number,
-      title: title,
-      dateLabel: date == null
-          ? null
-          : dayMonthLabel(DateTime.utc(date.year, date.month, date.day)),
-      stopCount: day.stops.length,
-    ));
-  }
-  return SavedItinerarySummary(
-    days: days,
-    stopCount: stopCount,
-    starredCount: starredCount,
-    keptAsideCount: itinerary.keptAside.length,
+  return TripPlan(
+    days: [
+      for (final day in itinerary.days)
+        PlanDay(
+          number: day.number,
+          date: switch (day.date) {
+            null => null,
+            final d => DateTime.utc(d.year, d.month, d.day),
+          },
+          place: day.place,
+          stops: [
+            for (final stop in day.stops)
+              PlanStop(text: stop.text, timeLabel: stop.time?.iso),
+          ],
+        ),
+    ],
   );
 }
