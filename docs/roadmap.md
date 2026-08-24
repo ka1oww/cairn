@@ -68,7 +68,8 @@ estimated mid-to-late October; the slack is the point.
 
 ## Where this is now
 
-**Foundations are done. The app has a way in and a front door.**
+**Foundations are done. The app has a way in, and a trip with two
+destinations in it.**
 
 The paste-and-confirm flow is built and tested: paste a plan, see what the
 parser understood day by day with its doubt surfaced per cause, flip
@@ -81,14 +82,25 @@ the launch surface: the app now opens on the day page for today's date —
 which day of the trip it is, the day itself, and the day's stops in the
 order they were pasted, with a star and a time only where the plan pinned
 one to a clock. There is no separate day-detail screen and there never will
-be: `DayPage(date)` is the whole of it, and the Trail will open the same
-widget on any other date. The drawn edges are built with it — a day with
+be: `DayPage` is the whole of it, and the Trail opens that same widget for
+every node it draws. The drawn edges are built with it — a day with
 nothing planned, a date the plan skips, before the trip starts, after it
 ends, and a plan pasted with no dates at all.
 
+**The Trail is built on top of both**, and with it the real container. The
+trip is a winding path of one node per day in itinerary order, a flag on the
+day you are standing in, ink road behind you and dashes ahead; tapping any
+node — past, ahead, or a day whose date was never given — opens that day's
+page, which is the same day page and not a second one. Today and the Trail
+are tabs; the Pool becomes a third when it exists and is not shown as a
+disabled stub until then. The edges are built with it: before the trip
+starts, after it ends, a one-day trip, and a date the plan skips (which gets
+a day page but no node, because the drawings number the path over the plan's
+own days).
+
 The itinerary is local-only until it becomes the shared, propagated fact of
-Phase 2. Photos on the day page, the gate, the Trail and the Pool are still
-not built. Beneath it: four pure-Dart libraries, a backend schema, a
+Phase 2. Photos on the day page and on the Trail's nodes, the gate and the
+Pool are still not built. Beneath it: four pure-Dart libraries, a backend schema, a
 dual-camera spike, the decision record, and the design handoffs, all
 tested.
 
@@ -102,7 +114,7 @@ tested.
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **The way in and Today.** The paste-and-confirm flow persisting the itinerary locally, and the day page it lands on. Photos, the gate, the Trail and the Pool not started. |
+| The Flutter app | **The way in, Today and the Trail.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, and the tab container holding them. Photos, the gate and the Pool not started. |
 
 ---
 
@@ -151,10 +163,12 @@ local file that is never committed.*
 
 ### Phase 3 — the trip surfaces
 
-The Trail (the day's real path), the gate holding a day shut until you
-contribute, the day page's *other* half — the photo timeline that makes the
-day an artefact, its plan half having landed early with Today — the
-back-only capture, and the late-photo path for a missed ping.
+The gate holding a day shut until you contribute, the day page's *other*
+half — the photo timeline that makes the day an artefact, its plan half
+having landed early with Today — the back-only capture, and the late-photo
+path for a missed ping. The Trail's own path landed early alongside Today;
+what is left of it here is the node a day's photos fill, which is the whole
+reward of that screen and cannot be drawn before photos exist.
 
 **Why third:** these are the parts people actually see and the parts most likely
 to change once you have used them. Building them on top of a working pool means

@@ -150,14 +150,17 @@
 </header>
 
 <div class="noapp">
-  <b>The app has a way in and a front door, and only those.</b>
+  <b>The app has a way in, and a trip with two destinations in it.</b>
   <span>The paste-and-confirm slice replaced the scaffold's proving screen and its disposable
   <code>trip_drafts</code> table: paste a plan, see what was understood with the doubt surfaced
   per cause, flip ambiguous dates in one tap, accept — and the itinerary persists into Drift,
   local-only for now. Today then replaced that slice's placeholder: the app opens on the day
   page for today's date — the day's identity, its stops in pasted order, a time only where the
-  plan starred one. There is one day screen and no separate day detail; the Trail will open the
-  same widget on any other date. <code>lib/README.md</code> spells these bands as
+  plan starred one. The Trail added the trip-level view — one node per day on the winding path,
+  a flag on today — and the real container it and Today live in: a tab bar built so the Pool
+  becomes a third entry, and shown without one until it exists. There is one day screen and no
+  separate day detail; the Trail opens that same widget for every node it draws.
+  <code>lib/README.md</code> spells these bands as
   directories. <b>Every other designed screen, the three services, the platform glue and the
   whole remote side are still intention, drawn here so the intention is inspectable.</b></span>
 </div>
@@ -267,8 +270,8 @@
 </svg>
 
 <!-- ======================= band labels ======================= -->
-<div class="band" style="top:0px"><span>Screens</span><em>partial — paste-and-confirm and the day page built; the rest drawn in docs/design · they know app state and nothing below it</em></div>
-<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>partial — the paste flow's state and the day view; the services not built</em></div>
+<div class="band" style="top:0px"><span>Screens</span><em>partial — paste-and-confirm, the day page and the Trail built, in a real tab container (Today · Trail; the Pool slots in when it exists); the rest drawn in docs/design · they know app state and nothing below it</em></div>
+<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>partial — the paste flow's state, the day view and the trail view; the services not built</em></div>
 <div class="band" style="top:415px"><span>Platform edges (iOS)</span><em>wiring not built · services know the platform; the platform knows nothing of Cairn</em></div>
 <div class="band" style="top:562px"><span>The repositories seam</span><em>partial — scaffolded · the most expensive layer to skip</em></div>
 <div class="band" style="top:772px"><span>Storage</span><em>partial — Drift scaffolded, remote not built; only the seam knows both exist</em></div>
@@ -276,13 +279,14 @@
 <div class="band" style="top:1460px"><span>Domain — pure Dart</span><em>built · four siblings: none imports another, none imports cairn_model — the app layer translates</em></div>
 
 <!-- ======================= screens ======================= -->
-<div class="node nb" style="left:60px;top:22px;width:170px;height:130px">
-  <span class="chip">not built</span><h4>Trail</h4>
-  <p>The trip-level front door; a flag on today. Opens the day page per day rather than owning one.</p>
+<div class="node partial" style="left:60px;top:22px;width:170px;height:130px">
+  <span class="chip">partial</span><h4>Trail</h4>
+  <p>The trip-level front door; one node per day on the winding path, a flag on today, each node opening the day page rather than owning one.</p>
+  <span class="sub">the path built; the photo-filled node, chapters and the cat not</span>
 </div>
 <div class="node partial" style="left:242px;top:22px;width:170px;height:130px">
   <span class="chip">partial</span><h4>Day page &amp; gate</h4>
-  <p>One screen for every day, Today included. Built: identity, the ordered stops, the star and its time. Not built: the photo timeline, the gate, the seal.</p>
+  <p>One screen for every day, Today included, opened by date or by the plan's own day number. Built: identity, the ordered stops, the star and its time. Not built: the photo timeline, the gate, the seal.</p>
   <span class="sub">the plan half built; photos not</span>
 </div>
 <div class="node nb" style="left:424px;top:22px;width:170px;height:130px">
@@ -316,7 +320,7 @@
 <div class="node partial" style="left:340px;top:250px;width:420px;height:115px">
   <span class="chip">partial</span><h4>Riverpod providers</h4>
   <p>One source of truth per question. A watched repository stream flows through a provider; writing a row updates every watching screen with no manual wiring. Calls <b>itinerary_parser</b> for the confirm flow.</p>
-  <span class="sub">the paste flow's state, the saved-plan stream and the day view — nothing of the Trail, the Pool or capture yet</span>
+  <span class="sub">the paste flow's state, the saved-plan stream, the day view and the trail view — nothing of the Pool or capture yet</span>
 </div>
 <div class="node nb" style="left:800px;top:250px;width:240px;height:115px">
   <span class="chip">not built</span><h4>Import sweep</h4>
