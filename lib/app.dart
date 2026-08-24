@@ -2,7 +2,7 @@
 // SCREENS band (it knows screens; nothing below).
 import 'package:flutter/material.dart';
 
-import 'screens/home_screen.dart';
+import 'screens/root_screen.dart';
 
 class CairnApp extends StatelessWidget {
   const CairnApp({super.key});
@@ -12,7 +12,7 @@ class CairnApp extends StatelessWidget {
     return MaterialApp(
       title: 'Cairn',
       theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6B705C))),
-      home: const HomeScreen(),
+      home: const RootScreen(),
     );
   }
 }

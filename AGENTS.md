@@ -35,6 +35,18 @@ import what is written there, not here.
 - iOS only, deliberately: no `android/` exists and the dev machine has no
   Android SDK. The build gate is
   `flutter build ios --simulator --no-codesign`.
+- The launch surface is the paste-and-confirm flow: `RootScreen` opens on the
+  paste box until an itinerary is accepted into Drift, then on the saved
+  trip. The flow's whole brain is `lib/app_state/paste_flow.dart`; screens
+  render its view models and never import the parser or `cairn_model`.
+- Widget tests over the stack must open Drift with
+  `closeStreamsSynchronously: true` or teardown hangs silently at 0% CPU —
+  the header comment in `test/paste_confirm_flow_test.dart` explains the
+  mechanism. Read it before writing any test that pumps the app.
+- Fixture-writing trap: a `Day 1 - Tokyo, 14 June 2027` header does *not*
+  give the day a date (the whole tail becomes the place); only a date-shaped
+  header (`Mon 14 June 2027 - Tokyo`, `3/11/2027 - Tokyo`) resolves
+  `ParsedDay.date`.
 
 ## Backend (`supabase/`)
 

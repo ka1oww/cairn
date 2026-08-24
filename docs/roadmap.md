@@ -68,13 +68,18 @@ estimated mid-to-late October; the slack is the point.
 
 ## Where this is now
 
-**Foundations are done. The app is a scaffold.**
+**Foundations are done. The first real screens exist.**
 
-The root `pubspec.yaml`, `lib/` and `ios/` exist (the app-scaffold PR): the
-Riverpod-and-Drift stack is wired end to end behind one deliberately minimal
-proving screen, and it builds for the iOS simulator. No screen from the design
-exists yet. Beneath it: four pure-Dart libraries, a backend schema, a
-dual-camera spike, the decision record, and the design handoffs, all tested.
+The paste-and-confirm flow is built and tested: paste a plan, see what the
+parser understood day by day with its doubt surfaced per cause, flip
+ambiguous dates month-first in one tap, accept — and the itinerary persists
+locally into Drift, surviving a relaunch as the app's launch surface. It
+replaced the scaffold's proving screen and disposable `trip_drafts` demo.
+The itinerary is local-only until it becomes the shared, propagated fact of
+Phase 2; after accepting, the app lands on a deliberate placeholder — Today
+and the Trail are still not built. Beneath it: four pure-Dart libraries, a
+backend schema, a dual-camera spike, the decision record, and the design
+handoffs, all tested.
 
 | Piece | State |
 | --- | --- |
@@ -86,7 +91,7 @@ dual-camera spike, the decision record, and the design handoffs, all tested.
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **Scaffold.** Builds and runs on the simulator; no product screen yet. |
+| The Flutter app | **First screens.** The paste-and-confirm flow, persisting the itinerary locally; everything after accepting is a placeholder. |
 
 ---
 
@@ -212,10 +217,11 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
 - The itinerary as a shared, propagated fact; membership changes reaching every
   phone.
 - The trip's close at trip end + 14 days — stored as its own rule.
-- The parser fix for hedged times, and the round-eight API extension (a reason
-  per uncertain day, a date-order parameter) before the paste screen is coded
-  around the gap.
 - Back-only capture wired to today's page.
+- The round-eight corrections beyond the asks: holding a chip to move a stop
+  between days, renaming in place, laying days out by hand when nothing
+  parsed. (The parser fix for hedged times and the round-eight API extension
+  landed in #15; the paste-and-confirm screens are built on them.)
 
 **Explicitly after the first release:**
 

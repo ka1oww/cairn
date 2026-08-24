@@ -142,18 +142,20 @@
     Every piece of the app as a node; an arrow means <b>“knows about”</b> and always points
     downward. Point at any node and its inward arrows are what breaks if it changes.
     Drawn 22 Aug 2026 from <code>main</code> (PRs #7–#10 merged) and design round 7 (PR #11);
-    updated the same day for the app scaffold.
+    updated the same day for the app scaffold, and 24 Aug 2026 for the
+    paste-and-confirm flow — the first real screens.
     The greppable twin of this page is <a href="architecture.md">architecture.md</a>.
   </p>
 </header>
 
 <div class="noapp">
-  <b>The app is a scaffold.</b>
-  <span>Root <code>pubspec.yaml</code>, <code>lib/</code> and <code>ios/</code> exist (the
-  app-scaffold PR): a shell, one provider, one repository and a one-table Drift store, proven
-  end to end by one deliberately minimal screen. <code>lib/README.md</code> spells these bands
-  as directories. <b>Every designed screen, the three services, the platform glue and the whole
-  remote side are still intention, drawn here so the intention is inspectable.</b></span>
+  <b>The app has its first real flow, and only that.</b>
+  <span>The paste-and-confirm slice replaced the scaffold's proving screen and its disposable
+  <code>trip_drafts</code> table: paste a plan, see what was understood with the doubt surfaced
+  per cause, flip ambiguous dates in one tap, accept — and the itinerary persists into Drift as
+  the launch surface, local-only for now. <code>lib/README.md</code> spells these bands as
+  directories. <b>Every other designed screen, the three services, the platform glue and the
+  whole remote side are still intention, drawn here so the intention is inspectable.</b></span>
 </div>
 
 <div class="legend">
@@ -261,8 +263,8 @@
 </svg>
 
 <!-- ======================= band labels ======================= -->
-<div class="band" style="top:0px"><span>Screens</span><em>not built — drawn in docs/design, round 7 current · they know app state and nothing below it</em></div>
-<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>partial — one scaffold provider; the services not built</em></div>
+<div class="band" style="top:0px"><span>Screens</span><em>partial — paste-and-confirm built; the rest drawn in docs/design · they know app state and nothing below it</em></div>
+<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>partial — the paste flow's state; the services not built</em></div>
 <div class="band" style="top:415px"><span>Platform edges (iOS)</span><em>wiring not built · services know the platform; the platform knows nothing of Cairn</em></div>
 <div class="band" style="top:562px"><span>The repositories seam</span><em>partial — scaffolded · the most expensive layer to skip</em></div>
 <div class="band" style="top:772px"><span>Storage</span><em>partial — Drift scaffolded, remote not built; only the seam knows both exist</em></div>
@@ -291,9 +293,10 @@
   <p>One spread per day; the photo fronts the cover, the cairn signs the foot; automatic, no editor; offline forever. After the first release.</p>
   <span class="sub">interior designed — round 9; printed page not</span>
 </div>
-<div class="node nb" style="left:970px;top:22px;width:170px;height:130px">
-  <span class="chip">not built</span><h4>Join &amp; confirm</h4>
+<div class="node partial" style="left:970px;top:22px;width:170px;height:130px">
+  <span class="chip">partial</span><h4>Join &amp; confirm</h4>
   <p>Invite code in, name edit, paste-the-plan + the confirmation screen.</p>
+  <span class="sub">paste-and-confirm built, local-only; join not started</span>
 </div>
 <div class="node nb" style="left:1152px;top:22px;width:170px;height:130px">
   <span class="chip">not built</span><h4>Settings &amp; members</h4>
@@ -308,7 +311,7 @@
 <div class="node partial" style="left:340px;top:250px;width:420px;height:115px">
   <span class="chip">partial</span><h4>Riverpod providers</h4>
   <p>One source of truth per question. A watched repository stream flows through a provider; writing a row updates every watching screen with no manual wiring. Calls <b>itinerary_parser</b> for the confirm flow.</p>
-  <span class="sub">scaffold: one proving provider in lib/app_state/ — nothing of the product's state yet</span>
+  <span class="sub">the paste flow's state and the saved-itinerary stream — nothing of the trip surfaces' state yet</span>
 </div>
 <div class="node nb" style="left:800px;top:250px;width:240px;height:115px">
   <span class="chip">not built</span><h4>Import sweep</h4>
@@ -365,7 +368,7 @@
 <!-- ======================= storage ======================= -->
 <div class="node partial" style="left:150px;top:805px;width:410px;height:120px">
   <span class="chip">partial</span><h4>Drift store — local SQLite</h4>
-  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Scaffold: one disposable trip_drafts table.</p>
+  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Holds the itinerary tables (days, stops, set-aside lines); the trip_drafts demo is dropped.</p>
   <span class="sub">choice validated in the demo and now built on, not yet recorded in a decision file</span>
 </div>
 <div class="node nb" style="left:800px;top:805px;width:410px;height:120px">

@@ -8,7 +8,8 @@ drawn. This file is the durable, diff-able, greppable version.
 Drawn 22 August 2026 from `main` (after PRs #7–#10 merged) and PR #11
 (design round 7). Updated the same day for the app scaffold
 (`fm/cairn-app-scaffold`), which turned the app bands from intention into
-first code.
+first code. Updated 24 August 2026 for the paste-and-confirm flow
+(`fm/cairn-screen-paste-confirm`), the app's first real screens.
 Sources: `docs/roadmap.md`, all seven files in `docs/decisions/`,
 `supabase/README.md`, `AGENTS.md`, and each package's `README.md`.
 
@@ -50,23 +51,27 @@ Two things that are *not* arrows:
 
 ## The most important fact on the map
 
-**The app is a scaffold.** The root `pubspec.yaml`, `lib/` and `ios/` now
-exist (the app-scaffold PR): a shell, one Riverpod provider, one repository
-and a one-table Drift store, wired end to end and proven by a deliberately
-minimal screen that reads a value through the whole stack and writes one
-back. `lib/README.md` spells this map's bands as directories — read it
-alongside this file. Everything else between the screens and the packages —
-every designed screen, the ping scheduler, the import sweep, the platform
-glue, the Supabase/R2 client adapter — is still **not built**, and the right
-edge is unchanged: the backend schema is verified only against a local
-Postgres, no hosted Supabase project exists, no R2 bucket has been created,
-nothing is deployed.
+**The app has its first real flow, and only that.** The paste-and-confirm
+slice (`fm/cairn-screen-paste-confirm`) replaced the scaffold's proving
+screen and its disposable `trip_drafts` table: a person can paste a plan,
+see what the parser understood day by day with its doubt surfaced per cause,
+flip ambiguous dates month-first in one tap, and accept — which persists the
+itinerary through the seam into Drift and makes it the launch surface. The
+itinerary is **local-only** in this slice; syncing it as a shared fact
+(grill round one §2) is still not built. Everything else between the screens
+and the packages — the Trail and every other designed screen, the ping
+scheduler, the import sweep, the platform glue, the Supabase/R2 client
+adapter — is still **not built**, and the right edge is unchanged: the
+backend schema is verified only against a local Postgres, no hosted Supabase
+project exists, no R2 bucket has been created, nothing is deployed.
+`lib/README.md` spells this map's bands as directories — read it alongside
+this file.
 
 The map therefore still draws the *intended* architecture in full, with state
 marked per node. A map of only what exists would omit most of the product.
 
 ```
-     Trail · Day page & gate · Capture · Pool · Book · Join & confirm · Settings   SCREENS        not built
+     Trail · Day page & gate · Capture · Pool · Book · Join & confirm · Settings   SCREENS        partial
         │                          (know app state, and nothing below it)
         ▼
      Riverpod providers · ping scheduler · import sweep · platform glue            APP STATE      partial
@@ -130,11 +135,16 @@ None of this is built, and the conflict/sync policy beyond the notes above is
 For each: what it knows (its outward arrows), what breaks if it changes (its
 inward arrows), and why it exists.
 
-### Screens — all not built; drawn in `docs/design/` (round 7 current)
+### Screens — paste-and-confirm built; the rest not built, drawn in `docs/design/`
 
-The scaffold's one proving screen (`lib/screens/home_screen.dart`) is
-deliberately none of these — it exists to demonstrate the wiring and is
-replaced, not extended, when the first real screen lands.
+The scaffold's proving screen is gone, replaced (not extended) by the first
+real screens: the paste box, the confirmation screen (design round 8's four
+surfaces — the confident read, the doubt surfaced with cause-specific asks,
+the one-tap month-first re-read, the paste that wouldn't parse), and the
+deliberate placeholder that proves the accepted itinerary persists across a
+relaunch (`lib/screens/`). Round 8's by-hand corrections beyond the asks —
+holding a chip to move it between days, renaming in place, laying days out
+by hand — are still not built.
 
 Every screen knows **app state and nothing else** — no repository, no store,
 no network, no SQL. What breaks if a screen changes: nothing below it, ever.
@@ -147,14 +157,14 @@ That is the layering rule paying rent.
 | **Capture** | not built | app state (platform glue drives the camera) | Answers the ping. Back camera primary, small front inset; thirty-minute window; the late path is always open and visibly late. |
 | **Pool** | not built | app state | Plumbing: the whole trip's photos in a plain, fast grid by day. Deliberately not a destination. |
 | **Book** | not built | app state | What the trip turns into: one spread per day, the photograph as the cover's face with the cairn signing the foot (book-round-nine decision), digital only, works with the network off forever. Automatic — it generates itself and there is no editor (book-no-editor decision). Interior designed in round 9; the printed page is not. Deliberately after the first release. |
-| **Join & confirm** | not built | app state | The way in: invite code (or deep link), display-name edit, paste-the-plan, and the confirmation screen that surfaces the parser's confidence and unplaced lines instead of trusting them. |
+| **Join & confirm** | partial — paste-the-plan and the confirmation screen built (local-only); invite code, deep link and display-name edit not started | app state | The way in: invite code (or deep link), display-name edit, paste-the-plan, and the confirmation screen that surfaces the parser's confidence and unplaced lines instead of trusting them. |
 | **Settings & members** | not built | app state | Rename, invites, member list, leave, remove. Its affordances follow the starter-and-container decision (rename flat, delete gated, one narrow removal power, never titled "admin"). |
 
 ### App state
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Riverpod providers** | partial — scaffold: one provider (`tripNameProvider`) proving the wiring, nothing of the product's state yet | repositories, `cairn_model`, `itinerary_parser` (the parse use case) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring. Validated in `learning/riverpod-drift-demo/`, now exercised in `lib/app_state/`. |
+| **Riverpod providers** | partial — the paste-and-confirm flow's state (`paste_flow.dart`: the parse, the per-day asks, the month-first re-read, accept) and the saved-itinerary stream; nothing of the trip surfaces' state yet | repositories, `cairn_model`, `itinerary_parser` (the parse use case) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring. The parser's dialect is translated to screen-facing view models here — screens never import it. |
 | **Ping scheduler** | not built | repositories (roster, trip clock, itinerary arrival/departure), `trip_moments`, local-notifications edge | The one interruption per person per day | Feeds `trip_moments` its inputs and registers every remaining day's local notifications in one offline pass. |
 | **Import sweep** | not built | camera-roll edge, `photo_day_assignment`, repositories | The completeness of the record | Runs when the app opens — the import promise commits to exactly that and no more (iOS offers no background trigger). Extracts metadata, asks the ladder, queues uploads. |
 | **Platform glue** | not built | camera, location, Sign in with Apple edges | Capture and Join | The thin controllers that drive dual capture, tag a pinged photo with GPS so it rides rung 1, and run the sign-in flow. Kept out of widgets so screens stay platform-blind. |
@@ -163,13 +173,13 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Repositories** | partial — scaffold: one repository over the draft table; the remote side, and everything listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
+| **Repositories** | partial — one repository over the local itinerary tables (`ConfirmedItinerary` in, watched summary out, spoken in `cairn_model` vocabulary); the remote side, and everything listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
 
 ### Storage
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Drift store** | partial — scaffold: one disposable `trip_drafts` table proving the stack; no real table is typed against the vocabulary yet | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) but **not yet recorded in a decision file**. |
+| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`; schema v2, which drops the scaffold's disposable `trip_drafts` demo); no photo or trip table yet | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) but **not yet recorded in a decision file**. |
 | **Supabase/R2 client adapter** | not built | Supabase Auth, Postgres (PostgREST under RLS), both edge functions, R2 (presigned PUT/GET) | Repositories — nothing else in the app may import a Supabase or HTTP symbol | Wraps the session JWT, the RLS-filtered queries, the edge-function calls, and the direct-to-R2 byte transfers behind one interface the repositories consume. |
 
 ### Backend (`supabase/` + Cloudflare)
