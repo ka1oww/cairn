@@ -36,9 +36,9 @@ the gaps.
   and the app commits code to both. Writing that choice down as a decision
   record is queued work — see the honesty section of `docs/architecture.md`.
 - **Supabase** (Postgres) and **Cloudflare R2** for the minimal backend, which
-  does exactly two things: hold the shared photo pool and hold trip membership.
-  The trail, the stars and the daily ping are computed on the phone, so the app
-  works fully offline. The schema is written and exercised against a local
+  holds only the shared facts: the photo pool, trip membership and the shared
+  trip clock. The trail, the stars and the daily ping are computed on the
+  phone, so the app works fully offline. The schema is written and exercised against a local
   Postgres; no hosted project exists yet.
 - **Sign in with Apple** as the first auth route. Not built.
 
