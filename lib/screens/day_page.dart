@@ -1,0 +1,363 @@
+// SCREENS band (docs/architecture.md): knows app state and nothing below it.
+// No repository, no store, no SQL, no parser — the view models come from
+// app_state/day_view.dart.
+//
+// There is one day screen and this is it. Today is `DayPage(today)`; the
+// Trail will open the same widget on any other date, because the design
+// draws one surface for both (2f, "Today / day detail"). Nothing here reads
+// the calendar: which day a date is, and whether it is behind us, are
+// decided in app state.
+//
+// The structure is 2f's: the day's identity, then a flat ordered list of the
+// stops as pasted. No progress tracking, no morning/afternoon split, no
+// "we're up to here" — every one of those is rejected in the decision
+// record. Photos arrive on this page in a later slice and are deliberately
+// not stubbed here.
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../app_state/day_view.dart';
+import '../app_state/paste_flow.dart';
+
+class DayPage extends ConsumerWidget {
+  const DayPage({super.key, required this.date});
+
+  /// The date this page is showing, at UTC midnight.
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final view = ref.watch(dayViewProvider(date));
+    return Scaffold(
+      body: SafeArea(
+        child: switch (view) {
+          AsyncData(value: final DayView day) => _Day(view: day),
+          AsyncData() => const SizedBox.shrink(),
+          AsyncError(:final error) =>
+            Center(child: Text('Failed to read: $error')),
+          _ => const Center(child: CircularProgressIndicator()),
+        },
+      ),
+    );
+  }
+}
+
+class _Day extends StatelessWidget {
+  const _Day({required this.view});
+
+  final DayView view;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        ...switch (view) {
+          final PlannedDay day => _plannedDay(day),
+          final GapDay day => _gapDay(day),
+          final BeforeTheTrip pre => _beforeTheTrip(pre),
+          final AfterTheTrip post => _afterTheTrip(post),
+        },
+        const SizedBox(height: 28),
+        const _StartOver(),
+      ],
+    );
+  }
+
+  List<Widget> _plannedDay(PlannedDay day) => [
+        _DayIdentity(day: day),
+        const SizedBox(height: 18),
+        if (day.stops.isEmpty)
+          const _NothingPlanned()
+        else
+          _StopList(stops: day.stops, isOver: day.isOver),
+      ];
+
+  List<Widget> _gapDay(GapDay day) => [
+        _Identity(
+          key: const Key('gap-day'),
+          title: day.title,
+          dateLabel: day.dateLabel,
+        ),
+        const SizedBox(height: 18),
+        const _NothingPlanned(),
+      ];
+
+  List<Widget> _beforeTheTrip(BeforeTheTrip view) => [
+        _Announcement(
+          key: const Key('pre-trip'),
+          headline: view.headline,
+          detail: view.detail,
+        ),
+        const SizedBox(height: 26),
+        const _Label('NEXT UP'),
+        const SizedBox(height: 8),
+        _DayIdentity(day: view.nextUp),
+        const SizedBox(height: 18),
+        if (view.nextUp.stops.isEmpty)
+          const _NothingPlanned()
+        else
+          _StopList(stops: view.nextUp.stops, isOver: false),
+      ];
+
+  List<Widget> _afterTheTrip(AfterTheTrip view) => [
+        _Announcement(
+          key: const Key('post-trip'),
+          headline: view.headline,
+          detail: view.detail,
+        ),
+        const SizedBox(height: 26),
+        const _Label('THE LAST DAY'),
+        const SizedBox(height: 8),
+        _DayIdentity(day: view.lastDay),
+        const SizedBox(height: 18),
+        if (view.lastDay.stops.isEmpty)
+          const _NothingPlanned()
+        else
+          _StopList(stops: view.lastDay.stops, isOver: true),
+      ];
+}
+
+/// The day's identity: which day of the trip it is, then the day itself.
+class _DayIdentity extends StatelessWidget {
+  const _DayIdentity({required this.day});
+
+  final PlannedDay day;
+
+  @override
+  Widget build(BuildContext context) => _Identity(
+        eyebrow: 'DAY ${day.number} OF ${day.dayCount}',
+        title: day.title,
+        // A day accepted with its date still open says so rather than
+        // wearing a date nobody gave it (design round 8's spelling).
+        dateLabel: day.dateLabel ?? 'date open',
+      );
+}
+
+class _Identity extends StatelessWidget {
+  const _Identity({
+    super.key,
+    this.eyebrow,
+    required this.title,
+    required this.dateLabel,
+  });
+
+  final String? eyebrow;
+  final String title;
+  final String dateLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (eyebrow != null) ...[
+          _Label(eyebrow!, key: const Key('day-eyebrow')),
+          const SizedBox(height: 6),
+        ],
+        Text(
+          title,
+          key: const Key('day-title'),
+          style: theme.textTheme.headlineMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          dateLabel,
+          key: const Key('day-date'),
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
+/// The day's plan: every stop, in the order it was pasted.
+class _StopList extends StatelessWidget {
+  const _StopList({required this.stops, required this.isOver});
+
+  final List<DayStop> stops;
+  final bool isOver;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final stop in stops) _StopRow(stop: stop, isOver: isOver),
+      ],
+    );
+  }
+}
+
+/// One stop.
+///
+/// A star and a time, or neither. **This is the only place a time appears in
+/// the whole app**, which is what makes it mean something: a starred stop is
+/// one the plan pinned to a clock, and an unstarred stop shows no time even
+/// where the source line hedged one.
+class _StopRow extends StatelessWidget {
+  const _StopRow({required this.stop, required this.isOver});
+
+  final DayStop stop;
+  final bool isOver;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Container(
+      key: Key('stop-${stop.position}'),
+      padding: const EdgeInsets.symmetric(vertical: 13),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: theme.dividerColor, width: 0.7),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 26,
+            child: stop.isStarred
+                // Past tense, the star loses its fill: surface 3i, which
+                // holds no opinion about a starred stop that was missed.
+                ? Icon(
+                    isOver ? Icons.star_border : Icons.star,
+                    size: 18,
+                    color: isOver ? muted : Colors.amber.shade700,
+                  )
+                : Text(
+                    stop.position.toString().padLeft(2, '0'),
+                    style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              stop.text,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: stop.isStarred && !isOver
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                color: isOver ? muted : null,
+              ),
+            ),
+          ),
+          if (stop.timeLabel != null) ...[
+            const SizedBox(width: 10),
+            _Time(key: Key('stop-time-${stop.position}'),
+                label: stop.timeLabel!, isOver: isOver),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Time extends StatelessWidget {
+  const _Time({super.key, required this.label, required this.isOver});
+
+  final String label;
+  final bool isOver;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (isOver) {
+      return Text(
+        'was $label',
+        style: theme.textTheme.bodySmall
+            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelMedium
+            ?.copyWith(color: Colors.brown.shade800),
+      ),
+    );
+  }
+}
+
+/// A day with nothing in it is a written state, not an empty list — design
+/// surface 3g. No skeleton rows and no nagging.
+class _NothingPlanned extends StatelessWidget {
+  const _NothingPlanned();
+
+  @override
+  Widget build(BuildContext context) => Text(
+        'Nothing planned. The best day of most trips.',
+        key: const Key('nothing-planned'),
+        style: Theme.of(context).textTheme.titleMedium,
+      );
+}
+
+class _Announcement extends StatelessWidget {
+  const _Announcement({
+    super.key,
+    required this.headline,
+    required this.detail,
+  });
+
+  final String headline;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(headline, style: theme.textTheme.displaySmall),
+        const SizedBox(height: 8),
+        Text(
+          detail,
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
+class _Label extends StatelessWidget {
+  const _Label(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      text,
+      style: theme.textTheme.labelSmall?.copyWith(
+        letterSpacing: 1.4,
+        fontWeight: FontWeight.bold,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+/// **Temporary.** The only way back to the paste box while this is the whole
+/// app; the real container arrives with the Trail and the Pool.
+class _StartOver extends ConsumerWidget {
+  const _StartOver();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Center(
+        child: TextButton(
+          key: const Key('start-over'),
+          onPressed: () => ref.read(pasteFlowProvider.notifier).pasteAnother(),
+          child: const Text('Paste a different plan'),
+        ),
+      );
+}

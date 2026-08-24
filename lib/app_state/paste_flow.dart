@@ -206,6 +206,23 @@ class PasteReview extends PasteFlowState {
 final pasteFlowProvider =
     NotifierProvider<PasteFlow, PasteFlowState>(PasteFlow.new);
 
+/// **Temporary.** True while the person has asked to paste a different plan
+/// from the day page, which is the only way back to the paste box once an
+/// itinerary is saved. The real container — the Trail, the Pool and the tab
+/// bar between them — arrives with those slices and takes this over; until
+/// then the root screen watches this alongside the saved itinerary.
+final repasteRequestedProvider =
+    NotifierProvider<RepasteRequest, bool>(RepasteRequest.new);
+
+class RepasteRequest extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void request() => state = true;
+
+  void clear() => state = false;
+}
+
 class PasteFlow extends Notifier<PasteFlowState> {
   String _text = '';
   bool _monthFirst = false;
@@ -274,6 +291,19 @@ class PasteFlow extends Notifier<PasteFlowState> {
     state = PasteEditing(initialText: _text);
   }
 
+  /// **Temporary**, until the Trail and the Pool bring the real container:
+  /// the day page's one way back. Hands the person an empty paste box;
+  /// accepting there replaces the saved plan.
+  void pasteAnother() {
+    _text = '';
+    _monthFirst = false;
+    _tripStartHint = null;
+    _result = null;
+    _clearAnswers();
+    state = const PasteEditing();
+    ref.read(repasteRequestedProvider.notifier).request();
+  }
+
   /// Persists the confirmation through the seam. The itinerary is local-only
   /// in this slice; syncing it as a shared fact is later work
   /// (docs/decisions/2026-08-22-grill-round-one.md §2).
@@ -314,6 +344,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
       ],
     );
     await ref.read(tripRepositoryProvider).saveItinerary(itinerary);
+    ref.read(repasteRequestedProvider.notifier).clear();
   }
 
   // -- internals -----------------------------------------------------------

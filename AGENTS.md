@@ -35,10 +35,17 @@ import what is written there, not here.
 - iOS only, deliberately: no `android/` exists and the dev machine has no
   Android SDK. The build gate is
   `flutter build ios --simulator --no-codesign`.
-- The launch surface is the paste-and-confirm flow: `RootScreen` opens on the
-  paste box until an itinerary is accepted into Drift, then on the saved
-  trip. The flow's whole brain is `lib/app_state/paste_flow.dart`; screens
-  render its view models and never import the parser or `cairn_model`.
+- The launch surface: `RootScreen` opens on the paste box until an itinerary
+  is accepted into Drift, then on **Today**. The flow's whole brain is
+  `lib/app_state/paste_flow.dart` and the day page's is
+  `lib/app_state/day_view.dart`; screens render their view models and never
+  import the parser or `cairn_model`.
+- **There is one day screen and no separate day detail.** Today is
+  `DayPage(date)` handed today's date, and the Trail will hand it any other.
+  A second day surface is the thing to refuse in review. `todayProvider`
+  derives today from the *device* date because no trip clock is stored yet —
+  it is the one place that changes when one is, and `bootstrapApp(today:)`
+  pins it in tests.
 - Widget tests over the stack must open Drift with
   `closeStreamsSynchronously: true` or teardown hangs silently at 0% CPU —
   the header comment in `test/paste_confirm_flow_test.dart` explains the

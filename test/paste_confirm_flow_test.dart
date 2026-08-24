@@ -81,6 +81,10 @@ remember yen cash + passports
 see everyone at changi, gate B5
 ''';
 
+/// The date every test in this file reads as today. Day 2 of the dated
+/// fixtures, so an accepted plan lands on a real day page.
+final _defaultToday = DateTime.utc(2027, 6, 15);
+
 void main() {
   late AppDatabase db;
 
@@ -90,13 +94,17 @@ void main() {
       )));
   tearDown(() => db.close());
 
-  Future<void> launch(WidgetTester tester) async {
+  /// `today` is pinned so the surface an accepted plan lands on does not
+  /// depend on when the suite is run. Every fixture here is dated June 2027;
+  /// 15 June sits on day 2, so accepting lands on that day's page.
+  Future<void> launch(WidgetTester tester, {DateTime? today}) async {
     // Tall viewport so the whole confirmation ListView builds without
     // scroll choreography in every test.
     tester.view.physicalSize = const Size(800, 2600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(bootstrapApp(database: db));
+    await tester.pumpWidget(
+        bootstrapApp(database: db, today: today ?? _defaultToday));
     await tester.pump();
     await tester.pump();
   }
@@ -247,24 +255,22 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // The launch surface switched on its own: the itinerary is the app's
-    // home now, read back from the store.
-    expect(find.text('The plan is on this phone.'), findsOneWidget);
-    expect(
-      tester.widget<Text>(find.byKey(const Key('saved-summary'))).data,
-      '1 day · 1 stop',
-    );
-    expect(find.text('3 lines kept aside, with reasons.'), findsOneWidget);
+    // The launch surface switched on its own: Today is the app's home now,
+    // read back from the store. The one-day plan is behind 15 June, so the
+    // page says the trip is walked and still holds day 1.
+    expect(find.byKey(const Key('post-trip')), findsOneWidget);
+    expect(find.text('Monday, Tokyo'), findsOneWidget);
+    expect(find.text('Senso-ji'), findsOneWidget);
 
     // Relaunch: a fresh widget tree and fresh providers over the same
     // database file stand in for killing and reopening the app.
-    await tester.pumpWidget(bootstrapApp(database: db));
+    await tester.pumpWidget(bootstrapApp(database: db, today: _defaultToday));
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('The plan is on this phone.'), findsOneWidget);
-    expect(find.text('Monday · Tokyo'), findsOneWidget);
-    expect(find.textContaining('14 June'), findsOneWidget);
+    expect(find.byKey(const Key('paste-input')), findsNothing);
+    expect(find.text('Monday, Tokyo'), findsOneWidget);
+    expect(find.text('14 June'), findsOneWidget);
   });
 
   testWidgets('an answered doubt is what gets persisted', (tester) async {
@@ -276,9 +282,10 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('The plan is on this phone.'), findsOneWidget);
-    // The picked date came back out of the store, not just the screen.
-    expect(find.text('Tuesday · Kyoto'), findsOneWidget);
-    expect(find.textContaining('15 June'), findsOneWidget);
+    // The picked date came back out of the store, not just the screen: 15
+    // June is now day 2, and the day page opens on it.
+    expect(find.text('Tuesday, Kyoto'), findsOneWidget);
+    expect(find.text('15 June'), findsOneWidget);
+    expect(find.text('DAY 2 OF 2'), findsOneWidget);
   });
 }
