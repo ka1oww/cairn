@@ -45,8 +45,11 @@ void main() {
     expect(view.getUint32(20), standInHeight);
     expect(view.getUint8(24), 8, reason: 'eight bits a channel');
     expect(view.getUint8(25), 2, reason: 'truecolour RGB');
-    expect(standInHeight, greaterThan(standInWidth),
-        reason: 'a phone held up to photograph people is held upright');
+    expect(
+      standInHeight,
+      greaterThan(standInWidth),
+      reason: 'a phone held up to photograph people is held upright',
+    );
   });
 
   test('two frames a moment apart are two different photographs', () {

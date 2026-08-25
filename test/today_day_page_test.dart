@@ -68,10 +68,14 @@ DateTime day(int dayOfJune) => DateTime.utc(2027, 6, dayOfJune);
 void main() {
   late AppDatabase db;
 
-  setUp(() => db = AppDatabase(DatabaseConnection(
+  setUp(
+    () => db = AppDatabase(
+      DatabaseConnection(
         NativeDatabase.memory(),
         closeStreamsSynchronously: true,
-      )));
+      ),
+    ),
+  );
   tearDown(() => db.close());
 
   Future<void> launch(WidgetTester tester, {required DateTime today}) async {
@@ -119,19 +123,22 @@ void main() {
 
   /// The words under a key. Some keys sit on a `Text`, some on a small
   /// wrapper around one, so match either.
-  String textOf(Key key) => (find
-          .descendant(
-            of: find.byKey(key),
-            matching: find.byType(Text),
-            matchRoot: true,
-          )
-          .evaluate()
-          .first
-          .widget as Text)
-      .data!;
+  String textOf(Key key) =>
+      (find
+                  .descendant(
+                    of: find.byKey(key),
+                    matching: find.byType(Text),
+                    matchRoot: true,
+                  )
+                  .evaluate()
+                  .first
+                  .widget
+              as Text)
+          .data!;
 
-  testWidgets('today is the day screen for today: identity, then the plan',
-      (tester) async {
+  testWidgets('today is the day screen for today: identity, then the plan', (
+    tester,
+  ) async {
     await launch(tester, today: day(15));
     await accept(tester, tripPaste);
 
@@ -164,10 +171,7 @@ void main() {
     // parser never starred it — the row renders its words and no clock.
     expect(find.byKey(const Key('stop-time-1')), findsNothing);
     expect(find.byKey(const Key('stop-time-3')), findsNothing);
-    expect(
-      find.text('maybe around 15:00 coffee somewhere'),
-      findsOneWidget,
-    );
+    expect(find.text('maybe around 15:00 coffee somewhere'), findsOneWidget);
   });
 
   testWidgets('stops render in pasted order, top to bottom', (tester) async {
@@ -189,34 +193,36 @@ void main() {
   });
 
   testWidgets(
-      'the same day page renders an arbitrary other date, in the past tense',
-      (tester) async {
-    await launch(tester, today: day(17));
-    await accept(tester, tripPaste);
+    'the same day page renders an arbitrary other date, in the past tense',
+    (tester) async {
+      await launch(tester, today: day(17));
+      await accept(tester, tripPaste);
 
-    // Today is day 3, present tense: a filled star, a plain time, no "was".
-    expect(textOf(const Key('day-eyebrow')), 'DAY 3 OF 3');
-    expect(find.textContaining('was '), findsNothing);
+      // Today is day 3, present tense: a filled star, a plain time, no "was".
+      expect(textOf(const Key('day-eyebrow')), 'DAY 3 OF 3');
+      expect(find.textContaining('was '), findsNothing);
 
-    // The very same widget, handed 14 June while today is still the 17th,
-    // is day 1 — no second screen exists and none is needed.
-    await tester.pumpWidget(dayPageAt(day(14), today: day(17)));
-    await tester.pump();
-    await tester.pump();
+      // The very same widget, handed 14 June while today is still the 17th,
+      // is day 1 — no second screen exists and none is needed.
+      await tester.pumpWidget(dayPageAt(day(14), today: day(17)));
+      await tester.pump();
+      await tester.pump();
 
-    expect(textOf(const Key('day-eyebrow')), 'DAY 1 OF 3');
-    expect(textOf(const Key('day-title')), 'Monday, Tokyo');
-    expect(find.text('Senso-ji'), findsOneWidget);
+      expect(textOf(const Key('day-eyebrow')), 'DAY 1 OF 3');
+      expect(textOf(const Key('day-title')), 'Monday, Tokyo');
+      expect(find.text('Senso-ji'), findsOneWidget);
 
-    // A day that is over keeps its star as an outline and its time reads
-    // "was 09:30" — the record holds no opinion about what did not happen.
-    expect(find.byIcon(Icons.star), findsNothing);
-    expect(find.byIcon(Icons.star_border), findsOneWidget);
-    expect(textOf(const Key('stop-time-2')), 'was 09:30');
-  });
+      // A day that is over keeps its star as an outline and its time reads
+      // "was 09:30" — the record holds no opinion about what did not happen.
+      expect(find.byIcon(Icons.star), findsNothing);
+      expect(find.byIcon(Icons.star_border), findsOneWidget);
+      expect(textOf(const Key('stop-time-2')), 'was 09:30');
+    },
+  );
 
-  testWidgets('a future day of the trip is present tense, not past',
-      (tester) async {
+  testWidgets('a future day of the trip is present tense, not past', (
+    tester,
+  ) async {
     await launch(tester, today: day(14));
     await accept(tester, tripPaste);
 
@@ -229,8 +235,9 @@ void main() {
     expect(find.textContaining('was '), findsNothing);
   });
 
-  testWidgets('a day of the trip with no stops is a written state',
-      (tester) async {
+  testWidgets('a day of the trip with no stops is a written state', (
+    tester,
+  ) async {
     await launch(tester, today: day(15));
     await tester.enterText(find.byKey(const Key('paste-input')), restDayPaste);
     await tester.tap(find.byKey(const Key('read-button')));
@@ -261,8 +268,9 @@ void main() {
     expect(find.byKey(const Key('nothing-planned')), findsOneWidget);
   });
 
-  testWidgets('before the trip: how far away it is, and the day that is next',
-      (tester) async {
+  testWidgets('before the trip: how far away it is, and the day that is next', (
+    tester,
+  ) async {
     await launch(tester, today: day(10));
     await accept(tester, tripPaste);
 
@@ -284,8 +292,9 @@ void main() {
     expect(find.text('Tomorrow.'), findsOneWidget);
   });
 
-  testWidgets('after the trip: it is walked, and the last day is still here',
-      (tester) async {
+  testWidgets('after the trip: it is walked, and the last day is still here', (
+    tester,
+  ) async {
     await launch(tester, today: day(20));
     await accept(tester, tripPaste);
 
@@ -301,8 +310,9 @@ void main() {
     expect(find.text('Dotonbori'), findsOneWidget);
   });
 
-  testWidgets('a plan with no dates shows day one, its date open',
-      (tester) async {
+  testWidgets('a plan with no dates shows day one, its date open', (
+    tester,
+  ) async {
     await launch(tester, today: day(15));
     await accept(tester, dateOpenPaste);
 
@@ -315,8 +325,9 @@ void main() {
     expect(find.text('09:30'), findsOneWidget);
   });
 
-  testWidgets('a relaunch lands on Today, not on the paste box',
-      (tester) async {
+  testWidgets('a relaunch lands on Today, not on the paste box', (
+    tester,
+  ) async {
     await launch(tester, today: day(15));
     await accept(tester, tripPaste);
 

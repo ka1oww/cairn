@@ -26,10 +26,10 @@ import '../app_state/trip_settings.dart';
 
 /// Slides the trip's sheet over whatever is behind it.
 Future<void> showTripSheet(BuildContext context) => showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => const TripSheet(),
-    );
+  context: context,
+  isScrollControlled: true,
+  builder: (context) => const TripSheet(),
+);
 
 class TripSheet extends ConsumerWidget {
   const TripSheet({super.key});
@@ -42,13 +42,13 @@ class TripSheet extends ConsumerWidget {
         AsyncData(value: final TripSettingsView view) => _Sheet(view: view),
         AsyncData() => const SizedBox.shrink(),
         AsyncError(:final error) => Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('Failed to read: $error'),
-          ),
+          padding: const EdgeInsets.all(24),
+          child: Text('Failed to read: $error'),
+        ),
         _ => const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CircularProgressIndicator()),
-          ),
+          padding: EdgeInsets.all(24),
+          child: Center(child: CircularProgressIndicator()),
+        ),
       },
     );
   }
@@ -227,8 +227,9 @@ class _RenameDialog extends StatefulWidget {
 }
 
 class _RenameDialogState extends State<_RenameDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.name ?? '');
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.name ?? '',
+  );
 
   @override
   void dispose() {
@@ -238,20 +239,20 @@ class _RenameDialogState extends State<_RenameDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        content: TextField(
-          key: const Key('trip-name-input'),
-          controller: _controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Japan, June'),
-        ),
-        actions: [
-          TextButton(
-            key: const Key('trip-name-save'),
-            onPressed: () => Navigator.of(context).pop(_controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      );
+    content: TextField(
+      key: const Key('trip-name-input'),
+      controller: _controller,
+      autofocus: true,
+      decoration: const InputDecoration(hintText: 'Japan, June'),
+    ),
+    actions: [
+      TextButton(
+        key: const Key('trip-name-save'),
+        onPressed: () => Navigator.of(context).pop(_controller.text),
+        child: const Text('Save'),
+      ),
+    ],
+  );
 }
 
 /// The three words, and what they can do.

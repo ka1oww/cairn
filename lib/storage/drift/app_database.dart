@@ -206,15 +206,17 @@ class TripInviteCodes extends Table {
   Set<Column> get primaryKey => {code};
 }
 
-@DriftDatabase(tables: [
-  ItineraryDays,
-  ItineraryStops,
-  ItinerarySetAsides,
-  Photos,
-  TripFacts,
-  TripMembers,
-  TripInviteCodes,
-])
+@DriftDatabase(
+  tables: [
+    ItineraryDays,
+    ItineraryStops,
+    ItinerarySetAsides,
+    Photos,
+    TripFacts,
+    TripMembers,
+    TripInviteCodes,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   /// [mint] exists for tests, which pin the id so an assertion can name it.
   /// Every other caller takes [mintTripId].
@@ -228,88 +230,87 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            // v1 was the scaffold's single disposable trip_drafts row: a
-            // draft with no trip id at all, which is the sidestep
-            // docs/decisions/2026-08-25-the-trip-mints-its-own-id.md closed.
-            // It was demo data from the day it landed; the itinerary tables
-            // replace it and nothing carries over.
-            await m.deleteTable('trip_drafts');
-            // createAll() builds every table in the *current* schema, photos
-            // included, so this branch is finished — falling through would
-            // try to create it twice.
-            await m.createAll();
-            return;
-          }
-          if (from < 3) {
-            await m.createTable(photos);
-          }
-          if (from < 4) {
-            await m.createTable(tripFacts);
-            await m.createTable(tripMembers);
-            await m.createTable(tripInviteCodes);
-            // A phone that already had a plan already had a trip: it was
-            // started here, by the person holding it, on the day they
-            // accepted the paste. Backfilling it is not inventing a fact --
-            // the alternative is a saved itinerary with nobody on it, which
-            // would deal no pings and show an empty roster.
-            await customStatement(
-              // 'local-trip' is what every trip on this phone was called
-              // before the mint existed. It is written here as history rather
-              // than fixed here, because v5 below is the one place that heals
-              // it — a phone that reached v4 on an earlier build needs the
-              // same repair and would never run this branch.
-              "insert into trip_facts (id, trip_id, started_by_member_id) "
-              "select 1, 'local-trip', 'me' "
-              "where exists (select 1 from itinerary_days)",
-            );
-            await customStatement(
-              "insert into trip_members (id, display_name, joined_on_day) "
-              "select 'me', 'You', 1 "
-              "where exists (select 1 from itinerary_days)",
-            );
-          }
-          if (from < 5) {
-            // Every trip written before the mint carries the constant
-            // 'local-trip', which `trips.id` — a `uuid` column — would refuse
-            // the first time anything synced. Give it a real one now, while
-            // there is still provably nothing to reconcile with: no Supabase
-            // project exists, so no server has ever seen this trip's id.
-            //
-            // **This is the only time a trip's id changes, and it can only
-            // happen before the id has ever left the phone.** After this an id
-            // is the trip's for good: re-minting a synced trip would fork it
-            // in two on the server and re-deal every remaining ping
-            // (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md).
-            final trip = await select(tripFacts).getSingleOrNull();
-            if (trip != null && !TripId(trip.tripId).isCanonical) {
-              await (update(tripFacts)..where((t) => t.id.equals(_theOneTrip)))
-                  .write(TripFactsCompanion(tripId: Value(mint().value)));
-            }
-          }
-        },
-      );
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        // v1 was the scaffold's single disposable trip_drafts row: a
+        // draft with no trip id at all, which is the sidestep
+        // docs/decisions/2026-08-25-the-trip-mints-its-own-id.md closed.
+        // It was demo data from the day it landed; the itinerary tables
+        // replace it and nothing carries over.
+        await m.deleteTable('trip_drafts');
+        // createAll() builds every table in the *current* schema, photos
+        // included, so this branch is finished — falling through would
+        // try to create it twice.
+        await m.createAll();
+        return;
+      }
+      if (from < 3) {
+        await m.createTable(photos);
+      }
+      if (from < 4) {
+        await m.createTable(tripFacts);
+        await m.createTable(tripMembers);
+        await m.createTable(tripInviteCodes);
+        // A phone that already had a plan already had a trip: it was
+        // started here, by the person holding it, on the day they
+        // accepted the paste. Backfilling it is not inventing a fact --
+        // the alternative is a saved itinerary with nobody on it, which
+        // would deal no pings and show an empty roster.
+        await customStatement(
+          // 'local-trip' is what every trip on this phone was called
+          // before the mint existed. It is written here as history rather
+          // than fixed here, because v5 below is the one place that heals
+          // it — a phone that reached v4 on an earlier build needs the
+          // same repair and would never run this branch.
+          "insert into trip_facts (id, trip_id, started_by_member_id) "
+          "select 1, 'local-trip', 'me' "
+          "where exists (select 1 from itinerary_days)",
+        );
+        await customStatement(
+          "insert into trip_members (id, display_name, joined_on_day) "
+          "select 'me', 'You', 1 "
+          "where exists (select 1 from itinerary_days)",
+        );
+      }
+      if (from < 5) {
+        // Every trip written before the mint carries the constant
+        // 'local-trip', which `trips.id` — a `uuid` column — would refuse
+        // the first time anything synced. Give it a real one now, while
+        // there is still provably nothing to reconcile with: no Supabase
+        // project exists, so no server has ever seen this trip's id.
+        //
+        // **This is the only time a trip's id changes, and it can only
+        // happen before the id has ever left the phone.** After this an id
+        // is the trip's for good: re-minting a synced trip would fork it
+        // in two on the server and re-deal every remaining ping
+        // (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md).
+        final trip = await select(tripFacts).getSingleOrNull();
+        if (trip != null && !TripId(trip.tripId).isCanonical) {
+          await (update(tripFacts)..where((t) => t.id.equals(_theOneTrip)))
+              .write(TripFactsCompanion(tripId: Value(mint().value)));
+        }
+      }
+    },
+  );
 
   /// The saved itinerary's days, in trip order. This is the stream the
   /// repository hangs its itinerary watch on: every write path here replaces
   /// all three tables in one transaction, so a change to stops or set-aside
   /// lines always arrives with a change to this table.
-  Stream<List<ItineraryDay>> watchItineraryDays() =>
-      (select(itineraryDays)..orderBy([(t) => OrderingTerm.asc(t.number)]))
-          .watch();
+  Stream<List<ItineraryDay>> watchItineraryDays() => (select(
+    itineraryDays,
+  )..orderBy([(t) => OrderingTerm.asc(t.number)])).watch();
 
-  Future<List<ItineraryStop>> readItineraryStops() => (select(itineraryStops)
-        ..orderBy([
-          (t) => OrderingTerm.asc(t.dayNumber),
-          (t) => OrderingTerm.asc(t.position),
-        ]))
-      .get();
-
-  Future<List<ItinerarySetAside>> readItinerarySetAsides() =>
-      (select(itinerarySetAsides)
-            ..orderBy([(t) => OrderingTerm.asc(t.position)]))
+  Future<List<ItineraryStop>> readItineraryStops() =>
+      (select(itineraryStops)..orderBy([
+            (t) => OrderingTerm.asc(t.dayNumber),
+            (t) => OrderingTerm.asc(t.position),
+          ]))
           .get();
+
+  Future<List<ItinerarySetAside>> readItinerarySetAsides() => (select(
+    itinerarySetAsides,
+  )..orderBy([(t) => OrderingTerm.asc(t.position)])).get();
 
   /// Replaces the stored itinerary wholesale, atomically. There is one
   /// itinerary per phone in this slice (the trip is local-only until
@@ -365,35 +366,36 @@ class AppDatabase extends _$AppDatabase {
   /// hands them over already in the order every surface reads them in. A
   /// late photo therefore lands at its true hour rather than at the end
   /// (design-calls §7).
-  Stream<List<Photo>> watchPhotos() => (select(photos)
-        ..orderBy([
-          (t) => OrderingTerm.asc(t.takenAtUtcIso),
-          // Two photos on the same instant still need one stable order.
-          (t) => OrderingTerm.asc(t.id),
-        ]))
-      .watch();
+  Stream<List<Photo>> watchPhotos() =>
+      (select(photos)..orderBy([
+            (t) => OrderingTerm.asc(t.takenAtUtcIso),
+            // Two photos on the same instant still need one stable order.
+            (t) => OrderingTerm.asc(t.id),
+          ]))
+          .watch();
 
   /// The same list, read once instead of watched. The pool's surfaces want
   /// the stream; a caller that only needs today's answer wants this.
-  Future<List<Photo>> readPhotos() => (select(photos)
-        ..orderBy([
-          (t) => OrderingTerm.asc(t.takenAtUtcIso),
-          (t) => OrderingTerm.asc(t.id),
-        ]))
-      .get();
+  Future<List<Photo>> readPhotos() =>
+      (select(photos)..orderBy([
+            (t) => OrderingTerm.asc(t.takenAtUtcIso),
+            (t) => OrderingTerm.asc(t.id),
+          ]))
+          .get();
 
   /// Appends one photo. Photos accumulate; nothing here replaces a pool the
   /// way [replaceItinerary] replaces the plan.
-  Future<void> insertPhoto(PhotoRecord photo) =>
-      into(photos).insert(PhotosCompanion.insert(
-        id: photo.id,
-        dayNumber: photo.dayNumber,
-        contributorId: photo.contributorId,
-        takenAtUtcIso: photo.takenAtUtcIso,
-        origin: photo.origin,
-        word: Value(photo.word),
-        filePath: photo.filePath,
-      ));
+  Future<void> insertPhoto(PhotoRecord photo) => into(photos).insert(
+    PhotosCompanion.insert(
+      id: photo.id,
+      dayNumber: photo.dayNumber,
+      contributorId: photo.contributorId,
+      takenAtUtcIso: photo.takenAtUtcIso,
+      origin: photo.origin,
+      word: Value(photo.word),
+      filePath: photo.filePath,
+    ),
+  );
 
   /// Rewrites one photo's word, or clears it.
   ///
@@ -401,8 +403,9 @@ class AppDatabase extends _$AppDatabase {
   /// (design round 10, `18c`), so this is an ordinary update rather than a
   /// write-once. Whose print may be written on is decided above this band.
   Future<int> updatePhotoWord({required String id, required String? word}) =>
-      (update(photos)..where((t) => t.id.equals(id)))
-          .write(PhotosCompanion(word: Value(word)));
+      (update(photos)..where((t) => t.id.equals(id))).write(
+        PhotosCompanion(word: Value(word)),
+      );
   // -------------------------------------------------------------- the trip
 
   /// The trip's own facts, or null while this phone has not started one.
@@ -416,33 +419,32 @@ class AppDatabase extends _$AppDatabase {
   /// actually moves so that no layer of stream de-duplication can swallow
   /// the change.
   Stream<TripFact?> watchTripFacts() => customSelect(
-        'select (select count(*) from trip_facts) as started, '
-        "(select coalesce(name, '') from trip_facts) as name, "
-        '(select count(*) from trip_members) as members, '
-        '(select count(*) from trip_invite_codes) as codes, '
-        '(select count(*) from trip_invite_codes '
-        'where revoked_at_utc_iso is not null) as revoked',
-        readsFrom: {tripFacts, tripMembers, tripInviteCodes},
-      ).watch().asyncMap((_) => select(tripFacts).getSingleOrNull());
+    'select (select count(*) from trip_facts) as started, '
+    "(select coalesce(name, '') from trip_facts) as name, "
+    '(select count(*) from trip_members) as members, '
+    '(select count(*) from trip_invite_codes) as codes, '
+    '(select count(*) from trip_invite_codes '
+    'where revoked_at_utc_iso is not null) as revoked',
+    readsFrom: {tripFacts, tripMembers, tripInviteCodes},
+  ).watch().asyncMap((_) => select(tripFacts).getSingleOrNull());
 
   /// The same facts, read once instead of watched — the trip's counterpart of
   /// [readPhotos], and what a caller wanting one answer should take.
   Future<TripFact?> readTripFacts() => select(tripFacts).getSingleOrNull();
 
-  Future<List<TripMember>> readTripMembers() => (select(tripMembers)
-        ..orderBy([
-          (t) => OrderingTerm.asc(t.joinedOnDay),
-          // One stable order for a party that must agree with every other
-          // phone's: `trip_moments` sorts the ids again anyway, and this is
-          // the same sort, so the roster reads the same everywhere.
-          (t) => OrderingTerm.asc(t.id),
-        ]))
-      .get();
-
-  Future<List<TripInviteCode>> readTripInviteCodes() =>
-      (select(tripInviteCodes)
-            ..orderBy([(t) => OrderingTerm.asc(t.mintedAtUtcIso)]))
+  Future<List<TripMember>> readTripMembers() =>
+      (select(tripMembers)..orderBy([
+            (t) => OrderingTerm.asc(t.joinedOnDay),
+            // One stable order for a party that must agree with every other
+            // phone's: `trip_moments` sorts the ids again anyway, and this is
+            // the same sort, so the roster reads the same everywhere.
+            (t) => OrderingTerm.asc(t.id),
+          ]))
           .get();
+
+  Future<List<TripInviteCode>> readTripInviteCodes() => (select(
+    tripInviteCodes,
+  )..orderBy([(t) => OrderingTerm.asc(t.mintedAtUtcIso)])).get();
 
   /// Writes the trip and the person who started it, if there is not one, and
   /// hands back the trip's id either way.
@@ -468,11 +470,13 @@ class AppDatabase extends _$AppDatabase {
       final existing = await select(tripFacts).getSingleOrNull();
       if (existing != null) return TripId(existing.tripId);
       final tripId = mint();
-      await into(tripFacts).insert(TripFactsCompanion.insert(
-        id: const Value(_theOneTrip),
-        tripId: tripId.value,
-        startedByMemberId: starterId,
-      ));
+      await into(tripFacts).insert(
+        TripFactsCompanion.insert(
+          id: const Value(_theOneTrip),
+          tripId: tripId.value,
+          startedByMemberId: starterId,
+        ),
+      );
       await into(tripMembers).insert(
         TripMembersCompanion.insert(
           id: starterId,
@@ -486,25 +490,28 @@ class AppDatabase extends _$AppDatabase {
 
   /// Renames the trip, or clears the name with null.
   Future<int> renameTrip(String? name) =>
-      (update(tripFacts)..where((t) => t.id.equals(_theOneTrip)))
-          .write(TripFactsCompanion(name: Value(name)));
+      (update(tripFacts)..where((t) => t.id.equals(_theOneTrip))).write(
+        TripFactsCompanion(name: Value(name)),
+      );
 
   /// Records one minted code.
   Future<int> insertInviteCode(InviteCodeRecord invite) =>
-      into(tripInviteCodes).insert(TripInviteCodesCompanion.insert(
-        code: invite.code,
-        mintedByMemberId: invite.mintedByMemberId,
-        mintedAtUtcIso: invite.mintedAtUtcIso,
-      ));
+      into(tripInviteCodes).insert(
+        TripInviteCodesCompanion.insert(
+          code: invite.code,
+          mintedByMemberId: invite.mintedByMemberId,
+          mintedAtUtcIso: invite.mintedAtUtcIso,
+        ),
+      );
 
   /// Shuts one code. Rotating is minting a new one and revoking the old;
   /// nothing here ever repoints a code at a different trip.
   Future<int> revokeInviteCode({
     required String code,
     required String atUtcIso,
-  }) =>
-      (update(tripInviteCodes)..where((t) => t.code.equals(code)))
-          .write(TripInviteCodesCompanion(revokedAtUtcIso: Value(atUtcIso)));
+  }) => (update(tripInviteCodes)..where((t) => t.code.equals(code))).write(
+    TripInviteCodesCompanion(revokedAtUtcIso: Value(atUtcIso)),
+  );
 
   /// Deletes the whole trip from this phone: the plan, the pool's rows, the
   /// roster, the codes and the trip itself.

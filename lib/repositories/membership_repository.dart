@@ -68,8 +68,8 @@ class TripMembership {
     required this.startedBy,
     required List<Member> members,
     List<TripInvite> invites = const [],
-  })  : members = List.unmodifiable(members),
-        invites = List.unmodifiable(invites);
+  }) : members = List.unmodifiable(members),
+       invites = List.unmodifiable(invites);
 }
 
 /// The trip's roster and its codes, read-only.
@@ -191,9 +191,7 @@ class MembershipStore implements MembershipRepository {
   /// is checked above this layer, where the roster is known.
   Future<void> rename(String? name) {
     final trimmed = name?.trim();
-    return _db.renameTrip(
-      trimmed == null || trimmed.isEmpty ? null : trimmed,
-    );
+    return _db.renameTrip(trimmed == null || trimmed.isEmpty ? null : trimmed);
   }
 
   /// Mints one code for this trip and hands it back.
@@ -205,9 +203,7 @@ class MembershipStore implements MembershipRepository {
     required MemberId by,
     required DateTime now,
   }) async {
-    final taken = {
-      for (final row in await _db.readTripInviteCodes()) row.code,
-    };
+    final taken = {for (final row in await _db.readTripInviteCodes()) row.code};
     InviteCode code;
     var attempts = 0;
     do {
@@ -230,7 +226,8 @@ class MembershipStore implements MembershipRepository {
 
   /// Shuts one code. Whether the person asking may is checked above this
   /// layer, against `cairn_model`'s `canRevokeInvite`.
-  Future<void> revokeInvite(InviteCode code, DateTime at) => _db.revokeInviteCode(
+  Future<void> revokeInvite(InviteCode code, DateTime at) =>
+      _db.revokeInviteCode(
         code: code.spoken,
         atUtcIso: at.toUtc().toIso8601String(),
       );

@@ -45,8 +45,9 @@ class PoolScreen extends ConsumerWidget {
         child: switch (pool) {
           AsyncData(value: final PoolView view) => _Pool(view: view),
           AsyncData() => const SizedBox.shrink(),
-          AsyncError(:final error) =>
-            Center(child: Text('Failed to read: $error')),
+          AsyncError(:final error) => Center(
+            child: Text('Failed to read: $error'),
+          ),
           _ => const Center(child: CircularProgressIndicator()),
         },
       ),
@@ -110,8 +111,9 @@ class _Header extends StatelessWidget {
           Text(
             countLabel!,
             key: const Key('pool-count'),
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
       ],
     );
@@ -120,23 +122,23 @@ class _Header extends StatelessWidget {
 
 /// One day of the trip: the day it is, then the photos that landed on it.
 List<Widget> _daySlivers(PoolDay day) => [
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
-        sliver: SliverToBoxAdapter(child: _DayHeading(day: day)),
-      ),
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 22),
-        sliver: SliverGrid.count(
-          crossAxisCount: 3,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          children: [
-            for (final photo in day.photos)
-              _Tile(photo: photo, isWithheld: !day.isOpen),
-          ],
-        ),
-      ),
-    ];
+  SliverPadding(
+    padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+    sliver: SliverToBoxAdapter(child: _DayHeading(day: day)),
+  ),
+  SliverPadding(
+    padding: const EdgeInsets.fromLTRB(24, 0, 24, 22),
+    sliver: SliverGrid.count(
+      crossAxisCount: 3,
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      children: [
+        for (final photo in day.photos)
+          _Tile(photo: photo, isWithheld: !day.isOpen),
+      ],
+    ),
+  ),
+];
 
 /// Which day this is, and how much of it there is.
 class _DayHeading extends StatelessWidget {
@@ -158,8 +160,9 @@ class _DayHeading extends StatelessWidget {
           children: [
             Text(
               day.number.toString().padLeft(2, '0'),
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.primary),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
             ),
             const SizedBox(width: 8),
             Flexible(
@@ -167,8 +170,9 @@ class _DayHeading extends StatelessWidget {
                 day.title,
                 key: Key('pool-day-${day.number}-title'),
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -234,21 +238,21 @@ class _Tile extends StatelessWidget {
       ),
       child: switch ((isWithheld, path)) {
         (true, _) => _Blank(
-            icon: Icons.visibility_off_outlined,
-            iconKey: Key('pool-photo-${photo.id}-withheld'),
-          ),
+          icon: Icons.visibility_off_outlined,
+          iconKey: Key('pool-photo-${photo.id}-withheld'),
+        ),
         (false, null) => _Blank(
-            icon: Icons.photo_outlined,
-            iconKey: Key('pool-photo-${photo.id}-awaiting'),
-          ),
+          icon: Icons.photo_outlined,
+          iconKey: Key('pool-photo-${photo.id}-awaiting'),
+        ),
         // Through [PhotoFrame], never `Image.file` directly: the file is
         // the original the pool keeps, and a tile this size decodes a tile's
         // worth of it. See lib/screens/photo_frame.dart.
         (false, final String here) => PhotoFrame(
-            file: File(here),
-            imageKey: Key('pool-photo-${photo.id}-image'),
-            fit: BoxFit.cover,
-          ),
+          file: File(here),
+          imageKey: Key('pool-photo-${photo.id}-image'),
+          fit: BoxFit.cover,
+        ),
       },
     );
   }
@@ -265,13 +269,13 @@ class _Blank extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Icon(
-          icon,
-          key: iconKey,
-          size: 20,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      );
+    child: Icon(
+      icon,
+      key: iconKey,
+      size: 20,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    ),
+  );
 }
 
 /// An empty pool is a written state, not an empty grid — the same rule the
@@ -283,8 +287,8 @@ class _EmptyPool extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        'Nothing in the pool yet. Everyone\'s photos land here.',
-        key: const Key('pool-empty'),
-        style: Theme.of(context).textTheme.titleMedium,
-      );
+    'Nothing in the pool yet. Everyone\'s photos land here.',
+    key: const Key('pool-empty'),
+    style: Theme.of(context).textTheme.titleMedium,
+  );
 }

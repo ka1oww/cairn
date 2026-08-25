@@ -182,5 +182,6 @@ class DeviceCameraSource implements CameraSource {
 }
 
 /// Bound to [DeviceCameraSource] for the app, and to a fake by tests.
-final cameraSourceProvider =
-    Provider<CameraSource>((ref) => const DeviceCameraSource());
+final cameraSourceProvider = Provider<CameraSource>(
+  (ref) => const DeviceCameraSource(),
+);

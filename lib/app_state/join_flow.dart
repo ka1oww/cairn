@@ -103,7 +103,7 @@ JoinAnswer joinAnswerFor({
     return const JoinAnswer(
       JoinOutcome.notACode,
       'That is not three words of a Cairn code. Any order, any spelling '
-          'that is close — but it has to be the words you were told.',
+      'that is close — but it has to be the words you were told.',
     );
   }
 
@@ -131,14 +131,14 @@ JoinAnswer joinAnswerFor({
     return const JoinAnswer(
       JoinOutcome.tripClosed,
       'That trip has closed. Its code died with it — the book it left '
-          'behind does not.',
+      'behind does not.',
     );
   }
   if (matches.contains(model.InviteStanding.revoked)) {
     return const JoinAnswer(
       JoinOutcome.retired,
       'Those words have been retired. Ask whoever invited you for the '
-          'trip\'s code again.',
+      'trip\'s code again.',
     );
   }
 
@@ -148,7 +148,7 @@ JoinAnswer joinAnswerFor({
   return JoinAnswer(
     JoinOutcome.elsewhere,
     'Read as ${code.spoken}. That trip is on somebody else\'s phone, and '
-        'Cairn cannot reach it yet — trips do not travel between phones. '
-        'Nothing here has changed.',
+    'Cairn cannot reach it yet — trips do not travel between phones. '
+    'Nothing here has changed.',
   );
 }

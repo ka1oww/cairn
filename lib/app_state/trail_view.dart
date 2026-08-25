@@ -99,11 +99,7 @@ class TrailView {
   /// One per day of the plan, in itinerary order.
   final List<TrailNode> nodes;
 
-  const TrailView({
-    required this.headline,
-    this.detail,
-    required this.nodes,
-  });
+  const TrailView({required this.headline, this.detail, required this.nodes});
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +130,10 @@ TrailView? trailViewFor(TripPlan? plan, DateTime today) {
 
   final dayCount = plan.days.length;
   final daysWord = dayCount == 1 ? 'day' : 'days';
-  final dated = [for (final day in plan.days) if (day.date != null) day];
+  final dated = [
+    for (final day in plan.days)
+      if (day.date != null) day,
+  ];
 
   // Nothing was pinned to the calendar, so there is no today to flag and no
   // day is behind us. Every node is ahead and the header counts the plan.
@@ -177,7 +176,10 @@ TrailView? trailViewFor(TripPlan? plan, DateTime today) {
 
   for (final day in dated) {
     if (day.date == today) {
-      return TrailView(headline: 'Day ${day.number} of $dayCount', nodes: nodes);
+      return TrailView(
+        headline: 'Day ${day.number} of $dayCount',
+        nodes: nodes,
+      );
     }
   }
 

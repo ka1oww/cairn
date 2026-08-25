@@ -88,10 +88,14 @@ final _defaultToday = DateTime.utc(2027, 6, 15);
 void main() {
   late AppDatabase db;
 
-  setUp(() => db = AppDatabase(DatabaseConnection(
+  setUp(
+    () => db = AppDatabase(
+      DatabaseConnection(
         NativeDatabase.memory(),
         closeStreamsSynchronously: true,
-      )));
+      ),
+    ),
+  );
   tearDown(() => db.close());
 
   /// `today` is pinned so the surface an accepted plan lands on does not
@@ -104,7 +108,8 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-        bootstrapApp(database: db, today: today ?? _defaultToday));
+      bootstrapApp(database: db, today: today ?? _defaultToday),
+    );
     await tester.pump();
     await tester.pump();
   }
@@ -115,16 +120,18 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('a phone with nothing saved opens on the paste box',
-      (tester) async {
+  testWidgets('a phone with nothing saved opens on the paste box', (
+    tester,
+  ) async {
     await launch(tester);
 
     expect(find.byKey(const Key('paste-input')), findsOneWidget);
     expect(find.byKey(const Key('read-button')), findsOneWidget);
   });
 
-  testWidgets('a confident parse reads as a glance, stars only found times',
-      (tester) async {
+  testWidgets('a confident parse reads as a glance, stars only found times', (
+    tester,
+  ) async {
     await launch(tester);
     await paste(tester, cleanPaste);
 
@@ -139,9 +146,9 @@ void main() {
     expect(find.byKey(const Key('accept-button')), findsOneWidget);
   });
 
-  testWidgets(
-      'a weekday with no date is asked about, and one tap answers it',
-      (tester) async {
+  testWidgets('a weekday with no date is asked about, and one tap answers it', (
+    tester,
+  ) async {
     await launch(tester);
     await paste(tester, unsureWeekdayPaste);
 
@@ -171,8 +178,9 @@ void main() {
     expect(find.text('date open'), findsNothing);
   });
 
-  testWidgets('ambiguous numeric dates offer the one-tap month-first re-read',
-      (tester) async {
+  testWidgets('ambiguous numeric dates offer the one-tap month-first re-read', (
+    tester,
+  ) async {
     await launch(tester);
     await paste(tester, ambiguousDatesPaste);
 
@@ -191,8 +199,9 @@ void main() {
     expect(find.text('Read day-first instead'), findsOneWidget);
   });
 
-  testWidgets('set-aside lines are shown kept, each with its reason',
-      (tester) async {
+  testWidgets('set-aside lines are shown kept, each with its reason', (
+    tester,
+  ) async {
     await launch(tester);
     await paste(tester, setAsidePaste);
 
@@ -209,8 +218,9 @@ void main() {
     expect(find.textContaining('booking confirmation'), findsOneWidget);
   });
 
-  testWidgets('a day with no stops asks, and may be left empty on purpose',
-      (tester) async {
+  testWidgets('a day with no stops asks, and may be left empty on purpose', (
+    tester,
+  ) async {
     await launch(tester);
     await paste(tester, noStopsPaste);
 
@@ -223,55 +233,58 @@ void main() {
     expect(find.textContaining('Found the day'), findsNothing);
   });
 
-  testWidgets('a paste with no findable days is a kept dead end, not an error',
-      (tester) async {
-    await launch(tester);
-    await paste(tester, banterPaste);
+  testWidgets(
+    'a paste with no findable days is a kept dead end, not an error',
+    (tester) async {
+      await launch(tester);
+      await paste(tester, banterPaste);
 
-    expect(
-      find.text('No days in this one — that I could find.'),
-      findsOneWidget,
-    );
-    // The lines are visibly kept.
-    expect(find.text('remember yen cash + passports'), findsOneWidget);
-    expect(find.byKey(const Key('accept-button')), findsNothing);
+      expect(
+        find.text('No days in this one — that I could find.'),
+        findsOneWidget,
+      );
+      // The lines are visibly kept.
+      expect(find.text('remember yen cash + passports'), findsOneWidget);
+      expect(find.byKey(const Key('accept-button')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('paste-something-else')));
-    await tester.pump();
+      await tester.tap(find.byKey(const Key('paste-something-else')));
+      await tester.pump();
 
-    // Back at the paste box with the paste still there — nothing thrown away.
-    final input = tester.widget<TextField>(
-      find.byKey(const Key('paste-input')),
-    );
-    expect(input.controller!.text, banterPaste);
-  });
+      // Back at the paste box with the paste still there — nothing thrown away.
+      final input = tester.widget<TextField>(
+        find.byKey(const Key('paste-input')),
+      );
+      expect(input.controller!.text, banterPaste);
+    },
+  );
 
   testWidgets(
-      'accepting persists through the seam into Drift and survives a relaunch',
-      (tester) async {
-    await launch(tester);
-    await paste(tester, setAsidePaste);
-    await tester.tap(find.byKey(const Key('accept-button')));
-    await tester.pump();
-    await tester.pump();
+    'accepting persists through the seam into Drift and survives a relaunch',
+    (tester) async {
+      await launch(tester);
+      await paste(tester, setAsidePaste);
+      await tester.tap(find.byKey(const Key('accept-button')));
+      await tester.pump();
+      await tester.pump();
 
-    // The launch surface switched on its own: Today is the app's home now,
-    // read back from the store. The one-day plan is behind 15 June, so the
-    // page says the trip is walked and still holds day 1.
-    expect(find.byKey(const Key('post-trip')), findsOneWidget);
-    expect(find.text('Monday, Tokyo'), findsOneWidget);
-    expect(find.text('Senso-ji'), findsOneWidget);
+      // The launch surface switched on its own: Today is the app's home now,
+      // read back from the store. The one-day plan is behind 15 June, so the
+      // page says the trip is walked and still holds day 1.
+      expect(find.byKey(const Key('post-trip')), findsOneWidget);
+      expect(find.text('Monday, Tokyo'), findsOneWidget);
+      expect(find.text('Senso-ji'), findsOneWidget);
 
-    // Relaunch: a fresh widget tree and fresh providers over the same
-    // database file stand in for killing and reopening the app.
-    await tester.pumpWidget(bootstrapApp(database: db, today: _defaultToday));
-    await tester.pump();
-    await tester.pump();
+      // Relaunch: a fresh widget tree and fresh providers over the same
+      // database file stand in for killing and reopening the app.
+      await tester.pumpWidget(bootstrapApp(database: db, today: _defaultToday));
+      await tester.pump();
+      await tester.pump();
 
-    expect(find.byKey(const Key('paste-input')), findsNothing);
-    expect(find.text('Monday, Tokyo'), findsOneWidget);
-    expect(find.text('14 June'), findsOneWidget);
-  });
+      expect(find.byKey(const Key('paste-input')), findsNothing);
+      expect(find.text('Monday, Tokyo'), findsOneWidget);
+      expect(find.text('14 June'), findsOneWidget);
+    },
+  );
 
   testWidgets('an answered doubt is what gets persisted', (tester) async {
     await launch(tester);

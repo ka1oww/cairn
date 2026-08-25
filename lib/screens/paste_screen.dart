@@ -64,7 +64,8 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
                   decoration: const InputDecoration(
-                    hintText: 'Day 1 - Tokyo\n- Senso-ji\n- 10:12 train to Kyoto…',
+                    hintText:
+                        'Day 1 - Tokyo\n- Senso-ji\n- 10:12 train to Kyoto…',
                     border: OutlineInputBorder(),
                   ),
                 ),

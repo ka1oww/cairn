@@ -11,7 +11,9 @@ class CairnApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Cairn',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6B705C))),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6B705C)),
+      ),
       home: const RootScreen(),
     );
   }

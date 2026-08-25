@@ -30,12 +30,9 @@ import 'package:cairn/repositories/membership_repository.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 
 AppDatabase inMemory({TripId Function()? mint}) => AppDatabase(
-      DatabaseConnection(
-        NativeDatabase.memory(),
-        closeStreamsSynchronously: true,
-      ),
-      mint: mint ?? mintTripId,
-    );
+  DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true),
+  mint: mint ?? mintTripId,
+);
 
 /// A store over a database that lives in a real file, so it can be closed and
 /// opened again — which is the only honest way to ask whether an id is
@@ -61,10 +58,16 @@ void main() {
         starterDisplayName: 'You',
       );
 
-      expect(minted.isCanonical, isTrue,
-          reason: 'a uuid is what `trips.id` will accept unchanged');
-      expect((await db.readTripFacts())!.tripId, minted.value,
-          reason: 'the id the caller was handed is the id that was written');
+      expect(
+        minted.isCanonical,
+        isTrue,
+        reason: 'a uuid is what `trips.id` will accept unchanged',
+      );
+      expect(
+        (await db.readTripFacts())!.tripId,
+        minted.value,
+        reason: 'the id the caller was handed is the id that was written',
+      );
     });
 
     test('the whole store starts a trip without being told an id', () async {
@@ -228,8 +231,11 @@ void main() {
       db = AppDatabase(NativeDatabase(File(path)), mint: () => healed);
       addTearDown(db.close);
 
-      expect((await db.readTripFacts())!.tripId, minted.value,
-          reason: 'the repair is for pre-mint ids, and only for those');
+      expect(
+        (await db.readTripFacts())!.tripId,
+        minted.value,
+        reason: 'the repair is for pre-mint ids, and only for those',
+      );
     });
 
     test('a phone with no trip at all is not given one', () async {

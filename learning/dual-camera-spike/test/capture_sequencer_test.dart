@@ -10,30 +10,33 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('CaptureSequencer', () {
-    test('captures back before front, in that order, exactly once each', () async {
-      final calls = <String>[];
-      final sequencer = CaptureSequencer(
-        takeBackPhoto: () async {
-          calls.add('back');
-          return Uint8List.fromList([1, 2, 3]);
-        },
-        switchToFrontLens: () async {
-          calls.add('switch');
-        },
-        takeFrontPhoto: () async {
-          calls.add('front');
-          return Uint8List.fromList([4, 5, 6]);
-        },
-      );
+    test(
+      'captures back before front, in that order, exactly once each',
+      () async {
+        final calls = <String>[];
+        final sequencer = CaptureSequencer(
+          takeBackPhoto: () async {
+            calls.add('back');
+            return Uint8List.fromList([1, 2, 3]);
+          },
+          switchToFrontLens: () async {
+            calls.add('switch');
+          },
+          takeFrontPhoto: () async {
+            calls.add('front');
+            return Uint8List.fromList([4, 5, 6]);
+          },
+        );
 
-      final result = await sequencer.capture();
+        final result = await sequencer.capture();
 
-      expect(calls, ['back', 'switch', 'front']);
-      expect(result.back.role, ShotRole.back);
-      expect(result.front.role, ShotRole.front);
-      expect(result.back.imageBytes, [1, 2, 3]);
-      expect(result.front.imageBytes, [4, 5, 6]);
-    });
+        expect(calls, ['back', 'switch', 'front']);
+        expect(result.back.role, ShotRole.back);
+        expect(result.front.role, ShotRole.front);
+        expect(result.back.imageBytes, [1, 2, 3]);
+        expect(result.front.imageBytes, [4, 5, 6]);
+      },
+    );
 
     test('the front shot is always timestamped after the back shot', () async {
       final sequencer = CaptureSequencer(
@@ -51,26 +54,32 @@ void main() {
       final result = await sequencer.capture();
 
       expect(result.front.capturedAt, greaterThan(result.back.capturedAt));
-      expect(result.gapBetweenShots, greaterThanOrEqualTo(const Duration(milliseconds: 25)));
-    });
-
-    test('propagates a failure from the back shot without calling the rest', () async {
-      final calls = <String>[];
-      final sequencer = CaptureSequencer(
-        takeBackPhoto: () async {
-          calls.add('back');
-          throw StateError('camera denied');
-        },
-        switchToFrontLens: () async => calls.add('switch'),
-        takeFrontPhoto: () async {
-          calls.add('front');
-          return Uint8List(0);
-        },
+      expect(
+        result.gapBetweenShots,
+        greaterThanOrEqualTo(const Duration(milliseconds: 25)),
       );
-
-      await expectLater(sequencer.capture(), throwsStateError);
-      expect(calls, ['back']);
     });
+
+    test(
+      'propagates a failure from the back shot without calling the rest',
+      () async {
+        final calls = <String>[];
+        final sequencer = CaptureSequencer(
+          takeBackPhoto: () async {
+            calls.add('back');
+            throw StateError('camera denied');
+          },
+          switchToFrontLens: () async => calls.add('switch'),
+          takeFrontPhoto: () async {
+            calls.add('front');
+            return Uint8List(0);
+          },
+        );
+
+        await expectLater(sequencer.capture(), throwsStateError);
+        expect(calls, ['back']);
+      },
+    );
 
     test('propagates a failure from switching lenses without taking the front shot', () async {
       final calls = <String>[];

@@ -27,7 +27,9 @@ class TripApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Riverpod + Drift demo',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal)),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+      ),
       home: const TripHome(),
     );
   }

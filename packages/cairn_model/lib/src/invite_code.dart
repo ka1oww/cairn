@@ -62,7 +62,10 @@ final class InviteCode {
     required int numberDraw,
   }) {
     final first = words[firstDraw % words.length];
-    final remaining = [for (final w in words) if (w != first) w];
+    final remaining = [
+      for (final w in words)
+        if (w != first) w
+    ];
     return InviteCode(
       first,
       remaining[secondDraw % remaining.length],
@@ -108,10 +111,9 @@ final class InviteCode {
 
   /// The two words in one order, so two spellings of the same code compare
   /// equal.
-  List<String> get _pair =>
-      firstWord.compareTo(secondWord) <= 0
-          ? [firstWord, secondWord]
-          : [secondWord, firstWord];
+  List<String> get _pair => firstWord.compareTo(secondWord) <= 0
+      ? [firstWord, secondWord]
+      : [secondWord, firstWord];
 
   @override
   bool operator ==(Object other) =>
@@ -144,26 +146,123 @@ final class InviteCode {
   /// thousand codes is a space a caller with no cooldown can walk, which is
   /// the largest open gap in `supabase/README.md`.
   static const words = <String>[
-    'acorn', 'almond', 'amber', 'anchor', 'anvil', 'apricot',
-    'bamboo', 'basket', 'beacon', 'bison', 'cabin', 'cactus',
-    'candle', 'cedar', 'clover', 'compass', 'copper', 'dahlia',
-    'daisy', 'dolphin', 'domino', 'dragon', 'drift', 'elder',
-    'falcon', 'feather', 'ferry', 'fjord', 'fossil', 'garden',
-    'gecko', 'ginger', 'glacier', 'hammock', 'harbour', 'harvest',
-    'hazel', 'hedge', 'heron', 'honey', 'ibex', 'indigo',
-    'iris', 'island', 'ivory', 'jackal', 'jasmine', 'jetty',
-    'jungle', 'juniper', 'kayak', 'kelp', 'kestrel', 'kettle',
-    'knoll', 'koala', 'ladder', 'lagoon', 'lantern', 'lilac',
-    'llama', 'lupin', 'mammoth', 'mango', 'maple', 'marsh',
-    'meadow', 'monsoon', 'narwhal', 'nectar', 'needle', 'nook',
-    'nutmeg', 'oasis', 'ocelot', 'octopus', 'olive', 'orchard',
-    'otter', 'parcel', 'parsnip', 'pebble', 'puffin', 'pumpkin',
-    'quail', 'quartz', 'quince', 'quokka', 'rabbit', 'radish',
-    'reindeer', 'ribbon', 'river', 'sorrel', 'summit', 'tapir',
-    'teal', 'temple', 'thistle', 'tulip', 'tunnel', 'umbrella',
-    'urchin', 'velvet', 'vessel', 'violet', 'vulture', 'walnut',
-    'willow', 'wombat', 'yarrow', 'yonder', 'yucca', 'zebra',
-    'zenith', 'zephyr', 'zinnia',
+    'acorn',
+    'almond',
+    'amber',
+    'anchor',
+    'anvil',
+    'apricot',
+    'bamboo',
+    'basket',
+    'beacon',
+    'bison',
+    'cabin',
+    'cactus',
+    'candle',
+    'cedar',
+    'clover',
+    'compass',
+    'copper',
+    'dahlia',
+    'daisy',
+    'dolphin',
+    'domino',
+    'dragon',
+    'drift',
+    'elder',
+    'falcon',
+    'feather',
+    'ferry',
+    'fjord',
+    'fossil',
+    'garden',
+    'gecko',
+    'ginger',
+    'glacier',
+    'hammock',
+    'harbour',
+    'harvest',
+    'hazel',
+    'hedge',
+    'heron',
+    'honey',
+    'ibex',
+    'indigo',
+    'iris',
+    'island',
+    'ivory',
+    'jackal',
+    'jasmine',
+    'jetty',
+    'jungle',
+    'juniper',
+    'kayak',
+    'kelp',
+    'kestrel',
+    'kettle',
+    'knoll',
+    'koala',
+    'ladder',
+    'lagoon',
+    'lantern',
+    'lilac',
+    'llama',
+    'lupin',
+    'mammoth',
+    'mango',
+    'maple',
+    'marsh',
+    'meadow',
+    'monsoon',
+    'narwhal',
+    'nectar',
+    'needle',
+    'nook',
+    'nutmeg',
+    'oasis',
+    'ocelot',
+    'octopus',
+    'olive',
+    'orchard',
+    'otter',
+    'parcel',
+    'parsnip',
+    'pebble',
+    'puffin',
+    'pumpkin',
+    'quail',
+    'quartz',
+    'quince',
+    'quokka',
+    'rabbit',
+    'radish',
+    'reindeer',
+    'ribbon',
+    'river',
+    'sorrel',
+    'summit',
+    'tapir',
+    'teal',
+    'temple',
+    'thistle',
+    'tulip',
+    'tunnel',
+    'umbrella',
+    'urchin',
+    'velvet',
+    'vessel',
+    'violet',
+    'vulture',
+    'walnut',
+    'willow',
+    'wombat',
+    'yarrow',
+    'yonder',
+    'yucca',
+    'zebra',
+    'zenith',
+    'zephyr',
+    'zinnia',
   ];
 
   /// How far a said word may be from a real one and still be that word.
@@ -219,10 +318,7 @@ int _editDistance(String a, String b) {
       if (insertion < best) best = insertion;
       final substitution = rows[i - 1][j - 1] + cost;
       if (substitution < best) best = substitution;
-      if (i > 1 &&
-          j > 1 &&
-          a[i - 1] == b[j - 2] &&
-          a[i - 2] == b[j - 1]) {
+      if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) {
         final transposition = rows[i - 2][j - 2] + 1;
         if (transposition < best) best = transposition;
       }

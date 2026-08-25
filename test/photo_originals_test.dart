@@ -51,11 +51,13 @@ DateTime day(int dayOfJune) => DateTime.utc(2027, 6, dayOfJune);
 /// docs/decisions/2026-08-25-the-trip-mints-its-own-id.md).
 final testTripId = TripId.mint(List.filled(16, 0x5a));
 
-tm.Ping pingOn(DateTime date) => tm.dayAssignment(
+tm.Ping pingOn(DateTime date) => tm
+    .dayAssignment(
       tripId: testTripId.value,
       party: tm.Party(const [localMemberId]),
       day: tm.TripDay(date: date, utcOffset: Duration.zero),
-    ).pingFor(localMemberId)!;
+    )
+    .pingFor(localMemberId)!;
 
 /// A camera that writes one real image file, and remembers exactly what it
 /// wrote so a later assertion can compare against it rather than against an
@@ -89,14 +91,8 @@ void main() {
     // read off a widget tree.
 
     test('a box is decoded at its own size in device pixels', () {
-      expect(
-        displayDecodeWidth(logicalEdge: 110, devicePixelRatio: 3),
-        330,
-      );
-      expect(
-        displayDecodeWidth(logicalEdge: 393, devicePixelRatio: 3),
-        1179,
-      );
+      expect(displayDecodeWidth(logicalEdge: 110, devicePixelRatio: 3), 330);
+      expect(displayDecodeWidth(logicalEdge: 393, devicePixelRatio: 3), 1179);
     });
 
     test('a fractional box rounds up, never down', () {
@@ -116,12 +112,13 @@ void main() {
       // A photograph that will not draw is worse than one decoded larger
       // than it needed to be.
       expect(
-        displayDecodeWidth(
-            logicalEdge: double.infinity, devicePixelRatio: 3),
+        displayDecodeWidth(logicalEdge: double.infinity, devicePixelRatio: 3),
         maxDisplayDecodeEdge,
       );
-      expect(displayDecodeWidth(logicalEdge: 0, devicePixelRatio: 3),
-          maxDisplayDecodeEdge);
+      expect(
+        displayDecodeWidth(logicalEdge: 0, devicePixelRatio: 3),
+        maxDisplayDecodeEdge,
+      );
     });
 
     test('a degenerate pixel ratio is read as one, and never as zero', () {
@@ -154,13 +151,15 @@ void main() {
       expect(governingEdge(BoxFit.fill, 390, 2600), 390);
     });
 
-    test('BoxFit.none derives nothing, because it would shrink the picture',
-        () {
-      // `none` draws the image at whatever size it decoded to, so a smaller
-      // decode is a smaller photograph on screen rather than the same one
-      // more cheaply.
-      expect(governingEdge(BoxFit.none, 390, 2600), isNull);
-    });
+    test(
+      'BoxFit.none derives nothing, because it would shrink the picture',
+      () {
+        // `none` draws the image at whatever size it decoded to, so a smaller
+        // decode is a smaller photograph on screen rather than the same one
+        // more cheaply.
+        expect(governingEdge(BoxFit.none, 390, 2600), isNull);
+      },
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -191,13 +190,15 @@ void main() {
       tester.view.physicalSize = const Size(800, 2600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(bootstrapApp(
-        database: db,
-        today: day(14),
-        now: ping.at,
-        utcOffset: Duration.zero,
-        camera: camera,
-      ));
+      await tester.pumpWidget(
+        bootstrapApp(
+          database: db,
+          today: day(14),
+          now: ping.at,
+          utcOffset: Duration.zero,
+          camera: camera,
+        ),
+      );
       await tester.pump();
       await tester.pump();
 
@@ -214,8 +215,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('the frame the camera wrote is the frame the pool keeps',
-        (tester) async {
+    testWidgets('the frame the camera wrote is the frame the pool keeps', (
+      tester,
+    ) async {
       final camera = RecordingCamera(frames, takenAtUtc: pingOn(day(14)).at);
       await keepOnePhoto(tester, camera);
 
@@ -226,23 +228,37 @@ void main() {
 
       final row = (await db.readPhotos()).single;
       final onDisk = File(row.filePath);
-      expect(onDisk.existsSync(), isTrue,
-          reason: 'the row points at a file that is not there');
+      expect(
+        onDisk.existsSync(),
+        isTrue,
+        reason: 'the row points at a file that is not there',
+      );
 
       final original = camera.written[row.filePath];
-      expect(original, isNotNull,
-          reason: 'the store filed a path the camera never wrote — something '
-              'between the two made a second file');
-      expect(onDisk.readAsBytesSync(), original,
-          reason: 'the stored frame is not the frame the camera wrote: '
-              'something on the way re-encoded or downsized the original');
+      expect(
+        original,
+        isNotNull,
+        reason:
+            'the store filed a path the camera never wrote — something '
+            'between the two made a second file',
+      );
+      expect(
+        onDisk.readAsBytesSync(),
+        original,
+        reason:
+            'the stored frame is not the frame the camera wrote: '
+            'something on the way re-encoded or downsized the original',
+      );
 
       // And drawing it in the Pool leaves it alone too.
       await tester.tap(find.byKey(const Key('tab-pool')));
       await tester.pumpAndSettle();
       expect(find.byKey(Key('pool-photo-${row.id}-image')), findsOneWidget);
-      expect(onDisk.readAsBytesSync(), original,
-          reason: 'showing a photograph rewrote it');
+      expect(
+        onDisk.readAsBytesSync(),
+        original,
+        reason: 'showing a photograph rewrote it',
+      );
     });
 
     testWidgets('a discarded retake takes no original with it', (tester) async {
@@ -259,12 +275,16 @@ void main() {
 
       final row = (await db.readPhotos()).single;
       expect(camera.written, hasLength(2));
-      expect(File(row.filePath).readAsBytesSync(), camera.written[row.filePath],
-          reason: 'the kept frame is not the second frame, byte for byte');
+      expect(
+        File(row.filePath).readAsBytesSync(),
+        camera.written[row.filePath],
+        reason: 'the kept frame is not the second frame, byte for byte',
+      );
     });
 
-    testWidgets('the Pool draws a tile at the tile\'s size, not the frame\'s',
-        (tester) async {
+    testWidgets('the Pool draws a tile at the tile\'s size, not the frame\'s', (
+      tester,
+    ) async {
       final camera = RecordingCamera(frames, takenAtUtc: pingOn(day(14)).at);
       await keepOnePhoto(tester, camera);
       await tester.tap(find.byKey(const Key('capture-keep')));
@@ -277,9 +297,13 @@ void main() {
       final image = tester.widget<Image>(
         find.byKey(Key('pool-photo-${row.id}-image')),
       );
-      expect(image.image, isA<ResizeImage>(),
-          reason: 'the tile is decoding the original at full size — every '
-              'photo surface goes through PhotoFrame');
+      expect(
+        image.image,
+        isA<ResizeImage>(),
+        reason:
+            'the tile is decoding the original at full size — every '
+            'photo surface goes through PhotoFrame',
+      );
 
       // Not merely "smaller": the decode is the tile's own size, so this
       // fails if the rule ever drifts to a fixed thumbnail number.
@@ -296,19 +320,26 @@ void main() {
       expect((image.image as ResizeImage).width, lessThan(standInWidth));
     });
 
-    testWidgets('the breath draws the frame at the screen, not at the ceiling',
-        (tester) async {
-      final camera = RecordingCamera(frames, takenAtUtc: pingOn(day(14)).at);
-      await keepOnePhoto(tester, camera);
+    testWidgets(
+      'the breath draws the frame at the screen, not at the ceiling',
+      (tester) async {
+        final camera = RecordingCamera(frames, takenAtUtc: pingOn(day(14)).at);
+        await keepOnePhoto(tester, camera);
 
-      final image = tester.widget<Image>(find.byKey(const Key('capture-frame')));
-      expect(image.image, isA<ResizeImage>());
-      // `BoxFit.contain` in a tall sheet: the width governs, so the decode
-      // follows the 800-pixel view and not the sheet's height. A decode at
-      // the ceiling here would mean the fit is not being consulted at all —
-      // which is exactly what this test caught the first time it ran.
-      expect((image.image as ResizeImage).width, lessThanOrEqualTo(800));
-      expect((image.image as ResizeImage).width, lessThan(maxDisplayDecodeEdge));
-    });
+        final image = tester.widget<Image>(
+          find.byKey(const Key('capture-frame')),
+        );
+        expect(image.image, isA<ResizeImage>());
+        // `BoxFit.contain` in a tall sheet: the width governs, so the decode
+        // follows the 800-pixel view and not the sheet's height. A decode at
+        // the ceiling here would mean the fit is not being consulted at all —
+        // which is exactly what this test caught the first time it ran.
+        expect((image.image as ResizeImage).width, lessThanOrEqualTo(800));
+        expect(
+          (image.image as ResizeImage).width,
+          lessThan(maxDisplayDecodeEdge),
+        );
+      },
+    );
   });
 }

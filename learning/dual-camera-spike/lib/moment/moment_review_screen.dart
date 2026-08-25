@@ -22,8 +22,14 @@ class MomentReviewScreen extends StatelessWidget {
           children: [
             Expanded(
               child: DualCameraFrame(
-                subject: Image.memory(capture.back.imageBytes, fit: BoxFit.cover),
-                inset: Image.memory(capture.front.imageBytes, fit: BoxFit.cover),
+                subject: Image.memory(
+                  capture.back.imageBytes,
+                  fit: BoxFit.cover,
+                ),
+                inset: Image.memory(
+                  capture.front.imageBytes,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
             Padding(

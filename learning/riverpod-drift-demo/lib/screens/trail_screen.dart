@@ -19,7 +19,8 @@ class TrailScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Trail')),
       body: stopsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Could not load trail: $err')),
+        error: (err, stack) =>
+            Center(child: Text('Could not load trail: $err')),
         data: (stops) {
           // Grouping by day here, in Dart, rather than in SQL, is a
           // deliberate contrast with the GROUP BY query on the Pool screen:
@@ -38,7 +39,10 @@ class TrailScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             children: [
               for (final day in days) ...[
-                Text('Day $day', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Day $day',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 4),
                 for (final stop in byDay[day]!)
                   Padding(

@@ -145,12 +145,14 @@ final poolViewProvider = Provider<AsyncValue<PoolView?>>((ref) {
   }
   if (plan case AsyncData(value: final savedPlan)) {
     if (photos case AsyncData(value: final pooled)) {
-      return AsyncData(poolViewFor(
-        savedPlan,
-        pooled,
-        today,
-        viewer: ref.watch(viewerProvider),
-      ));
+      return AsyncData(
+        poolViewFor(
+          savedPlan,
+          pooled,
+          today,
+          viewer: ref.watch(viewerProvider),
+        ),
+      );
     }
   }
   return const AsyncLoading();
@@ -212,9 +214,7 @@ PoolDay _day(
   // the Pool, the day page and the book from each sorting slightly
   // differently.
   final ordered = DayPool.of(number, [for (final photo in photos) photo.ref]);
-  final paths = {
-    for (final photo in photos) photo.ref.id: photo.localPath,
-  };
+  final paths = {for (final photo in photos) photo.ref.id: photo.localPath};
 
   final date = planDay?.date;
   return PoolDay(

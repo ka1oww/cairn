@@ -127,7 +127,8 @@ void main() {
   // successor and no crown appeared on anyone, but the one power she held is
   // somebody's, because the wrong-join case it exists for did not leave with
   // her.
-  group('when the starter leaves, the power passes to the longest-standing', () {
+  group('when the starter leaves, the power passes to the longest-standing',
+      () {
     final withoutMum = build(members: [
       Member(id: ava, displayName: 'Ava', joinedOnDay: 3),
       Member(id: jonas, displayName: 'Jonas'),
@@ -148,7 +149,8 @@ void main() {
       expect(build().removalPowerHolder, mum);
     });
 
-    test('two people who joined on the same day still leave exactly one '
+    test(
+        'two people who joined on the same day still leave exactly one '
         'holder, and every phone names the same one', () {
       final sameDay = build(members: [
         Member(id: ava, displayName: 'Ava'),

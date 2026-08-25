@@ -38,7 +38,15 @@ import 'dart:math' as math;
 /// Raw formats are in deliberately: a phone set to shoot ProRAW writes them
 /// into the same roll, and the pool would keep those originals too.
 const photoExtensions = {
-  'jpg', 'jpeg', 'heic', 'heif', 'png', 'dng', 'tif', 'tiff', 'webp',
+  'jpg',
+  'jpeg',
+  'heic',
+  'heif',
+  'png',
+  'dng',
+  'tif',
+  'tiff',
+  'webp',
 };
 
 /// The size distribution of one corpus of photographs.
@@ -51,8 +59,10 @@ class CorpusStats {
   /// Sizes per lower-cased extension, ascending within each.
   final Map<String, List<int>> byExtension;
 
-  factory CorpusStats.of(Iterable<int> sizes,
-      {Map<String, List<int>> byExtension = const {}}) {
+  factory CorpusStats.of(
+    Iterable<int> sizes, {
+    Map<String, List<int>> byExtension = const {},
+  }) {
     final sorted = sizes.toList()..sort();
     final grouped = {
       for (final entry in byExtension.entries)
@@ -118,7 +128,10 @@ class CorpusStats {
       }
     }
   }
-  return (stats: CorpusStats.of(sizes, byExtension: byExtension), skipped: skipped);
+  return (
+    stats: CorpusStats.of(sizes, byExtension: byExtension),
+    skipped: skipped,
+  );
 }
 
 String _extensionOf(String path) {
@@ -187,7 +200,8 @@ class TripEstimate {
 /// What a whole archive costs in the month it reaches [totalGb], counting the
 /// free allowance.
 double archiveUsdPerMonth(double totalGb) =>
-    math.max(0, totalGb - R2Pricing.freeStorageGbMonth) * R2Pricing.usdPerGbMonth;
+    math.max(0, totalGb - R2Pricing.freeStorageGbMonth) *
+    R2Pricing.usdPerGbMonth;
 
 // ---------------------------------------------------------------------------
 // Reporting
@@ -268,13 +282,16 @@ void main(List<String> args) {
     ..sort((a, b) => b.value.length.compareTo(a.value.length));
   for (final entry in formats) {
     final sub = CorpusStats.of(entry.value);
-    stdout.writeln('  ${entry.key.padRight(6)} '
-        '${sub.count.toString().padLeft(7)}  '
-        '${mb(sub.median).padLeft(10)}  ${mb(sub.mean).padLeft(10)}');
+    stdout.writeln(
+      '  ${entry.key.padRight(6)} '
+      '${sub.count.toString().padLeft(7)}  '
+      '${mb(sub.median).padLeft(10)}  ${mb(sub.mean).padLeft(10)}',
+    );
   }
 
   stdout.writeln(
-      '\nONE TRIP: $people people x $days days x $perPersonPerDay photo(s)/person/day');
+    '\nONE TRIP: $people people x $days days x $perPersonPerDay photo(s)/person/day',
+  );
   for (final reading in [
     ('median original', stats.median),
     ('mean original', stats.mean.round()),
@@ -286,11 +303,13 @@ void main(List<String> args) {
       photosPerPersonPerDay: perPersonPerDay,
       bytesPerPhoto: reading.$2,
     );
-    stdout.writeln('  ${reading.$1.padRight(18)}'
-        '${estimate.photos.round()} photos  '
-        '${gbOf(estimate.bytes).padLeft(9)}  '
-        'free tier holds ${estimate.tripsInsideFreeTier.toStringAsFixed(1)} trips  '
-        '${usd(estimate.marginalUsdPerMonth)}/month each beyond it');
+    stdout.writeln(
+      '  ${reading.$1.padRight(18)}'
+      '${estimate.photos.round()} photos  '
+      '${gbOf(estimate.bytes).padLeft(9)}  '
+      'free tier holds ${estimate.tripsInsideFreeTier.toStringAsFixed(1)} trips  '
+      '${usd(estimate.marginalUsdPerMonth)}/month each beyond it',
+    );
   }
 
   stdout.writeln('\nARCHIVE at $tripsPerYear trips/year (median original)');
@@ -303,10 +322,12 @@ void main(List<String> args) {
   for (final year in [1, 2, 3, 5]) {
     final totalGb = perTrip.gb * tripsPerYear * year;
     final monthly = archiveUsdPerMonth(totalGb);
-    stdout.writeln('  year ${year.toString().padRight(2)} '
-        '${totalGb.toStringAsFixed(1).padLeft(7)} GB stored   '
-        '${usd(monthly).padLeft(8)}/month   '
-        '${usd(monthly * 12).padLeft(8)}/year');
+    stdout.writeln(
+      '  year ${year.toString().padRight(2)} '
+      '${totalGb.toStringAsFixed(1).padLeft(7)} GB stored   '
+      '${usd(monthly).padLeft(8)}/month   '
+      '${usd(monthly * 12).padLeft(8)}/year',
+    );
   }
 }
 

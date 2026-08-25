@@ -55,8 +55,9 @@ class DayPage extends ConsumerWidget {
         child: switch (view) {
           AsyncData(value: final DayView day) => _Day(view: day, date: date),
           AsyncData() => const SizedBox.shrink(),
-          AsyncError(:final error) =>
-            Center(child: Text('Failed to read: $error')),
+          AsyncError(:final error) => Center(
+            child: Text('Failed to read: $error'),
+          ),
           _ => const Center(child: CircularProgressIndicator()),
         },
       ),
@@ -104,57 +105,57 @@ class _Day extends StatelessWidget {
   }
 
   List<Widget> _plannedDay(PlannedDay day) => [
-        _DayIdentity(day: day),
-        const SizedBox(height: 18),
-        if (day.stops.isEmpty)
-          const _NothingPlanned()
-        else
-          _StopList(stops: day.stops, isOver: day.isOver),
-      ];
+    _DayIdentity(day: day),
+    const SizedBox(height: 18),
+    if (day.stops.isEmpty)
+      const _NothingPlanned()
+    else
+      _StopList(stops: day.stops, isOver: day.isOver),
+  ];
 
   List<Widget> _gapDay(GapDay day) => [
-        _Identity(
-          key: const Key('gap-day'),
-          title: day.title,
-          dateLabel: day.dateLabel,
-        ),
-        const SizedBox(height: 18),
-        const _NothingPlanned(),
-      ];
+    _Identity(
+      key: const Key('gap-day'),
+      title: day.title,
+      dateLabel: day.dateLabel,
+    ),
+    const SizedBox(height: 18),
+    const _NothingPlanned(),
+  ];
 
   List<Widget> _beforeTheTrip(BeforeTheTrip view) => [
-        _Announcement(
-          key: const Key('pre-trip'),
-          headline: view.headline,
-          detail: view.detail,
-        ),
-        const SizedBox(height: 26),
-        const _Label('NEXT UP'),
-        const SizedBox(height: 8),
-        _DayIdentity(day: view.nextUp),
-        const SizedBox(height: 18),
-        if (view.nextUp.stops.isEmpty)
-          const _NothingPlanned()
-        else
-          _StopList(stops: view.nextUp.stops, isOver: false),
-      ];
+    _Announcement(
+      key: const Key('pre-trip'),
+      headline: view.headline,
+      detail: view.detail,
+    ),
+    const SizedBox(height: 26),
+    const _Label('NEXT UP'),
+    const SizedBox(height: 8),
+    _DayIdentity(day: view.nextUp),
+    const SizedBox(height: 18),
+    if (view.nextUp.stops.isEmpty)
+      const _NothingPlanned()
+    else
+      _StopList(stops: view.nextUp.stops, isOver: false),
+  ];
 
   List<Widget> _afterTheTrip(AfterTheTrip view) => [
-        _Announcement(
-          key: const Key('post-trip'),
-          headline: view.headline,
-          detail: view.detail,
-        ),
-        const SizedBox(height: 26),
-        const _Label('THE LAST DAY'),
-        const SizedBox(height: 8),
-        _DayIdentity(day: view.lastDay),
-        const SizedBox(height: 18),
-        if (view.lastDay.stops.isEmpty)
-          const _NothingPlanned()
-        else
-          _StopList(stops: view.lastDay.stops, isOver: true),
-      ];
+    _Announcement(
+      key: const Key('post-trip'),
+      headline: view.headline,
+      detail: view.detail,
+    ),
+    const SizedBox(height: 26),
+    const _Label('THE LAST DAY'),
+    const SizedBox(height: 8),
+    _DayIdentity(day: view.lastDay),
+    const SizedBox(height: 18),
+    if (view.lastDay.stops.isEmpty)
+      const _NothingPlanned()
+    else
+      _StopList(stops: view.lastDay.stops, isOver: true),
+  ];
 }
 
 /// What today is asking of you, at the top of the day — or nothing at all,
@@ -177,18 +178,19 @@ class _CaptureCall extends ConsumerWidget {
     final theme = Theme.of(context);
     final (String line, String? action) = switch (call) {
       MomentAhead() => ('Your minute is somewhere in today.', null),
-      MomentOpen(isLastStretch: true) =>
-        ('Your minute. Last stretch.', 'Take it'),
+      MomentOpen(isLastStretch: true) => (
+        'Your minute. Last stretch.',
+        'Take it',
+      ),
       MomentOpen() => ('Your minute. Look up.', 'Take it'),
       // Surface 12a's wash card, and design-calls §7: no lockout, ever. A
       // photo taken now carries its real hour and sits visibly late on the
       // page, which is the only pressure the system applies.
       MomentLate() => (
-          "Your minute came and went. The door's open till midnight.",
-          'Take it now',
-        ),
-      MomentAnswered(:final hourLabel) =>
-        ('Yours landed at $hourLabel.', null),
+        "Your minute came and went. The door's open till midnight.",
+        'Take it now',
+      ),
+      MomentAnswered(:final hourLabel) => ('Yours landed at $hourLabel.', null),
       NoMomentHere() => ('', null),
     };
 
@@ -197,18 +199,22 @@ class _CaptureCall extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(line,
-              key: const Key('capture-call'),
-              style: theme.textTheme.titleMedium),
+          Text(
+            line,
+            key: const Key('capture-call'),
+            style: theme.textTheme.titleMedium,
+          ),
           if (action != null) ...[
             const SizedBox(height: 8),
             FilledButton(
               key: const Key('capture-call-action'),
               onPressed: () {
                 ref.read(captureFlowProvider.notifier).open();
-                Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (context) => const CaptureScreen(),
-                ));
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => const CaptureScreen(),
+                  ),
+                );
               },
               child: Text(action),
             ),
@@ -227,12 +233,12 @@ class _DayIdentity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Identity(
-        eyebrow: 'DAY ${day.number} OF ${day.dayCount}',
-        title: day.title,
-        // A day accepted with its date still open says so rather than
-        // wearing a date nobody gave it (design round 8's spelling).
-        dateLabel: day.dateLabel ?? 'date open',
-      );
+    eyebrow: 'DAY ${day.number} OF ${day.dayCount}',
+    title: day.title,
+    // A day accepted with its date still open says so rather than
+    // wearing a date nobody gave it (design round 8's spelling).
+    dateLabel: day.dateLabel ?? 'date open',
+  );
 }
 
 class _Identity extends StatelessWidget {
@@ -266,8 +272,9 @@ class _Identity extends StatelessWidget {
         Text(
           dateLabel,
           key: const Key('day-date'),
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -348,8 +355,11 @@ class _StopRow extends StatelessWidget {
           ),
           if (stop.timeLabel != null) ...[
             const SizedBox(width: 10),
-            _Time(key: Key('stop-time-${stop.position}'),
-                label: stop.timeLabel!, isOver: isOver),
+            _Time(
+              key: Key('stop-time-${stop.position}'),
+              label: stop.timeLabel!,
+              isOver: isOver,
+            ),
           ],
         ],
       ),
@@ -369,8 +379,9 @@ class _Time extends StatelessWidget {
     if (isOver) {
       return Text(
         'was $label',
-        style: theme.textTheme.bodySmall
-            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
       );
     }
     return Container(
@@ -381,8 +392,9 @@ class _Time extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: theme.textTheme.labelMedium
-            ?.copyWith(color: Colors.brown.shade800),
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: Colors.brown.shade800,
+        ),
       ),
     );
   }
@@ -395,10 +407,10 @@ class _NothingPlanned extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        'Nothing planned. The best day of most trips.',
-        key: const Key('nothing-planned'),
-        style: Theme.of(context).textTheme.titleMedium,
-      );
+    'Nothing planned. The best day of most trips.',
+    key: const Key('nothing-planned'),
+    style: Theme.of(context).textTheme.titleMedium,
+  );
 }
 
 class _Announcement extends StatelessWidget {
@@ -421,8 +433,9 @@ class _Announcement extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           detail,
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );

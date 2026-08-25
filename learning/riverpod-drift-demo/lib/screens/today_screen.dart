@@ -66,16 +66,18 @@ class TodayScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: stops
                   .where((s) => s.dayNumber == kTodayDayNumber)
-                  .map((s) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.place, size: 18),
-                            const SizedBox(width: 8),
-                            Text(s.name),
-                          ],
-                        ),
-                      ))
+                  .map(
+                    (s) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.place, size: 18),
+                          const SizedBox(width: 8),
+                          Text(s.name),
+                        ],
+                      ),
+                    ),
+                  )
                   .toList(),
             ),
           ),
@@ -108,7 +110,10 @@ class TripTipCard extends ConsumerWidget {
               children: [
                 const Icon(Icons.lightbulb_outline),
                 const SizedBox(width: 8),
-                Text('Trip tip', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Trip tip',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.refresh),

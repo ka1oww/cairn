@@ -132,8 +132,7 @@ void main() {
       expect(trip.day(2).standingAt(afterLanding), DayStanding.inProgress);
     });
 
-    test('the gap between two days on different clocks belongs to neither',
-        () {
+    test('the gap between two days on different clocks belongs to neither', () {
       // Day 2 seals at Tokyo midnight (15:00 UTC); day 3 opens at London
       // midnight (23:00 UTC). The hours between are in no day at all, and
       // that is reported honestly rather than papered over: day 2 is walked

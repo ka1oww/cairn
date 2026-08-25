@@ -62,10 +62,10 @@ class CaptureSequencer {
     required Future<void> Function() switchToFrontLens,
     required Future<Uint8List> Function() takeFrontPhoto,
     Stopwatch? stopwatch,
-  })  : _takeBackPhoto = takeBackPhoto,
-        _switchToFrontLens = switchToFrontLens,
-        _takeFrontPhoto = takeFrontPhoto,
-        _stopwatch = stopwatch ?? Stopwatch();
+  }) : _takeBackPhoto = takeBackPhoto,
+       _switchToFrontLens = switchToFrontLens,
+       _takeFrontPhoto = takeFrontPhoto,
+       _stopwatch = stopwatch ?? Stopwatch();
 
   final Future<Uint8List> Function() _takeBackPhoto;
   final Future<void> Function() _switchToFrontLens;
@@ -83,8 +83,16 @@ class CaptureSequencer {
     final frontAt = _stopwatch.elapsed;
     _stopwatch.stop();
     return MomentCapture(
-      back: CapturedShot(role: ShotRole.back, imageBytes: backBytes, capturedAt: backAt),
-      front: CapturedShot(role: ShotRole.front, imageBytes: frontBytes, capturedAt: frontAt),
+      back: CapturedShot(
+        role: ShotRole.back,
+        imageBytes: backBytes,
+        capturedAt: backAt,
+      ),
+      front: CapturedShot(
+        role: ShotRole.front,
+        imageBytes: frontBytes,
+        capturedAt: frontAt,
+      ),
     );
   }
 }

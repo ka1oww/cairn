@@ -85,16 +85,19 @@ void main() {
       write('camera.heic', 2200000);
 
       expect(measureDirectories([root.path]).stats.count, 3);
-      final originals =
-          measureDirectories([root.path], minBytes: 1000000).stats;
+      final originals = measureDirectories([
+        root.path,
+      ], minBytes: 1000000).stats;
       expect(originals.count, 1);
       expect(originals.median, 2200000);
     });
 
     test('a directory that is not there is skipped, not fatal', () {
       write('a.jpg', 100);
-      final measured =
-          measureDirectories([root.path, '${root.path}/nope-not-here']);
+      final measured = measureDirectories([
+        root.path,
+        '${root.path}/nope-not-here',
+      ]);
       expect(measured.stats.count, 1);
     });
   });

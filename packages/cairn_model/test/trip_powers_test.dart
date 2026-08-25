@@ -46,7 +46,10 @@ void main() {
     });
 
     test('passes to the longest-standing member when the starter leaves', () {
-      final without = [for (final m in party) if (m.id != mum) m];
+      final without = [
+        for (final m in party)
+          if (m.id != mum) m
+      ];
       expect(removalPowerHolder(startedBy: mum, members: without), jonas);
       expect(
         canRemoveMember(
@@ -73,7 +76,8 @@ void main() {
       );
     });
 
-    test('cannot reach somebody who is not on the trip, in either '
+    test(
+        'cannot reach somebody who is not on the trip, in either '
         'direction', () {
       expect(
         canRemoveMember(
@@ -140,7 +144,8 @@ void main() {
       );
     });
 
-    test('nobody deletes one that holds somebody else\'s — the starter '
+    test(
+        'nobody deletes one that holds somebody else\'s — the starter '
         'included', () {
       for (final member in party) {
         expect(
@@ -155,9 +160,11 @@ void main() {
       }
     });
 
-    test('and it does not pass on when the starter leaves, unlike removal',
-        () {
-      final without = [for (final m in party) if (m.id != mum) m];
+    test('and it does not pass on when the starter leaves, unlike removal', () {
+      final without = [
+        for (final m in party)
+          if (m.id != mum) m
+      ];
       expect(removalPowerHolder(startedBy: mum, members: without), jonas);
       expect(
         canDeleteTrip(
@@ -181,8 +188,8 @@ void main() {
       days: TripDay.sequence(
         startDate: CalendarDate(2026, 6, 14),
         length: 8,
-        clock: TripClock.zone('Asia/Tokyo',
-            utcOffset: const Duration(hours: 9)),
+        clock:
+            TripClock.zone('Asia/Tokyo', utcOffset: const Duration(hours: 9)),
       ),
     );
     final invite = TripInvite(

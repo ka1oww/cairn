@@ -33,10 +33,12 @@ const _monthNames = [
 String weekdayName(int isoWeekday) => _weekdayNames[isoWeekday - 1];
 
 /// `Mon` for ISO weekday 1.
-String weekdayAbbrev(int isoWeekday) => _weekdayNames[isoWeekday - 1].substring(0, 3);
+String weekdayAbbrev(int isoWeekday) =>
+    _weekdayNames[isoWeekday - 1].substring(0, 3);
 
 /// `14 June` — the spelling design round 8 puts beside a day.
-String dayMonthLabel(DateTime date) => '${date.day} ${_monthNames[date.month - 1]}';
+String dayMonthLabel(DateTime date) =>
+    '${date.day} ${_monthNames[date.month - 1]}';
 
 /// `14th`, `1st`, `22nd` — for the round-8 ask chips ("It's the 18th").
 String ordinal(int day) {
@@ -53,11 +55,7 @@ String ordinal(int day) {
 /// (design surface 2f). The confirmation screen's day list spells the same
 /// pair with a middot; the two surfaces are deliberately drawn differently
 /// and are not shared.
-String dayPageTitle({
-  String? weekday,
-  String? place,
-  required int number,
-}) =>
+String dayPageTitle({String? weekday, String? place, required int number}) =>
     switch ((weekday, place)) {
       (final w?, final p?) => '$w, $p',
       (final w?, null) => w,
@@ -84,5 +82,6 @@ const _countWords = [
 /// (surface 7c: "Five days to go"), because the one number this app sets in
 /// digits is a starred stop's time. Falls back to digits past twelve, where
 /// the word is longer than the thing it names.
-String countWord(int count) =>
-    count >= 1 && count <= _countWords.length ? _countWords[count - 1] : '$count';
+String countWord(int count) => count >= 1 && count <= _countWords.length
+    ? _countWords[count - 1]
+    : '$count';

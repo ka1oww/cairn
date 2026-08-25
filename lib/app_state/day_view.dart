@@ -47,11 +47,7 @@ class DayStop {
   /// `16:40`, or null when the stop is not starred.
   final String? timeLabel;
 
-  const DayStop({
-    required this.position,
-    required this.text,
-    this.timeLabel,
-  });
+  const DayStop({required this.position, required this.text, this.timeLabel});
 
   bool get isStarred => timeLabel != null;
 }
@@ -180,14 +176,15 @@ final todayProvider = Provider<DateTime>((ref) {
 /// The family key is a plain `DateTime` at UTC midnight, not a domain date:
 /// screens may name nothing below this band, so no `cairn_model` type
 /// reaches them.
-final dayViewProvider = Provider.family<AsyncValue<DayView?>, DateTime>(
-  (ref, date) {
-    final today = ref.watch(todayProvider);
-    return ref
-        .watch(savedItineraryProvider)
-        .whenData((plan) => dayViewFor(plan, date, today));
-  },
-);
+final dayViewProvider = Provider.family<AsyncValue<DayView?>, DateTime>((
+  ref,
+  date,
+) {
+  final today = ref.watch(todayProvider);
+  return ref
+      .watch(savedItineraryProvider)
+      .whenData((plan) => dayViewFor(plan, date, today));
+});
 
 /// The same day page's view model, asked for by **position in the plan**
 /// rather than by date.
@@ -197,14 +194,15 @@ final dayViewProvider = Provider.family<AsyncValue<DayView?>, DateTime>(
 /// on the Trail still has a position, so the Trail opens it by position —
 /// which is the hole the Today slice flagged, closed. Both families end in
 /// the same [DayView] and the same screen; there is still one day surface.
-final planDayViewProvider = Provider.family<AsyncValue<DayView?>, int>(
-  (ref, number) {
-    final today = ref.watch(todayProvider);
-    return ref
-        .watch(savedItineraryProvider)
-        .whenData((plan) => dayViewForPlanDay(plan, number, today));
-  },
-);
+final planDayViewProvider = Provider.family<AsyncValue<DayView?>, int>((
+  ref,
+  number,
+) {
+  final today = ref.watch(todayProvider);
+  return ref
+      .watch(savedItineraryProvider)
+      .whenData((plan) => dayViewForPlanDay(plan, number, today));
+});
 
 // ---------------------------------------------------------------------------
 // The derivation, kept a pure function so it can be read in one sitting.
@@ -220,7 +218,10 @@ final planDayViewProvider = Provider.family<AsyncValue<DayView?>, int>(
 DayView? dayViewFor(TripPlan? plan, DateTime date, DateTime today) {
   if (plan == null || plan.days.isEmpty) return null;
 
-  final dated = [for (final day in plan.days) if (day.date != null) day];
+  final dated = [
+    for (final day in plan.days)
+      if (day.date != null) day,
+  ];
   if (dated.isEmpty) {
     // Nothing was pinned to the calendar, so no date can select a day. Day
     // one is what there is to show, and it shows its date as open rather
@@ -245,7 +246,8 @@ DayView? dayViewFor(TripPlan? plan, DateTime date, DateTime today) {
   if (date.isAfter(latest.date!)) {
     return AfterTheTrip(
       headline: 'The trip is walked.',
-      detail: '$dayCount $daysWord, ending ${dayMonthLabel(latest.date!)}. '
+      detail:
+          '$dayCount $daysWord, ending ${dayMonthLabel(latest.date!)}. '
           'Every one of them is still here.',
       lastDay: _planned(plan, latest, isOver: true),
     );

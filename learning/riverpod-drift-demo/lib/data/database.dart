@@ -73,52 +73,52 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) => m.createAll(),
-        // Seeding lives in `beforeOpen`, guarded by an emptiness check,
-        // rather than in `onCreate` alone. `onCreate` is *supposed* to fire
-        // only the first time a database is created, but the web backend's
-        // sharedIndexedDb storage (used here because this browser lacks
-        // SharedArrayBuffer/nested-worker support — see the console log
-        // when the app starts) does not reliably persist the schema-version
-        // marker `onCreate` relies on, so it can fire again on a later
-        // load even though the previous data is still there. Checking
-        // "is the trips table actually empty?" is the only signal that
-        // can't lie, so that's what guards the insert here. Native SQLite
-        // on iOS does not have this quirk, but this guard is harmless there
-        // too — it is a no-op on rows 2..n of the app's history regardless
-        // of platform.
-        beforeOpen: (details) async {
-          final alreadySeeded = await select(trips).get();
-          if (alreadySeeded.isNotEmpty) return;
+    onCreate: (m) => m.createAll(),
+    // Seeding lives in `beforeOpen`, guarded by an emptiness check,
+    // rather than in `onCreate` alone. `onCreate` is *supposed* to fire
+    // only the first time a database is created, but the web backend's
+    // sharedIndexedDb storage (used here because this browser lacks
+    // SharedArrayBuffer/nested-worker support — see the console log
+    // when the app starts) does not reliably persist the schema-version
+    // marker `onCreate` relies on, so it can fire again on a later
+    // load even though the previous data is still there. Checking
+    // "is the trips table actually empty?" is the only signal that
+    // can't lie, so that's what guards the insert here. Native SQLite
+    // on iOS does not have this quirk, but this guard is harmless there
+    // too — it is a no-op on rows 2..n of the app's history regardless
+    // of platform.
+    beforeOpen: (details) async {
+      final alreadySeeded = await select(trips).get();
+      if (alreadySeeded.isNotEmpty) return;
 
-          final tripId = await into(trips).insert(
-            const TripsCompanion(name: Value('Ember Team Coastal Loop')),
+      final tripId = await into(trips)
+          .insert(const TripsCompanion(name: Value('Ember Team Coastal Loop')));
+      final stopNames = <int, List<String>>{
+        1: ['Ferry terminal', 'Old town market', 'Cliffside trail'],
+        2: ['Harbour breakfast', 'Lighthouse museum', 'Sunset point'],
+        3: ['Farmers market', 'Botanical garden', 'Airport'],
+      };
+      for (final entry in stopNames.entries) {
+        for (final name in entry.value) {
+          await into(stops).insert(
+            StopsCompanion.insert(
+              tripId: tripId,
+              dayNumber: entry.key,
+              name: name,
+            ),
           );
-          final stopNames = <int, List<String>>{
-            1: ['Ferry terminal', 'Old town market', 'Cliffside trail'],
-            2: ['Harbour breakfast', 'Lighthouse museum', 'Sunset point'],
-            3: ['Farmers market', 'Botanical garden', 'Airport'],
-          };
-          for (final entry in stopNames.entries) {
-            for (final name in entry.value) {
-              await into(stops).insert(
-                StopsCompanion.insert(
-                  tripId: tripId,
-                  dayNumber: entry.key,
-                  name: name,
-                ),
-              );
-            }
-          }
-        },
-      );
+        }
+      }
+    },
+  );
 
   /// All stops for the trip, oldest day first. This is the "plain select"
   /// query the task asked us to also include, as a baseline to contrast
   /// against the aggregate query below.
   Future<List<Stop>> allStopsOrderedByDay() {
-    return (select(stops)..orderBy([(s) => OrderingTerm.asc(s.dayNumber)]))
-        .get();
+    return (select(
+      stops,
+    )..orderBy([(s) => OrderingTerm.asc(s.dayNumber)])).get();
   }
 
   /// Live count of photos taken on one specific day, as a Stream.
@@ -131,11 +131,11 @@ class AppDatabase extends _$AppDatabase {
   /// needs to know that Riverpod exists.
   Stream<int> watchPhotoCountForDay(int dayNumber) {
     final countExp = photos.id.count();
-    final query = selectOnly(photos).join([
-      innerJoin(stops, stops.id.equalsExp(photos.stopId)),
-    ])
-      ..addColumns([countExp])
-      ..where(stops.dayNumber.equals(dayNumber));
+    final query =
+        selectOnly(photos)
+            .join([innerJoin(stops, stops.id.equalsExp(photos.stopId))])
+          ..addColumns([countExp])
+          ..where(stops.dayNumber.equals(dayNumber));
     return query.watchSingle().map((row) => row.read(countExp) ?? 0);
   }
 
@@ -155,22 +155,22 @@ class AppDatabase extends _$AppDatabase {
   /// every photo and tallying it yourself.
   Stream<List<DayPhotoCount>> watchPhotoCountsPerDay() {
     final countExp = photos.id.count();
-    final query = selectOnly(stops).join([
-      innerJoin(photos, photos.stopId.equalsExp(stops.id)),
-    ])
-      ..addColumns([stops.dayNumber, countExp])
-      ..groupBy([stops.dayNumber])
-      ..orderBy([OrderingTerm.asc(stops.dayNumber)]);
+    final query =
+        selectOnly(stops)
+            .join([innerJoin(photos, photos.stopId.equalsExp(stops.id))])
+          ..addColumns([stops.dayNumber, countExp])
+          ..groupBy([stops.dayNumber])
+          ..orderBy([OrderingTerm.asc(stops.dayNumber)]);
     return query.watch().map(
-          (rows) => rows
-              .map(
-                (row) => DayPhotoCount(
-                  dayNumber: row.read(stops.dayNumber)!,
-                  photoCount: row.read(countExp) ?? 0,
-                ),
-              )
-              .toList(),
-        );
+      (rows) => rows
+          .map(
+            (row) => DayPhotoCount(
+              dayNumber: row.read(stops.dayNumber)!,
+              photoCount: row.read(countExp) ?? 0,
+            ),
+          )
+          .toList(),
+    );
   }
 
   /// Attaches a new photo to the first stop of the given day. Stands in for
@@ -178,10 +178,11 @@ class AppDatabase extends _$AppDatabase {
   /// Riverpod- or widget-shaped anywhere in this function: it just writes a
   /// row. Every screen watching a query above finds out on its own.
   Future<void> addPhotoToDay(int dayNumber) async {
-    final dayStops = await (select(stops)
-          ..where((s) => s.dayNumber.equals(dayNumber))
-          ..limit(1))
-        .get();
+    final dayStops =
+        await (select(stops)
+              ..where((s) => s.dayNumber.equals(dayNumber))
+              ..limit(1))
+            .get();
     if (dayStops.isEmpty) return;
     await into(photos).insert(
       PhotosCompanion.insert(

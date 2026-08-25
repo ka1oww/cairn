@@ -70,8 +70,9 @@ final tripPartyProvider = Provider<tm.Party?>((ref) {
 /// (docs/decisions/2026-08-22-last-calls.md §4), but no trip row is stored,
 /// so this reads the device's offset. It is the second of the two places that
 /// change when the trip clock lands, and tests pin it.
-final tripUtcOffsetProvider =
-    Provider<Duration>((ref) => DateTime.now().timeZoneOffset);
+final tripUtcOffsetProvider = Provider<Duration>(
+  (ref) => DateTime.now().timeZoneOffset,
+);
 
 /// Now, in UTC.
 ///
@@ -214,8 +215,9 @@ class RecordingNotificationEdge implements NotificationEdge {
   }
 }
 
-final notificationEdgeProvider =
-    Provider<NotificationEdge>((ref) => RecordingNotificationEdge());
+final notificationEdgeProvider = Provider<NotificationEdge>(
+  (ref) => RecordingNotificationEdge(),
+);
 
 /// Registers every ping still to come, in one pass, and re-registers when the
 /// plan changes.

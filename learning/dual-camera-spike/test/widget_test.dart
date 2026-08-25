@@ -8,8 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dual_camera_spike/main.dart';
 
 void main() {
-  testWidgets('home screen explains the spike and offers to open the camera',
-      (WidgetTester tester) async {
+  testWidgets('home screen explains the spike and offers to open the camera', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const DualCameraSpikeApp());
     await tester.pumpAndSettle();
 
