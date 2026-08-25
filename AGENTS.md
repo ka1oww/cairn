@@ -52,10 +52,23 @@ import what is written there, not here.
   temporary route back to the paste box. Anything drawn but not built stays
   **absent, not disabled** — that is how the Pool waited, how leaving and
   removing wait now, and how the next one should.
+- **The phone mints the trip's id, and the server keeps it**
+  (`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`). A trip must be
+  startable in flight mode, and the ping schedule seeds itself from the id, so
+  an id issued at first sync would silently re-deal every remaining day. The
+  mint is split like the invite draw — `TripId.mint(bytes)` in `cairn_model`
+  is the shape, `mintTripId()` in `app_database.dart` is the randomness — and
+  it is called *inside* the transaction that decides there is no trip yet, so
+  nothing above the store may hand in an id of its own. **There is no fallback
+  id anywhere**: the `localTripId = 'local-trip'` constant is gone and
+  `pingsForPlan` requires a real `TripId`. Schema v5 heals a trip written
+  before the mint; that is the only time an id changes, and after it an id is
+  the trip's for good.
 - **The trip is a stored fact, and the permission model is not the app's.**
   Accepting a plan starts it (`MembershipStore.startTrip`, idempotent) and
-  mints its first three-word code. Who may do what is `cairn_model`'s
-  `trip_powers.dart` and nothing above it re-decides it; there is no role
+  mints its id and its first three-word code. Who may do what is
+  `cairn_model`'s `trip_powers.dart` and nothing above it re-decides it;
+  there is no role
   column in `trip_members` and there must never be one. A code carries no
   expiry of its own either: it dies when the trip closes, so
   `trip_invite_codes` has no expiry column and `TripInvite.standingAt` is
@@ -224,7 +237,9 @@ Sharp edges worth knowing before touching this directory again:
     Also here: `InviteCode` (two words and a number, forgiving of order and of
     one edit, over a vocabulary whose words are pairwise three edits apart) and
     `tripClosesAt` (trip end + the fourteen-day grace; the book's rule is not
-    this one and never expires).
+    this one and never expires). `TripId.mint` is the package's one exception
+    to "it invents nothing": it *formats* sixteen bytes a caller drew, the same
+    division `InviteCode.draw` makes, so the package still has no randomness.
   - A day's clock is fixed where the day *starts* and never moves, so a photo taken after an afternoon border crossing still reads at the hour that day was on. `TripDay.sequence`'s per-day clock overrides mirror `photo_day_assignment`'s `timeZoneOverridesByDay` deliberately -- change one and the other has to follow.
 - `packages/photo_day_assignment/` — pure-Dart package that decides which day of a trip a photo belongs to, using GPS-derived timezone over EXIF timestamps where possible (see its `README.md` for the full degradation ladder). Test with `dart test` from inside that directory.
   - It calls `timezone_finder`'s `findLocation(longitude, latitude)` -- longitude first, the opposite of the usual lat/lng convention and a standing trap when wiring up callers.

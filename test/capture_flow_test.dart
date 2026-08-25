@@ -24,6 +24,7 @@
 // instead), and await real file I/O inside the fake camera.
 import 'dart:io';
 
+import 'package:cairn_model/cairn_model.dart' show TripId;
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -63,12 +64,22 @@ Day 2 - Kyoto
 
 DateTime day(int dayOfJune) => DateTime.utc(2027, 6, dayOfJune);
 
+/// The trip id the flow's database is told to mint.
+///
+/// The app mints a fresh uuid for every trip it starts
+/// (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md), and the ping is
+/// a hash of it — so a test that wants to know which minute the app will
+/// choose has to pin the mint, exactly as it pins the clock. Pinning it is
+/// also the assertion that the id reaches the derivation at all: deal the app
+/// a different id and every expectation below moves.
+final testTripId = TripId.mint(List.filled(16, 0x5a));
+
 /// The ping this phone is dealt on [date], computed the way the app computes
 /// it. The instant is a hash of the trip, the party and the date, so a test
 /// cannot choose it — it has to ask for it.
 tm.Ping pingOn(DateTime date, {Duration utcOffset = Duration.zero}) =>
     tm.dayAssignment(
-      tripId: localTripId,
+      tripId: testTripId.value,
       party: tm.Party(const [localMemberId]),
       day: tm.TripDay(date: date, utcOffset: utcOffset),
     ).pingFor(localMemberId)!;
@@ -204,6 +215,7 @@ void main() {
         party: party,
         utcOffset: Duration.zero,
         memberId: localMemberId,
+        tripId: testTripId,
       );
       expect(pings, hasLength(3));
       expect(
@@ -220,6 +232,7 @@ void main() {
         party: party,
         utcOffset: Duration.zero,
         memberId: localMemberId,
+        tripId: testTripId,
       );
       expect(pings, hasLength(1));
     });
@@ -231,6 +244,7 @@ void main() {
           party: party,
           utcOffset: Duration.zero,
           memberId: localMemberId,
+          tripId: testTripId,
         ),
         isEmpty,
       );
@@ -242,6 +256,7 @@ void main() {
         party: party,
         utcOffset: Duration.zero,
         memberId: localMemberId,
+        tripId: testTripId,
       )) {
         expect(ping.localTimeOfDay, greaterThanOrEqualTo(const Duration(hours: 8)));
         expect(
@@ -261,6 +276,7 @@ void main() {
               party: party,
               utcOffset: Duration.zero,
               memberId: localMemberId,
+              tripId: testTripId,
             ))
               p.at,
           ];
@@ -273,6 +289,7 @@ void main() {
         party: party,
         utcOffset: Duration.zero,
         memberId: localMemberId,
+        tripId: testTripId,
       );
       final container = ProviderContainer(overrides: [
         pingScheduleProvider.overrideWithValue(schedule),
@@ -303,10 +320,14 @@ void main() {
     late Directory frames;
 
     setUp(() {
-      db = AppDatabase(DatabaseConnection(
-        NativeDatabase.memory(),
-        closeStreamsSynchronously: true,
-      ));
+      db = AppDatabase(
+        DatabaseConnection(
+          NativeDatabase.memory(),
+          closeStreamsSynchronously: true,
+        ),
+        // Pin the mint, so `pingOn` can predict the minute the app deals.
+        mint: () => testTripId,
+      );
       frames = Directory.systemTemp.createTempSync('cairn-frames');
     });
     tearDown(() async {

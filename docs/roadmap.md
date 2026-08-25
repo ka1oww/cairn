@@ -77,7 +77,10 @@ The paste-and-confirm flow is built and tested: paste a plan, see what the
 parser understood day by day with its doubt surfaced per cause, flip
 ambiguous dates month-first in one tap, accept — and the itinerary persists
 locally into Drift, surviving a relaunch. It replaced the scaffold's proving
-screen and disposable `trip_drafts` demo.
+screen and disposable `trip_drafts` demo — the sidestep in which a drafted
+trip held no id at all. A trip now mints its own uuid the moment it is
+started, with no connection and nothing to ask, and keeps it when it first
+syncs ([the trip's own id](decisions/2026-08-25-the-trip-mints-its-own-id.md)).
 
 **Today is built on top of it**, and it replaced that slice's placeholder as
 the launch surface: the app now opens on the day page for today's date —

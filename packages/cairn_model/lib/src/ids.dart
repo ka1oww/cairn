@@ -8,7 +8,12 @@
 /// The string itself is whatever the layer below produces: a Supabase
 /// `uuid` rendered as text for [MemberId] (`profiles.id`, which is
 /// `auth.users.id`), [TripId] (`trips.id`) and [PhotoId] (`photos.id`).
-/// This package never generates one — it has no I/O and no randomness.
+///
+/// **This package still has no randomness**, so it invents no identifier of
+/// its own. [TripId.mint] is the one place that builds an identifier rather
+/// than accepting one, and it is a *formatter*: the caller brings sixteen
+/// random bytes, exactly as `InviteCode.draw` takes three numbers a caller
+/// already has.
 abstract base class _Identifier {
   /// The opaque identifier, exactly as the storage layer spells it.
   final String value;
@@ -34,9 +39,71 @@ abstract base class _Identifier {
 }
 
 /// Identifies one trip.
+///
+/// **The phone mints it, before the trip has ever been near a server**
+/// (`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`). A trip can be
+/// started with no connection, so nothing may wait on a round trip to learn
+/// what the trip is called in the one place every layer names it — and the
+/// ping schedule seeds itself from this string, so an id that changed at
+/// first sync would silently re-deal every remaining day of the trip.
+///
+/// The canonical spelling is one RFC 4122 version-4 uuid in the lower-case
+/// hyphenated form Postgres reads back, because `trips.id` is a `uuid`
+/// column: an id the phone minted is the id the server keeps, and that only
+/// works if the phone mints something the column will accept.
 final class TripId extends _Identifier {
   TripId(super.value);
+
+  /// Formats sixteen random bytes as one version-4 uuid.
+  ///
+  /// It takes the randomness rather than drawing it, the way
+  /// `InviteCode.draw` takes three numbers: this package has no source of
+  /// entropy and is not about to grow one. Where the bytes come from is the
+  /// app's store's business (`lib/storage/drift/app_database.dart`).
+  ///
+  /// [bytes] must be exactly sixteen values in 0..255. The version and
+  /// variant nibbles are overwritten here, so a caller that hands over
+  /// sixteen bytes of a weaker source gets a well-formed uuid over weak
+  /// entropy — the shape is this function's promise, the randomness is the
+  /// caller's.
+  factory TripId.mint(List<int> bytes) {
+    if (bytes.length != 16) {
+      throw ArgumentError.value(
+          bytes.length, 'bytes', 'a uuid is made of exactly sixteen bytes');
+    }
+    final octets = List<int>.generate(16, (i) {
+      final byte = bytes[i];
+      if (byte < 0 || byte > 255) {
+        throw ArgumentError.value(byte, 'bytes', 'every byte must be 0..255');
+      }
+      return byte;
+    }, growable: false);
+    octets[6] = (octets[6] & 0x0f) | 0x40; // version 4
+    octets[8] = (octets[8] & 0x3f) | 0x80; // variant 10xx (RFC 4122)
+    final hex = [
+      for (final byte in octets) byte.toRadixString(16).padLeft(2, '0'),
+    ];
+    return TripId('${hex.sublist(0, 4).join()}-'
+        '${hex.sublist(4, 6).join()}-'
+        '${hex.sublist(6, 8).join()}-'
+        '${hex.sublist(8, 10).join()}-'
+        '${hex.sublist(10, 16).join()}');
+  }
+
+  /// Whether this id is spelled the way [TripId.mint] spells one, and so the
+  /// way `trips.id` will accept it when the trip first syncs.
+  ///
+  /// It is a question about the *spelling*, not about provenance: it cannot
+  /// tell a phone-minted id from a server-minted one, and is not meant to —
+  /// the whole point of the decision is that those are the same thing. What
+  /// it does catch is an id from before the mint existed, which is what the
+  /// store's migration uses it for.
+  bool get isCanonical => _canonicalUuid.hasMatch(value);
 }
+
+final RegExp _canonicalUuid = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+);
 
 /// Identifies one person, for the whole of their account — not per trip.
 ///

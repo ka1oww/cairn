@@ -363,8 +363,11 @@ class PasteFlow extends Notifier<PasteFlowState> {
     // rather than a rank on them (docs/decisions/2026-08-22-last-calls.md
     // §1). It is idempotent, so pasting a different plan replaces the
     // itinerary without starting a second trip or minting a second code.
+    // Nothing here names the trip's id: the store mints one where it writes
+    // the row (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md), so
+    // accepting a plan with the phone in flight mode still produces a trip
+    // with a real, durable id.
     await ref.read(membershipStoreProvider).startTrip(
-          tripId: localTripId,
           starter: model.MemberId(localMemberId),
           starterDisplayName: localMemberName,
           now: ref.read(nowProvider),

@@ -23,6 +23,7 @@
 // the reason capture_flow_test.dart's header gives.
 import 'dart:io';
 
+import 'package:cairn_model/cairn_model.dart' show TripId;
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -46,8 +47,12 @@ Tue 15 June 2027 - Kyoto
 
 DateTime day(int dayOfJune) => DateTime.utc(2027, 6, dayOfJune);
 
+/// The trip id the flow's database is told to mint (see
+/// docs/decisions/2026-08-25-the-trip-mints-its-own-id.md).
+final testTripId = TripId.mint(List.filled(16, 0x5a));
+
 tm.Ping pingOn(DateTime date) => tm.dayAssignment(
-      tripId: localTripId,
+      tripId: testTripId.value,
       party: tm.Party(const [localMemberId]),
       day: tm.TripDay(date: date, utcOffset: Duration.zero),
     ).pingFor(localMemberId)!;
@@ -164,10 +169,13 @@ void main() {
     late Directory frames;
 
     setUp(() {
-      db = AppDatabase(DatabaseConnection(
-        NativeDatabase.memory(),
-        closeStreamsSynchronously: true,
-      ));
+      db = AppDatabase(
+        DatabaseConnection(
+          NativeDatabase.memory(),
+          closeStreamsSynchronously: true,
+        ),
+        mint: () => testTripId,
+      );
       frames = Directory.systemTemp.createTempSync('cairn_originals');
     });
     tearDown(() {

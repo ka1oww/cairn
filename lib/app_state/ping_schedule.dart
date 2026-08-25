@@ -10,6 +10,7 @@
 // The derivation is a compatibility contract (docs/architecture.md,
 // invariant 4). Nothing here may reinterpret it — this layer supplies inputs
 // and reads answers.
+import 'package:cairn_model/cairn_model.dart' show TripId;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trip_moments/trip_moments.dart' as tm;
 
@@ -17,17 +18,17 @@ import 'day_view.dart';
 import 'trip_providers.dart';
 
 // ---------------------------------------------------------------------------
-// The party, and the two inputs that are still not real.
+// The party, and the one input that is still not real.
+//
+// **The trip id is no longer among them.** It used to be the constant
+// `localTripId`, standing in for a uuid Postgres had not minted yet; the phone
+// mints a real one now, when the trip is started and with no connection
+// (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md), and it is the same
+// string the trip will carry after it first syncs. That matters more here than
+// anywhere else: the derivation seeds itself from the trip id, so an id that
+// changed at first sync would silently re-deal every remaining day of the
+// trip. There is nothing to fall back to, and this file no longer offers one.
 // ---------------------------------------------------------------------------
-
-/// The id the trip started on this phone carries.
-///
-/// One trip per phone until trips are shared, so it is a constant rather than
-/// a mint: the derivation seeds itself from it, and a phone that renamed its
-/// own trip id would re-deal every remaining day for no reason. Phase 2
-/// replaces it with the `trips.id` uuid, which every phone on the trip
-/// already agrees on.
-const localTripId = 'local-trip';
 
 /// Who this phone is.
 ///
@@ -91,14 +92,19 @@ final nowProvider = Provider<DateTime>((ref) => DateTime.now().toUtc());
 /// person accepted with its date still open has no instant to be. Nothing
 /// here guesses one, for the same reason the parser and the day page do not.
 final pingScheduleProvider = Provider<List<tm.Ping>>((ref) {
+  // No trip is no party and no party is no pings, and the trip is read here
+  // for its id: the store minted one before it wrote the row, so a trip that
+  // exists has one. There is deliberately no fallback — an invented id would
+  // deal a schedule this trip does not have.
+  final trip = ref.watch(tripMembershipProvider).value;
   final party = ref.watch(tripPartyProvider);
-  if (party == null) return const [];
+  if (trip == null || party == null) return const [];
   return pingsForPlan(
     plan: ref.watch(savedItineraryProvider).value,
     party: party,
     utcOffset: ref.watch(tripUtcOffsetProvider),
     memberId: localMemberId,
-    tripId: ref.watch(tripMembershipProvider).value?.tripId ?? localTripId,
+    tripId: trip.tripId,
   );
 });
 
@@ -129,7 +135,7 @@ List<tm.Ping> pingsForPlan({
   required tm.Party party,
   required Duration utcOffset,
   required String memberId,
-  String tripId = localTripId,
+  required TripId tripId,
 }) {
   if (plan == null) return const [];
   final pings = <tm.Ping>[];
@@ -137,7 +143,7 @@ List<tm.Ping> pingsForPlan({
     final date = day.date;
     if (date == null) continue;
     final assignment = tm.dayAssignment(
-      tripId: tripId,
+      tripId: tripId.value,
       party: party,
       // Arrival and departure narrow the first and last days, and the
       // itinerary is the only thing that knows them. Nothing stores a flight

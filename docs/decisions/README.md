@@ -32,5 +32,6 @@ Read in order:
 | [2026-08-23 — the book's treatment](2026-08-23-book-treatment.md) | The blend is settled: the book may only look handmade in ways that are true |
 | [2026-08-25 — Riverpod and Drift](2026-08-25-riverpod-and-drift.md) | The stack the app is already built on, written down: what `setState`, `provider`, `bloc`, `sqflite`, Hive and Isar were weighed against, and the evidence the demo and the scaffold produced |
 | [2026-08-25 — the line register](2026-08-25-book-line-register.md) | How a written line dresses in the book: typeset and set apart is the rule, the writer's own strokes an optional flourish, a script face refused |
+| [2026-08-25 — the trip's own id](2026-08-25-the-trip-mints-its-own-id.md) | The phone mints the trip id offline and the server keeps it; there is no id that arrives late and no schedule that re-deals |
 
 Design handoffs that implement these live in [`../design/`](../design/).

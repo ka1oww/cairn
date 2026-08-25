@@ -23,6 +23,7 @@ dart test
 | Day | `TripDay` | One day of the trip, read on the clock it started on. |
 | Stop | `Stop` | A place on a day, as the pasted itinerary described it. |
 | Member | `Member` | A person on the trip. |
+| A trip's id | `TripId` | The uuid the phone mints for a trip, before the trip has ever synced. |
 | Invite code | `InviteCode` | The three words somebody says across a table to get onto a trip. |
 | An invite | `TripInvite` | One code that was minted for a trip, and whether it still admits people. |
 | Photo | `PhotoRef` | A pointer to one photo in the shared pool. The bytes are elsewhere. |
@@ -187,6 +188,24 @@ that will eventually be two. `Trip`'s own methods delegate to it.
 different action, available to everyone (`docs/design/`, 6e "Leave this
 trip"), and it is not modelled here.
 
+## Who names a trip
+
+**The phone mints the trip's id**
+(`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`), so `TripId` is the
+one identifier here that this package will build rather than merely accept.
+A trip has to be startable in flight mode, and an id that arrived at first
+sync would be worse than late: `packages/trip_moments` seeds every person's
+daily minute from the trip id, so a trip renumbered on syncing would silently
+re-deal every remaining day of itself.
+
+`TripId.mint` is a **formatter, not a mint of randomness** — the same division
+`InviteCode.draw` makes, for the same reason. It takes sixteen bytes a caller
+already drew and returns one RFC 4122 version-4 uuid in the lower-case
+hyphenated spelling `trips.id` reads back; where the bytes come from is the
+app's store's business. `TripId.isCanonical` is that spelling read backwards,
+and it is a question about shape rather than provenance: a phone-minted id and
+a server-minted one are the same thing, which is the whole point.
+
 ## Invite codes, and when they die
 
 Three spoken words, forgiving of order and spelling
@@ -314,6 +333,9 @@ The tests are aimed at the parts that are genuinely subtle, not the getters:
 - `test/trip_powers_test.dart` — the whole permission model in one place: the
   one narrow power, the flat rest, and the delete gate that shuts for
   everybody once somebody else's photos are in.
+- `test/trip_id_test.dart` — the minted spelling byte by byte, the version and
+  variant nibbles stamped over whatever it is handed, and the ids that are not
+  canonical: the pre-mint constant, an upper-cased uuid, a version-1 one.
 - `test/invite_code_test.dart` — a code said back in the wrong order, in the
   wrong case and a letter out; the vocabulary's separation, which is what
   makes that safe; and a code dying with its trip and at no other time.

@@ -1,5 +1,8 @@
 // STORAGE band (docs/architecture.md): the Drift store. Knows Drift and the
 // device disk; knows nothing of who asks. Queried only by repositories/.
+import 'dart:math';
+
+import 'package:cairn_model/cairn_model.dart' show TripId;
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
@@ -120,8 +123,14 @@ class TripFacts extends Table {
   /// Always 1. See the class comment.
   IntColumn get id => integer()();
 
-  /// The trip's id, as the ping derivation seeds itself from. Local until
-  /// Postgres mints a uuid for it.
+  /// The trip's id, as the ping derivation seeds itself from.
+  ///
+  /// **Minted here, and never reissued.** The phone writes a real uuid the
+  /// moment the trip is started, with no connection and nothing to ask
+  /// (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md); when the trip
+  /// first syncs, `trips.id` takes this string rather than handing back
+  /// another. It is not "local until Postgres mints one" — there is one mint,
+  /// it happens here, and this row is where it becomes durable.
   TextColumn get tripId => text()();
 
   /// What the trip is called, or null while nobody has named it. Any member
@@ -207,18 +216,25 @@ class TripInviteCodes extends Table {
   TripInviteCodes,
 ])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase(super.e);
+  /// [mint] exists for tests, which pin the id so an assertion can name it.
+  /// Every other caller takes [mintTripId].
+  AppDatabase(super.e, {this.mint = mintTripId});
+
+  /// Where a trip's id comes from. See [mintTripId].
+  final TripId Function() mint;
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onUpgrade: (m, from, to) async {
           if (from < 2) {
-            // v1 was the scaffold's single disposable trip_drafts row,
-            // documented as demo data from the day it landed; the itinerary
-            // tables replace it and nothing carries over.
+            // v1 was the scaffold's single disposable trip_drafts row: a
+            // draft with no trip id at all, which is the sidestep
+            // docs/decisions/2026-08-25-the-trip-mints-its-own-id.md closed.
+            // It was demo data from the day it landed; the itinerary tables
+            // replace it and nothing carries over.
             await m.deleteTable('trip_drafts');
             // createAll() builds every table in the *current* schema, photos
             // included, so this branch is finished — falling through would
@@ -239,6 +255,11 @@ class AppDatabase extends _$AppDatabase {
             // the alternative is a saved itinerary with nobody on it, which
             // would deal no pings and show an empty roster.
             await customStatement(
+              // 'local-trip' is what every trip on this phone was called
+              // before the mint existed. It is written here as history rather
+              // than fixed here, because v5 below is the one place that heals
+              // it — a phone that reached v4 on an earlier build needs the
+              // same repair and would never run this branch.
               "insert into trip_facts (id, trip_id, started_by_member_id) "
               "select 1, 'local-trip', 'me' "
               "where exists (select 1 from itinerary_days)",
@@ -248,6 +269,24 @@ class AppDatabase extends _$AppDatabase {
               "select 'me', 'You', 1 "
               "where exists (select 1 from itinerary_days)",
             );
+          }
+          if (from < 5) {
+            // Every trip written before the mint carries the constant
+            // 'local-trip', which `trips.id` — a `uuid` column — would refuse
+            // the first time anything synced. Give it a real one now, while
+            // there is still provably nothing to reconcile with: no Supabase
+            // project exists, so no server has ever seen this trip's id.
+            //
+            // **This is the only time a trip's id changes, and it can only
+            // happen before the id has ever left the phone.** After this an id
+            // is the trip's for good: re-minting a synced trip would fork it
+            // in two on the server and re-deal every remaining ping
+            // (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md).
+            final trip = await select(tripFacts).getSingleOrNull();
+            if (trip != null && !TripId(trip.tripId).isCanonical) {
+              await (update(tripFacts)..where((t) => t.id.equals(_theOneTrip)))
+                  .write(TripFactsCompanion(tripId: Value(mint().value)));
+            }
           }
         },
       );
@@ -386,6 +425,10 @@ class AppDatabase extends _$AppDatabase {
         readsFrom: {tripFacts, tripMembers, tripInviteCodes},
       ).watch().asyncMap((_) => select(tripFacts).getSingleOrNull());
 
+  /// The same facts, read once instead of watched — the trip's counterpart of
+  /// [readPhotos], and what a caller wanting one answer should take.
+  Future<TripFact?> readTripFacts() => select(tripFacts).getSingleOrNull();
+
   Future<List<TripMember>> readTripMembers() => (select(tripMembers)
         ..orderBy([
           (t) => OrderingTerm.asc(t.joinedOnDay),
@@ -401,22 +444,33 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.asc(t.mintedAtUtcIso)]))
           .get();
 
-  /// Writes the trip and the person who started it, if there is not one.
+  /// Writes the trip and the person who started it, if there is not one, and
+  /// hands back the trip's id either way.
+  ///
+  /// **The id is minted here**, in the same transaction that decides there is
+  /// no trip yet, because those two facts must not be able to disagree: an id
+  /// minted outside the transaction could be minted twice, and an id minted
+  /// after it would be an id the trip briefly did not have. This is exactly
+  /// the job `trips.id`'s `default gen_random_uuid()` does on the server, and
+  /// moving it to the phone is the whole of
+  /// docs/decisions/2026-08-25-the-trip-mints-its-own-id.md.
   ///
   /// Idempotent, because accepting a plan is what starts a trip and a plan
   /// can be accepted again (pasting a different one replaces the itinerary,
-  /// and replacing your own itinerary is not starting a second trip).
-  Future<void> startTripIfAbsent({
-    required String tripId,
+  /// and replacing your own itinerary is not starting a second trip). A
+  /// second call draws bytes it then throws away and returns the id the trip
+  /// already has — the row is the mint's record, not the draw.
+  Future<TripId> startTripIfAbsent({
     required String starterId,
     required String starterDisplayName,
   }) {
     return transaction(() async {
       final existing = await select(tripFacts).getSingleOrNull();
-      if (existing != null) return;
+      if (existing != null) return TripId(existing.tripId);
+      final tripId = mint();
       await into(tripFacts).insert(TripFactsCompanion.insert(
         id: const Value(_theOneTrip),
-        tripId: tripId,
+        tripId: tripId.value,
         startedByMemberId: starterId,
       ));
       await into(tripMembers).insert(
@@ -426,6 +480,7 @@ class AppDatabase extends _$AppDatabase {
         ),
         mode: InsertMode.insertOrIgnore,
       );
+      return tripId;
     });
   }
 
@@ -507,6 +562,25 @@ typedef ItinerarySetAsideRecord = ({
   String text,
   String explanation,
 });
+
+/// Mints one trip id, here on the phone and with nothing to ask.
+///
+/// **The counterpart of `trips.id`'s `default gen_random_uuid()`**, moved to
+/// the phone so a trip can be started with no connection
+/// (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md). It lives beside
+/// the store that writes the row for the same reason the server's default
+/// lives on the column: an id is minted exactly where it becomes durable, and
+/// nothing above this band gets to hold an id that no row remembers.
+///
+/// `cairn_model` owns the *shape* and refuses to invent the randomness — the
+/// same division `InviteCode.draw` makes — so the draw is here and the
+/// formatting is `TripId.mint`. [Random.secure] rather than [Random] because
+/// two phones must never mint the same trip: 122 random bits make a collision
+/// vanishingly unlikely, and a predictable generator would throw that away.
+TripId mintTripId() {
+  final random = Random.secure();
+  return TripId.mint([for (var i = 0; i < 16; i++) random.nextInt(256)]);
+}
 
 /// Opens the on-device database. Native SQLite arrives through
 /// `package:sqlite3` 3.x's build hooks (the successor to the end-of-life
