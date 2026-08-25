@@ -10,12 +10,17 @@
 // sticker treatment and the taker's initial chip belong to the design-system
 // slice, and inventing them here would be inventing the surface twice.
 //
-// The two states are both real. An empty pool is a written line, not a
+// The three states are all real. An empty pool is a written line, not a
 // skeleton grid and not a nag — the same rule the day page's "nothing planned"
 // follows. A tile whose bytes are not on this phone is drawn as a tile waiting
 // for them: in a pool eight people share, a photo is a real row here long
 // before its bytes arrive, and that is a permanent state of the product rather
-// than a stub.
+// than a stub. And a day the gate holds shut — only ever the day being lived,
+// only until you add yours — keeps its heading, its date and its count and
+// withholds its pictures, because a shut gate shows the shape of the day
+// obscured rather than hiding that anything happened
+// (`docs/decisions/2026-08-22-design-calls.md` §4). It says so in a line, so
+// blank tiles read as withheld rather than as broken.
 //
 // Deliberately absent: the taker's initial chip (no roster is stored — see
 // `pool_view.dart`), the dashed "+" tile (an invitation to a capture screen
@@ -124,7 +129,10 @@ List<Widget> _daySlivers(PoolDay day) => [
           crossAxisCount: 3,
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
-          children: [for (final photo in day.photos) _Tile(photo: photo)],
+          children: [
+            for (final photo in day.photos)
+              _Tile(photo: photo, isWithheld: !day.isOpen),
+          ],
         ),
       ),
     ];
@@ -178,6 +186,17 @@ class _DayHeading extends StatelessWidget {
           key: Key('pool-day-${day.number}-date'),
           style: theme.textTheme.bodySmall?.copyWith(color: muted),
         ),
+        // Why the tiles below are blank. Without it a shut day is
+        // indistinguishable from a day whose bytes have not arrived, and the
+        // gate reads as a fault instead of an invitation.
+        if (!day.isOpen) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Shut until you add yours.',
+            key: Key('pool-day-${day.number}-shut'),
+            style: theme.textTheme.bodySmall?.copyWith(color: muted),
+          ),
+        ],
       ],
     );
   }
@@ -185,13 +204,21 @@ class _DayHeading extends StatelessWidget {
 
 /// One photo.
 ///
-/// `pool-photo-<id>-image` and `pool-photo-<id>-awaiting` are the keys a test
-/// asks the tile's state through, so "the bytes are here" and "the bytes are
-/// not here yet" are asserted apart rather than assumed.
+/// `pool-photo-<id>-image`, `pool-photo-<id>-awaiting` and
+/// `pool-photo-<id>-withheld` are the keys a test asks the tile's state
+/// through, so "the bytes are here", "the bytes are not here yet" and "this
+/// day is not yours to see yet" are asserted apart rather than assumed. The
+/// last two look alike on purpose — both are a tile with no picture in it —
+/// which is exactly why they are not allowed to be the same key.
 class _Tile extends StatelessWidget {
-  const _Tile({required this.photo});
+  const _Tile({required this.photo, required this.isWithheld});
 
   final PoolPhoto photo;
+
+  /// The gate holds this photo's day shut. [PoolPhoto.imagePath] is null on
+  /// such a tile whether or not the bytes are on this phone — the screen is
+  /// never handed a path it is meant not to use.
+  final bool isWithheld;
 
   @override
   Widget build(BuildContext context) {
@@ -204,22 +231,43 @@ class _Tile extends StatelessWidget {
         color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: path == null
-          ? Center(
-              child: Icon(
-                Icons.photo_outlined,
-                key: Key('pool-photo-${photo.id}-awaiting'),
-                size: 20,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            )
-          : Image.file(
-              File(path),
-              key: Key('pool-photo-${photo.id}-image'),
-              fit: BoxFit.cover,
-            ),
+      child: switch ((isWithheld, path)) {
+        (true, _) => _Blank(
+            icon: Icons.visibility_off_outlined,
+            iconKey: Key('pool-photo-${photo.id}-withheld'),
+          ),
+        (false, null) => _Blank(
+            icon: Icons.photo_outlined,
+            iconKey: Key('pool-photo-${photo.id}-awaiting'),
+          ),
+        (false, final String here) => Image.file(
+            File(here),
+            key: Key('pool-photo-${photo.id}-image'),
+            fit: BoxFit.cover,
+          ),
+      },
     );
   }
+}
+
+/// A tile with no picture in it — either because the bytes are not here or
+/// because the gate is holding the day shut. Which one it is, is the icon and
+/// its key.
+class _Blank extends StatelessWidget {
+  const _Blank({required this.icon, required this.iconKey});
+
+  final IconData icon;
+  final Key iconKey;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Icon(
+          icon,
+          key: iconKey,
+          size: 20,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      );
 }
 
 /// An empty pool is a written state, not an empty grid — the same rule the

@@ -15,6 +15,13 @@
 // open), and walking capture to build each of those would be testing capture
 // twice and the Pool not at all.
 //
+// The gate is tested next door, in day_gate_test.dart, and not here: this file
+// is about the *drawing*. One consequence is worth knowing before adding to
+// it, though -- these fixtures credit their photos to somebody who is not this
+// phone, so a photo on the day being lived is withheld until this phone adds
+// one of its own. The tiles are still there and still keyed; what changes is
+// what is inside them.
+//
 // Two things about the container shape these tests, as they shape
 // trail_and_shell_test.dart: every tab stays alive in the tree but the ones
 // you are not looking at are *offstage*, and Flutter's finders skip offstage

@@ -127,12 +127,27 @@ so no pocket actually buzzes; and where there is no camera (the Simulator) the
 app draws its own frame, so a green run there is not evidence the real camera
 path works.
 
+**The gate now says what the record says.** Today's photographs stay shut to
+you until you have put something into today, and a day that is over is open to
+everyone who was on the trip for it — answered or not, and whether they joined
+before it or the morning after. It is one rule (`cairn_model`'s
+`GateState.decide`) with one answer in the app, so no surface can hold a
+private opinion about it; the deliberate "shut forever" test that pinned the
+opposite is gone rather than worked around, as
+[grill round one](decisions/2026-08-22-grill-round-one.md) §1 asked. Its reach
+is honestly small today: the Pool is the only surface that draws a photograph,
+so it is the only one with anything to withhold, and with no roster every photo
+on this phone is this phone's own — so the day being lived opens as soon as you
+answer it and there is nobody else's picture to hold back yet.
+
 The itinerary is local-only until it becomes the shared, propagated fact of
 Phase 2, and so is the ping's roster: the derivation is real but it is dealt
 for a party of one, because no member table exists yet. A pool of one phone's
 photos is likewise only half the Pool — nobody else's bytes can arrive until
-Phase 2 moves them. Still not built: the day page's photo timeline, the
-Trail's filled node, and the gate.
+Phase 2 moves them, and that is also what the gate is waiting on to matter.
+Still not built: the day page's photo timeline, the Trail's filled node, and
+the gate's face on the day page — the rule is there, the page has no
+photographs to withhold yet.
 Beneath it: four pure-Dart libraries, a backend schema, a
 dual-camera spike, the decision record, and the design handoffs, all
 tested.
@@ -147,7 +162,7 @@ tested.
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **The way in, Today, the Trail, the Pool and capture.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it — and the daily moment that fills it: the ping's schedule, the camera behind a seam, the pause and the word, written into a local photo index the Pool reads. The gate not started; nothing registered with iOS yet. |
+| The Flutter app | **The way in, Today, the Trail, the Pool and capture.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it — and the daily moment that fills it: the ping's schedule, the camera behind a seam, the pause and the word, written into a local photo index the Pool reads. The gate's rule landed with them and the Pool obeys it; the day page's own gated half waits on the photo timeline. Nothing registered with iOS yet. |
 
 ---
 
@@ -196,10 +211,10 @@ local file that is never committed.*
 
 ### Phase 3 — the trip surfaces
 
-The gate holding a day shut until you contribute, the day page's *other*
-half — the photo timeline that makes the day an artefact, its plan half
-having landed early with Today — the back-only capture, and the late-photo
-path for a missed ping. The Trail's own path landed early alongside Today;
+The day page's *other* half — the photo timeline that makes the day an
+artefact, its plan half having landed early with Today — and with it the gate's
+face on that page, the rule itself having landed early too; the back-only
+capture, and the late-photo path for a missed ping. The Trail's own path landed early alongside Today;
 what is left of it here is the node a day's photos fill, which is the whole
 reward of that screen and cannot be drawn before photos exist. The Pool's
 structure landed early the same way, over a read seam with nothing behind it;
@@ -274,8 +289,6 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
 
 - Implement the starter, container and invite decisions, including three-word
   codes that expire with the trip.
-- Open past days; the gate applies to today only (and remove the "shut forever"
-  test that pins the opposite).
 - The itinerary as a shared, propagated fact; membership changes reaching every
   phone.
 - The trip's close at trip end + 14 days — stored as its own rule.

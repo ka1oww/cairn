@@ -173,6 +173,10 @@
   the line's own scope. Two honest holes remain in it — nothing is registered with iOS, so no
   pocket buzzes; and where there is no camera the app draws its own frame, so a green Simulator
   run says nothing about the real camera path.
+  The gate now agrees with the record: today's photographs stay shut to you until you have put
+  something into today, and every day that is over is open to everyone who was there. It is one
+  rule (<code>GateState.decide</code>), answered in the app in one place, and the Pool is the only
+  surface drawing a photograph for it to withhold yet.
   <code>lib/README.md</code> spells these bands as
   directories. <b>Every other designed screen, the import sweep, the remaining platform glue and the
   whole remote side are still intention, drawn here so the intention is inspectable.</b></span>
@@ -299,7 +303,7 @@
 </div>
 <div class="node partial" style="left:242px;top:22px;width:170px;height:130px">
   <span class="chip">partial</span><h4>Day page &amp; gate</h4>
-  <p>One screen for every day, Today included, opened by date or by the plan's own day number. Built: identity, the ordered stops, the star and its time, and the day's one call to the moment. Not built: the photo timeline, the gate, the seal.</p>
+  <p>One screen for every day, Today included, opened by date or by the plan's own day number. Built: identity, the ordered stops, the star and its time, and the day's one call to the moment. Not built: the photo timeline and the seal &mdash; and with them this page's half of the gate, which has nothing to withhold while the page draws no photographs.</p>
   <span class="sub">the plan half built, and the way into capture; photos not</span>
 </div>
 <div class="node partial" style="left:424px;top:22px;width:170px;height:130px">
@@ -450,7 +454,7 @@
 </div>
 <div class="node built" style="left:600px;top:1495px;width:400px;height:162px">
   <span class="chip">built</span><h4>cairn_model — the vocabulary</h4>
-  <p>Trip, TripClock, TripDay, Stop, Member, PhotoRef, DayPool, GateState, CalendarDate, ClockTime, typed ids. Zero dependencies. Encodes: clock fixed at day start · gate is one enum · contributors survive photo deletion · no roles. Everything above the packages is written against it.</p>
+  <p>Trip, TripClock, TripDay, Stop, Member, PhotoRef, DayPool, GateState, DayStanding, CalendarDate, ClockTime, typed ids. Zero dependencies. Encodes: clock fixed at day start · gate is one enum, and applies to the day being lived · contributors survive photo deletion · no roles. Everything above the packages is written against it.</p>
   <span class="sub">Trip.canRemove has no succession yet — decision settled, implementation queued</span>
 </div>
 <div class="node built" style="left:1030px;top:1495px;width:300px;height:162px">
@@ -482,8 +486,11 @@
       <li><b>“A day’s clock is fixed where it starts”</b> is encoded three times — in
       <code>cairn_model</code>, <code>trip_moments</code> and <code>photo_day_assignment</code> —
       by siblings that cannot see each other. Change one, change all.</li>
-      <li><b>The gate rule exists twice on purpose:</b> <code>GateState</code> on the phone,
-      <code>day_page_is_open</code> in SQL for signing downloads. They must move together.</li>
+      <li><b>The gate rule exists twice on purpose, and only twice:</b>
+      <code>GateState.decide</code> on the phone &mdash; answered by <code>Trip.gateFor</code> and by
+      the app's <code>day_gate.dart</code> &mdash; and <code>day_page_is_open</code> in SQL for signing
+      downloads. They must move together, and a third copy per surface is the thing to refuse in
+      review. The rule: the gate applies to the day being lived; every sealed day is the party's.</li>
       <li><b>The trip clock has one source</b> — the <code>trips</code> row. No phone ever infers
       it; two phones inferring differently is silent schedule drift.</li>
       <li><b>The ping derivation is frozen.</b> Any change splits devices mid-trip; the only safe

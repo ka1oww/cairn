@@ -19,6 +19,14 @@
 // with the day page about the same photo. So this groups on the day number
 // already on the photo, and nothing here imports the ladder.
 //
+// **The gate applies here, because the gate is about photographs.** A day
+// that is shut to you withholds its pictures wherever they would be drawn, not
+// only on its own page — the server makes that literal by gating the signature
+// on the bytes themselves (`supabase/migrations/0007_day_unlocks.sql`), so a
+// Pool that drew them anyway would be showing what the server refuses. The
+// rule is not restated here: it comes from `day_gate.dart`, which is the app's
+// one answer to it.
+//
 // Deliberately absent, because nothing in the app has them yet: the taker's
 // initial chip the design puts on every tile (no roster is stored, and this
 // layer invents nothing — the photo names its contributor by id, and an id is
@@ -29,6 +37,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../repositories/photo_repository.dart';
 import 'date_labels.dart';
+import 'day_gate.dart';
 import 'day_view.dart';
 import 'trip_providers.dart';
 
@@ -45,6 +54,10 @@ class PoolPhoto {
   /// Where the image file is on this phone, or null when its bytes are not
   /// here. A tile without bytes is drawn as a tile waiting for them, never as
   /// a missing photo: the row is real either way.
+  ///
+  /// Null on a shut day too, and that is the point of a gate rather than a
+  /// curtain: the screen is not handed the bytes and told not to look at them.
+  /// [PoolDay.isOpen] is what tells the two apart.
   final String? imagePath;
 
   const PoolPhoto({required this.id, this.imagePath});
@@ -73,12 +86,22 @@ class PoolDay {
   /// happened, which is the order the day page and the book read them in.
   final List<PoolPhoto> photos;
 
+  /// Whether this day's photographs are yours to see.
+  ///
+  /// False only for the day being lived, and only until you put something into
+  /// it (`day_gate.dart`). The day is still listed, still named, still counted
+  /// — a shut gate shows the shape of the day and withholds the images
+  /// (`docs/decisions/2026-08-22-design-calls.md` §4), so hiding the section
+  /// would be hiding the wrong thing.
+  final bool isOpen;
+
   const PoolDay({
     required this.number,
     required this.title,
     this.dateLabel,
     required this.detail,
     required this.photos,
+    required this.isOpen,
   });
 }
 
@@ -122,7 +145,12 @@ final poolViewProvider = Provider<AsyncValue<PoolView?>>((ref) {
   }
   if (plan case AsyncData(value: final savedPlan)) {
     if (photos case AsyncData(value: final pooled)) {
-      return AsyncData(poolViewFor(savedPlan, pooled, today));
+      return AsyncData(poolViewFor(
+        savedPlan,
+        pooled,
+        today,
+        viewer: ref.watch(viewerProvider),
+      ));
     }
   }
   return const AsyncLoading();
@@ -132,13 +160,14 @@ final poolViewProvider = Provider<AsyncValue<PoolView?>>((ref) {
 // The derivation, kept a pure function so it can be read in one sitting.
 // ---------------------------------------------------------------------------
 
-/// The Pool for [plan] and [photos], with [today] deciding only which day
-/// wears the word "today".
+/// The Pool for [plan] and [photos], with [today] deciding which day wears the
+/// word "today" and, through the gate, which day is still [viewer]'s to earn.
 PoolView? poolViewFor(
   TripPlan? plan,
   List<PooledPhoto> photos,
-  DateTime today,
-) {
+  DateTime today, {
+  required MemberId viewer,
+}) {
   if (plan == null || plan.days.isEmpty) return null;
   if (photos.isEmpty) return const PoolView(days: []);
 
@@ -154,7 +183,19 @@ PoolView? poolViewFor(
     countLabel: _photoCount(photos.length),
     days: [
       for (final number in numbers)
-        _day(number, byDay[number]!, planDays[number], today),
+        _day(
+          number,
+          byDay[number]!,
+          planDays[number],
+          today,
+          gateForPlanDay(
+            number: number,
+            planDay: planDays[number],
+            today: today,
+            photos: photos,
+            viewer: viewer,
+          ),
+        ),
     ],
   );
 }
@@ -164,6 +205,7 @@ PoolDay _day(
   List<PooledPhoto> photos,
   PlanDay? planDay,
   DateTime today,
+  GateState gate,
 ) {
   // The order of a day's photos is the domain's rule, not this layer's:
   // oldest first, ties broken on id. Asking `DayPool` for it is what keeps
@@ -186,8 +228,12 @@ PoolDay _day(
     detail: date == today ? 'today' : _photoCount(photos.length),
     photos: [
       for (final ref in ordered.photos)
-        PoolPhoto(id: ref.id.value, imagePath: paths[ref.id]),
+        PoolPhoto(
+          id: ref.id.value,
+          imagePath: gate.isOpen ? paths[ref.id] : null,
+        ),
     ],
+    isOpen: gate.isOpen,
   );
 }
 

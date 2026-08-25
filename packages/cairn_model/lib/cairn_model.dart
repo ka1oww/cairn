@@ -8,6 +8,7 @@ library;
 export 'src/calendar_date.dart' show CalendarDate;
 export 'src/clock_time.dart' show ClockTime;
 export 'src/day_pool.dart' show DayPool;
+export 'src/day_standing.dart' show DayStanding;
 export 'src/gate.dart' show GateState;
 export 'src/ids.dart' show MemberId, PhotoId, TripId;
 export 'src/member.dart' show Member;
