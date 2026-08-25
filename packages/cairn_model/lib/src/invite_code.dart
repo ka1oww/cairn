@@ -4,9 +4,12 @@
 /// spelling (`docs/decisions/2026-08-22-grill-round-one.md` §5), drawn as
 /// `otter maple 42` on design surfaces 6d and 15c — two words and a
 /// two-digit number, which is still three things a person says out loud and
-/// is what the drawings put on screen. The eight-character generator that
-/// decision replaced is still what `supabase/migrations/0005_trip_invites.sql`
-/// mints; this type is the phone's half, and the server's half is Phase 2.
+/// is what the drawings put on screen. This type is the phone's half of that
+/// grammar; `supabase/migrations/0005_trip_invites.sql` is the server's, and
+/// the two are written to agree letter for letter — the vocabulary below, the
+/// distance [matches] counts by, and the canonical spelling. The probe there
+/// reads this file and compares the word lists, so a word added on one side
+/// alone fails rather than quietly widening a code.
 ///
 /// **This file has no randomness.** Minting draws from [words] and [numbers]
 /// somewhere that is allowed to be random — the app's seam does it, the way
@@ -136,8 +139,10 @@ final class InviteCode {
   /// A hundred and nineteen words, chosen distinctly and paired with a
   /// two-digit number, is a little over six hundred thousand codes. That is
   /// sized against two people on the same trip minting codes minutes apart,
-  /// not against somebody guessing at a server: rate-limiting redemption is
-  /// the server's job, and the server's generator is still the old one.
+  /// not against somebody guessing at a server. Rate-limiting redemption is
+  /// the server's job and the server has not done it yet — six hundred
+  /// thousand codes is a space a caller with no cooldown can walk, which is
+  /// the largest open gap in `supabase/README.md`.
   static const words = <String>[
     'acorn', 'almond', 'amber', 'anchor', 'anvil', 'apricot',
     'bamboo', 'basket', 'beacon', 'bison', 'cabin', 'cactus',

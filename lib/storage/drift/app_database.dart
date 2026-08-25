@@ -171,8 +171,10 @@ class TripMembers extends Table {
 /// **No expiry column.** A code dies when the trip closes and at no other
 /// time (`cairn_model`'s `tripClosesAt`), so storing an expiry here would be
 /// a second copy of the trip's ending, free to disagree with the first. The
-/// server's table does carry `expires_at`, and filling it from the trip's
-/// close is Phase 2's job.
+/// server's table has none either, for the same reason: it derives the close
+/// from the trip (`trip_closes_at` in
+/// `supabase/migrations/0005_trip_invites.sql`) every time a code is
+/// redeemed.
 class TripInviteCodes extends Table {
   /// The code as it is written down: `otter maple 42`. Canonical, so the
   /// same code said two ways is one row.

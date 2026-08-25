@@ -10,9 +10,33 @@ filtering to zero rows, not by raising, so "the statement errored" is the wrong
 assertion almost every time. Assert on the state of the table afterwards.
 """
 
+import os
+import re
 import sys
 
 from harness import As, apply_migrations, check, make_user, recreate_db, summary
+
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+MODEL = os.path.join(REPO, "packages", "cairn_model", "lib", "src")
+
+
+def dart_invite_words():
+    """The vocabulary as `cairn_model` spells it, read out of the Dart itself.
+
+    The point is drift, not parsing. A code minted on one side of the seam is
+    typed into the other, so a word that exists in only one of the two lists is
+    a code somebody can be given and cannot use. Reading the Dart is the only
+    way this file can notice that.
+    """
+    src = open(os.path.join(MODEL, "invite_code.dart")).read()
+    body = re.search(r"static const words = <String>\[(.*?)\];", src, re.S).group(1)
+    return re.findall(r"'([a-z]+)'", body)
+
+
+def dart_grace_days():
+    """`graceAfterATrip`, in days, as `cairn_model` states it."""
+    src = open(os.path.join(MODEL, "trip_close.dart")).read()
+    return int(re.search(r"graceAfterATrip = Duration\(days: (\d+)\)", src).group(1))
 
 PHOTO_A = "aaaaaaaa-0000-0000-0000-000000000001"
 PHOTO_B = "bbbbbbbb-0000-0000-0000-000000000001"
@@ -81,9 +105,9 @@ def main():
 
     # ------------------------------------------------------- roles are flat...
     print("\n== roles are flat: nothing to escalate to ==")
-    a.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, 'JAPAN123', :u)",
+    a.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, 'otter maple 42', :u)",
           t=japan, u=alice)
-    status, rows = c.try_run("select public.redeem_trip_invite('JAPAN123')")
+    status, rows = c.try_run("select public.redeem_trip_invite('otter maple 42')")
     check(status == "ok", "Carol redeems the invite and joins", repr(rows))
 
     columns = [row[0] for row in db.run(
@@ -103,7 +127,7 @@ def main():
                  t=japan, u=alice)[0][0] == 1,
           "a plain member cannot remove someone else")
 
-    d.run("select public.redeem_trip_invite('JAPAN123')")
+    d.run("select public.redeem_trip_invite('otter maple 42')")
     a.run("delete from public.trip_members where trip_id = :t and user_id = :u", t=japan, u=dave)
     check(db.run("select count(*) from public.trip_members where trip_id = :t and user_id = :u",
                  t=japan, u=dave)[0][0] == 0,
@@ -115,7 +139,7 @@ def main():
     check(db.run("select count(*) from public.trip_members where trip_id = :t and user_id = :u",
                  t=japan, u=carol)[0][0] == 0,
           "anyone can remove themselves -- leaving is not the starter's to permit")
-    c.run("select public.redeem_trip_invite('JAPAN123')")
+    c.run("select public.redeem_trip_invite('otter maple 42')")
 
     print("\n== nobody edits anyone else's photos or placements ==")
     before = db.run("select trip_day from public.photos where id = :id", id=PHOTO_A)[0][0]
@@ -171,7 +195,7 @@ def main():
     check(status == "err", "nor forge one", repr(rows)[:80])
 
     print("\n== someone joining mid-trip sees every past day freely ==")
-    d.run("select public.redeem_trip_invite('JAPAN123')")
+    d.run("select public.redeem_trip_invite('otter maple 42')")
     past = db.run("select (current_date - 2)::date")[0][0]
     check(d.run(is_open, t=japan, d=past, u=dave)[0][0] is True,
           "a member who joined today can open a day that ended before he arrived")
@@ -215,13 +239,129 @@ def main():
     status, rows = b.try_run("select code from public.trip_invites")
     check(status == "ok" and not rows, "an outsider cannot enumerate invite codes", repr(rows))
     status, rows = c.try_run(
-        "insert into public.trip_invites (trip_id, code, created_by) values (:t, 'FLAT2345', :u)",
+        "insert into public.trip_invites (trip_id, code, created_by) values (:t, 'cedar willow 27', :u)",
         t=japan, u=carol)
     check(status == "ok", "any member can mint one -- inviting is flat", repr(rows)[:80])
-    before = db.run("select use_count from public.trip_invites where code = 'JAPAN123'")[0][0]
-    c.run("select public.redeem_trip_invite('JAPAN123')")
-    after = db.run("select use_count from public.trip_invites where code = 'JAPAN123'")[0][0]
+    before = db.run("select use_count from public.trip_invites where code = 'otter maple 42'")[0][0]
+    c.run("select public.redeem_trip_invite('otter maple 42')")
+    after = db.run("select use_count from public.trip_invites where code = 'otter maple 42'")[0][0]
     check(before == after, "re-redeeming a code you already used spends no use", f"{before} -> {after}")
+
+    # ------------------------------------------------- the code is three words
+    print("\n== a code is three spoken words, and the two halves spell them the same ==")
+    words = db.run("select public.invite_code_words()")[0][0]
+    check(list(words) == dart_invite_words(),
+          "the server's vocabulary is the phone's, word for word",
+          f"server={len(words)} dart={len(dart_invite_words())}")
+
+    columns = [row[0] for row in db.run(
+        "select column_name from information_schema.columns "
+        "where table_schema = 'public' and table_name = 'trip_invites'")]
+    check("expires_at" not in columns,
+          "an invite carries no expiry of its own -- the trip's close is the only one",
+          f"columns={columns}")
+
+    minted = [db.run("select public.generate_invite_code()")[0][0] for _ in range(20)]
+    shape = re.compile(r"^([a-z]+) ([a-z]+) ([1-9][0-9])$")
+    check(all(shape.match(m) for m in minted),
+          "the generator mints two words and a two-digit number, never eight characters",
+          repr(minted[:3]))
+    check(all(shape.match(m).group(1) != shape.match(m).group(2) for m in minted),
+          "and never the same word twice", repr(minted[:3]))
+    check(all(shape.match(m).group(i) in words for m in minted for i in (1, 2)),
+          "drawn only from the vocabulary", repr(minted[:3]))
+
+    # The whole grammar rests on this: a word one edit out can only ever be the
+    # word it was reaching for. It is pinned on the phone by
+    # `packages/cairn_model/test/invite_code_test.dart`, and pinned here too
+    # because the server is the half that does the matching at redemption.
+    slack = db.run("select public.invite_code_spelling_slack()")[0][0]
+    close = db.run("""select a, b from unnest(public.invite_code_words()) a,
+                                        unnest(public.invite_code_words()) b
+                      where a < b and public.invite_word_distance(a, b) <= :n""", n=2 * slack)
+    check(not close, f"no two words are within {2 * slack} edits of each other", repr(close[:3]))
+    check(db.run("select public.invite_word_distance('maple', 'mapel')")[0][0] == 1,
+          "a swapped pair of letters is one edit, not two -- the commonest typo there is",
+          repr(db.run("select public.invite_word_distance('maple', 'mapel')")[0][0]))
+    check(db.run("select public.invite_code_key('otter, maple, 42')")[0][0]
+          == db.run("select public.invite_code_key('OTTER-MAPLE-42')")[0][0]
+          == 'maple otter 42',
+          "and everything that is not a letter or a digit is a gap")
+    check(db.run("select public.invite_code_key('otter maple 4')")[0][0] is None
+          and db.run("select public.invite_code_key('otter maple 999999999999')")[0][0] is None
+          and db.run("select public.invite_code_key('otter otter 42')")[0][0] is None,
+          "a one-digit number, a forty-digit one and the same word twice are all not codes")
+
+    drawn = str(c.run(
+        "insert into public.trip_invites (trip_id, created_by) values (:t, :u) returning code",
+        t=japan, u=carol)[0][0])
+    check(bool(shape.match(drawn)), "and it is what the column defaults to", repr(drawn))
+
+    status, rows = c.try_run(
+        "insert into public.trip_invites (trip_id, code, created_by) values (:t, 'JAPAN123', :u)",
+        t=japan, u=carol)
+    check(db.run("select count(*) from public.trip_invites where code = 'JAPAN123'")[0][0] == 0,
+          "an eight-character code is not a code any more, and cannot be stored",
+          repr(rows)[:80])
+
+    print("\n== said in another order, or a letter out, it is the same code ==")
+    joined = str(d.run("select public.redeem_trip_invite('willow cedar 27')")[0][0])
+    check(joined == japan, "the words in the other order open the trip they were minted for",
+          f"{joined} -> {japan}")
+    db.run("delete from public.trip_members where trip_id = :t and user_id = :u", t=japan, u=dave)
+    joined = str(d.run("select public.redeem_trip_invite('ceder willo 27')")[0][0])
+    check(joined == japan, "and one letter out per word is still the word that was said", joined)
+    status, rows = d.try_run("select public.redeem_trip_invite('cedar zzzzzz 27')")
+    check(status == "err" and "not found" in str(rows),
+          "while a word nothing is reaching for is not a worse guess, it is no code",
+          repr(rows)[:90])
+    status, rows = c.try_run(
+        "insert into public.trip_invites (trip_id, code, created_by) values (:t, 'willow cedar 27', :u)",
+        t=japan, u=carol)
+    check(db.run("select count(*) from public.trip_invites "
+                 "where code in ('willow cedar 27', 'cedar willow 27')")[0][0] == 1,
+          "so the same code written the other way round cannot be minted twice",
+          repr(rows)[:80])
+
+    # ------------------------------------------------ a code dies with its trip
+    print("\n== a code that outlived its trip opens nothing ==")
+    grace = dart_grace_days()
+    check(db.run("select extract(epoch from public.trip_grace_after_end())")[0][0]
+          == grace * 86400,
+          f"the grace after a trip is the phone's {grace} days, not a second number",
+          repr(db.run("select public.trip_grace_after_end()")[0][0]))
+    check(db.run("""select public.trip_closes_at(t.id)
+                           = ((t.end_date + 1)::timestamp at time zone t.timezone)
+                             + make_interval(days => :g)
+                    from public.trips t where t.id = :t""", t=japan, g=grace)[0][0] is True,
+          "and a trip closes a grace after its last day ends, in its own clock, not UTC")
+
+    stale = str(b.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Last year', :u, 'Atlantic/Reykjavik', current_date - 44, current_date - 40)
+           returning id""", u=bob)[0][0])
+    b.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, 'puffin quartz 61', :u)",
+          t=stale, u=bob)
+    status, rows = d.try_run("select public.redeem_trip_invite('puffin quartz 61')")
+    check(status == "err" and "expired" in str(rows),
+          "redeeming a code whose trip closed is refused", repr(rows)[:90])
+    check(db.run("select count(*) from public.trip_members where trip_id = :t and user_id = :u",
+                 t=stale, u=dave)[0][0] == 0,
+          "and nobody joined -- the refusal is a refusal, not a message")
+    status, rows = d.try_run("select count(*) from public.photos where trip_id = :t", t=stale)
+    check(rows[0][0] == 0, "so last year's archive stays shut to whoever still remembers three words")
+
+    fresh = str(b.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Just back', :u, 'Atlantic/Reykjavik', current_date - 9, current_date - 5)
+           returning id""", u=bob)[0][0])
+    b.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, 'puffin quartz 62', :u)",
+          t=fresh, u=bob)
+    status, rows = d.try_run("select public.redeem_trip_invite('puffin quartz 62')")
+    check(status == "ok", "a trip that ended inside the grace still lets someone in", repr(rows)[:90])
+    check(db.run("select count(*) from public.trip_members where trip_id = :t and user_id = :u",
+                 t=fresh, u=dave)[0][0] == 1,
+          "which is what the grace is for: the photos are still coming")
 
     # ------------------------------------------------------------------ clock
     print("\n== the shared trip clock ==")
@@ -281,11 +421,11 @@ def main():
           repr(rows)[:80])
 
     print("\n== an invite cannot be repointed to another trip ==")
-    before_trip = db.run("select trip_id from public.trip_invites where code = 'FLAT2345'")[0][0]
+    before_trip = db.run("select trip_id from public.trip_invites where code = 'cedar willow 27'")[0][0]
     status, rows = c.try_run(
-        "update public.trip_invites set trip_id = :t where code = 'FLAT2345'", t=iceland)
+        "update public.trip_invites set trip_id = :t where code = 'cedar willow 27'", t=iceland)
     check(status == "err", "even by its own creator, to a trip she also belongs to", repr(rows)[:80])
-    after_trip = db.run("select trip_id from public.trip_invites where code = 'FLAT2345'")[0][0]
+    after_trip = db.run("select trip_id from public.trip_invites where code = 'cedar willow 27'")[0][0]
     check(str(after_trip) == str(before_trip), "and the row's trip_id is unchanged",
           f"{before_trip} -> {after_trip}")
 

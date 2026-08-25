@@ -19,7 +19,7 @@ the same claim the previous version of this file made.
 | `profiles` | One row per person, and the durable home of the name credited under every photo. Auto-created by a trigger on `auth.users` insert. Has **no foreign key to `auth.users`**, on purpose — see [Deletion](#deletion-the-login-goes-the-credit-stays). |
 | `trips` | A named container, plus the shared trip clock (timezone, dates, waking window). Holds no itinerary data — that stays on the phone. |
 | `trip_members` | The root of every access-control check in this schema. A row is reachable by a user if and only if they have a matching `(trip_id, user_id)` row here. Carries **no role column**; see [Roles are flat](#roles-are-flat-except-one-thing). |
-| `trip_invites` | Invite codes, kept in their own table rather than a column on `trips` so a code can be rotated, expired, or usage-limited without touching trip identity, and a trip can have more than one outstanding code. |
+| `trip_invites` | Invite codes — three spoken words each — kept in their own table rather than a column on `trips` so a code can be rotated, revoked, or usage-limited without touching trip identity, and a trip can have more than one outstanding code. Carries **no expiry column**; a code dies when its trip closes and at no other time. See [How someone joins](#how-someone-joins-a-trip). |
 | `photos` | One row per photo in the pool. The bytes live in R2; this row is the index the app queries and the thing RLS protects. |
 | `day_unlocks` | The gate, as a durable fact: "this person contributed to this day". Written only by a trigger on `photos`, and never deleted by anything. See [The gate](#the-gate). |
 | `day_pages` | A day's finished, composed page — one image per trip per day, made lazily at share or bind time. This was `daily_moments` and modelled a four-up panel; the four-up is retired. |
@@ -30,22 +30,53 @@ comments — read those alongside this table, they're short.
 
 ### How someone joins a trip
 
-**Invite code**, not a magic link. Any member of a trip can create a row in
-`trip_invites` (an 8-character code from an unambiguous alphabet —
-`0/O`, `1/I/L` removed — since it's meant to be read aloud or typed by
-hand), optionally with an expiry or a use limit. A joiner calls
-`redeem_trip_invite(code)`.
+**Three spoken words**, not a magic link. A code is two words and a two-digit
+number — `otter maple 42` — because it is a thing somebody says across a
+table rather than a thing they spell out
+([the decision](../docs/decisions/2026-08-22-grill-round-one.md) §5). Any
+member of a trip can create a row in `trip_invites`, optionally with a use
+limit; `code` defaults to `generate_invite_code()`, which draws two distinct
+words and a number. A joiner calls `redeem_trip_invite(code)`.
 
-That function is `SECURITY DEFINER` and is the *only* way to join a trip
+It is **forgiving of order and of spelling**. `maple otter 42` is the same
+code as `otter maple 42`, and so is `mapel oter 42`: the words come from a
+fixed vocabulary chosen so that no two of its words are within two edits of
+each other, so one letter of slack can only ever land on the word it was
+reaching for. `invite_code_key(text)` is the one place that turns anything
+somebody said into the single canonical spelling; uniqueness and lookup are
+both defined over its result, never over the text as written.
+
+That vocabulary and that distance are **a second copy of
+`packages/cairn_model/lib/src/invite_code.dart`** — a code minted on one side
+of the seam is typed into the other, so the two have to agree letter for
+letter. `tests/rls_probe.py` reads the word list out of the Dart and compares
+it with `invite_code_words()` rather than trusting them to stay in step, and
+the distance function is written out here rather than taken from
+`fuzzystrmatch`, whose `levenshtein()` prices a swapped pair of letters at two
+and would refuse near-spellings the phone accepts.
+
+**A code carries no expiry of its own.** It dies when its trip closes —
+the last day's end in the trip's own clock, plus the fourteen-day grace, which
+is `trip_closes_at(trip_id)` here and `tripClosesAt` in `cairn_model`. After
+that every day of the trip is past, so a code that outlived it would open the
+whole archive to whoever still remembered three words. There is deliberately
+no `expires_at` column: two timestamps for one rule are two chances to
+disagree about when a trip is over, which is the thing the
+[grace-window decision](../docs/decisions/2026-08-22-grace-window.md) exists
+to prevent.
+
+`redeem_trip_invite` is `SECURITY DEFINER` and is the *only* way to join a trip
 you didn't create. It has to be: a non-member cannot be granted `SELECT`
 on `trip_invites` (that would let anyone enumerate or brute-force codes by
 reading the table) and cannot `INSERT` into `trip_members` directly under
-the RLS policies here. The function looks the code up, validates
-expiry/use-limit, inserts the membership row, and increments the use
-counter, all inside one elevated-privilege call whose surface area is
-exactly one text argument. Redeeming a code for a trip you are already on is a
-no-op and spends no use, so a re-tapped deep link cannot burn a limited code
-down.
+the RLS policies here. The function canonicalises what was said, looks the
+code up, refuses it if the trip has closed or the use limit is spent, inserts
+the membership row, and increments the use counter, all inside one
+elevated-privilege call whose surface area is exactly one text argument.
+Text that is not a code and a code nobody minted are refused with the same
+sentence, so a guesser is never told which half of their guess was wrong.
+Redeeming a code for a trip you are already on is a no-op and spends no use,
+so a re-tapped deep link cannot burn a limited code down.
 
 A deep link (`traveling-app://join/<code>`) is just the same code
 delivered a second way — no separate mechanism needed.
@@ -407,20 +438,29 @@ Being honest about the edges:
 - **No handling for a trip's last member leaving.** If the person who started
   a trip removes themselves, nobody can remove anyone else afterwards; the
   trip is otherwise fully usable. Worth a product answer before it happens.
-- **Invite code collisions are unhandled.** `generate_invite_code()` picks
-  from a 31-character, 8-position alphabet (~850 billion combinations),
-  so a collision on the `unique` constraint is astronomically unlikely but
-  not impossible; a production client should retry the insert once on a
-  unique-violation rather than assume it never happens.
+- **Invite code collisions are unhandled, and now worth handling.** Three
+  spoken words are 117 words paired distinctly with a two-digit number — a
+  little over six hundred thousand codes, sized against two people on the same
+  trip minting minutes apart rather than against a guesser. That is small
+  enough that a collision on the canonical-spelling index is an ordinary
+  event rather than an astronomical one, so a client **must** retry the insert
+  on a unique-violation instead of treating it as an error. The phone already
+  does (`MembershipRepository.mintInvite` redraws); nothing here does it for
+  a caller that inserts directly.
 - **`day_pages` regeneration has no conflict resolution.** If two members'
   phones both compose the same day's page near-simultaneously, the
   `unique (trip_id, page_date)` constraint means the second `insert` fails —
   the client needs to catch that and fall back to an `update` rather than
   treat it as an error. Not encoded in SQL because "which one wins" is a
   product/UX choice.
-- **No rate limiting on `redeem_trip_invite`** — callable by any authenticated
-  user with no cooldown. Brute-forcing the code space is computationally
-  infeasible but not throttled at the database level.
+- **No rate limiting on `redeem_trip_invite`, and the code space is now small
+  enough for that to matter.** Eight characters were ~850 billion
+  combinations; three spoken words are a little over six hundred thousand, and
+  each guess covers a whole neighbourhood of near-spellings. An authenticated
+  caller with no cooldown can walk the entire space. The code was made sayable
+  on purpose and that trade is the decision's, not an oversight — but the
+  throttle it assumes does not exist yet, at the database level or above it.
+  This is the largest open gap in this directory.
 - **Deletions are invisible to a pull cursor.** `updated_at` lets an *edit*
   sync; a row someone deleted on another phone is only noticed by refetching.
   Fine at this size (a roster is eight rows, a trip's photos are one query),
@@ -437,12 +477,15 @@ independently built clusters — 17.10 and a Homebrew 17.11 — so the results a
 not an artefact of one machine's setup.
 
 - All nine migrations apply cleanly, and apply again cleanly on a second run.
-- 55 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 77 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
   departure and account deletion, invite enumeration, timezone validation, and
-  `updated_at` bumping on edit.
+  `updated_at` bumping on edit — plus the three-word invite grammar: the
+  server's vocabulary compared word for word against the Dart the phone uses,
+  order- and spelling-forgiving redemption, a code refused once its trip has
+  closed, and one still admitting people inside the grace.
 - The recursion fix is checked at the mechanism level
   (`tests/recursion_mechanism.py`): the whole schema is applied by an ordinary
   role that is neither superuser nor `BYPASSRLS`, the policies resolve, and
