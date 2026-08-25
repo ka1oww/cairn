@@ -29,5 +29,6 @@ Read in order:
 | [2026-08-22 — the cat](2026-08-22-cat-deferred.md) | The cat is parked as a future feature, with the feasibility findings preserved |
 | [2026-08-22 — paying later](2026-08-22-paying-later.md) | The Apple $99 waits until the weekend test with friends — the first moment the app must reach someone else's phone |
 | [2026-08-22 — the December target](2026-08-22-december-target.md) | No trip is in the calendar; December is the chosen anchor, with six weeks of slack and the two things that would spend it |
+| [2026-08-23 — the book's treatment](2026-08-23-book-treatment.md) | The blend is settled: the book may only look handmade in ways that are true |
 
 Design handoffs that implement these live in [`../design/`](../design/).
