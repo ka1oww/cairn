@@ -33,7 +33,8 @@
       "headerSourceLine": {
         "lineNumber": 1,
         "text": "Mon 3 Nov"
-      }
+      },
+      "dateCandidate": null
     },
     {
       "index": 2,
@@ -68,7 +69,8 @@
       "headerSourceLine": {
         "lineNumber": 5,
         "text": "Tue 4 Nov"
-      }
+      },
+      "dateCandidate": null
     }
   ],
   "unplacedLines": [],

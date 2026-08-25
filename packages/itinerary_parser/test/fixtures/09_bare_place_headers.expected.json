@@ -42,7 +42,8 @@
       "headerSourceLine": {
         "lineNumber": 1,
         "text": "Kyoto"
-      }
+      },
+      "dateCandidate": null
     },
     {
       "index": 2,
@@ -74,7 +75,8 @@
       "headerSourceLine": {
         "lineNumber": 6,
         "text": "Nara"
-      }
+      },
+      "dateCandidate": null
     },
     {
       "index": 3,
@@ -109,7 +111,8 @@
       "headerSourceLine": {
         "lineNumber": 10,
         "text": "Osaka"
-      }
+      },
+      "dateCandidate": null
     }
   ],
   "unplacedLines": [],

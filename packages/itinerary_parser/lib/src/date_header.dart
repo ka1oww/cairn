@@ -235,3 +235,177 @@ DateHeaderMatch? tryParseDateHeader(
 
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Date fragments inside a header that is not itself a date header.
+//
+// `Day 1 - Tokyo, 14 June` is a `Day N` header, so the whole tail used to
+// become the day's place and the date in it was lost — the day then read
+// "date open" while its own title said otherwise. The parser still refuses to
+// bind it (a `Day N` header's date comes from the trip's start, not from a
+// fragment nobody confirmed), so instead it *surfaces* the fragment: the
+// confirmation screen offers it as one tap. Recognized, never silently bound
+// and never silently discarded.
+// ---------------------------------------------------------------------------
+
+/// A date-shaped run of characters found inside a header's trailing text.
+///
+/// [start]/[end] are offsets into the string that was searched, so a caller
+/// can lift the fragment out of the text and keep the rest as the place name.
+class DateFragment {
+  /// Day of month, 1-31.
+  final int day;
+
+  /// Month, 1-12.
+  final int month;
+
+  /// Four-digit year, when the fragment spelled one out.
+  final int? year;
+
+  /// The fragment exactly as it was written (`14 June`), for showing the
+  /// person what was recognized.
+  final String text;
+
+  /// True when this came from a numeric slash date that would also have been
+  /// valid — and different — read the other way round. Mirrors
+  /// [DateHeaderMatch.ambiguousNumericOrder].
+  final bool ambiguousNumericOrder;
+
+  final int start;
+  final int end;
+
+  const DateFragment({
+    required this.day,
+    required this.month,
+    this.year,
+    required this.text,
+    required this.start,
+    required this.end,
+    this.ambiguousNumericOrder = false,
+  });
+}
+
+final RegExp _fragmentDayMonth = RegExp(
+  r'\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\.?(?:,?\s+(\d{4}))?\b',
+  caseSensitive: false,
+);
+
+final RegExp _fragmentMonthDay = RegExp(
+  r'\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b',
+  caseSensitive: false,
+);
+
+final RegExp _fragmentIso = RegExp(r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b');
+
+final RegExp _fragmentNumeric = RegExp(r'\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b');
+
+bool _validDay(int d) => d >= 1 && d <= 31;
+
+/// Finds the first date-shaped fragment anywhere in [text], or null when
+/// there is none.
+///
+/// Only shapes that name a **day and a month** count: a bare year, a bare
+/// weekday or a lone number is not a date this can offer, and a month word
+/// has to be a real month, so `Day 2 - 5 temples` finds nothing.
+///
+/// [monthFirstNumericDates] reads a numeric slash fragment (`3/11`) the same
+/// way [tryParseDateHeader] reads a whole numeric header, so one flip on the
+/// confirmation screen moves every date in the paste together.
+DateFragment? findDateFragment(
+  String text, {
+  bool monthFirstNumericDates = false,
+}) {
+  final found = <DateFragment>[];
+
+  for (final m in _fragmentIso.allMatches(text)) {
+    final month = int.parse(m.group(2)!);
+    final day = int.parse(m.group(3)!);
+    if (month < 1 || month > 12 || !_validDay(day)) continue;
+    found.add(DateFragment(
+      day: day,
+      month: month,
+      year: int.parse(m.group(1)!),
+      text: m.group(0)!,
+      start: m.start,
+      end: m.end,
+    ));
+    break;
+  }
+
+  for (final m in _fragmentDayMonth.allMatches(text)) {
+    final month = _month(m.group(2)!);
+    final day = int.parse(m.group(1)!);
+    if (month == null || !_validDay(day)) continue;
+    found.add(DateFragment(
+      day: day,
+      month: month,
+      year: m.group(3) != null ? int.parse(m.group(3)!) : null,
+      text: m.group(0)!,
+      start: m.start,
+      end: m.end,
+    ));
+    break;
+  }
+
+  for (final m in _fragmentMonthDay.allMatches(text)) {
+    final month = _month(m.group(1)!);
+    final day = int.parse(m.group(2)!);
+    if (month == null || !_validDay(day)) continue;
+    found.add(DateFragment(
+      day: day,
+      month: month,
+      year: m.group(3) != null ? int.parse(m.group(3)!) : null,
+      text: m.group(0)!,
+      start: m.start,
+      end: m.end,
+    ));
+    break;
+  }
+
+  for (final m in _fragmentNumeric.allMatches(text)) {
+    final first = int.parse(m.group(1)!);
+    final second = int.parse(m.group(2)!);
+    final dayFirstValid = _validDay(first) && second >= 1 && second <= 12;
+    final monthFirstValid = first >= 1 && first <= 12 && _validDay(second);
+    if (!dayFirstValid && !monthFirstValid) continue;
+    final readMonthFirst = monthFirstNumericDates
+        ? monthFirstValid
+        : (!dayFirstValid && monthFirstValid);
+    found.add(DateFragment(
+      day: readMonthFirst ? second : first,
+      month: readMonthFirst ? first : second,
+      year: m.group(3) != null ? _fullYear(int.parse(m.group(3)!)) : null,
+      text: m.group(0)!,
+      start: m.start,
+      end: m.end,
+      ambiguousNumericOrder:
+          dayFirstValid && monthFirstValid && first != second,
+    ));
+    break;
+  }
+
+  if (found.isEmpty) return null;
+  found.sort((a, b) {
+    final byStart = a.start.compareTo(b.start);
+    if (byStart != 0) return byStart;
+    return (b.end - b.start).compareTo(a.end - a.start);
+  });
+  return found.first;
+}
+
+final RegExp _edgeSeparators = RegExp(r'^[\s\-–—:,·|/]+|[\s\-–—:,·|/]+$');
+final RegExp _doubledSeparators = RegExp(r'\s*[,·|]\s*(?=[,·|])');
+
+/// [text] with [fragment] lifted out and the punctuation that joined them
+/// tidied away — `Tokyo, 14 June` becomes `Tokyo`, `14 June - Tokyo` becomes
+/// `Tokyo`, and `14 June` on its own becomes null rather than a place named
+/// after a date.
+String? textWithoutFragment(String text, DateFragment fragment) {
+  final rest =
+      text.substring(0, fragment.start) + text.substring(fragment.end);
+  final tidied = rest
+      .replaceAll(_doubledSeparators, '')
+      .replaceAll(_edgeSeparators, '')
+      .trim();
+  return tidied.isEmpty ? null : tidied;
+}

@@ -167,6 +167,87 @@ class Stop {
   String toString() => 'Stop(${time != null ? '${time!.toIso()} ' : ''}$text)';
 }
 
+
+/// A date the parser *recognized in a day's header but did not bind* to the
+/// day.
+///
+/// `Day 1 - Tokyo, 14 June` names a date, but a `Day N` header takes its date
+/// from where the day sits in the trip, not from a fragment in its title — so
+/// the fragment used to be swallowed whole into [ParsedDay.place] and the day
+/// then read "date open" while its own title said 14 June. It is neither bound
+/// nor discarded now: it is surfaced here, for the confirmation screen to
+/// offer as one tap.
+///
+/// [year] is null whenever the header did not spell one out; resolving it is
+/// the caller's decision (this package never guesses a year), which is why
+/// [resolved] returns null rather than picking one.
+class DateCandidate {
+  /// Day of month, 1-31.
+  final int day;
+
+  /// Month, 1-12.
+  final int month;
+
+  /// Four-digit year, when the header spelled one out.
+  final int? year;
+
+  /// The fragment exactly as written (`14 June`) — what the person can check
+  /// against their own paste.
+  final String text;
+
+  /// The whole of the header that carried it, as written, minus the `Day N`
+  /// part that made it a header (`Tokyo, 14 June`). The confirmation screen
+  /// quotes this back, so the person is answering about their own words
+  /// rather than about the parser's reading of them.
+  final String headerText;
+
+  /// True when this came from a numeric slash date that reads both ways
+  /// round. Mirrors [ParseResult.hasAmbiguousNumericDates], which is set for
+  /// the whole paste when any candidate or header is ambiguous.
+  final bool ambiguousNumericOrder;
+
+  const DateCandidate({
+    required this.day,
+    required this.month,
+    this.year,
+    required this.text,
+    required this.headerText,
+    this.ambiguousNumericOrder = false,
+  });
+
+  /// The concrete date, when the header spelled a year out; null otherwise.
+  DateTime? get resolved => year == null ? null : DateTime(year!, month, day);
+
+  /// The concrete date this candidate means in [year].
+  DateTime inYear(int year) => DateTime(year, month, day);
+
+  Map<String, dynamic> toJson() => {
+        'day': day,
+        'month': month,
+        'year': year,
+        'text': text,
+        'headerText': headerText,
+        'ambiguousNumericOrder': ambiguousNumericOrder,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DateCandidate &&
+      other.day == day &&
+      other.month == month &&
+      other.year == year &&
+      other.text == text &&
+      other.headerText == headerText &&
+      other.ambiguousNumericOrder == ambiguousNumericOrder;
+
+  @override
+  int get hashCode =>
+      Object.hash(day, month, year, text, headerText, ambiguousNumericOrder);
+
+  @override
+  String toString() => 'DateCandidate($text)';
+}
+
 /// One day of the trip: an optional date, an optional place, and its
 /// ordered stops.
 class ParsedDay {
@@ -208,6 +289,11 @@ class ParsedDay {
   /// than a header-introduced section.
   final SourceLine? headerSourceLine;
 
+  /// A date this day's header named that the parser did not bind — see
+  /// [DateCandidate]. Null when the header carried no such fragment, which
+  /// includes every header whose date *was* bound to [date].
+  final DateCandidate? dateCandidate;
+
   const ParsedDay({
     required this.index,
     this.date,
@@ -217,6 +303,7 @@ class ParsedDay {
     this.uncertainty,
     this.headerWeekday,
     this.headerSourceLine,
+    this.dateCandidate,
   });
 
   Map<String, dynamic> toJson() => {
@@ -228,6 +315,7 @@ class ParsedDay {
         'uncertainty': uncertainty?.slug,
         'headerWeekday': headerWeekday,
         'headerSourceLine': headerSourceLine?.toJson(),
+        'dateCandidate': dateCandidate?.toJson(),
       };
 
   @override

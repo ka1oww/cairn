@@ -1,23 +1,44 @@
 // APP STATE band (docs/architecture.md): the paste-and-confirm flow's state.
 //
 // This file is the flow's whole brain: it owns the pasted text, runs the
-// parser (the DOMAIN band — screens never name it), applies the person's
-// corrections, and persists the accepted itinerary through the seam. The
-// screens render the view models defined here and call the notifier's
-// methods; every type they see is declared in this band.
+// parser (the DOMAIN band — screens never name it), holds the person's
+// editable draft of what it read, and persists the accepted itinerary through
+// the seam. The screens render the view models defined here and call the
+// notifier's methods; every type they see is declared in this band.
 //
 // The shape of what gets shown is design round 8's
 // (docs/design/2026-08-22-round8-handoff.zip): the confident read, the doubt
 // surfaced per day with cause-specific copy, the one-tap month-first re-read,
 // the kept-aside lines with reasons, and the paste that could not be read.
+//
+// **The read-back is an editor.** The parse is a first draft, not a verdict:
+// every stop can be reworded, timed, reordered inside its day, moved to
+// another day, or set aside, and every day can be renamed and dated — all of
+// it before the plan is accepted. Two rules hold the whole thing together:
+//
+//  - **Nothing is ever demolished.** Removing a stop moves it to the
+//    set-aside with a reason, exactly where the parser's own unplaced lines
+//    sit, and dragging it back into a day restores it. There is no delete.
+//  - **A date the plan named is offered, never assumed.** A `Day N` header
+//    that says `Tokyo, 14 June` carries that date as a *candidate*
+//    (`ip.DateCandidate`); this layer works it up into a [DateSuggestion] the
+//    date sheet can draw, and only a tap binds it.
 import 'package:cairn_model/cairn_model.dart' as model;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
 import '../repositories/trip_repository.dart';
 import 'date_labels.dart';
+import 'day_view.dart';
 import 'ping_schedule.dart';
 import 'trip_providers.dart';
+
+/// The reason a set-aside line carries when the person took it out of a day
+/// themselves. Spelled once: it is persisted with the accepted plan, shown in
+/// the set-aside tile, and asserted in tests.
+const removedByYouExplanation =
+    'Removed by you — kept here, not deleted. Drag it back into a day to '
+    'put it back.';
 
 // ---------------------------------------------------------------------------
 // View models — everything a screen may see, spoken in screen terms.
@@ -36,16 +57,61 @@ enum DayDoubtCause {
   noStops,
 }
 
-/// One stop as the confirmation screen shows it: the text as pasted, and a
-/// time label exactly when the parser starred it (the star rule — a found,
-/// unhedged clock time — lives in the parser and is only echoed here).
+/// One stop as the confirmation screen shows it: the text as it now stands,
+/// and a time label exactly when there is a time — the star rule, which the
+/// parser sets on the first read and the person can set or clear afterwards.
+///
+/// [id] is how a tap or a drag names this stop back to the notifier. It is
+/// stable for as long as the draft lives, and a re-read of the whole paste
+/// mints new ones, because a re-read makes different stops.
 class ReviewStop {
+  final String id;
   final String text;
   final String? timeLabel;
 
-  const ReviewStop({required this.text, this.timeLabel});
+  const ReviewStop({required this.id, required this.text, this.timeLabel});
 
   bool get isStarred => timeLabel != null;
+}
+
+/// A date this day's own title named, worked up into everything the date
+/// sheet draws — `"Tokyo, 14 June" · 14 June · Sunday · day 1`.
+///
+/// Present only while the date is genuinely open: binding it, clearing it by
+/// hand, or leaving it open all put the suggestion away. Working out the year
+/// is this layer's one piece of arithmetic over the parser's refusal to guess
+/// one; the rule is written on `PasteFlow._resolveCandidate`.
+class DateSuggestion {
+  /// The day's title as the person wrote it (`Tokyo, 14 June`).
+  final String headerText;
+
+  /// The date-shaped part of it (`14 June`) — the part to draw emphasized.
+  final String fragment;
+
+  /// The date one tap would bind.
+  final DateTime date;
+
+  /// `14 June`.
+  final String dateLabel;
+
+  /// `Sunday`.
+  final String weekdayLabel;
+
+  final int dayNumber;
+
+  /// True when the title spelled the year out, so no year had to be worked
+  /// out at all.
+  final bool yearWasNamed;
+
+  const DateSuggestion({
+    required this.headerText,
+    required this.fragment,
+    required this.date,
+    required this.dateLabel,
+    required this.weekdayLabel,
+    required this.dayNumber,
+    required this.yearWasNamed,
+  });
 }
 
 /// What tapping an ask chip does. Screens switch on this and call the
@@ -120,8 +186,19 @@ class ReviewDay {
   /// what the plan *called* the day), `Kyoto`, or `Day 3`.
   final String title;
 
+  /// The place alone, as the day editor puts it in a text field. Null when
+  /// the header named none.
+  final String? place;
+
   /// `14 June`, or null while the date is open.
   final String? dateLabel;
+
+  /// The bound date, or null while it is open.
+  final DateTime? date;
+
+  /// The date this day's own title named and nobody has answered about yet.
+  /// Null the rest of the time.
+  final DateSuggestion? dateSuggestion;
 
   final List<ReviewStop> stops;
   final DayConfidence confidence;
@@ -133,7 +210,10 @@ class ReviewDay {
   const ReviewDay({
     required this.number,
     required this.title,
+    this.place,
     this.dateLabel,
+    this.date,
+    this.dateSuggestion,
     required this.stops,
     required this.confidence,
     this.doubt,
@@ -142,11 +222,24 @@ class ReviewDay {
   bool get needsEye => doubt != null;
 }
 
+/// A line kept out of the days — one the parser could not place, or one the
+/// person took out of a day themselves. Both are the same promise: nothing
+/// pasted is thrown away, and everything here can be dragged into a day.
 class KeptAsideLine {
+  final String id;
   final String text;
   final String explanation;
 
-  const KeptAsideLine({required this.text, required this.explanation});
+  /// True when this line is here because the person removed it, rather than
+  /// because the parser could not place it.
+  final bool removedByPerson;
+
+  const KeptAsideLine({
+    required this.id,
+    required this.text,
+    required this.explanation,
+    this.removedByPerson = false,
+  });
 }
 
 /// Everything the confirmation screen renders.
@@ -182,6 +275,10 @@ class ItineraryReview {
   int get unsureCount => days.where((d) => d.needsEye).length;
 
   int get cleanCount => days.length - unsureCount;
+
+  /// True once the person has taken something out of a day — the set-aside
+  /// tile stops being only "lines I couldn't place" and has to say so.
+  bool get anyRemovedByPerson => keptAside.any((l) => l.removedByPerson);
 }
 
 sealed class PasteFlowState {
@@ -202,6 +299,104 @@ class PasteReview extends PasteFlowState {
   final ItineraryReview review;
 
   const PasteReview(this.review);
+}
+
+// ---------------------------------------------------------------------------
+// The draft — the read as the person is editing it, before it is accepted.
+//
+// Deliberately mutable and deliberately private: it is the one place an edit
+// lands, and every [ItineraryReview] is built fresh from it, so no screen can
+// hold a stale half of it.
+// ---------------------------------------------------------------------------
+
+class _DraftStop {
+  _DraftStop({
+    required this.id,
+    required this.text,
+    this.time,
+    required this.sourceLineNumber,
+  });
+
+  final String id;
+  String text;
+  model.ClockTime? time;
+
+  /// Where this came from in the paste, or 0 for a stop the person typed.
+  /// Carried so a stop set aside again lands back in the kept list with the
+  /// line number it was pasted on.
+  final int sourceLineNumber;
+}
+
+class _DraftDay {
+  _DraftDay({
+    required this.number,
+    this.place,
+    this.date,
+    this.candidate,
+    required this.confidence,
+    this.uncertainty,
+    this.headerWeekday,
+    required this.stops,
+  });
+
+  final int number;
+  String? place;
+  DateTime? date;
+
+  /// The date the day's own title named, as the parser reported it.
+  final ip.DateCandidate? candidate;
+
+  /// True once the person has answered about [candidate] — by binding it, by
+  /// dating the day some other way, or by saying leave it open. The
+  /// suggestion is offered once, not nagged.
+  bool candidateAnswered = false;
+
+  final ip.Confidence confidence;
+  final ip.DayUncertainty? uncertainty;
+  final int? headerWeekday;
+  final List<_DraftStop> stops;
+
+  /// True once the person has said this day reads right as it stands.
+  bool confirmed = false;
+
+  /// The stop count [confirmed] was last true for. A day whose stop count
+  /// has since moved away from this is no longer answered for — emptiness is
+  /// live state, not a verdict the parser or the person handed down once.
+  int confirmedStopCount = 0;
+}
+
+class _DraftAside {
+  _DraftAside({
+    required this.id,
+    required this.text,
+    required this.explanation,
+    required this.sourceLineNumber,
+    this.time,
+    this.removedByPerson = false,
+  });
+
+  final String id;
+  final String text;
+  final String explanation;
+  final int sourceLineNumber;
+
+  /// Kept so putting a removed stop back is lossless — its time comes with
+  /// it.
+  final model.ClockTime? time;
+  final bool removedByPerson;
+}
+
+class _Draft {
+  _Draft({required this.days, required this.aside});
+
+  final List<_DraftDay> days;
+  final List<_DraftAside> aside;
+}
+
+class _FoundStop {
+  const _FoundStop(this.day, this.stop);
+  final _DraftDay day;
+  final _DraftStop stop;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,12 +435,13 @@ class PasteFlow extends Notifier<PasteFlowState> {
 
   ip.ParseResult? _result;
 
-  /// The person's per-day answers, keyed by the parser's 1-based day index.
-  /// Cleared by anything that re-reads the whole paste ([readMonthFirst],
-  /// [useYear]): a re-read moves the ground the answers stood on.
-  final Map<int, DateTime> _pickedDates = {};
-  final Set<int> _confirmedDays = {};
-  final Map<int, List<String>> _addedStops = {};
+  /// The read as it is being edited. Rebuilt from scratch by anything that
+  /// re-reads the whole paste ([readMonthFirst], [useYear]): a re-read makes
+  /// different stops, so the edits made to the old ones have nothing left to
+  /// hold on to.
+  _Draft? _draft;
+
+  var _nextId = 0;
 
   @override
   PasteFlowState build() => const PasteEditing();
@@ -255,7 +451,6 @@ class PasteFlow extends Notifier<PasteFlowState> {
     _text = text;
     _monthFirst = false;
     _tripStartHint = null;
-    _clearAnswers();
     _reparse();
   }
 
@@ -264,7 +459,6 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// through.
   void readMonthFirst(bool monthFirst) {
     _monthFirst = monthFirst;
-    _clearAnswers();
     _reparse();
   }
 
@@ -273,25 +467,159 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// second-guessing it.
   void useYear(int year) {
     _tripStartHint = DateTime(year, 1, 1);
-    _clearAnswers();
     _reparse();
   }
 
+  // -- editing a day -------------------------------------------------------
+
   void setDayDate(int dayNumber, DateTime date) {
-    _pickedDates[dayNumber] = DateTime(date.year, date.month, date.day);
+    final day = _dayNumbered(dayNumber);
+    if (day == null) return;
+    day.date = DateTime(date.year, date.month, date.day);
+    day.candidateAnswered = true;
+    _rebuildReview();
+  }
+
+  /// The date sheet's one-tap yes: bind the date the day's own title named.
+  void useDateSuggestion(int dayNumber) {
+    final day = _dayNumbered(dayNumber);
+    final suggestion = day == null ? null : _suggestionFor(day);
+    if (suggestion == null) return;
+    setDayDate(dayNumber, suggestion.date);
+  }
+
+  /// The date sheet's quiet other answer, and the day editor's way to undate
+  /// a day: the date goes back to open, and the suggestion is not offered
+  /// again. An open date is a legitimate state — never a contradiction with
+  /// a title that named one.
+  void leaveDateOpen(int dayNumber) {
+    final day = _dayNumbered(dayNumber);
+    if (day == null) return;
+    day.date = null;
+    day.candidateAnswered = true;
+    _rebuildReview();
+  }
+
+  /// Rename the day. An empty name is no name, not a day called "".
+  void renameDay(int dayNumber, String? place) {
+    final day = _dayNumbered(dayNumber);
+    if (day == null) return;
+    final trimmed = place?.trim();
+    day.place = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
     _rebuildReview();
   }
 
   void confirmDay(int dayNumber) {
-    _confirmedDays.add(dayNumber);
+    final day = _dayNumbered(dayNumber);
+    if (day == null) return;
+    day.confirmed = true;
+    day.confirmedStopCount = day.stops.length;
     _rebuildReview();
   }
 
+  // -- editing a stop ------------------------------------------------------
+
   void addStop(int dayNumber, String text) {
-    if (text.trim().isEmpty) return;
-    _addedStops.putIfAbsent(dayNumber, () => []).add(text.trim());
+    final day = _dayNumbered(dayNumber);
+    if (day == null) return;
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    day.stops.add(
+      _DraftStop(id: _mintId('stop'), text: trimmed, sourceLineNumber: 0),
+    );
     _rebuildReview();
   }
+
+  void editStopText(String stopId, String text) {
+    final found = _findStop(stopId);
+    final trimmed = text.trim();
+    if (found == null || trimmed.isEmpty) return;
+    found.stop.text = trimmed;
+    _rebuildReview();
+  }
+
+  /// Give a stop a time, or take it away — which is also what stars it and
+  /// unstars it, because a time is the only star rule there is.
+  void setStopTime(String stopId, int hour, int minute) {
+    final found = _findStop(stopId);
+    if (found == null) return;
+    found.stop.time = model.ClockTime(hour, minute);
+    _rebuildReview();
+  }
+
+  void clearStopTime(String stopId) {
+    final found = _findStop(stopId);
+    if (found == null) return;
+    found.stop.time = null;
+    _rebuildReview();
+  }
+
+  /// Put [stopId] at position [toIndex] of day [toDayNumber].
+  ///
+  /// One method for both gestures on purpose: rearranging inside a day and
+  /// moving to another day are the same drag, and the caller does not have to
+  /// know which one it just made. [toIndex] is a slot in the day's list *as
+  /// it stands now* — slot 0 is before the first stop, slot `length` is after
+  /// the last — so a within-day move accounts for the stop leaving its old
+  /// place first. Null means the end.
+  void moveStop(String stopId, {required int toDayNumber, int? toIndex}) {
+    final found = _findStop(stopId);
+    final target = _dayNumbered(toDayNumber);
+    if (found == null || target == null) return;
+    final fromIndex = found.day.stops.indexOf(found.stop);
+    var index = toIndex ?? target.stops.length;
+    if (identical(found.day, target)) {
+      if (index > fromIndex) index -= 1;
+      if (index == fromIndex) return;
+    }
+    found.day.stops.removeAt(fromIndex);
+    target.stops.insert(index.clamp(0, target.stops.length), found.stop);
+    _rebuildReview();
+  }
+
+  /// Take a stop out of its day. **Never a delete**: it lands in the
+  /// set-aside beside the lines the parser could not place, with its reason,
+  /// and dragging it back into a day puts it back exactly as it was.
+  void removeStop(String stopId) {
+    final found = _findStop(stopId);
+    if (found == null) return;
+    found.day.stops.remove(found.stop);
+    _draft!.aside.add(
+      _DraftAside(
+        id: _mintId('aside'),
+        text: found.stop.text,
+        explanation: removedByYouExplanation,
+        sourceLineNumber: found.stop.sourceLineNumber,
+        time: found.stop.time,
+        removedByPerson: true,
+      ),
+    );
+    _rebuildReview();
+  }
+
+  /// The other direction: a kept line becomes a stop of day [toDayNumber].
+  /// The bullet a pasted line was written with is stripped the same way the
+  /// parser strips one, so a restored line reads like every other stop.
+  void restoreAside(String asideId, {required int toDayNumber, int? toIndex}) {
+    final draft = _draft;
+    final target = _dayNumbered(toDayNumber);
+    if (draft == null || target == null) return;
+    final index = draft.aside.indexWhere((l) => l.id == asideId);
+    if (index < 0) return;
+    final line = draft.aside.removeAt(index);
+    target.stops.insert(
+      (toIndex ?? target.stops.length).clamp(0, target.stops.length),
+      _DraftStop(
+        id: _mintId('stop'),
+        text: ip.stripBullet(line.text),
+        time: line.time,
+        sourceLineNumber: line.sourceLineNumber,
+      ),
+    );
+    _rebuildReview();
+  }
+
+  // -- leaving -------------------------------------------------------------
 
   /// Back to the paste box, the current paste kept.
   void startOver() {
@@ -320,46 +648,39 @@ class PasteFlow extends Notifier<PasteFlowState> {
     _monthFirst = false;
     _tripStartHint = null;
     _result = null;
-    _clearAnswers();
+    _draft = null;
     state = const PasteEditing();
   }
 
-  /// Persists the confirmation through the seam. The itinerary is local-only
-  /// in this slice; syncing it as a shared fact is later work
+  /// Persists the confirmation through the seam — the draft as the person
+  /// left it, not the parse it started as. The itinerary is local-only in
+  /// this slice; syncing it as a shared fact is later work
   /// (docs/decisions/2026-08-22-grill-round-one.md §2).
   Future<void> accept() async {
-    final result = _result;
-    if (result == null) return;
+    final draft = _draft;
+    if (draft == null) return;
     final itinerary = ConfirmedItinerary(
       days: [
-        for (final day in result.days)
+        for (final day in draft.days)
           ConfirmedDay(
-            number: day.index,
-            date: switch (_effectiveDate(day)) {
+            number: day.number,
+            date: switch (day.date) {
               null => null,
               final d => model.CalendarDate.fromDateTimeIgnoringZone(d),
             },
             place: day.place,
             stops: [
               for (final stop in day.stops)
-                model.Stop(
-                  text: stop.text,
-                  time: switch (stop.time) {
-                    null => null,
-                    final t => model.ClockTime(t.hour, t.minute),
-                  },
-                ),
-              for (final added in _addedStops[day.index] ?? const <String>[])
-                model.Stop(text: added),
+                model.Stop(text: stop.text, time: stop.time),
             ],
           ),
       ],
       keptAside: [
-        for (final line in result.unplacedLines)
+        for (final line in draft.aside)
           KeptLine(
-            sourceLineNumber: line.sourceLine.lineNumber,
-            text: line.sourceLine.text.trim(),
-            explanation: line.reason.explanation,
+            sourceLineNumber: line.sourceLineNumber,
+            text: line.text,
+            explanation: line.explanation,
           ),
       ],
     );
@@ -385,67 +706,118 @@ class PasteFlow extends Notifier<PasteFlowState> {
 
   // -- internals -----------------------------------------------------------
 
-  void _clearAnswers() {
-    _pickedDates.clear();
-    _confirmedDays.clear();
-    _addedStops.clear();
+  String _mintId(String prefix) => '$prefix-${_nextId++}';
+
+  _DraftDay? _dayNumbered(int number) {
+    for (final day in _draft?.days ?? const <_DraftDay>[]) {
+      if (day.number == number) return day;
+    }
+    return null;
+  }
+
+  _FoundStop? _findStop(String id) {
+    for (final day in _draft?.days ?? const <_DraftDay>[]) {
+      for (final stop in day.stops) {
+        if (stop.id == id) return _FoundStop(day, stop);
+      }
+    }
+    return null;
   }
 
   void _reparse() {
-    _result = ip.parseItinerary(
+    final result = ip.parseItinerary(
       _text,
       tripStartDate: _tripStartHint,
       monthFirstNumericDates: _monthFirst,
+    );
+    _result = result;
+    _nextId = 0;
+    _draft = _Draft(
+      days: [
+        for (final day in result.days)
+          _DraftDay(
+            number: day.index,
+            place: day.place,
+            date: day.date,
+            candidate: day.dateCandidate,
+            confidence: day.confidence,
+            uncertainty: day.uncertainty,
+            headerWeekday: day.headerWeekday,
+            stops: [
+              for (final stop in day.stops)
+                _DraftStop(
+                  id: _mintId('stop'),
+                  text: stop.text,
+                  time: switch (stop.time) {
+                    null => null,
+                    final t => model.ClockTime(t.hour, t.minute),
+                  },
+                  sourceLineNumber: stop.sourceLine.lineNumber,
+                ),
+            ],
+          ),
+      ],
+      aside: [
+        for (final line in result.unplacedLines)
+          _DraftAside(
+            id: _mintId('aside'),
+            text: line.sourceLine.text.trim(),
+            explanation: line.reason.explanation,
+            sourceLineNumber: line.sourceLine.lineNumber,
+          ),
+      ],
     );
     _rebuildReview();
   }
 
   void _rebuildReview() {
     final result = _result;
-    if (result == null) return;
-    state = PasteReview(_buildReview(result));
-  }
-
-  DateTime? _effectiveDate(ip.ParsedDay day) =>
-      _pickedDates[day.index] ?? day.date;
-
-  ItineraryReview _buildReview(ip.ParseResult result) {
+    final draft = _draft;
+    if (result == null || draft == null) return;
     final nothingRead = result.usedHeaderlessFallback || result.days.isEmpty;
-    return ItineraryReview(
-      days: nothingRead
-          ? const []
-          : [for (final day in result.days) _buildDay(day, result.days)],
-      keptAside: [
-        for (final line in result.unplacedLines)
-          KeptAsideLine(
-            text: line.sourceLine.text.trim(),
-            explanation: line.reason.explanation,
-          ),
-      ],
-      offerMonthFirstFix: result.hasAmbiguousNumericDates,
-      readMonthFirst: _monthFirst,
-      nothingRead: nothingRead,
-      keptLines: nothingRead
-          ? [
-              for (final line in _text.split('\n'))
-                if (line.trim().isNotEmpty) line.trim(),
-            ]
-          : const [],
+    state = PasteReview(
+      ItineraryReview(
+        days: nothingRead
+            ? const []
+            : [for (final day in draft.days) _buildDay(day, draft)],
+        keptAside: [
+          for (final line in draft.aside)
+            KeptAsideLine(
+              id: line.id,
+              text: line.text,
+              explanation: line.explanation,
+              removedByPerson: line.removedByPerson,
+            ),
+        ],
+        offerMonthFirstFix: result.hasAmbiguousNumericDates,
+        readMonthFirst: _monthFirst,
+        nothingRead: nothingRead,
+        keptLines: nothingRead
+            ? [
+                for (final line in _text.split('\n'))
+                  if (line.trim().isNotEmpty) line.trim(),
+              ]
+            : const [],
+      ),
     );
   }
 
-  ReviewDay _buildDay(ip.ParsedDay day, List<ip.ParsedDay> allDays) {
-    final date = _effectiveDate(day);
-    final doubt = _doubtFor(day, allDays, date);
+  ReviewDay _buildDay(_DraftDay day, _Draft draft) {
+    final doubt = _doubtFor(day, draft);
     return ReviewDay(
-      number: day.index,
-      title: _titleFor(day, date),
-      dateLabel: date == null ? null : dayMonthLabel(date),
+      number: day.number,
+      title: _titleFor(day),
+      place: day.place,
+      dateLabel: day.date == null ? null : dayMonthLabel(day.date!),
+      date: day.date,
+      dateSuggestion: _suggestionFor(day),
       stops: [
         for (final stop in day.stops)
-          ReviewStop(text: stop.text, timeLabel: stop.time?.toIso()),
-        for (final added in _addedStops[day.index] ?? const <String>[])
-          ReviewStop(text: added),
+          ReviewStop(
+            id: stop.id,
+            text: stop.text,
+            timeLabel: stop.time?.iso,
+          ),
       ],
       confidence: doubt == null
           ? DayConfidence.high
@@ -458,7 +830,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
     );
   }
 
-  String _titleFor(ip.ParsedDay day, DateTime? date) {
+  String _titleFor(_DraftDay day) {
+    final date = day.date;
     final String? weekdayPart;
     if (date != null) {
       weekdayPart = weekdayName(date.weekday);
@@ -472,28 +845,81 @@ class PasteFlow extends Notifier<PasteFlowState> {
     if (weekdayPart != null && place != null) return '$weekdayPart · $place';
     if (weekdayPart != null) return weekdayPart;
     if (place != null) return place;
-    return 'Day ${day.index}';
+    return 'Day ${day.number}';
+  }
+
+  /// The one-tap date offer for a day whose own title named a date, or null
+  /// when there is nothing to offer: no candidate, a date already bound, or
+  /// the person has already answered about it.
+  DateSuggestion? _suggestionFor(_DraftDay day) {
+    final candidate = day.candidate;
+    if (candidate == null || day.candidateAnswered || day.date != null) {
+      return null;
+    }
+    final date = _resolveCandidate(candidate);
+    return DateSuggestion(
+      headerText: candidate.headerText,
+      fragment: candidate.text,
+      date: date,
+      dateLabel: dayMonthLabel(date),
+      weekdayLabel: weekdayName(date.weekday),
+      dayNumber: day.number,
+      yearWasNamed: candidate.year != null,
+    );
+  }
+
+  /// **The year rule.** The parser will not guess a year, and neither does
+  /// this: `14 June` is offered in the year the rest of the plan is already
+  /// in — the first date bound anywhere in it — and only when *nothing* in
+  /// the plan is dated does the device's own date answer instead. A date
+  /// that would then sit more than a month behind that reference means next
+  /// year's one, which is the rolling rule the parser applies to a year-less
+  /// date header.
+  ///
+  /// The sheet shows the weekday it worked out, so a year worked out wrong is
+  /// visible before it is bound rather than after.
+  DateTime _resolveCandidate(ip.DateCandidate candidate) {
+    if (candidate.year != null) return candidate.inYear(candidate.year!);
+    final reference = _yearReference();
+    final inReferenceYear = candidate.inYear(reference.year);
+    return inReferenceYear.difference(reference).inDays < -30
+        ? candidate.inYear(reference.year + 1)
+        : inReferenceYear;
+  }
+
+  DateTime _yearReference() {
+    for (final day in _draft?.days ?? const <_DraftDay>[]) {
+      final date = day.date;
+      if (date != null) return DateTime(date.year, date.month, date.day);
+    }
+    final today = ref.read(todayProvider);
+    return DateTime(today.year, today.month, today.day);
   }
 
   /// The surfaced doubt for a day, or null when it reads clean — either the
   /// parser was sure, or the person has answered.
-  DayDoubt? _doubtFor(
-    ip.ParsedDay day,
-    List<ip.ParsedDay> allDays,
-    DateTime? effectiveDate,
-  ) {
+  DayDoubt? _doubtFor(_DraftDay day, _Draft draft) {
+    if (day.confirmed) {
+      if (day.stops.length == day.confirmedStopCount) return null;
+      final doubt = _emptiedDoubt(day);
+      if (doubt == null) day.confirmedStopCount = day.stops.length;
+      return doubt;
+    }
+
     final uncertainty = day.uncertainty;
-    if (uncertainty == null) return null;
-    if (_confirmedDays.contains(day.index)) return null;
+    if (uncertainty == null) return _emptiedDoubt(day);
 
     switch (uncertainty) {
       case ip.DayUncertainty.weekdayWithoutDate:
       case ip.DayUncertainty.dateWithoutYear:
         // A date answered — picked directly, or resolved by a whole-paste
         // year re-read — closes the question.
-        if (effectiveDate != null) return null;
+        if (day.date != null) return _emptiedDoubt(day);
       case ip.DayUncertainty.noStops:
-        if (_addedStops[day.index]?.isNotEmpty ?? false) return null;
+        // Anything in the day answers it, however it got there: typed in, or
+        // dragged in from another day or from the set-aside.
+        if (day.stops.isNotEmpty) return null;
+        return _emptyDayDoubt(ip.DayUncertainty.noStops.explanation);
       case ip.DayUncertainty.barePlaceName:
         break;
       case ip.DayUncertainty.headerlessBlock:
@@ -505,7 +931,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
     return switch (uncertainty) {
       ip.DayUncertainty.weekdayWithoutDate => _weekdayDoubt(
         day,
-        allDays,
+        draft,
         uncertainty.explanation,
       ),
       ip.DayUncertainty.dateWithoutYear => _yearDoubt(uncertainty.explanation),
@@ -518,29 +944,36 @@ class PasteFlow extends Notifier<PasteFlowState> {
             'own day — it read like one from where it sits. Your call:',
         options: const [DayAskOption("It's a day", ConfirmAsIs())],
       ),
-      ip.DayUncertainty.noStops => DayDoubt(
-        cause: DayDoubtCause.noStops,
-        explanation: uncertainty.explanation,
-        ask:
-            'Found the day, nothing in it. A rest day — or lines I '
-            "couldn't read?",
-        options: const [
-          DayAskOption('+ Add a stop', AddStop()),
-          DayAskOption('leave it empty', ConfirmAsIs()),
-        ],
-      ),
+      // Answered above, either way.
+      ip.DayUncertainty.noStops => null,
       // Unreachable: mapped to the nothing-read state above.
       ip.DayUncertainty.headerlessBlock => null,
     };
   }
 
-  DayDoubt _weekdayDoubt(
-    ip.ParsedDay day,
-    List<ip.ParsedDay> allDays,
-    String explanation,
-  ) {
+  /// A day the person emptied asks the same question a day that arrived empty
+  /// asks. Emptiness is a live state, not a verdict the parser handed down, so
+  /// a day whose last stop was dragged onto another day says so rather than
+  /// sitting there looking finished.
+  DayDoubt? _emptiedDoubt(_DraftDay day) => day.stops.isEmpty
+      ? _emptyDayDoubt('Nothing is under this day now.')
+      : null;
+
+  DayDoubt _emptyDayDoubt(String explanation) => DayDoubt(
+    cause: DayDoubtCause.noStops,
+    explanation: explanation,
+    ask:
+        'Found the day, nothing in it. A rest day — or does something '
+        'belong here?',
+    options: const [
+      DayAskOption('+ Add a stop', AddStop()),
+      DayAskOption('leave it empty', ConfirmAsIs()),
+    ],
+  );
+
+  DayDoubt _weekdayDoubt(_DraftDay day, _Draft draft, String explanation) {
     final named = day.headerWeekday!;
-    final candidate = _candidateDateFor(day, allDays);
+    final candidate = _candidateDateFor(day, draft);
 
     if (candidate == null) {
       return DayDoubt(
@@ -596,7 +1029,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
   }
 
   DayDoubt _yearDoubt(String explanation) {
-    final thisYear = DateTime.now().year;
+    final thisYear = ref.read(todayProvider).year;
     return DayDoubt(
       cause: DayDoubtCause.dateWithoutYear,
       explanation: explanation,
@@ -612,14 +1045,14 @@ class PasteFlow extends Notifier<PasteFlowState> {
 
   /// Where the day would land if the days run consecutively: counted off the
   /// nearest neighbour that has a date. Offered as a chip, never assumed.
-  DateTime? _candidateDateFor(ip.ParsedDay day, List<ip.ParsedDay> allDays) {
-    final position = allDays.indexOf(day);
+  DateTime? _candidateDateFor(_DraftDay day, _Draft draft) {
+    final position = draft.days.indexOf(day);
     for (var i = position - 1; i >= 0; i--) {
-      final date = _effectiveDate(allDays[i]);
+      final date = draft.days[i].date;
       if (date != null) return date.add(Duration(days: position - i));
     }
-    for (var i = position + 1; i < allDays.length; i++) {
-      final date = _effectiveDate(allDays[i]);
+    for (var i = position + 1; i < draft.days.length; i++) {
+      final date = draft.days[i].date;
       if (date != null) return date.subtract(Duration(days: i - position));
     }
     return null;

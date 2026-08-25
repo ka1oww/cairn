@@ -57,7 +57,8 @@
       "headerSourceLine": {
         "lineNumber": 1,
         "text": "Day 1: Tokyo"
-      }
+      },
+      "dateCandidate": null
     }
   ],
   "unplacedLines": [],

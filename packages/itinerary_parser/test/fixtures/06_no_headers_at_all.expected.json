@@ -36,7 +36,8 @@
       "confidence": "low",
       "uncertainty": "headerless-block",
       "headerWeekday": null,
-      "headerSourceLine": null
+      "headerSourceLine": null,
+      "dateCandidate": null
     },
     {
       "index": 2,
@@ -74,7 +75,8 @@
       "confidence": "low",
       "uncertainty": "headerless-block",
       "headerWeekday": null,
-      "headerSourceLine": null
+      "headerSourceLine": null,
+      "dateCandidate": null
     }
   ],
   "unplacedLines": [],

@@ -42,7 +42,8 @@
       "headerSourceLine": {
         "lineNumber": 1,
         "text": "Sat 14 June - Tokyo"
-      }
+      },
+      "dateCandidate": null
     },
     {
       "index": 2,
@@ -86,7 +87,8 @@
       "headerSourceLine": {
         "lineNumber": 6,
         "text": "Monday - Kyoto"
-      }
+      },
+      "dateCandidate": null
     },
     {
       "index": 3,
@@ -99,7 +101,8 @@
       "headerSourceLine": {
         "lineNumber": 11,
         "text": "Tuesday"
-      }
+      },
+      "dateCandidate": null
     }
   ],
   "unplacedLines": [],
