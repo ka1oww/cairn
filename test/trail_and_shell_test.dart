@@ -345,7 +345,7 @@ void main() {
       (tester) async {
     await arriveOnTrail(tester, today: day(15));
 
-    await tester.tap(find.byKey(const Key('trip-overflow')));
+    await tester.tap(find.byKey(const Key('trip-sheet-open')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('start-over')));
     await tester.pumpAndSettle();

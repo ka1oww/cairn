@@ -4,6 +4,7 @@ import 'package:test/test.dart';
 void main() {
   final mum = MemberId('mum');
   final ava = MemberId('ava');
+  final jonas = MemberId('jonas');
   final stranger = MemberId('stranger');
 
   final kyoto =
@@ -88,10 +89,6 @@ void main() {
       );
     });
 
-    test('with a starter who is not on it', () {
-      expect(() => build(startedBy: stranger), throwsA(isA<ArgumentError>()));
-    });
-
     test('with someone joining on a day the trip never reaches', () {
       expect(
         () => build(members: [
@@ -115,13 +112,56 @@ void main() {
     });
 
     test('and not themselves', () {
-      // Leaving is a different thing, available to everyone, and what happens
-      // to a trip whose starter leaves is not settled anywhere.
+      // Leaving is a different thing and available to everyone. What happens
+      // when the starter takes it is the group below.
       expect(trip.canRemove(remover: mum, target: mum), isFalse);
     });
 
     test('and not somebody who is not on the trip', () {
       expect(trip.canRemove(remover: mum, target: stranger), isFalse);
+    });
+  });
+
+  // docs/decisions/2026-08-22-starter-and-container.md §1. A trip the starter
+  // has left is an ordinary trip, not a broken one: no dialog named a
+  // successor and no crown appeared on anyone, but the one power she held is
+  // somebody's, because the wrong-join case it exists for did not leave with
+  // her.
+  group('when the starter leaves, the power passes to the longest-standing', () {
+    final withoutMum = build(members: [
+      Member(id: ava, displayName: 'Ava', joinedOnDay: 3),
+      Member(id: jonas, displayName: 'Jonas'),
+    ]);
+
+    test('the trip is still a trip', () {
+      expect(withoutMum.isMember(mum), isFalse);
+      expect(withoutMum.startedBy, mum);
+    });
+
+    test('the holder is whoever has been here longest', () {
+      expect(withoutMum.removalPowerHolder, jonas);
+      expect(withoutMum.canRemove(remover: jonas, target: ava), isTrue);
+      expect(withoutMum.canRemove(remover: ava, target: jonas), isFalse);
+    });
+
+    test('and it is the starter for as long as she is here', () {
+      expect(build().removalPowerHolder, mum);
+    });
+
+    test('two people who joined on the same day still leave exactly one '
+        'holder, and every phone names the same one', () {
+      final sameDay = build(members: [
+        Member(id: ava, displayName: 'Ava'),
+        Member(id: jonas, displayName: 'Jonas'),
+      ]);
+      expect(sameDay.removalPowerHolder, ava);
+      // The party read back in the other order answers identically: the
+      // tie-break is the id, not the position in the list.
+      final reversed = build(members: [
+        Member(id: jonas, displayName: 'Jonas'),
+        Member(id: ava, displayName: 'Ava'),
+      ]);
+      expect(reversed.removalPowerHolder, ava);
     });
   });
 

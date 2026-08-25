@@ -5,7 +5,10 @@ import 'gate.dart';
 import 'ids.dart';
 import 'member.dart';
 import 'trip_clock.dart';
+import 'trip_close.dart';
 import 'trip_day.dart';
+import 'trip_invite.dart';
+import 'trip_powers.dart' as powers;
 
 /// The whole journey: who is on it, how long it runs, what the plan says, and
 /// what time it is.
@@ -17,9 +20,17 @@ final class Trip {
 
   /// The person who started the trip.
   ///
-  /// The only asymmetry in the party. They can remove someone
-  /// ([canRemove]); nothing else distinguishes them from anyone else, and in
-  /// particular the gate does not care who started the trip.
+  /// The only asymmetry in the party. Whoever holds the removal power can
+  /// remove someone ([canRemove]) and can delete the trip while it holds
+  /// nobody else's photos ([canDelete]); nothing else distinguishes them
+  /// from anyone else, and in particular the gate does not care who started
+  /// the trip.
+  ///
+  /// **They may have left.** A starter who leaves is not on [members] any
+  /// more, and the removal power passes to whoever has been here longest —
+  /// see [removalPowerHolder]. So this is the name of the person who started
+  /// the trip, for as long as the trip exists, and never a guarantee that
+  /// they are still on it.
   final MemberId startedBy;
 
   /// The clock the trip's members share.
@@ -30,7 +41,8 @@ final class Trip {
   /// see [TripDay.clock] — but only ever a clock fixed where that day started.
   final TripClock clock;
 
-  /// Everyone on the trip, including [startedBy]. Unmodifiable.
+  /// Everyone on the trip, [startedBy] included unless they have left.
+  /// Unmodifiable.
   final List<Member> members;
 
   /// The trip's days, day 1 first. Unmodifiable.
@@ -94,13 +106,10 @@ final class Trip {
         );
       }
     }
-    if (!seen.contains(startedBy)) {
-      throw ArgumentError.value(
-        startedBy,
-        'startedBy',
-        'the person who started the trip is on it',
-      );
-    }
+    // The starter is deliberately not required to be on the trip. Refusing
+    // to let them leave traps someone who has fallen out with the group, so
+    // the record lets them go and passes the removal power on instead
+    // (docs/decisions/2026-08-22-starter-and-container.md §1).
   }
 
   /// How many days the trip runs.
@@ -137,23 +146,67 @@ final class Trip {
   /// Whether [member] is on this trip.
   bool isMember(MemberId member) => memberOrNull(member) != null;
 
+  /// Who holds the removal power: [startedBy] while they are here, and
+  /// otherwise whoever has been on the trip longest. Never nobody.
+  ///
+  /// It is not a title and must never be drawn as one — see
+  /// `trip_powers.dart`, which is where this rule and the rest of the trip's
+  /// permission model are written.
+  MemberId get removalPowerHolder =>
+      powers.removalPowerHolder(startedBy: startedBy, members: members);
+
   /// Whether [remover] may remove [target] from the trip.
   ///
-  /// True only for the person who started the trip, removing somebody else.
-  /// This is the whole of the trip's permission model — there is no role to
-  /// grant, nothing else is asymmetric, and every other action is available to
-  /// every member equally.
+  /// The whole of the trip's permission asymmetry — there is no role to
+  /// grant, nothing else about a member is asymmetric, and every other
+  /// action is available to every member equally.
   ///
-  /// Removing yourself is not this: leaving a trip is something anyone can do
-  /// and is not modelled here, and what happens to a trip whose starter leaves
-  /// has not been decided (`supabase/README.md`, "No handling for a trip's
-  /// last owner leaving"). So this stays false for `remover == target` rather
-  /// than answering a question the record has not.
+  /// Removing yourself is not this: leaving a trip is something anyone can
+  /// do and is not a power, so this stays false for `remover == target`.
   bool canRemove({required MemberId remover, required MemberId target}) =>
-      remover == startedBy &&
-      remover != target &&
-      isMember(remover) &&
-      isMember(target);
+      powers.canRemoveMember(
+        remover: remover,
+        target: target,
+        startedBy: startedBy,
+        members: members,
+      );
+
+  /// Whether [member] may rename this trip. Any member may.
+  bool canRename(MemberId member) =>
+      powers.canRenameTrip(member: member, members: members);
+
+  /// Whether [member] may delete this trip.
+  ///
+  /// The starter's alone, and only while nobody else's photos are in it.
+  /// [holdsOtherMembersPhotos] is a fact about the pool, which this type
+  /// does not hold — the caller who can see the pool answers it.
+  bool canDelete(
+    MemberId member, {
+    required bool holdsOtherMembersPhotos,
+  }) =>
+      powers.canDeleteTrip(
+        member: member,
+        startedBy: startedBy,
+        members: members,
+        holdsOtherMembersPhotos: holdsOtherMembersPhotos,
+      );
+
+  /// Whether [member] may mint an invite code for this trip. Any member may.
+  bool canMintInvite(MemberId member) =>
+      powers.canMintInvite(member: member, members: members);
+
+  /// Whether [member] may revoke [invite]: whoever minted it, or the
+  /// starter.
+  bool canRevoke(MemberId member, TripInvite invite) => powers.canRevokeInvite(
+        member: member,
+        startedBy: startedBy,
+        mintedBy: invite.mintedBy,
+      );
+
+  /// The instant this trip closes to new photos, and with it the instant its
+  /// invite codes die: fourteen days after the last day seals
+  /// (`trip_close.dart`). The book is not this and never expires.
+  DateTime get closesAt => tripClosesAt(endsAt);
 
   /// Whether the day [pool] holds is open to [viewer] at [now], and why.
   ///

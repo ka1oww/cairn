@@ -2,6 +2,7 @@
 // truth per question; screens watch these and nothing below them.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../repositories/membership_repository.dart';
 import '../repositories/photo_repository.dart';
 import '../repositories/trip_repository.dart';
 
@@ -41,6 +42,38 @@ final photoStoreProvider = Provider<PhotoStore>(
   (ref) => throw UnimplementedError(
     'photoStoreProvider is bound in bootstrap.dart (or a test override)',
   ),
+);
+
+/// The trip's roster and its codes, read-only, bound by the composition root
+/// the same way. Kept a third repository rather than a method on the trip's:
+/// the itinerary is replaced wholesale, the pool only accumulates, and who is
+/// here changes for reasons that have nothing to do with either.
+final membershipRepositoryProvider = Provider<MembershipRepository>(
+  (ref) => throw UnimplementedError(
+    'membershipRepositoryProvider is bound in bootstrap.dart (or a test override)',
+  ),
+);
+
+/// The same trip, with its write path: starting it, naming it, minting and
+/// revoking a code, deleting it.
+///
+/// Separate from [membershipRepositoryProvider] for the reason the photo
+/// store is separate from the pool's read side — reading who is here and
+/// changing it are different privileges — and so a test can seed a party of
+/// eight through the read side alone.
+final membershipStoreProvider = Provider<MembershipStore>(
+  (ref) => throw UnimplementedError(
+    'membershipStoreProvider is bound in bootstrap.dart (or a test override)',
+  ),
+);
+
+/// The trip on this phone, or null while none has been started.
+///
+/// One subscription for the whole app, for the reason [savedItineraryProvider]
+/// is one: the roster feeds the ping's deal *and* the trip's own surface, and
+/// two streams over one store are two chances to disagree about who is here.
+final tripMembershipProvider = StreamProvider<TripMembership?>(
+  (ref) => ref.watch(membershipRepositoryProvider).watchMembership(),
 );
 
 /// Every photo in the trip's pool, straight off the seam.

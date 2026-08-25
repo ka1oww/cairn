@@ -140,9 +140,29 @@ so it is the only one with anything to withhold, and with no roster every photo
 on this phone is this phone's own — so the day being lived opens as soon as you
 answer it and there is nobody else's picture to hold back yet.
 
+**The trip is now a stored thing rather than an implied one.** Accepting a
+plan starts a trip: a roster in Drift, the fact of who started it, and three
+words to say to somebody so they can join. The permission model is
+`cairn_model`'s and nothing above it re-decides it — renaming and minting are
+flat, deleting is the starter's alone and only while the trip holds nobody
+else's photos, revoking belongs to whoever minted the code or to the starter,
+and the removal power passes silently to the longest-standing member if the
+starter leaves. There is no role column in the schema and there must never be
+one. The sheet over it hangs off the Trail's title and never a fourth tab: the
+roster with one quiet note per row, the live code with what it can and cannot
+do, rename, new words, and a delete that states its own refusal in writing.
+The pings are dealt across that roster now, so the stub member is gone.
+
+Two halves of it are honestly unfinished, and they are the same half twice: a
+phone can only ever write its own row, so the roster holds one person, and a
+code — real, canonical, revocable, dying with the trip — cannot admit anybody,
+because nothing carries a membership to another phone. Saying a code back is
+built and answers every case this phone can see; for a well-formed code
+belonging to somebody else's trip it says so plainly rather than spinning.
+That last step is Phase 2 and nothing else.
+
 The itinerary is local-only until it becomes the shared, propagated fact of
-Phase 2, and so is the ping's roster: the derivation is real but it is dealt
-for a party of one, because no member table exists yet. A pool of one phone's
+Phase 2. A pool of one phone's
 photos is likewise only half the Pool — nobody else's bytes can arrive until
 Phase 2 moves them, and that is also what the gate is waiting on to matter.
 Still not built: the day page's photo timeline, the Trail's filled node, and
@@ -162,7 +182,7 @@ tested.
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **The way in, Today, the Trail, the Pool and capture.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it — and the daily moment that fills it: the ping's schedule, the camera behind a seam, the pause and the word, written into a local photo index the Pool reads. The gate's rule landed with them and the Pool obeys it; the day page's own gated half waits on the photo timeline. Nothing registered with iOS yet. |
+| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them and the Pool obeys it (the day page's own gated half still waits on the photo timeline) — and now the trip as a stored fact: roster, starter, flat-but-gated powers, three-word codes that die with the trip, and the sheet off the Trail's title. Nothing registered with iOS yet; no code can reach another phone yet. |
 
 ---
 
@@ -287,11 +307,26 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
 
 **First release:**
 
-- Implement the starter, container and invite decisions, including three-word
-  codes that expire with the trip.
+- Carry a membership to another phone, which is the one thing standing between
+  a real invite code and somebody actually joining. Everything on this side of
+  it is built — roster, roles, three-word codes that die with the trip, and the
+  door that reads them back — and honestly says so when it cannot reach a trip.
+- Put the three-word grammar on the server: `supabase/migrations/` still mints
+  an 8-character code, still carries a per-invite `expires_at` (the single
+  timestamp the grace-window decision exists to prevent) and `max_uses`, and
+  still has starter-only rename/delete with no photo condition and no
+  succession. The phone and the schema now disagree about the same settled
+  decisions, and the schema is the half that is wrong.
 - The itinerary as a shared, propagated fact; membership changes reaching every
   phone.
-- The trip's close at trip end + 14 days — stored as its own rule.
+- The trip's close at trip end + 14 days as a *stored* rule. It is derived
+  correctly on the phone now (`cairn_model`'s `tripClosesAt`, which is what
+  kills an invite code), but it is derived from the plan each time rather than
+  being a fact of the trip everybody's phone agrees on — and the server knows
+  nothing of it.
+- The trip's own clock. Nothing stores one, so the trip is read at the
+  device's UTC offset in the two places that admit it, and the timezone power
+  the starter-and-container decision settled has nothing to act on yet.
 - Register the ping with iOS. The schedule is derived and handed to a
   `NotificationEdge`; nothing implements that edge against the OS, so the last
   inch of the ping — the buzz — is the piece still missing.
@@ -366,6 +401,11 @@ Each of these has already cost time, or is certain to.
   a green simulator run says the flow is right and says *nothing* about whether
   the camera path works. The real back camera has to be judged on a device, and
   only on a device.
+- **The person holding the phone is `me`, and their name is "You".** There is
+  no sign-in, so there is no account id to be. The roster row is real and every
+  photo is credited to it; only the id and the display name are local
+  constants, and they are the last stand-ins in the app state. They go when
+  sign-in lands, and every row written before then still says `me`.
 - **A photo row is an index; the photograph is a file beside it.** Locally that
   is Drift plus a file in the app's documents directory, mirroring Postgres
   plus R2 on the server. Deleting the row does not delete the photograph, and

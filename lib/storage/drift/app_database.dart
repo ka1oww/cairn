@@ -109,12 +109,106 @@ class Photos extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [ItineraryDays, ItineraryStops, ItinerarySetAsides, Photos])
+/// The trip itself: the facts that are true of it rather than of any one day.
+///
+/// **Exactly one row, always id 1.** There is one trip per phone until trips
+/// are shared (Phase 2, `docs/roadmap.md`), and a table with a fixed key is
+/// how that stays a fact the schema states rather than a convention the code
+/// remembers. When a phone can be on two trips this grows a real key and
+/// everything above it already asks for a trip by id.
+class TripFacts extends Table {
+  /// Always 1. See the class comment.
+  IntColumn get id => integer()();
+
+  /// The trip's id, as the ping derivation seeds itself from. Local until
+  /// Postgres mints a uuid for it.
+  TextColumn get tripId => text()();
+
+  /// What the trip is called, or null while nobody has named it. Any member
+  /// may rename it (docs/decisions/2026-08-22-starter-and-container.md §2),
+  /// so this column is not the starter's.
+  TextColumn get name => text().nullable()();
+
+  /// Who started the trip.
+  ///
+  /// A fact about the trip, never a rank on a membership row — which is why
+  /// it is a column here and there is no role column on [TripMembers]. They
+  /// may have left; see `cairn_model`'s `removalPowerHolder`.
+  TextColumn get startedByMemberId => text()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Who is on this trip.
+///
+/// **There is no role column and there must never be one.** Roles are flat
+/// (docs/decisions/2026-08-22-last-calls.md §1): the one asymmetry is who
+/// started the trip, and that is a column on [TripFacts]. A role here would
+/// be a rank a person carries, which is the thing the record refuses.
+///
+/// Only one row can be written today — this phone's own — because nothing
+/// carries anyone else's membership here yet. That is Phase 2's job, and
+/// this table is the shape it lands in.
+class TripMembers extends Table {
+  /// The member's id. The local person's is `localMemberId`; when accounts
+  /// exist this is the `profiles.id` uuid.
+  TextColumn get id => text()();
+
+  /// The name credited under this person's photos.
+  TextColumn get displayName => text()();
+
+  /// The 1-based day of the trip this person joined on. 1 for everyone who
+  /// was here before it started; a day-3 joiner gets days 1 and 2 freely.
+  IntColumn get joinedOnDay => integer().withDefault(const Constant(1))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// The invite codes minted for this trip.
+///
+/// **No expiry column.** A code dies when the trip closes and at no other
+/// time (`cairn_model`'s `tripClosesAt`), so storing an expiry here would be
+/// a second copy of the trip's ending, free to disagree with the first. The
+/// server's table does carry `expires_at`, and filling it from the trip's
+/// close is Phase 2's job.
+class TripInviteCodes extends Table {
+  /// The code as it is written down: `otter maple 42`. Canonical, so the
+  /// same code said two ways is one row.
+  TextColumn get code => text()();
+
+  /// Who minted it. Minting is flat — any member may
+  /// (docs/decisions/2026-08-22-starter-and-container.md §3) — and revoking
+  /// belongs to whoever minted it or to the starter, which is why this is
+  /// kept.
+  TextColumn get mintedByMemberId => text()();
+
+  TextColumn get mintedAtUtcIso => text()();
+
+  /// When it was shut, or null while it still admits people. Rotating a code
+  /// is minting a new one and revoking the old; a code is never repointed at
+  /// another trip, which the server refuses at the database level.
+  TextColumn get revokedAtUtcIso => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {code};
+}
+
+@DriftDatabase(tables: [
+  ItineraryDays,
+  ItineraryStops,
+  ItinerarySetAsides,
+  Photos,
+  TripFacts,
+  TripMembers,
+  TripInviteCodes,
+])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -132,6 +226,26 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 3) {
             await m.createTable(photos);
+          }
+          if (from < 4) {
+            await m.createTable(tripFacts);
+            await m.createTable(tripMembers);
+            await m.createTable(tripInviteCodes);
+            // A phone that already had a plan already had a trip: it was
+            // started here, by the person holding it, on the day they
+            // accepted the paste. Backfilling it is not inventing a fact --
+            // the alternative is a saved itinerary with nobody on it, which
+            // would deal no pings and show an empty roster.
+            await customStatement(
+              "insert into trip_facts (id, trip_id, started_by_member_id) "
+              "select 1, 'local-trip', 'me' "
+              "where exists (select 1 from itinerary_days)",
+            );
+            await customStatement(
+              "insert into trip_members (id, display_name, joined_on_day) "
+              "select 'me', 'You', 1 "
+              "where exists (select 1 from itinerary_days)",
+            );
           }
         },
       );
@@ -248,7 +362,123 @@ class AppDatabase extends _$AppDatabase {
   Future<int> updatePhotoWord({required String id, required String? word}) =>
       (update(photos)..where((t) => t.id.equals(id)))
           .write(PhotosCompanion(word: Value(word)));
+  // -------------------------------------------------------------- the trip
+
+  /// The trip's own facts, or null while this phone has not started one.
+  ///
+  /// The roster and the codes hang off this stream, so it is driven by all
+  /// three of the trip's tables and not by `trip_facts` alone. The itinerary
+  /// can play the simpler trick (`watchItineraryDays`) because every write
+  /// there rewrites the very table being watched; minting a code changes no
+  /// fact about the trip, and a stream watching only the facts would leave a
+  /// rotated code sitting on screen. The query selects the state that
+  /// actually moves so that no layer of stream de-duplication can swallow
+  /// the change.
+  Stream<TripFact?> watchTripFacts() => customSelect(
+        'select (select count(*) from trip_facts) as started, '
+        "(select coalesce(name, '') from trip_facts) as name, "
+        '(select count(*) from trip_members) as members, '
+        '(select count(*) from trip_invite_codes) as codes, '
+        '(select count(*) from trip_invite_codes '
+        'where revoked_at_utc_iso is not null) as revoked',
+        readsFrom: {tripFacts, tripMembers, tripInviteCodes},
+      ).watch().asyncMap((_) => select(tripFacts).getSingleOrNull());
+
+  Future<List<TripMember>> readTripMembers() => (select(tripMembers)
+        ..orderBy([
+          (t) => OrderingTerm.asc(t.joinedOnDay),
+          // One stable order for a party that must agree with every other
+          // phone's: `trip_moments` sorts the ids again anyway, and this is
+          // the same sort, so the roster reads the same everywhere.
+          (t) => OrderingTerm.asc(t.id),
+        ]))
+      .get();
+
+  Future<List<TripInviteCode>> readTripInviteCodes() =>
+      (select(tripInviteCodes)
+            ..orderBy([(t) => OrderingTerm.asc(t.mintedAtUtcIso)]))
+          .get();
+
+  /// Writes the trip and the person who started it, if there is not one.
+  ///
+  /// Idempotent, because accepting a plan is what starts a trip and a plan
+  /// can be accepted again (pasting a different one replaces the itinerary,
+  /// and replacing your own itinerary is not starting a second trip).
+  Future<void> startTripIfAbsent({
+    required String tripId,
+    required String starterId,
+    required String starterDisplayName,
+  }) {
+    return transaction(() async {
+      final existing = await select(tripFacts).getSingleOrNull();
+      if (existing != null) return;
+      await into(tripFacts).insert(TripFactsCompanion.insert(
+        id: const Value(_theOneTrip),
+        tripId: tripId,
+        startedByMemberId: starterId,
+      ));
+      await into(tripMembers).insert(
+        TripMembersCompanion.insert(
+          id: starterId,
+          displayName: starterDisplayName,
+        ),
+        mode: InsertMode.insertOrIgnore,
+      );
+    });
+  }
+
+  /// Renames the trip, or clears the name with null.
+  Future<int> renameTrip(String? name) =>
+      (update(tripFacts)..where((t) => t.id.equals(_theOneTrip)))
+          .write(TripFactsCompanion(name: Value(name)));
+
+  /// Records one minted code.
+  Future<int> insertInviteCode(InviteCodeRecord invite) =>
+      into(tripInviteCodes).insert(TripInviteCodesCompanion.insert(
+        code: invite.code,
+        mintedByMemberId: invite.mintedByMemberId,
+        mintedAtUtcIso: invite.mintedAtUtcIso,
+      ));
+
+  /// Shuts one code. Rotating is minting a new one and revoking the old;
+  /// nothing here ever repoints a code at a different trip.
+  Future<int> revokeInviteCode({
+    required String code,
+    required String atUtcIso,
+  }) =>
+      (update(tripInviteCodes)..where((t) => t.code.equals(code)))
+          .write(TripInviteCodesCompanion(revokedAtUtcIso: Value(atUtcIso)));
+
+  /// Deletes the whole trip from this phone: the plan, the pool's rows, the
+  /// roster, the codes and the trip itself.
+  ///
+  /// **The photographs themselves are not this method's to delete.** A photo
+  /// row is an index and the frame is a file beside it; nothing in the app
+  /// reconciles the two in either direction yet (`docs/roadmap.md`, "Things
+  /// that will bite"), and deleting files is not something to do for the
+  /// first time inside a transaction.
+  Future<void> deleteTripWholesale() {
+    return transaction(() async {
+      await delete(itineraryStops).go();
+      await delete(itinerarySetAsides).go();
+      await delete(itineraryDays).go();
+      await delete(photos).go();
+      await delete(tripInviteCodes).go();
+      await delete(tripMembers).go();
+      await delete(tripFacts).go();
+    });
+  }
 }
+
+/// The one trip's row key. See [TripFacts].
+const _theOneTrip = 1;
+
+/// The write-side shape [AppDatabase.insertInviteCode] accepts.
+typedef InviteCodeRecord = ({
+  String code,
+  String mintedByMemberId,
+  String mintedAtUtcIso,
+});
 
 /// The write-side shape [AppDatabase.insertPhoto] accepts.
 typedef PhotoRecord = ({

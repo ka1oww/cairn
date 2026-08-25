@@ -22,9 +22,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../app_state/paste_flow.dart';
 import '../app_state/trail_view.dart';
+import '../app_state/trip_settings.dart';
 import 'day_page.dart';
+import 'trip_sheet.dart';
 
 /// Where a node sits across the width, alternating left and right as the
 /// path winds. Fractions of the available width, taken from surface 2a's
@@ -86,16 +87,17 @@ class _Trail extends StatelessWidget {
 /// The trip, and where in it we are.
 ///
 /// The design's eyebrow above this line is the trip's own name ("JAPAN,
-/// JUNE"). No trip row is stored yet and this layer invents nothing, so the
-/// eyebrow is absent rather than guessed.
-class _Header extends StatelessWidget {
+/// JUNE"). A trip can be named now, so the name is here when there is one —
+/// and absent, rather than guessed from the plan, when nobody has named it.
+class _Header extends ConsumerWidget {
   const _Header({required this.view});
 
   final TrailView view;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final name = ref.watch(tripSettingsProvider).value?.name;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 14, 8, 0),
       child: Row(
@@ -105,6 +107,14 @@ class _Header extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (name != null)
+                  Text(
+                    name.toUpperCase(),
+                    key: const Key('trail-trip-name'),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 Text(
                   view.headline,
                   key: const Key('trail-headline'),
@@ -122,33 +132,24 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          const _TripOverflow(),
+          const _TripSheetButton(),
         ],
       ),
     );
   }
 }
 
-/// **Temporary.** The only route back to the paste box, moved off the day
-/// page and onto the trip's own title, which is where design surface 6e
-/// hangs everything trip-level ("off the trail's title, never a fourth
-/// tab"). It goes when the real trip-settings sheet lands: rename, invite,
-/// members, leave.
-class _TripOverflow extends ConsumerWidget {
-  const _TripOverflow();
+/// Everything trip-level, hanging off the trail's title and never off a
+/// fourth tab (surface 6e). The chevron the design grows on the title: it
+/// slides `TripSheet` over the trail.
+class _TripSheetButton extends StatelessWidget {
+  const _TripSheetButton();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      PopupMenuButton<void>(
-        key: const Key('trip-overflow'),
-        icon: const Icon(Icons.more_horiz),
-        itemBuilder: (context) => [
-          PopupMenuItem<void>(
-            key: const Key('start-over'),
-            onTap: () => ref.read(pasteFlowProvider.notifier).pasteAnother(),
-            child: const Text('Paste a different plan'),
-          ),
-        ],
+  Widget build(BuildContext context) => IconButton(
+        key: const Key('trip-sheet-open'),
+        icon: const Icon(Icons.expand_more),
+        onPressed: () => showTripSheet(context),
       );
 }
 

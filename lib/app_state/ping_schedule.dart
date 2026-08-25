@@ -17,27 +17,50 @@ import 'day_view.dart';
 import 'trip_providers.dart';
 
 // ---------------------------------------------------------------------------
-// The inputs that are not yet real.
+// The party, and the two inputs that are still not real.
 // ---------------------------------------------------------------------------
 
-/// **Local-only stand-ins.** The trip id and the roster are shared facts that
-/// arrive with accounts and trip membership in Phase 2 (`docs/roadmap.md`).
-/// Nothing creates a trip row or a member row yet, so this phone schedules a
-/// trip of one, under a fixed id.
+/// The id the trip started on this phone carries.
 ///
-/// The derivation itself is the real one and is not weakened by this: a party
-/// of one is a party, and `trip_moments` deals it a slot exactly as it deals
-/// eight. What a party of one cannot show is the property the package is
-/// *for* — that eight people never collide — and that stays untestable in the
-/// app until the roster is a real shared fact.
+/// One trip per phone until trips are shared, so it is a constant rather than
+/// a mint: the derivation seeds itself from it, and a phone that renamed its
+/// own trip id would re-deal every remaining day for no reason. Phase 2
+/// replaces it with the `trips.id` uuid, which every phone on the trip
+/// already agrees on.
 const localTripId = 'local-trip';
 
-/// See [localTripId]. Every photo taken on this phone is credited to this id
-/// until accounts exist.
+/// Who this phone is.
+///
+/// **Still a stand-in, and the last one here.** There is no sign-in, so there
+/// is no account id to be — the roster is real, this phone's row in it is
+/// real, and only the *name* of the person holding the phone is a local
+/// constant. Every photo taken here is credited to it.
 const localMemberId = 'me';
 
-final localPartyProvider =
-    Provider<tm.Party>((ref) => tm.Party(const [localMemberId]));
+/// What to call the person holding this phone until a sign-in says.
+///
+/// Not a placeholder name: the display name comes from the Google or Apple
+/// sign-in (docs/decisions/2026-08-22-design-calls.md §3) and there is no
+/// sign-in yet, so the roster says "You" rather than inventing somebody.
+const localMemberName = 'You';
+
+/// The party the day is dealt across: the trip's roster, exactly as stored.
+///
+/// **The party is an input, not an afterthought.** Each phone derives the
+/// whole day's assignment for everyone, which is what makes the schedule
+/// collision-free with no server in it; a derivation that knew only its own
+/// id could only hash that id, and independent hashes collide and cluster
+/// (`packages/trip_moments/README.md`).
+///
+/// Null while no trip has been started — the roster is empty, and a party of
+/// nobody is not a party to deal to. It is deliberately not a fallback party
+/// of one: an app with no trip has no pings, and inventing a member to
+/// schedule for would be scheduling a ping for a person who is not there.
+final tripPartyProvider = Provider<tm.Party?>((ref) {
+  final trip = ref.watch(tripMembershipProvider).value;
+  if (trip == null || trip.members.isEmpty) return null;
+  return tm.Party([for (final member in trip.members) member.id.value]);
+});
 
 /// The clock the trip is read in.
 ///
@@ -68,16 +91,24 @@ final nowProvider = Provider<DateTime>((ref) => DateTime.now().toUtc());
 /// person accepted with its date still open has no instant to be. Nothing
 /// here guesses one, for the same reason the parser and the day page do not.
 final pingScheduleProvider = Provider<List<tm.Ping>>((ref) {
+  final party = ref.watch(tripPartyProvider);
+  if (party == null) return const [];
   return pingsForPlan(
     plan: ref.watch(savedItineraryProvider).value,
-    party: ref.watch(localPartyProvider),
+    party: party,
     utcOffset: ref.watch(tripUtcOffsetProvider),
     memberId: localMemberId,
+    tripId: ref.watch(tripMembershipProvider).value?.tripId ?? localTripId,
   );
 });
 
 /// This phone's ping today, or null — today is not a day of the plan, its
 /// date is still open, or the day was too short to hold a slot for everyone.
+///
+/// "Too short for everyone" is a real answer now that the party is the real
+/// roster: eight people on a day that opens at 21:00 do not all get a slot,
+/// and fewer slots on a short day is correct rather than a shortfall to pad
+/// (docs/decisions/2026-08-22-last-calls.md §8).
 final todaysPingProvider = Provider<tm.Ping?>((ref) {
   final today = ref.watch(todayProvider);
   for (final ping in ref.watch(pingScheduleProvider)) {

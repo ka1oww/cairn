@@ -20,9 +20,13 @@ Two files sit outside the bands, deliberately:
   stack in dependency order — open the database, wrap it in the repository,
   bind the repository into Riverpod — and that something necessarily knows
   every layer. Confining that knowledge to one file is what keeps it out of
-  all the others: `app_state/` declares `tripRepositoryProvider` and
-  `photoRepositoryProvider` as unbound — each throws if read — and only
-  `bootstrap.dart` (and tests) may bind them.
+  all the others: `app_state/` declares `tripRepositoryProvider`,
+  `photoRepositoryProvider` and `membershipRepositoryProvider` as unbound —
+  each throws if read — and only `bootstrap.dart` (and tests) may bind them.
+  Two of those seams have a write half as well (`photoStoreProvider`,
+  `membershipStoreProvider`), and the app must bind each pair to the *same*
+  object; binding them apart is how a captured photo or a renamed trip
+  silently stops reaching the screen that reads it.
 - **`main.dart`** only calls `bootstrap.dart`.
 
 ## Where the framework bends the map, written down

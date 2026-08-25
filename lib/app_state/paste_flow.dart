@@ -16,6 +16,7 @@ import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
 import '../repositories/trip_repository.dart';
 import 'date_labels.dart';
+import 'ping_schedule.dart';
 import 'trip_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -291,17 +292,30 @@ class PasteFlow extends Notifier<PasteFlowState> {
     state = PasteEditing(initialText: _text);
   }
 
-  /// **Temporary**, until the Trail and the Pool bring the real container:
-  /// the day page's one way back. Hands the person an empty paste box;
+  /// **Temporary**, until a trip can be re-read without being thrown away:
+  /// the one way back to the paste box. Hands the person an empty paste box;
   /// accepting there replaces the saved plan.
   void pasteAnother() {
+    _forgetThePaste();
+    ref.read(repasteRequestedProvider.notifier).request();
+  }
+
+  /// The trip has been deleted, so the flow that made it starts again from
+  /// nothing. Deliberately not [startOver], which keeps the paste: deleting
+  /// is the one act that means gone, and handing back the plan somebody
+  /// just deleted would be the app arguing with them.
+  void forget() {
+    _forgetThePaste();
+    ref.read(repasteRequestedProvider.notifier).clear();
+  }
+
+  void _forgetThePaste() {
     _text = '';
     _monthFirst = false;
     _tripStartHint = null;
     _result = null;
     _clearAnswers();
     state = const PasteEditing();
-    ref.read(repasteRequestedProvider.notifier).request();
   }
 
   /// Persists the confirmation through the seam. The itinerary is local-only
@@ -344,6 +358,17 @@ class PasteFlow extends Notifier<PasteFlowState> {
       ],
     );
     await ref.read(tripRepositoryProvider).saveItinerary(itinerary);
+    // Accepting the plan is what starts the trip: it is the only door, and
+    // the person who accepted it is its starter — a fact about the trip
+    // rather than a rank on them (docs/decisions/2026-08-22-last-calls.md
+    // §1). It is idempotent, so pasting a different plan replaces the
+    // itinerary without starting a second trip or minting a second code.
+    await ref.read(membershipStoreProvider).startTrip(
+          tripId: localTripId,
+          starter: model.MemberId(localMemberId),
+          starterDisplayName: localMemberName,
+          now: ref.read(nowProvider),
+        );
     ref.read(repasteRequestedProvider.notifier).clear();
   }
 

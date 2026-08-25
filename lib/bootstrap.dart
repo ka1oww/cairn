@@ -12,6 +12,7 @@ import 'app_state/camera_source.dart';
 import 'app_state/day_view.dart';
 import 'app_state/ping_schedule.dart';
 import 'app_state/trip_providers.dart';
+import 'repositories/membership_repository.dart';
 import 'repositories/photo_repository.dart';
 import 'repositories/trip_repository.dart';
 import 'storage/drift/app_database.dart';
@@ -33,6 +34,13 @@ import 'storage/drift/app_database.dart';
 /// and both sides are bound to the same [PhotoStore], which is what makes the
 /// photo capture writes the photo the Pool draws — the two features share a
 /// store, not a wire between them.
+///
+/// [membership] is the same trick for the roster, and it is the only way to
+/// stand the party up at the size the product is for: this phone can write
+/// exactly one member row, so a test that wants to watch eight people get
+/// eight different minutes seeds the read side and leaves the write side
+/// bound to the store. Bind them to two different objects in the app and the
+/// trip's own surface would go blank the moment somebody renamed it.
 Widget bootstrapApp({
   AppDatabase? database,
   DateTime? today,
@@ -40,14 +48,18 @@ Widget bootstrapApp({
   Duration? utcOffset,
   CameraSource? camera,
   PhotoRepository? photos,
+  MembershipRepository? membership,
 }) {
   final db = database ?? openAppDatabase();
   final store = PhotoStore(db);
+  final roster = MembershipStore(db);
   return ProviderScope(
     overrides: [
       tripRepositoryProvider.overrideWithValue(TripRepository(db)),
       photoRepositoryProvider.overrideWithValue(photos ?? store),
       photoStoreProvider.overrideWithValue(store),
+      membershipRepositoryProvider.overrideWithValue(membership ?? roster),
+      membershipStoreProvider.overrideWithValue(roster),
       if (today != null) todayProvider.overrideWithValue(today),
       if (now != null) nowProvider.overrideWithValue(now),
       if (utcOffset != null) tripUtcOffsetProvider.overrideWithValue(utcOffset),

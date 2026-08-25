@@ -11,9 +11,20 @@ export 'src/day_pool.dart' show DayPool;
 export 'src/day_standing.dart' show DayStanding;
 export 'src/gate.dart' show GateState;
 export 'src/ids.dart' show MemberId, PhotoId, TripId;
+export 'src/invite_code.dart' show InviteCode;
 export 'src/member.dart' show Member;
 export 'src/photo_ref.dart' show PhotoOrigin, PhotoRef;
 export 'src/stop.dart' show Stop;
 export 'src/trip.dart' show Trip;
 export 'src/trip_clock.dart' show TripClock;
+export 'src/trip_close.dart' show graceAfterATrip, tripClosesAt;
 export 'src/trip_day.dart' show TripDay;
+export 'src/trip_invite.dart' show InviteStanding, TripInvite;
+export 'src/trip_powers.dart'
+    show
+        canDeleteTrip,
+        canMintInvite,
+        canRemoveMember,
+        canRenameTrip,
+        canRevokeInvite,
+        removalPowerHolder;
