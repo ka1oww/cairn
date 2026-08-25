@@ -32,10 +32,11 @@ keep, measured against a real camera roll rather than estimated.
 
 - **Flutter**, iOS only for now — there is no `android/` directory. Web and PWA
   were ruled out because iOS evicts PWA storage.
-- **Riverpod** for app state and **Drift** (SQLite) for the local database.
-  Chosen, and built on: the argument is made in `learning/riverpod-drift-demo/`
-  and the app commits code to both. Writing that choice down as a decision
-  record is queued work — see the honesty section of `docs/architecture.md`.
+- **Riverpod** for app state and **Drift** (SQLite) for the local database,
+  on Drift's native backend. Chosen, built on, and recorded in
+  `docs/decisions/2026-08-25-riverpod-and-drift.md`, which says what they were
+  weighed against; the argument was first made in working code in
+  `learning/riverpod-drift-demo/`.
 - **Supabase** (Postgres) and **Cloudflare R2** for the minimal backend, which
   holds only the shared facts: the photo pool, trip membership and the shared
   trip clock. The trail, the stars and the daily ping are computed on the

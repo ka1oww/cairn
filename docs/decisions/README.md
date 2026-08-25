@@ -30,5 +30,6 @@ Read in order:
 | [2026-08-22 — paying later](2026-08-22-paying-later.md) | The Apple $99 waits until the weekend test with friends — the first moment the app must reach someone else's phone |
 | [2026-08-22 — the December target](2026-08-22-december-target.md) | No trip is in the calendar; December is the chosen anchor, with six weeks of slack and the two things that would spend it |
 | [2026-08-23 — the book's treatment](2026-08-23-book-treatment.md) | The blend is settled: the book may only look handmade in ways that are true |
+| [2026-08-25 — Riverpod and Drift](2026-08-25-riverpod-and-drift.md) | The stack the app is already built on, written down: what `setState`, `provider`, `bloc`, `sqflite`, Hive and Isar were weighed against, and the evidence the demo and the scaffold produced |
 
 Design handoffs that implement these live in [`../design/`](../design/).
