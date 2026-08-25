@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cairn/app_state/day_view.dart';
 import 'package:cairn/app_state/trip_providers.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/repositories/photo_repository.dart';
 import 'package:cairn/repositories/trip_repository.dart';
 import 'package:cairn/screens/day_page.dart';
 import 'package:cairn/storage/drift/app_database.dart';
@@ -101,15 +102,20 @@ void main() {
   /// Flutter reuses the element and hands it a shorter override list; the
   /// key makes it a new scope instead. It fails the moment `bootstrapApp`
   /// binds a provider this helper does not, which is exactly what happened
-  /// when the Pool's seam arrived.
-  Widget dayPageAt(DateTime date, {required DateTime today}) => ProviderScope(
-        key: UniqueKey(),
-        overrides: [
-          tripRepositoryProvider.overrideWithValue(TripRepository(db)),
-          todayProvider.overrideWithValue(today),
-        ],
-        child: MaterialApp(home: DayPage(date: date)),
-      );
+  /// when the Pool's seam arrived — and again when capture's did.
+  Widget dayPageAt(DateTime date, {required DateTime today}) {
+    final photos = PhotoStore(db);
+    return ProviderScope(
+      key: UniqueKey(),
+      overrides: [
+        tripRepositoryProvider.overrideWithValue(TripRepository(db)),
+        photoRepositoryProvider.overrideWithValue(photos),
+        photoStoreProvider.overrideWithValue(photos),
+        todayProvider.overrideWithValue(today),
+      ],
+      child: MaterialApp(home: DayPage(date: date)),
+    );
+  }
 
   /// The words under a key. Some keys sit on a `Text`, some on a small
   /// wrapper around one, so match either.

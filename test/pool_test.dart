@@ -6,9 +6,14 @@
 // paste_confirm_flow_test.dart; read that file's header before writing any
 // test that pumps the app.
 //
-// The pool is seeded through `bootstrapApp(photos:)` rather than written to,
-// because **there is no write path yet** — capture owns it. That is also why
-// the empty state is what the real app shows today.
+// The pool is seeded through `bootstrapApp(photos:)` rather than written to.
+// The write path exists now — capture owns it, and
+// `capture_flow_test.dart`'s "what you keep is what the Pool draws" is where
+// the two meet over one real store. These tests stay on a seeded pool
+// deliberately: a fixture of a known shape is how the *drawing* is exercised
+// (bytes here and bytes not here, a day the plan does not claim, a date still
+// open), and walking capture to build each of those would be testing capture
+// twice and the Pool not at all.
 //
 // Two things about the container shape these tests, as they shape
 // trail_and_shell_test.dart: every tab stays alive in the tree but the ones

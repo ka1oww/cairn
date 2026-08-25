@@ -43,9 +43,11 @@ it makes the rest of this file orderable:
 - **The book.** The payoff — but it is made *after* the trip, from photos
   already sitting in a pool. It does not need to exist while anyone is
   travelling, which is what makes the line drawable at all.
-- **Authored words.** Captions people write are printed by the book; they can
-  land with it. (There is still [no book editor](decisions/2026-08-22-book-no-editor.md),
-  in the first release or ever.)
+- **Writing a word later.** The one line typed at the breath shipped with
+  capture — the [no-book-editor decision](decisions/2026-08-22-book-no-editor.md)
+  put it on "a screen that already exists", and that screen is now built. What
+  is after the line is going back to your own print afterwards and writing on
+  it. (There is still no book editor, in the first release or ever.)
 - **The cat.** [Parked, not cut](decisions/2026-08-22-cat-deferred.md).
 - **The handover.** The end-of-trip save of the book and the full-size set to
   each person's own phone. The grace window means nothing is lost by it
@@ -68,8 +70,8 @@ estimated mid-to-late October; the slack is the point.
 
 ## Where this is now
 
-**Foundations are done. The app has a way in, and a trip with all three of
-its destinations in it.**
+**Foundations are done. The app has a way in, a trip with all three of its
+destinations in it, and — for the first time — something to put in them.**
 
 The paste-and-confirm flow is built and tested: paste a plan, see what the
 parser understood day by day with its doubt surfaced per cause, flip
@@ -110,15 +112,27 @@ than a skeleton grid, and a photo whose bytes are not on this phone is a tile
 waiting for them rather than a broken one, which is a permanent state of a
 pool eight people share.
 
-**The Pool is empty in the app as built, and that is the honest state.** What
-landed is the *read* seam — `PhotoRepository`, bound in `bootstrap.dart` to an
-in-memory pool with nothing in it — and the screen over it. Capture, the store
-behind it and every write path are a separate slice, and no photo can exist
-until they land.
+**Capture fills it, back-camera-only** — which is the line's own scope and not
+a shortcut, since the front inset is explicitly after the line. The whole loop
+is real: the schedule is dealt from `trip_moments` for every dated day of the
+plan, the day you are standing in says where your moment stands, an open or a
+late window offers the way in, the shutter takes a frame, the breath offers
+exactly one retake and one line of words, and keeping it writes a row into the
+photo index with the frame beside it on disk — where the Pool, reading the same
+store, draws it. A missed slot is never a lockout: the door stays open till
+midnight and what you take then lands at the hour it was taken.
+
+Two pieces of it are honestly unfinished. Nothing is registered with iOS yet,
+so no pocket actually buzzes; and where there is no camera (the Simulator) the
+app draws its own frame, so a green run there is not evidence the real camera
+path works.
 
 The itinerary is local-only until it becomes the shared, propagated fact of
-Phase 2. Photos themselves are still not built: capture, the store that holds
-them, the day page's photo timeline, the Trail's filled node, and the gate.
+Phase 2, and so is the ping's roster: the derivation is real but it is dealt
+for a party of one, because no member table exists yet. A pool of one phone's
+photos is likewise only half the Pool — nobody else's bytes can arrive until
+Phase 2 moves them. Still not built: the day page's photo timeline, the
+Trail's filled node, and the gate.
 Beneath it: four pure-Dart libraries, a backend schema, a
 dual-camera spike, the decision record, and the design handoffs, all
 tested.
@@ -133,7 +147,7 @@ tested.
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **The way in, Today, the Trail and the Pool.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, the shared pool's read seam and the screen over it, and the three-tab container holding them. Photos themselves, capture and the gate not started. |
+| The Flutter app | **The way in, Today, the Trail, the Pool and capture.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it — and the daily moment that fills it: the ping's schedule, the camera behind a seam, the pause and the word, written into a local photo index the Pool reads. The gate not started; nothing registered with iOS yet. |
 
 ---
 
@@ -265,7 +279,20 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
 - The itinerary as a shared, propagated fact; membership changes reaching every
   phone.
 - The trip's close at trip end + 14 days — stored as its own rule.
-- Back-only capture wired to today's page.
+- Register the ping with iOS. The schedule is derived and handed to a
+  `NotificationEdge`; nothing implements that edge against the OS, so the last
+  inch of the ping — the buzz — is the piece still missing.
+- Fetch other people's bytes into the pool. The Pool draws what this phone
+  took; a photo somebody else took is a tile waiting for bytes until Phase 2
+  moves them.
+- Show the frame on today's page and on the Trail's nodes, and put the live
+  viewfinder behind the shutter.
+- Authored words: the one line typed at the breath is built. What is *not* is
+  writing a word later on your own print, which the design places on the day
+  page rather than in capture. (This item used to sit below the line; the
+  no-book-editor decision puts the caption on "a screen that already exists"
+  and the design round puts it at the breath, so the capture half came with
+  capture. Only the write-it-later half is still after the line.)
 - The round-eight corrections beyond the asks: holding a chip to move a stop
   between days, renaming in place, laying days out by hand when nothing
   parsed. (The parser fix for hedged times and the round-eight API extension
@@ -275,7 +302,6 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
 
 - The book (automatic; photograph-fronted cover), and the printed page design
   that must be drawn in parallel before it.
-- Authored words at capture time.
 - The end-of-trip handover of the book and everyone's photos.
 - The two-frame camera (the front inset).
 - The cat.
@@ -322,6 +348,15 @@ Each of these has already cost time, or is certain to.
 - **Dart's `int` bitwise operators are 32-bit when compiled to JavaScript.** The
   ping derivation uses arithmetic rather than shifts for exactly this reason, and
   a golden test pins it. See `packages/trip_moments/`.
+- **The Simulator has no camera, so the app draws its own frame there.** That is
+  what makes the capture flow walkable without a cable, and it is also a trap:
+  a green simulator run says the flow is right and says *nothing* about whether
+  the camera path works. The real back camera has to be judged on a device, and
+  only on a device.
+- **A photo row is an index; the photograph is a file beside it.** Locally that
+  is Drift plus a file in the app's documents directory, mirroring Postgres
+  plus R2 on the server. Deleting the row does not delete the photograph, and
+  nothing yet reconciles the two in either direction.
 
 ---
 

@@ -16,12 +16,19 @@
 // The structure is 2f's: the day's identity, then a flat ordered list of the
 // stops as pasted. No progress tracking, no morning/afternoon split, no
 // "we're up to here" — every one of those is rejected in the decision
-// record. Photos arrive on this page in a later slice and are deliberately
+// record. The photo timeline arrives in a later slice and is deliberately
 // not stubbed here.
+//
+// One thing did arrive: **the call to your moment**, at the top of the day,
+// which is where the design puts it (the wash card of surface 12a's "later,
+// in the app"). It draws nothing at all unless today is asking something of
+// you, so a day you are only reading is unchanged.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app_state/capture_flow.dart';
 import '../app_state/day_view.dart';
+import 'capture_screen.dart';
 
 class DayPage extends ConsumerWidget {
   /// The day at [date] — Today, and any dated day the Trail opens.
@@ -46,7 +53,7 @@ class DayPage extends ConsumerWidget {
     return Scaffold(
       body: SafeArea(
         child: switch (view) {
-          AsyncData(value: final DayView day) => _Day(view: day),
+          AsyncData(value: final DayView day) => _Day(view: day, date: date),
           AsyncData() => const SizedBox.shrink(),
           AsyncError(:final error) =>
             Center(child: Text('Failed to read: $error')),
@@ -58,9 +65,14 @@ class DayPage extends ConsumerWidget {
 }
 
 class _Day extends StatelessWidget {
-  const _Day({required this.view});
+  const _Day({required this.view, this.date});
 
   final DayView view;
+
+  /// The date this page was opened on, or null when it was opened by the
+  /// plan's day number instead. Only a page that knows its date can be
+  /// today, and only today ever asks anything of you.
+  final DateTime? date;
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +92,7 @@ class _Day extends StatelessWidget {
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
+        if (date != null) _CaptureCall(date: date!),
         ...switch (view) {
           final PlannedDay day => _plannedDay(day),
           final GapDay day => _gapDay(day),
@@ -142,6 +155,68 @@ class _Day extends StatelessWidget {
         else
           _StopList(stops: view.lastDay.stops, isOver: true),
       ];
+}
+
+/// What today is asking of you, at the top of the day — or nothing at all,
+/// which is the usual.
+///
+/// It never says *when* your minute is. A ping you can see coming is a ping
+/// you can pose for, and the whole value of the scattered model is that the
+/// photograph is one nobody planned
+/// (docs/decisions/2026-08-22-the-moment.md).
+class _CaptureCall extends ConsumerWidget {
+  const _CaptureCall({required this.date});
+
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final call = ref.watch(captureCallProvider(date));
+    if (call is NoMomentHere) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final (String line, String? action) = switch (call) {
+      MomentAhead() => ('Your minute is somewhere in today.', null),
+      MomentOpen(isLastStretch: true) =>
+        ('Your minute. Last stretch.', 'Take it'),
+      MomentOpen() => ('Your minute. Look up.', 'Take it'),
+      // Surface 12a's wash card, and design-calls §7: no lockout, ever. A
+      // photo taken now carries its real hour and sits visibly late on the
+      // page, which is the only pressure the system applies.
+      MomentLate() => (
+          "Your minute came and went. The door's open till midnight.",
+          'Take it now',
+        ),
+      MomentAnswered(:final hourLabel) =>
+        ('Yours landed at $hourLabel.', null),
+      NoMomentHere() => ('', null),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(line,
+              key: const Key('capture-call'),
+              style: theme.textTheme.titleMedium),
+          if (action != null) ...[
+            const SizedBox(height: 8),
+            FilledButton(
+              key: const Key('capture-call-action'),
+              onPressed: () {
+                ref.read(captureFlowProvider.notifier).open();
+                Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (context) => const CaptureScreen(),
+                ));
+              },
+              child: Text(action),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 /// The day's identity: which day of the trip it is, then the day itself.
