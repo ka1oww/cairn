@@ -86,9 +86,15 @@ eight-day trip lands exactly on the 20-page minimum, `17f`'s gutter
 caption moves to the fore-edge to survive the binding (`18g`), the
 four-up surrenders its middle column to the fold (`18h`), and the
 printed colophon replaces `17g`'s button bar with derived facts and an
-ink specimen (`18i`). One question is escalated, not decided: how a
-written line dresses — four registers drawn and priced on the captain's
-board (`18e`), flagged `needs-decision` on the status file.
+ink specimen (`18i`). Round ten's last open question — how a written
+line dresses, four registers drawn and priced on the captain's board
+(`18e`) — was settled on 25 August: register 3, **typeset and set
+apart** (italic, full ink, the mount's own tilt), is the rule, and
+register 4, the writer's own finger-drawn strokes, is an **optional
+per-line flourish**, never required. Registers 1 and 2 are rejected —
+2 as the same lie round nine killed, now told about a real author. See
+[the line register](../decisions/2026-08-25-book-line-register.md). The
+governing rule: the book may only look handmade in ways that are true.
 
 ## Corrections to an exported round
 
