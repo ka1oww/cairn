@@ -1,0 +1,197 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": "Tokyo",
+      "stops": [
+        {
+          "text": "Land at Haneda, hotel in Shinjuku",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "Land at Haneda, hotel in Shinjuku"
+          }
+        },
+        {
+          "text": "Meiji Shrine walk",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 5,
+            "text": "- Meiji Shrine walk"
+          }
+        }
+      ],
+      "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 3,
+        "text": "Day 1 - Tokyo, 14 June"
+      },
+      "dateCandidate": {
+        "day": 14,
+        "month": 6,
+        "year": null,
+        "text": "14 June",
+        "headerText": "Tokyo, 14 June",
+        "ambiguousNumericOrder": false
+      }
+    },
+    {
+      "index": 2,
+      "date": null,
+      "place": "Tokyo",
+      "stops": [
+        {
+          "text": "TeamLab Planets 11am",
+          "time": {
+            "hour": 11,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 8,
+            "text": "- TeamLab Planets 11am"
+          }
+        },
+        {
+          "text": "Golden Gai at night",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 9,
+            "text": "- Golden Gai at night"
+          }
+        }
+      ],
+      "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 7,
+        "text": "Day 2 – Tokyo"
+      },
+      "dateCandidate": null
+    },
+    {
+      "index": 3,
+      "date": null,
+      "place": "Kyoto",
+      "stops": [
+        {
+          "text": "Fushimi Inari",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 12,
+            "text": "- Fushimi Inari"
+          }
+        },
+        {
+          "text": "10:12 train to Kyoto",
+          "time": {
+            "hour": 10,
+            "minute": 12
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 13,
+            "text": "- 10:12 train to Kyoto"
+          }
+        }
+      ],
+      "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 11,
+        "text": "Day 3: June 16 - Kyoto"
+      },
+      "dateCandidate": {
+        "day": 16,
+        "month": 6,
+        "year": null,
+        "text": "June 16",
+        "headerText": "June 16 - Kyoto",
+        "ambiguousNumericOrder": false
+      }
+    },
+    {
+      "index": 4,
+      "date": null,
+      "place": "Osaka",
+      "stops": [
+        {
+          "text": "Dotonbori",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 16,
+            "text": "- Dotonbori"
+          }
+        }
+      ],
+      "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 15,
+        "text": "Day 4 - Osaka 17/6"
+      },
+      "dateCandidate": {
+        "day": 17,
+        "month": 6,
+        "year": null,
+        "text": "17/6",
+        "headerText": "Osaka 17/6",
+        "ambiguousNumericOrder": false
+      }
+    },
+    {
+      "index": 5,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Fly home",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 19,
+            "text": "- Fly home"
+          }
+        }
+      ],
+      "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 18,
+        "text": "Day 5 - 18 June 2027"
+      },
+      "dateCandidate": {
+        "day": 18,
+        "month": 6,
+        "year": 2027,
+        "text": "18 June 2027",
+        "headerText": "18 June 2027",
+        "ambiguousNumericOrder": false
+      }
+    }
+  ],
+  "unplacedLines": [
+    {
+      "sourceLine": {
+        "lineNumber": 1,
+        "text": "Tokyo + Kyoto, 5 days"
+      },
+      "reason": "preamble"
+    }
+  ],
+  "overallConfidence": "high",
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
+}

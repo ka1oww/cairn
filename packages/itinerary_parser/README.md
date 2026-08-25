@@ -45,7 +45,7 @@ for (final line in result.unplacedLines) {
 
 That's the entire public API: one function, `parseItinerary`, and the
 result types it returns (`ParseResult`, `ParsedDay`, `Stop`, `SourceLine`,
-`UnplacedLine`, `UnplacedReason`, `ParsedTime`, `Confidence`,
+`UnplacedLine`, `UnplacedReason`, `ParsedTime`, `DateCandidate`, `Confidence`,
 `DayUncertainty`). `ItineraryParser.parse(...)` is a thin static-method
 alternative to `parseItinerary(...)` for callers who prefer that style;
 they behave identically.
@@ -124,6 +124,28 @@ it named is exposed as `ParsedDay.headerWeekday` — for a
 weekday-without-date day this is the only structured record of what the
 plan called the day, and it lets the UI check the named weekday against
 whatever date the day would land on.
+
+### A date in a day's own title
+
+`Day 1 - Tokyo, 14 June` is a `Day N` header, and a `Day N` header takes
+its date from where the day sits in the trip, not from a fragment in its
+title. The parser will not bind that fragment — but it will not swallow
+it into the place name either (which is what it used to do, leaving a day
+that read "date open" beside a title that said 14 June).
+
+The fragment is lifted out of `ParsedDay.place` and reported as
+`ParsedDay.dateCandidate`, a `DateCandidate` carrying the day, the month,
+the year *if the title spelled one*, and the fragment exactly as written.
+It is a suggestion for the confirmation screen to offer in one tap, never
+a date the parser chose: `DateCandidate.resolved` is null whenever the
+title named no year, because this package does not guess years. A day can
+carry both a bound `date` and a candidate that disagrees with it; only
+the person can settle that.
+
+Only shapes naming a **day and a month** qualify (`14 June`, `June 14`,
+`14/6`, `2027-06-20`), and the month word has to be a real month, so
+`Day 6 - 5 temples` finds nothing. A numeric candidate follows
+`monthFirstNumericDates` exactly as a numeric header does.
 
 ## What this parser cannot do
 

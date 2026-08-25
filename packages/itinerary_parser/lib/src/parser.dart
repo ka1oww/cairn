@@ -105,6 +105,11 @@ class _Classified {
   final _Line line;
   final int? dayNumber;
   final String? headerTrailing;
+
+  /// The header's trailing text as written, before a date fragment was
+  /// lifted out of it — what [DateCandidate.headerText] quotes back.
+  final String? headerTitle;
+  final DateFragment? headerDateFragment;
   final DateHeaderMatch? dateMatch;
   final String? placeText;
   final String? stopText;
@@ -116,6 +121,8 @@ class _Classified {
     this.line, {
     this.dayNumber,
     this.headerTrailing,
+    this.headerTitle,
+    this.headerDateFragment,
     this.dateMatch,
     this.placeText,
     this.stopText,
@@ -154,11 +161,24 @@ _Classified _classifyLine(
   if (!startsWithBullet(cleaned)) {
     final dayMatch = tryParseDayNumberHeader(cleaned);
     if (dayMatch != null) {
+      // `Day 1 - Tokyo, 14 June`: the date in the title is recognized and
+      // lifted out of the place, but never bound here — a `Day N` header's
+      // date comes from the trip's start. It travels as a candidate the
+      // confirmation screen can offer in one tap.
+      final trailing = dayMatch.trailingText;
+      final fragment = trailing == null
+          ? null
+          : findDateFragment(trailing,
+              monthFirstNumericDates: monthFirstNumericDates);
       return _Classified(
         _Kind.dayHeader,
         line,
         dayNumber: dayMatch.dayNumber,
-        headerTrailing: dayMatch.trailingText,
+        headerTrailing: fragment == null
+            ? trailing
+            : textWithoutFragment(trailing!, fragment),
+        headerTitle: trailing,
+        headerDateFragment: fragment,
       );
     }
 
@@ -222,6 +242,7 @@ class _OpenDay {
   final DayUncertainty? headerUncertainty;
   final int? headerWeekday;
   final SourceLine? headerSourceLine;
+  final DateCandidate? dateCandidate;
   final List<Stop> stops = [];
 
   _OpenDay({
@@ -232,6 +253,7 @@ class _OpenDay {
     this.headerUncertainty,
     this.headerWeekday,
     this.headerSourceLine,
+    this.dateCandidate,
   });
 
   ParsedDay close() {
@@ -247,6 +269,7 @@ class _OpenDay {
       uncertainty: empty ? DayUncertainty.noStops : headerUncertainty,
       headerWeekday: headerWeekday,
       headerSourceLine: headerSourceLine,
+      dateCandidate: dateCandidate,
     );
   }
 }
@@ -282,6 +305,10 @@ ParseResult _buildHeaderModeResult(
       case _Kind.dayHeader:
         contentLineCount++;
         closeCurrent();
+        final fragment = c.headerDateFragment;
+        if (fragment != null && fragment.ambiguousNumericOrder) {
+          sawAmbiguousNumericDate = true;
+        }
         current = _OpenDay(
           index: days.length + 1,
           date: tripStartDate == null
@@ -290,6 +317,16 @@ ParseResult _buildHeaderModeResult(
           place: c.headerTrailing,
           headerConfidence: Confidence.high,
           headerSourceLine: c.line.sourceLine,
+          dateCandidate: fragment == null
+              ? null
+              : DateCandidate(
+                  day: fragment.day,
+                  month: fragment.month,
+                  year: fragment.year,
+                  text: fragment.text,
+                  headerText: c.headerTitle!,
+                  ambiguousNumericOrder: fragment.ambiguousNumericOrder,
+                ),
         );
       case _Kind.dateHeader:
         contentLineCount++;

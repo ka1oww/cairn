@@ -6,5 +6,6 @@
 /// UI built on top of this package.
 library;
 
+export 'src/line_classifier.dart' show stripBullet;
 export 'src/models.dart';
 export 'src/parser.dart' show parseItinerary, ItineraryParser;

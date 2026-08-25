@@ -39,7 +39,8 @@
       "headerSourceLine": {
         "lineNumber": 3,
         "text": "Day 1 - Kyoto"
-      }
+      },
+      "dateCandidate": null
     },
     {
       "index": 2,
@@ -83,7 +84,8 @@
       "headerSourceLine": {
         "lineNumber": 9,
         "text": "Day 2 osaka"
-      }
+      },
+      "dateCandidate": null
     }
   ],
   "unplacedLines": [

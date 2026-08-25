@@ -43,6 +43,32 @@ import what is written there, not here.
   (`paste_flow.dart`, `day_view.dart`, `trail_view.dart`, `pool_view.dart`,
   `capture_flow.dart`, `ping_schedule.dart`); screens render their view models
   and never import the parser or `cairn_model`.
+- **The read-back is an editor, and it never demolishes.** The confirm screen
+  edits a *draft* inside `paste_flow.dart`, and `accept()` builds the
+  `ConfirmedItinerary` from that draft rather than from the parse. Every stop
+  carries a stable id so a chip survives being reworded, timed, reordered,
+  moved to another day or removed. **Removing a stop files it in the set-aside
+  with a reason; nothing the person pasted is ever deleted** — that is why the
+  tile's title flips from "couldn't place" to "set aside" once a removal of
+  the person's own is in it, and why a set-aside line drags back into a day.
+  The gestures are split deliberately: a *tap* on a chip opens its menu, a
+  *long press* drags it (`LongPressDraggable` + `DragTarget`, built-in
+  Flutter, no package), and the whole chip is the handle, not an icon. A day's
+  emptiness is live state, not a parse verdict — drag the last stop off a day
+  and it asks what a day that arrived empty asks, which also collapses the
+  clean days to slim rows. A whole-paste re-read (`readMonthFirst`, `useYear`)
+  reparses and so discards the draft; its card says so.
+- **A date inside a day's own title is a candidate, never a binding.**
+  `Day 1 - Tokyo, 14 June` used to lose the date entirely; the parser now
+  surfaces it as `ParsedDay.dateCandidate` (`src/date_header.dart`'s
+  `findDateFragment`, which also hands back the title with the fragment lifted
+  out) and *still does not set the date*. The phone asks, through the confirm
+  screen's date sheet, and `leaveDateOpen` is an answer it remembers rather
+  than a dismissal. A parser that binds a year is the thing to refuse in
+  review: `_resolveCandidate` rolls a year-less candidate off the first date
+  already bound in the draft — `todayProvider` when there is none — and the
+  sheet shows the weekday it worked out, so a wrong year is visible before it
+  binds and not after.
 - **The container is `lib/screens/trip_shell.dart`**: a tab per destination,
   each owning its own `Navigator` so a day page opened from the Trail
   survives a switch to Today and back. It holds all three of the design's
