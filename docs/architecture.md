@@ -13,9 +13,13 @@ first code. Updated 24 August 2026 for the paste-and-confirm flow
 the same day for Today (`fm/cairn-screen-today`), the day page that replaced
 that slice's placeholder as the launch surface, and again for the Trail
 (`fm/cairn-screen-trail`), the trip's front door and the real tab container
-the destinations now live in. Updated 25 August 2026 for the Pool
+the destinations now live in. Updated 25 August 2026 twice, for two slices
+that landed together and met in the middle: the Pool
 (`fm/cairn-screen-pool`), the container's third tab and the read seam under
-it.
+it, and capture (`fm/cairn-screen-capture`) — the ping, the camera, the pause
+and the word — which drew the app's first photo write path all the way down
+the bands, lit up two platform edges that had been drawn as intentions, and
+put the store behind the Pool's seam.
 Sources: `docs/roadmap.md`, all seven files in `docs/decisions/`,
 `supabase/README.md`, `AGENTS.md`, and each package's `README.md`.
 
@@ -72,13 +76,15 @@ today, every node opening the same day page — and with it the **real
 container**: a tab bar holding Today and the Trail, built so the Pool becomes
 a third entry and shown without one until it existed. The Pool
 (`fm/cairn-screen-pool`) is that third entry: the trip's photos in one shared
-place, grouped by day and read newest first, over a **read-only seam with
-nothing behind it** — `PhotoRepository`, bound in `bootstrap.dart` to an empty
-in-memory pool. The itinerary is
-**local-only**; syncing it as a shared fact (grill round one §2) is still not
-built. Everything else between the screens and the packages — capture and
-every photo write path, photos on the day page and the Trail, the ping
-scheduler, the import sweep, the platform
+place, grouped by day and read newest first, over a **read-only seam** —
+`PhotoRepository`. Capture (`fm/cairn-screen-capture`) put a store behind that
+seam and gave it something to read: the ping's schedule, the camera behind
+`CameraSource`, the pause, the word, and a row in Drift's `photos` with the
+frame beside it on disk. The itinerary is
+**local-only**, and so is the pool — nobody else's bytes arrive until Phase 2;
+syncing the itinerary as a shared fact (grill round one §2) is still not
+built. Everything else between the screens and the packages — photos on the
+day page and the Trail, the import sweep, the rest of the platform
 glue, the Supabase/R2 client adapter — is still **not built**, and the right
 edge is unchanged: the backend schema is verified only against a local
 Postgres, no hosted Supabase project exists, no R2 bucket has been created,
@@ -154,7 +160,7 @@ None of this is built, and the conflict/sync policy beyond the notes above is
 For each: what it knows (its outward arrows), what breaks if it changes (its
 inward arrows), and why it exists.
 
-### Screens — the way in, the day page, the Trail and the Pool built; the rest not built, drawn in `docs/design/`
+### Screens — the way in, the day page, the Trail, the Pool and capture built; the rest not built, drawn in `docs/design/`
 
 The scaffold's proving screen is gone, replaced (not extended) by the first
 real screens: the paste box, the confirmation screen (design round 8's four
@@ -183,6 +189,12 @@ Trip-level actions hang off the Trail's title and never off a tab (surface 6e);
 the temporary route back to the paste box (`repasteRequestedProvider`) lives
 there now, and goes when the real trip-settings sheet lands.
 
+**Capture is a route, not a destination** (`lib/screens/capture_screen.dart`).
+It is reached from the day's one call to action and nothing else: the day page
+carries a single line saying where the moment stands, and only an open or a
+late window offers a way in. That is the same principle as the absent Pool tab
+— the flow is not a place you can wander into, it is the answer to a ping.
+
 Every screen knows **app state and nothing else** — no repository, no store,
 no network, no SQL. What breaks if a screen changes: nothing below it, ever.
 That is the layering rule paying rent.
@@ -191,9 +203,9 @@ That is the layering rule paying rent.
 | --- | --- | --- | --- |
 | **Trail** | partial — the path built (`lib/screens/trail_screen.dart`): one node per day of the plan in itinerary order, past/today/ahead drawn apart, the flag on today, every node opening `DayPage.planDay(n)`; the photo-filled node, the long-trip chapters and edge scrubber, and the cat not started | app state | The trip-level front door. The cairn is the trip's portrait, not its front door (design-calls §6). It opens `DayPage` for each day rather than owning a day surface of its own. The winding is the screen's identity, not decoration; a list of days would be a different screen wearing this one's name. |
 | **The container** | built — `TripShell`: a tab per destination, one `Navigator` each | app state | Today, the Trail and the Pool are tabs — surface 2e's structure entire. Trip-level actions hang off the Trail's title, never a fourth tab (6e), and a test pins the destination count at three. |
-| **Day page & shut gate** | partial — the plan half built (`DayPage`, `lib/screens/day_page.dart`), reachable by date and, since the Trail, by plan-day number; the photo timeline, the gate and the seal not started | app state | One screen for every day, Today included. Built: the day's identity (day n of m, date, place), the flat ordered stop list, the star and its time — the only time in the app — and the drawn edges (nothing planned, a date the plan skips, before the trip, after it, a plan with no dates). Not built: the day is also the artefact, a vertical timeline of photos with hours prominent and credit small; shut, it shows times and names with images withheld and seals silently at midnight. |
-| **Capture** | not built | app state (platform glue drives the camera) | Answers the ping. Back camera primary, small front inset; thirty-minute window; the late path is always open and visibly late. |
-| **Pool** | partial — the screen built (`lib/screens/pool_screen.dart`): the trip's photos grouped by day, newest day first, oldest photo first within a day, over a read-only seam bound to an empty in-memory pool; **no photo can exist yet**, so what a phone sees is the empty state. The taker's initial chip, the dashed "+" tile, opening a photo full-screen and the house treatment not built | app state | Plumbing: the whole trip's photos in a plain, fast grid by day (first-calls, "The Pool is plumbing"). Deliberately not a destination and deliberately not a place to spend design effort. It is also what the book is later made from, which is why it holds the whole trip rather than today. |
+| **Day page & shut gate** | partial — the plan half built (`DayPage`, `lib/screens/day_page.dart`), reachable by date and, since the Trail, by plan-day number; the photo timeline, the gate and the seal not started; since capture it also carries the day's one call to action, which is the only photo-shaped thing on it | app state | One screen for every day, Today included. Built: the day's identity (day n of m, date, place), the flat ordered stop list, the star and its time — the only time in the app — and the drawn edges (nothing planned, a date the plan skips, before the trip, after it, a plan with no dates). Not built: the day is also the artefact, a vertical timeline of photos with hours prominent and credit small; shut, it shows times and names with images withheld and seals silently at midnight. |
+| **Capture** | built, back-only — `CaptureScreen` over `capture_flow.dart`: the call on the day page, the framing screen with the window's own words, the shutter, the breath with exactly one retake, the word, and the keep that writes a row; the front inset and a live viewfinder not built | app state | Answers the ping. Back camera primary, small front inset; thirty-minute window; the late path is always open and visibly late. The inset is explicitly after the line (camera-like-bereal decision), so back-only is not a shortcut here — it is the settled first-release scope. It is a **route, not a destination**: the day page's one call is the only way in, which is the same reasoning that kept the Pool off the tab bar until it existed. |
+| **Pool** | partial — the screen built (`lib/screens/pool_screen.dart`): the trip's photos grouped by day, newest day first, oldest photo first within a day, over the read seam — which capture's store now sits behind, so a photo taken on this phone appears here. The taker's initial chip, the dashed "+" tile, opening a photo full-screen and the house treatment not built; nobody else's bytes can arrive until Phase 2 | app state | Plumbing: the whole trip's photos in a plain, fast grid by day (first-calls, "The Pool is plumbing"). Deliberately not a destination and deliberately not a place to spend design effort. It is also what the book is later made from, which is why it holds the whole trip rather than today. |
 | **Book** | not built | app state | What the trip turns into: one spread per day, the photograph as the cover's face with the cairn signing the foot (book-round-nine decision), digital only, works with the network off forever. Automatic — it generates itself and there is no editor (book-no-editor decision). Interior designed in round 9; the printed page is not. Deliberately after the first release. |
 | **Join & confirm** | partial — paste-the-plan and the confirmation screen built (local-only); invite code, deep link and display-name edit not started | app state | The way in: invite code (or deep link), display-name edit, paste-the-plan, and the confirmation screen that surfaces the parser's confidence and unplaced lines instead of trusting them. |
 | **Settings & members** | not built | app state | Rename, invites, member list, leave, remove. Its affordances follow the starter-and-container decision (rename flat, delete gated, one narrow removal power, never titled "admin"). |
@@ -202,22 +214,22 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Riverpod providers** | partial — the paste-and-confirm flow's state (`paste_flow.dart`), the saved-plan stream (`trip_providers.dart`), the day view (`day_view.dart`: which day a date *or* a plan-day number is, and whether it is behind us), the trail view (`trail_view.dart`: the whole trip as nodes, and where the flag goes) and the pool view (`pool_view.dart`: the trip's photos grouped by the day already on them); nothing of capture yet | repositories, `cairn_model`, `itinerary_parser` (the parse use case) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring. The parser's dialect is translated to screen-facing view models here — screens never import it, and no `cairn_model` type reaches one either. |
-| **Ping scheduler** | not built | repositories (roster, trip clock, itinerary arrival/departure), `trip_moments`, local-notifications edge | The one interruption per person per day | Feeds `trip_moments` its inputs and registers every remaining day's local notifications in one offline pass. |
+| **Riverpod providers** | partial — the paste-and-confirm flow's state (`paste_flow.dart`), the saved-plan stream and the photo seam's providers (`trip_providers.dart`), the day view (`day_view.dart`: which day a date *or* a plan-day number is, and whether it is behind us), the trail view (`trail_view.dart`: the whole trip as nodes, and where the flag goes), the pool view (`pool_view.dart`: the trip's photos grouped by the day already on them) and the capture flow (`capture_flow.dart`: where the moment stands, and the whole of the shutter-pause-word walk) | repositories, `cairn_model`, `itinerary_parser` (the parse use case), `trip_moments` (the schedule) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring — which is exactly how a kept photo reaches the Pool with no wire between the two features. The parser's dialect is translated to screen-facing view models here — screens never import it, and no `cairn_model` type reaches one either. |
+| **Ping scheduler** | built against a local party of one (`ping_schedule.dart`) — the derivation, the day's ping, and the register-the-remaining-days pass are real; the roster and trip clock it should be fed are Phase 2 facts, so it is fed a stub member and the device's offset | repositories (roster, trip clock, itinerary arrival/departure), `trip_moments`, local-notifications edge | The one interruption per person per day | Feeds `trip_moments` its inputs and registers every remaining day's local notifications in one offline pass. Registration replaces the whole future deal rather than appending to it, because the deal is re-derived whenever the plan or the clock moves and a stale ping firing alongside a fresh one is indistinguishable from two pings a day. |
 | **Import sweep** | not built | camera-roll edge, `photo_day_assignment`, repositories | The completeness of the record | Runs when the app opens — the import promise commits to exactly that and no more (iOS offers no background trigger). Extracts metadata, asks the ladder, queues uploads. |
-| **Platform glue** | not built | camera, location, Sign in with Apple edges | Capture and Join | The thin controllers that drive dual capture, tag a pinged photo with GPS so it rides rung 1, and run the sign-in flow. Kept out of widgets so screens stay platform-blind. |
+| **Platform glue** | partial — the camera is behind `CameraSource` (`camera_source.dart`), with the real back camera on a device and a generated stand-in where there is none; location and Sign in with Apple not started | camera, location, Sign in with Apple edges | Capture and Join | The thin controllers that drive dual capture, tag a pinged photo with GPS so it rides rung 1, and run the sign-in flow. Kept out of widgets so screens stay platform-blind. |
 
 ### The seam
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Repositories** | partial — one repository over the local itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the Pool's **read-only** photo seam (`PhotoRepository` — the trip's photos as a stream of `PhotoRef`s, each with the path to its bytes on this phone when they are here), which is an interface with no store behind it and one empty in-memory implementation, because capture owns every write path and lands separately; the remote side, and everything listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
+| **Repositories** | partial — one repository over the local itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store; the remote side, and everything listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
 
 ### Storage
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`; schema v2, which drops the scaffold's disposable `trip_drafts` demo); no photo or trip table yet | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) but **not yet recorded in a decision file**. |
+| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`) and `photos`, the local photo index (schema v3: v2 dropped the scaffold's disposable `trip_drafts` demo, v3 added photos); no trip table yet | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) but **not yet recorded in a decision file**. |
 | **Supabase/R2 client adapter** | not built | Supabase Auth, Postgres (PostgREST under RLS), both edge functions, R2 (presigned PUT/GET) | Repositories — nothing else in the app may import a Supabase or HTTP symbol | Wraps the session JWT, the RLS-filtered queries, the edge-function calls, and the direct-to-R2 byte transfers behind one interface the repositories consume. |
 
 ### Backend (`supabase/` + Cloudflare)
@@ -245,8 +257,8 @@ Services know the edges; the edges know nothing of Cairn.
 | Node | State | What breaks if it changes | Why it is on the map |
 | --- | --- | --- | --- |
 | **Camera roll (PhotoKit)** | not built | The import sweep, and the honesty of the import promise | iOS never wakes a third-party app for a new photo — no background trigger, no entitlement. The sweep runs on open; the interface says exactly that. |
-| **Camera (dual capture)** | not built | Capture | Back primary + front inset, taken as a back-then-front sequence — the spike (`learning/dual-camera-spike/`) established that is what "like BeReal" actually means, and true simultaneous capture is explicitly not being built. Back-only ships first; the inset lands after the first release. |
-| **Local notifications** | not built | The ping reaching anyone | Registered in one offline pass from the schedule. Ordinary alert level — **never** time-sensitive, never pierces Do Not Disturb (notification-alert-level decision). Delivery is the OS's to refuse. |
+| **Camera (dual capture)** | partial — the back camera is driven for real behind `CameraSource`; the front inset is not built, and deliberately so | Capture | Back primary + front inset, taken as a back-then-front sequence — the spike (`learning/dual-camera-spike/`) established that is what "like BeReal" actually means, and true simultaneous capture is explicitly not being built. Back-only ships first; the inset lands after the first release. |
+| **Local notifications** | not built — the schedule is derived and handed to a `NotificationEdge`, but the only implementation records what it was given rather than registering it with iOS; this is the one genuinely unbuilt piece of the ping | The ping reaching anyone | Registered in one offline pass from the schedule. Ordinary alert level — **never** time-sensitive, never pierces Do Not Disturb (notification-alert-level decision). Delivery is the OS's to refuse. |
 | **Location** | not built | Rung-1 day assignment for pinged photos | A GPS tag at capture time is what lets the app's own photos take the best rung of the ladder. |
 | **Sign in with Apple** | not built | The whole account path | First auth route. Web/PWA were ruled out (iOS evicts PWA storage); native + Apple sign-in is the way in. |
 
@@ -299,6 +311,11 @@ a "change one, change all" edge:
    (`SECURITY DEFINER`). An inlined membership subquery in an RLS policy
    recurses infinitely; `force row level security` on any table re-enables the
    recursion. Both directions are demonstrated in `supabase/tests/`.
+8. **A photo row is an index, never the photograph.** On the server, Postgres
+   holds the row and R2 holds the bytes; on the phone, Drift's `photos` holds
+   the row and the file sits beside it on disk. The local shape mirrors the
+   remote one on purpose, so the sync path is a copy rather than a
+   translation — and it means deleting a row is never deleting a photograph.
 
 ---
 
@@ -325,6 +342,32 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   learning demo makes the argument and the app commits code to both, and the
   root `README.md` now names them as the stack; what is still missing is a
   decision file recording the choice. The map draws them as the plan, flagged.
+- **The ping is dealt for a party of one.** The derivation is real and the
+  schedule is the real one; what it is fed is not. There is no roster, no
+  trip row and no member table yet, so `ping_schedule.dart` names a stub trip
+  and a stub member and passes a party of one, and takes the trip's UTC offset
+  from the device. Everything the packages promise about collision-free
+  permutation over eight people is untested against eight people because eight
+  people do not exist yet — that is Phase 2, and the inputs are the only part
+  that changes when it lands.
+- **Nothing has been registered with iOS.** The schedule reaches a
+  `NotificationEdge` and stops there. Until an implementation calls into the
+  OS, nobody's pocket buzzes: the whole ping path is real except its last
+  inch, which is the inch the user would notice.
+- **The camera opens, but there is no viewfinder.** Capture drives the camera
+  through a controller and takes one frame; it never shows the live preview
+  behind the shutter. That is a visual-treatment question the design round
+  answers, and this slice is deliberately bare.
+- **Where there is no camera, the app draws its own frame.** The iOS
+  Simulator has no camera and never will, so `DeviceCameraSource` falls back
+  to a generated image whenever no back camera answers. That makes the flow
+  walkable on the simulator — and it means a green run there is not evidence
+  the real capture path works. Only a device is.
+- **The pool holds one phone's photos.** Capture writes into it and the Pool
+  draws it, which is the whole loop on one device — but nothing fetches
+  anybody else's bytes, so `PooledPhoto.localPath` is non-null for exactly the
+  photos this phone took. A pool eight people share is Phase 2, and the tile
+  that says it is waiting for bytes is already drawn for it.
 - **The day page derives today from the device date.** A trip has one clock
   and it follows the itinerary's leg (last-calls §4), but nothing creates a
   trip row yet, so `todayProvider` (`lib/app_state/day_view.dart`) reads the

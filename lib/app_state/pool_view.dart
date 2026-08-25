@@ -101,19 +101,9 @@ class PoolView {
 // Providers.
 // ---------------------------------------------------------------------------
 
-/// Bound to the real pool by the composition root (`bootstrap.dart`), and to
-/// seeded in-memory pools by tests. Left unbound it throws, loudly and
-/// immediately, which is the correct behaviour for a wiring mistake.
-final photoRepositoryProvider = Provider<PhotoRepository>(
-  (ref) => throw UnimplementedError(
-    'photoRepositoryProvider is bound in bootstrap.dart (or a test override)',
-  ),
-);
-
-/// Every photo in the trip's pool, straight off the seam.
-final tripPhotosProvider = StreamProvider<List<PooledPhoto>>(
-  (ref) => ref.watch(photoRepositoryProvider).watchTripPhotos(),
-);
+// `photoRepositoryProvider` and `tripPhotosProvider` are declared in
+// `trip_providers.dart`: capture reads the pool too, and a seam provider owned
+// by one feature is one the next feature has to import sideways to reach.
 
 /// The Pool, or null while no plan is saved.
 final poolViewProvider = Provider<AsyncValue<PoolView?>>((ref) {

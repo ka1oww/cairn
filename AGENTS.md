@@ -38,9 +38,9 @@ import what is written there, not here.
 - The launch surface: `RootScreen` opens on the paste box until an itinerary
   is accepted into Drift, then on the trip — `TripShell`, whose tabs open on
   **Today**. Each flow's whole brain is one file in `lib/app_state/`
-  (`paste_flow.dart`, `day_view.dart`, `trail_view.dart`, `pool_view.dart`);
-  screens render their view models and never import the parser or
-  `cairn_model`.
+  (`paste_flow.dart`, `day_view.dart`, `trail_view.dart`, `pool_view.dart`,
+  `capture_flow.dart`, `ping_schedule.dart`); screens render their view models
+  and never import the parser or `cairn_model`.
 - **The container is `lib/screens/trip_shell.dart`**: a tab per destination,
   each owning its own `Navigator` so a day page opened from the Trail
   survives a switch to Today and back. It holds all three of the design's
@@ -48,6 +48,23 @@ import what is written there, not here.
   off the Trail's title, and the temporary route back to the paste box lives
   there. Anything drawn but not built stays **absent, not disabled** — that
   is how the Pool waited, and how the next one should.
+- **Capture is a route, not a tab.** The only way in is the day page's one
+  call to action, and only an open or a late window offers it. The camera is
+  behind `CameraSource` (`lib/app_state/camera_source.dart`): a real back
+  camera on a device, a *generated* PNG anywhere without one — which is what
+  makes the flow walkable on the Simulator, and also means a green simulator
+  run is no evidence the camera path works. Judge that on a device only.
+  `NSCameraUsageDescription` is in `ios/Runner/Info.plist`; audio is off, so
+  no microphone string is needed. The ping's schedule is real
+  (`trip_moments`) but dealt for a stub party of one, and `NotificationEdge`
+  is not implemented against iOS -- nothing actually buzzes yet.
+- **A photo row is an index, not the photograph**: Drift's `photos` table
+  holds the row, the frame is a file in the app's documents directory, and
+  that mirrors Postgres-plus-R2 on the server on purpose. The seam over it has
+  two halves on purpose -- `PhotoRepository` is the read interface the Pool was
+  built against, `PhotoStore` is the Drift implementation that also owns the
+  write path, and `bootstrap.dart` binds both providers to the one instance.
+  Bind them to two and every test still passes while the Pool goes blank.
 - **There is one day screen and no separate day detail.** Today is
   `DayPage(date:)` handed today's date; the Trail opens the same widget for
   every node, through `DayPage.planDay(n)`. Two ways in, one screen: the
@@ -60,11 +77,14 @@ import what is written there, not here.
   plan skips gets a `GapDay` page but never a node, because every drawing
   numbers the path over the plan's own days ("Day 4 of 8"). The winding
   geometry is the screen's identity, not decoration.
-- **The Pool is read-only, and empty.** `PhotoRepository`
-  (`lib/repositories/photo_repository.dart`) is the trip's photo *read* seam;
-  `bootstrap.dart` binds it to an `InMemoryPhotoPool` with nothing in it,
-  because no write path exists. Tests build the populated state through
-  `bootstrapApp(photos:)`. Two rules the screen depends on: a photo's day is
+- **The Pool reads; capture writes; they meet at one store.**
+  `PhotoRepository` (`lib/repositories/photo_repository.dart`) is the trip's
+  photo *read* seam, and `PhotoStore` is the Drift implementation that answers
+  it and owns the write path. `bootstrap.dart` binds `photoRepositoryProvider`
+  and `photoStoreProvider` to the same instance — that, and nothing else, is
+  what makes a captured photo appear in the Pool. Tests build a pool of a
+  known shape through `bootstrapApp(photos:)`, which overrides the read side
+  alone. Two rules the screen depends on: a photo's day is
   the `dayNumber` already on its `PhotoRef` — never re-derived from
   `photo_day_assignment` on read, since a person may have overridden it — and
   a day's photos are ordered by `cairn_model.DayPool`, not by the screen. A
@@ -79,7 +99,11 @@ import what is written there, not here.
   only the tab you are standing on, and a tap only reaches it. A test that
   pumps `bootstrapApp` and then its own `ProviderScope` must key that scope
   (`UniqueKey`): Riverpod refuses to update a scope whose override count
-  changed, and every new binding in `bootstrap.dart` changes it.
+  changed, and every new binding in `bootstrap.dart` changes it. Two more
+  silent hangs, both at 0% CPU with no error: awaiting a drift *stream*
+  (`watch().first`) inside `testWidgets` never completes under the faked
+  clock -- read once instead (`AppDatabase.readPhotos`) -- and so does real
+  file I/O, so a fake camera must write its frame synchronously.
 - Fixture-writing trap: a `Day 1 - Tokyo, 14 June 2027` header does *not*
   give the day a date (the whole tail becomes the place); only a date-shaped
   header (`Mon 14 June 2027 - Tokyo`, `3/11/2027 - Tokyo`) resolves

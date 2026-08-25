@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_state/day_view.dart';
+import '../app_state/ping_schedule.dart';
 import 'day_page.dart';
 import 'pool_screen.dart';
 import 'trail_screen.dart';
@@ -32,14 +33,14 @@ const _destinations = <_Destination>[
   (label: 'Pool', icon: Icons.grid_view_outlined, root: PoolScreen()),
 ];
 
-class TripShell extends StatefulWidget {
+class TripShell extends ConsumerStatefulWidget {
   const TripShell({super.key});
 
   @override
-  State<TripShell> createState() => _TripShellState();
+  ConsumerState<TripShell> createState() => _TripShellState();
 }
 
-class _TripShellState extends State<TripShell> {
+class _TripShellState extends ConsumerState<TripShell> {
   /// The app opens on Today. The Trail is the trip's front door in the sense
   /// that it is where the whole trip lives; the day you are standing in is
   /// still what you want first thing in the morning.
@@ -51,6 +52,12 @@ class _TripShellState extends State<TripShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Registering the pings is a side effect of the trip existing, not of any
+    // one screen. The container is the only thing that is on screen for the
+    // whole of a trip, so this is where the schedule is kept in step: watching
+    // it re-registers whenever the plan or the clock moves. See
+    // `pingRegistrationProvider`.
+    ref.watch(pingRegistrationProvider);
     return Scaffold(
       body: IndexedStack(
         index: _index,

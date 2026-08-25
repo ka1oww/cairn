@@ -35,6 +35,13 @@ dependencies:
   trip_moments:
     path: packages/trip_moments
 
+  # Platform edges the capture flow drives (docs/architecture.md draws these
+  # beside the APP STATE band: services know them, they know nothing of Cairn).
+  # The camera is back-only for the first release — the front inset is
+  # explicitly after the line (docs/decisions/2026-08-22-camera-like-bereal.md).
+  camera: ^0.12.0
+  path_provider: ^2.1.6
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

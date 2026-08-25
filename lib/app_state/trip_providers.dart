@@ -2,6 +2,7 @@
 // truth per question; screens watch these and nothing below them.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../repositories/photo_repository.dart';
 import '../repositories/trip_repository.dart';
 
 /// Bound to the real repository by the composition root (`bootstrap.dart`),
@@ -11,6 +12,44 @@ final tripRepositoryProvider = Provider<TripRepository>(
   (ref) => throw UnimplementedError(
     'tripRepositoryProvider is bound in bootstrap.dart (or a test override)',
   ),
+);
+
+/// The photo pool's seam, read-only, bound by the composition root the same
+/// way. Kept a second repository rather than a second method on the first:
+/// the plan is replaced wholesale and the pool only ever accumulates, and one
+/// class that did both would have to explain that in every doc comment.
+///
+/// It lives here rather than beside one feature's view models because two
+/// bands above it read the pool for different reasons — the Pool draws it, and
+/// capture asks it whether today's moment has already been answered — and a
+/// seam provider owned by whichever feature happened to arrive first is a seam
+/// provider the next feature has to import sideways to reach.
+final photoRepositoryProvider = Provider<PhotoRepository>(
+  (ref) => throw UnimplementedError(
+    'photoRepositoryProvider is bound in bootstrap.dart (or a test override)',
+  ),
+);
+
+/// The same pool, with its write path: keeping a frame and writing a word.
+///
+/// Separate from [photoRepositoryProvider] because reading the pool and adding
+/// to it are different privileges, and only capture holds the second one. In
+/// the app both are bound to the same `PhotoStore`, so what capture writes is
+/// what the Pool reads; a test may bind a seeded in-memory pool to the read
+/// side alone.
+final photoStoreProvider = Provider<PhotoStore>(
+  (ref) => throw UnimplementedError(
+    'photoStoreProvider is bound in bootstrap.dart (or a test override)',
+  ),
+);
+
+/// Every photo in the trip's pool, straight off the seam.
+///
+/// One subscription for the whole app, for the same reason
+/// [savedItineraryProvider] is one: two streams over the same store are two
+/// chances to disagree about what the trip holds.
+final tripPhotosProvider = StreamProvider<List<PooledPhoto>>(
+  (ref) => ref.watch(photoRepositoryProvider).watchTripPhotos(),
 );
 
 /// The itinerary saved on this phone, in screen terms — or null while none
