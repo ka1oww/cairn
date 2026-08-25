@@ -177,6 +177,10 @@
   something into today, and every day that is over is open to everyone who was there. It is one
   rule (<code>GateState.decide</code>), answered in the app in one place, and the Pool is the only
   surface drawing a photograph for it to withhold yet.
+  The trip itself is stored now rather than implied: a roster, the fact of who started it, and
+  three-word invite codes that die when the trip closes, with the permission model in
+  <code>cairn_model</code> and a sheet off the Trail's title over it. The pings are dealt across
+  that roster — which holds one person, because nothing carries a membership to another phone yet.
   <code>lib/README.md</code> spells these bands as
   directories. <b>Every other designed screen, the import sweep, the remaining platform glue and the
   whole remote side are still intention, drawn here so the intention is inspectable.</b></span>
@@ -324,23 +328,24 @@
 <div class="node partial" style="left:970px;top:22px;width:170px;height:130px">
   <span class="chip">partial</span><h4>Join &amp; confirm</h4>
   <p>Invite code in, name edit, paste-the-plan + the confirmation screen.</p>
-  <span class="sub">paste-and-confirm built, local-only; join not started</span>
+  <span class="sub">paste-and-confirm built, local-only; the code door built and answered honestly — no code can admit anyone until membership travels; deep link and name edit not started</span>
 </div>
-<div class="node nb" style="left:1152px;top:22px;width:170px;height:130px">
-  <span class="chip">not built</span><h4>Settings &amp; members</h4>
+<div class="node partial" style="left:1152px;top:22px;width:170px;height:130px">
+  <span class="chip">partial</span><h4>Settings &amp; members</h4>
   <p>Rename, invites, member list, leave, remove — per the starter decision.</p>
+  <span class="sub">the sheet off the Trail's title: roster, live code, rename, new words, gated delete; leave and remove absent, not disabled</span>
 </div>
 
 <!-- ======================= app state ======================= -->
 <div class="node partial" style="left:60px;top:250px;width:240px;height:115px">
   <span class="chip">partial</span><h4>Ping scheduler</h4>
   <p>Feeds <b>trip_moments</b> the roster, clock and first/last-day windows; registers every remaining day’s notifications in one offline pass, replacing the deal rather than appending to it.</p>
-  <span class="sub">built, but dealt for a party of one — no roster exists yet</span>
+  <span class="sub">built over the real roster — which holds one person until membership travels</span>
 </div>
 <div class="node partial" style="left:340px;top:250px;width:420px;height:115px">
   <span class="chip">partial</span><h4>Riverpod providers</h4>
   <p>One source of truth per question. A watched repository stream flows through a provider; writing a row updates every watching screen with no manual wiring. Calls <b>itinerary_parser</b> for the confirm flow.</p>
-  <span class="sub">the paste flow's state, the saved-plan stream, the day view, the trail view, the pool view, the ping schedule and the capture flow</span>
+  <span class="sub">the paste flow's state, the saved-plan stream, the day view, the trail view, the pool view, the ping schedule, the capture flow, the trip's sheet and the join door</span>
 </div>
 <div class="node nb" style="left:800px;top:250px;width:240px;height:115px">
   <span class="chip">not built</span><h4>Import sweep</h4>
@@ -401,7 +406,7 @@
 <!-- ======================= storage ======================= -->
 <div class="node partial" style="left:150px;top:805px;width:410px;height:120px">
   <span class="chip">partial</span><h4>Drift store — local SQLite</h4>
-  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Holds the itinerary tables (days, stops, set-aside lines) and <code>photos</code>, the local index whose bytes sit beside it on disk — the same split as Postgres and R2. Schema v3; the trip_drafts demo is dropped.</p>
+  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Holds the itinerary tables (days, stops, set-aside lines), <code>photos</code> — the local index whose bytes sit beside it on disk, the same split as Postgres and R2 — and the trip: <code>trip_facts</code>, <code>trip_members</code> (no role column, ever) and <code>trip_invite_codes</code> (no expiry column; a code dies with its trip). Schema v4; the trip_drafts demo is dropped.</p>
   <span class="sub">choice validated in the demo and now built on, not yet recorded in a decision file</span>
 </div>
 <div class="node nb" style="left:800px;top:805px;width:410px;height:120px">
@@ -509,13 +514,18 @@
     <p>Drawn as open, not settled. None is a contradiction: in each case the decision record is
     clear and the code is behind it, acknowledged and queued in <code>docs/roadmap.md</code>.</p>
     <ul>
-      <li><b>Starter &amp; container decisions settled, unimplemented.</b> Rename and invites flat;
-      delete gated once others’ photos exist; removal power passes to the longest-standing member.
-      Today’s schema is starter-only rename/delete with no succession, and
-      <code>Trip.canRemove</code> knows nothing of it. Queued near-term.</li>
-      <li><b>The ping is dealt for a party of one.</b> The derivation is real; its inputs are
-      stubs, because no roster, trip row or member table exists yet. Nothing about eight people
-      has been exercised against eight people.</li>
+      <li><b>Starter &amp; container decisions implemented on the phone, not on the server.</b>
+      <code>cairn_model</code>’s <code>trip_powers.dart</code> holds the whole model — rename and
+      mint flat, delete gated once others’ photos exist, revoke by minter or starter, removal power
+      passing to the longest-standing member — and the trip’s sheet asks it before every act. The
+      migrations still have starter-only rename/delete and an 8-character code; the timezone power
+      has nowhere to live until a trip clock is stored.</li>
+      <li><b>An invite code is real and cannot let anybody in.</b> Minting, rotating, revoking and
+      expiry-with-the-trip are built, and saying a code back is answered honestly for every case
+      this phone can see. Joining needs a membership that reaches another phone — Phase 2.</li>
+      <li><b>The ping is dealt over a real roster that holds one person.</b> The party is the
+      trip’s stored members now, and the collision-free promise is exercised against eight through
+      a seeded roster in the tests; a phone can still only write its own row.</li>
       <li><b>Nothing is registered with iOS.</b> The schedule reaches a <code>NotificationEdge</code>
       and stops. The whole ping path is real except its last inch — the one the user would notice.</li>
       <li><b>No viewfinder, and a drawn frame where there is no camera.</b> Capture takes a frame

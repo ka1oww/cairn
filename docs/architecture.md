@@ -80,7 +80,13 @@ place, grouped by day and read newest first, over a **read-only seam** —
 `PhotoRepository`. Capture (`fm/cairn-screen-capture`) put a store behind that
 seam and gave it something to read: the ping's schedule, the camera behind
 `CameraSource`, the pause, the word, and a row in Drift's `photos` with the
-frame beside it on disk. The itinerary is
+frame beside it on disk. The trip itself
+(`fm/cairn-roles-and-container`) is now a stored thing rather than an implied
+one: a roster, the fact of who started it, and three-word invite codes that
+die when the trip closes — with the whole permission model in `cairn_model`
+and a sheet off the Trail's title over it. The party the pings are dealt
+across is that roster, so the stub member is gone; it holds one person,
+because nothing carries a membership to another phone yet. The itinerary is
 **local-only**, and so is the pool — nobody else's bytes arrive until Phase 2;
 syncing the itinerary as a shared fact (grill round one §2) is still not
 built. Everything else between the screens and the packages — photos on the
@@ -207,15 +213,15 @@ That is the layering rule paying rent.
 | **Capture** | built, back-only — `CaptureScreen` over `capture_flow.dart`: the call on the day page, the framing screen with the window's own words, the shutter, the breath with exactly one retake, the word, and the keep that writes a row; the front inset and a live viewfinder not built | app state | Answers the ping. Back camera primary, small front inset; thirty-minute window; the late path is always open and visibly late. The inset is explicitly after the line (camera-like-bereal decision), so back-only is not a shortcut here — it is the settled first-release scope. It is a **route, not a destination**: the day page's one call is the only way in, which is the same reasoning that kept the Pool off the tab bar until it existed. |
 | **Pool** | partial — the screen built (`lib/screens/pool_screen.dart`): the trip's photos grouped by day, newest day first, oldest photo first within a day, over the read seam — which capture's store now sits behind, so a photo taken on this phone appears here. It is also the gate's one live consumer: the day being lived keeps its heading, its date and its count and withholds its pictures until you add yours, because the gate is about photographs wherever they are drawn. The taker's initial chip, the dashed "+" tile, opening a photo full-screen and the house treatment not built; nobody else's bytes can arrive until Phase 2 | app state | Plumbing: the whole trip's photos in a plain, fast grid by day (first-calls, "The Pool is plumbing"). Deliberately not a destination and deliberately not a place to spend design effort. It is also what the book is later made from, which is why it holds the whole trip rather than today. |
 | **Book** | not built | app state | What the trip turns into: one spread per day, the photograph as the cover's face with the cairn signing the foot (book-round-nine decision), digital only, works with the network off forever. Automatic — it generates itself and there is no editor (book-no-editor decision). Interior designed in round 9; the printed page is not. Deliberately after the first release. |
-| **Join & confirm** | partial — paste-the-plan and the confirmation screen built (local-only); invite code, deep link and display-name edit not started | app state | The way in: invite code (or deep link), display-name edit, paste-the-plan, and the confirmation screen that surfaces the parser's confidence and unplaced lines instead of trusting them. |
-| **Settings & members** | not built | app state | Rename, invites, member list, leave, remove. Its affordances follow the starter-and-container decision (rename flat, delete gated, one narrow removal power, never titled "admin"). |
+| **Join & confirm** | partial — paste-the-plan and the confirmation screen built (local-only), and beside them the second door: `JoinScreen` over `join_flow.dart` reads three words back in any order and any spelling within one edit, and answers every case it can see (not a code, this trip's own, retired, the trip has closed) plus the honest one it cannot — a well-formed code for a trip on another phone, which nothing here can reach. Deep link and display-name edit not started | app state | The way in: invite code (or deep link), display-name edit, paste-the-plan, and the confirmation screen that surfaces the parser's confidence and unplaced lines instead of trusting them. |
+| **Settings & members** | partial — built as `TripSheet` (`lib/screens/trip_sheet.dart`) over `trip_settings.dart`, off the Trail's title and never a fourth tab (6e): the roster with its one quiet note per row, the live code with what it can and cannot do, rename, new words, and the gated delete with its refusal in writing. Leave and remove are absent rather than disabled — there is nobody else on this phone's roster to remove, and a party of one leaving would leave the trip with nobody | app state | Rename, invites, member list, leave, remove. Its affordances follow the starter-and-container decision (rename flat, delete gated, one narrow removal power, never titled "admin"). |
 
 ### App state
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Riverpod providers** | partial — the paste-and-confirm flow's state (`paste_flow.dart`), the saved-plan stream and the photo seam's providers (`trip_providers.dart`), the day view (`day_view.dart`: which day a date *or* a plan-day number is, and whether it is behind us), the trail view (`trail_view.dart`: the whole trip as nodes, and where the flag goes), the pool view (`pool_view.dart`: the trip's photos grouped by the day already on them), the gate (`day_gate.dart`: one answer to "is this day mine to see", for every surface that draws a photograph) and the capture flow (`capture_flow.dart`: where the moment stands, and the whole of the shutter-pause-word walk) | repositories, `cairn_model`, `itinerary_parser` (the parse use case), `trip_moments` (the schedule) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring — which is exactly how a kept photo reaches the Pool with no wire between the two features. The parser's dialect is translated to screen-facing view models here — screens never import it, and no `cairn_model` type reaches one either. |
-| **Ping scheduler** | built against a local party of one (`ping_schedule.dart`) — the derivation, the day's ping, and the register-the-remaining-days pass are real; the roster and trip clock it should be fed are Phase 2 facts, so it is fed a stub member and the device's offset | repositories (roster, trip clock, itinerary arrival/departure), `trip_moments`, local-notifications edge | The one interruption per person per day | Feeds `trip_moments` its inputs and registers every remaining day's local notifications in one offline pass. Registration replaces the whole future deal rather than appending to it, because the deal is re-derived whenever the plan or the clock moves and a stale ping firing alongside a fresh one is indistinguishable from two pings a day. |
+| **Riverpod providers** | partial — the paste-and-confirm flow's state (`paste_flow.dart`), the saved-plan stream and the photo seam's providers (`trip_providers.dart`), the day view (`day_view.dart`: which day a date *or* a plan-day number is, and whether it is behind us), the trail view (`trail_view.dart`: the whole trip as nodes, and where the flag goes), the pool view (`pool_view.dart`: the trip's photos grouped by the day already on them), the gate (`day_gate.dart`: one answer to "is this day mine to see", for every surface that draws a photograph), the capture flow (`capture_flow.dart`: where the moment stands, and the whole of the shutter-pause-word walk), the trip's own sheet (`trip_settings.dart`: the roster, the live code and when it dies, and what each of the trip's own acts is allowed to do) and the second door (`join_flow.dart`: what saying three words back can answer) | repositories, `cairn_model`, `itinerary_parser` (the parse use case), `trip_moments` (the schedule) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring — which is exactly how a kept photo reaches the Pool with no wire between the two features. The parser's dialect is translated to screen-facing view models here — screens never import it, and no `cairn_model` type reaches one either. |
+| **Ping scheduler** | built over the real roster (`ping_schedule.dart`) — the derivation, the day's ping and the register-the-remaining-days pass are real, and the party is now the trip's stored members rather than a stub: `tripPartyProvider` reads the roster, and no trip means no pings rather than an invented member. It still holds one person, because nothing propagates membership between phones; the trip clock is still the device's offset | repositories (roster, trip clock, itinerary arrival/departure), `trip_moments`, local-notifications edge | The one interruption per person per day | Feeds `trip_moments` its inputs and registers every remaining day's local notifications in one offline pass. Registration replaces the whole future deal rather than appending to it, because the deal is re-derived whenever the plan or the clock moves and a stale ping firing alongside a fresh one is indistinguishable from two pings a day. |
 | **Import sweep** | not built | camera-roll edge, `photo_day_assignment`, repositories | The completeness of the record | Runs when the app opens — the import promise commits to exactly that and no more (iOS offers no background trigger). Extracts metadata, asks the ladder, queues uploads. |
 | **Platform glue** | partial — the camera is behind `CameraSource` (`camera_source.dart`), with the real back camera on a device and a generated stand-in where there is none; location and Sign in with Apple not started | camera, location, Sign in with Apple edges | Capture and Join | The thin controllers that drive dual capture, tag a pinged photo with GPS so it rides rung 1, and run the sign-in flow. Kept out of widgets so screens stay platform-blind. |
 
@@ -223,13 +229,13 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Repositories** | partial — one repository over the local itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store; the remote side, and everything listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
+| **Repositories** | partial — one repository over the local itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store. The membership seam (`membership_repository.dart`) has the same two halves for the same reason — `MembershipRepository`, the read interface the trip's surfaces and the ping's party are written against and the only way a test can stand a party of eight up, and `MembershipStore`, the Drift implementation that also owns starting the trip, renaming it, minting and revoking codes and deleting it. The remote side, and everything listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
 
 ### Storage
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`) and `photos`, the local photo index (schema v3: v2 dropped the scaffold's disposable `trip_drafts` demo, v3 added photos); no trip table yet | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) but **not yet recorded in a decision file**. |
+| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`), `photos`, and the trip itself: `trip_facts` (one row: which trip, what it is called, who started it), `trip_members` (the roster, with no role column and never one) and `trip_invite_codes` (minted and revoked, with no expiry column — a code dies with its trip and that rule is not stored twice). Schema v4: v2 dropped the scaffold's disposable `trip_drafts` demo, v3 added photos, v4 added the trip's three | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) but **not yet recorded in a decision file**. |
 | **Supabase/R2 client adapter** | not built | Supabase Auth, Postgres (PostgREST under RLS), both edge functions, R2 (presigned PUT/GET) | Repositories — nothing else in the app may import a Supabase or HTTP symbol | Wraps the session JWT, the RLS-filtered queries, the edge-function calls, and the direct-to-R2 byte transfers behind one interface the repositories consume. |
 
 ### Backend (`supabase/` + Cloudflare)
@@ -331,13 +337,24 @@ Drawn as open on the map, not as settled. None of these is a contradiction —
 in every case the decision record is clear and the code is behind it,
 acknowledged and queued (`docs/roadmap.md`, "Work already queued").
 
-- **The starter-and-container decisions are settled but not implemented.**
-  The record says: rename and invite are flat; delete is the starter's only
-  while the trip holds nobody else's photos; timezone changes belong with
-  delete; the removal power passes silently to the longest-standing member
-  when the starter leaves. Today's schema still has starter-only
-  rename/delete with no photo condition and no succession, and
-  `cairn_model.Trip.canRemove` knows nothing of succession. Queued near-term.
+- **The starter-and-container decisions are implemented on the phone and not
+  on the server.** `cairn_model`'s `trip_powers.dart` is the whole permission
+  model — rename and mint flat, delete the starter's only while the trip holds
+  nobody else's photos, revoke by the minter or the starter, and the removal
+  power passing silently to the longest-standing member when the starter
+  leaves — and the trip's own surface asks it before every act. The migrations
+  in `supabase/` still have starter-only rename/delete with no photo condition
+  and no succession, and an 8-character code generator rather than three
+  words. The timezone power has nowhere to live yet: no trip clock is stored,
+  so there is nothing to change.
+- **An invite code is real, canonical and revocable — and cannot let anybody
+  in.** Minting, rotating and revoking are implemented, expiry is derived from
+  the trip's close (never stored as a second timestamp), and saying a code
+  back is answered honestly for every case this phone can see. What is missing
+  is the only thing that would make joining work: a membership that reaches
+  another phone. Until Phase 2 lands that, a well-formed code for somebody
+  else's trip gets a written "Cairn cannot reach it yet", and the roster on
+  this phone holds exactly one person.
 - **The download path does not exist.** Only uploads are built. The
   requirements (sign nothing without `day_page_is_open`) are written down,
   which is exactly why the blank is the map's most dangerous one.
@@ -348,14 +365,15 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   learning demo makes the argument and the app commits code to both, and the
   root `README.md` now names them as the stack; what is still missing is a
   decision file recording the choice. The map draws them as the plan, flagged.
-- **The ping is dealt for a party of one.** The derivation is real and the
-  schedule is the real one; what it is fed is not. There is no roster, no
-  trip row and no member table yet, so `ping_schedule.dart` names a stub trip
-  and a stub member and passes a party of one, and takes the trip's UTC offset
-  from the device. Everything the packages promise about collision-free
-  permutation over eight people is untested against eight people because eight
-  people do not exist yet — that is Phase 2, and the inputs are the only part
-  that changes when it lands.
+- **The ping is dealt over a real roster that holds one person.** The
+  derivation and the schedule were always real; the party is now read from the
+  trip's own members rather than stubbed, and the collision-free promise is
+  exercised against eight people through a seeded roster in
+  `test/membership_test.dart`. What is still a stand-in is the *contents*: a
+  phone can only write its own row, so the roster holds one member until
+  membership propagates (Phase 2), and the trip's UTC offset still comes from
+  the device because no trip clock is stored. Only the inputs change when
+  Phase 2 lands.
 - **Nothing has been registered with iOS.** The schedule reaches a
   `NotificationEdge` and stops there. Until an implementation calls into the
   OS, nobody's pocket buzzes: the whole ping path is real except its last

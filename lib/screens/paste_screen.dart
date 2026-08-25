@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_state/paste_flow.dart';
+import 'join_screen.dart';
 
 /// The paste box. Nothing clever, per the flow's design: a text area and a
 /// parse action. Everything interesting happens on the screen after it.
@@ -73,6 +74,19 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
                 key: const Key('read-button'),
                 onPressed: _read,
                 child: const Text('Read it'),
+              ),
+              // The second of design surface 6a's two doors. Most people
+              // arrive here holding a code somebody told them rather than a
+              // plan to paste, so the other door is on this screen and not
+              // buried — bare, until the first-launch screen itself exists.
+              TextButton(
+                key: const Key('join-door'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => const JoinScreen(),
+                  ),
+                ),
+                child: const Text('I have an invite'),
               ),
             ],
           ),

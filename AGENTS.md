@@ -45,9 +45,27 @@ import what is written there, not here.
   each owning its own `Navigator` so a day page opened from the Trail
   survives a switch to Today and back. It holds all three of the design's
   destinations (Today, Trail, Pool) and no fourth: trip-level actions hang
-  off the Trail's title, and the temporary route back to the paste box lives
-  there. Anything drawn but not built stays **absent, not disabled** — that
-  is how the Pool waited, and how the next one should.
+  off the Trail's title, where the chevron opens `TripSheet` — the roster,
+  the trip's live code, rename, new words, the gated delete, and the
+  temporary route back to the paste box. Anything drawn but not built stays
+  **absent, not disabled** — that is how the Pool waited, how leaving and
+  removing wait now, and how the next one should.
+- **The trip is a stored fact, and the permission model is not the app's.**
+  Accepting a plan starts it (`MembershipStore.startTrip`, idempotent) and
+  mints its first three-word code. Who may do what is `cairn_model`'s
+  `trip_powers.dart` and nothing above it re-decides it; there is no role
+  column in `trip_members` and there must never be one. A code carries no
+  expiry of its own either: it dies when the trip closes, so
+  `trip_invite_codes` has no expiry column and `TripInvite.standingAt` is
+  *told* the close. Everything about joining is local — nothing carries a
+  membership to another phone, and the join door says so rather than
+  spinning.
+- **The trip's three Drift tables do not re-emit for free.** `trip_facts`,
+  `trip_members` and `trip_invite_codes` are read through one stream, and it
+  is a `customSelect` over all three with `readsFrom` — minting a code
+  changes no fact about the trip, so a stream watching `trip_facts` alone
+  leaves a rotated code on screen. Writing a no-op empty companion to force
+  an emit does not work; this was the bug.
 - **Capture is a route, not a tab.** The only way in is the day page's one
   call to action, and only an open or a late window offers it. The camera is
   behind `CameraSource` (`lib/app_state/camera_source.dart`): a real back
@@ -168,6 +186,13 @@ Sharp edges worth knowing before touching this directory again:
   - **The party is an input, not an afterthought.** Each device derives the whole day's assignment for everyone, which is what makes the schedule collision-free offline. A derivation that hashed only the local member id (as an earlier version did) permits two people to land on the same minute and permits the party to cluster.
   - It derives its instants with multiplication and addition, not bitwise shifts, deliberately: Dart's `int` bitwise operators are 32-bit when compiled to JavaScript, so the shift form silently diverges on web while the arithmetic form is exact on every backend. `test/golden_values_test.dart` pins this -- do not "simplify" the arithmetic back to shifts. `tool/print_goldens.dart` documents the four-command VM-vs-dart2js diff that verifies it.
 - `packages/cairn_model/` — pure-Dart domain model: the one vocabulary (trip, trip clock, day, stop, member, photo reference, gate) the database layer, the app's state layer and the interface are all written against. Test with `dart test` from inside that directory; its `README.md` names the decision file behind each non-obvious choice.
+  - The trip's whole permission model is `src/trip_powers.dart`, as pure
+    functions over `(member, startedBy, members)`. `Trip` delegates to it, and
+    so does the app: the rules live in one place because two copies drift.
+    Also here: `InviteCode` (two words and a number, forgiving of order and of
+    one edit, over a vocabulary whose words are pairwise three edits apart) and
+    `tripClosesAt` (trip end + the fourteen-day grace; the book's rule is not
+    this one and never expires).
   - A day's clock is fixed where the day *starts* and never moves, so a photo taken after an afternoon border crossing still reads at the hour that day was on. `TripDay.sequence`'s per-day clock overrides mirror `photo_day_assignment`'s `timeZoneOverridesByDay` deliberately -- change one and the other has to follow.
 - `packages/photo_day_assignment/` — pure-Dart package that decides which day of a trip a photo belongs to, using GPS-derived timezone over EXIF timestamps where possible (see its `README.md` for the full degradation ladder). Test with `dart test` from inside that directory.
   - It calls `timezone_finder`'s `findLocation(longitude, latitude)` -- longitude first, the opposite of the usual lat/lng convention and a standing trap when wiring up callers.

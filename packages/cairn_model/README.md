@@ -23,6 +23,8 @@ dart test
 | Day | `TripDay` | One day of the trip, read on the clock it started on. |
 | Stop | `Stop` | A place on a day, as the pasted itinerary described it. |
 | Member | `Member` | A person on the trip. |
+| Invite code | `InviteCode` | The three words somebody says across a table to get onto a trip. |
+| An invite | `TripInvite` | One code that was minted for a trip, and whether it still admits people. |
 | Photo | `PhotoRef` | A pointer to one photo in the shared pool. The bytes are elsewhere. |
 | The day's pool | `DayPool` | One day's slice of the shared pool, plus everyone who has ever contributed to it. |
 | Gate | `GateState` | Whether a day's page is open to one person, and why. |
@@ -153,16 +155,62 @@ asserts both halves so the edge is visible rather than folklore.
 
 Roles are flat. There is no role field, no permission set, and no
 `MemberRole` enum, because the product has none of those: everyone on a trip
-can do the same things. The single asymmetry is that the person who started the
-trip can remove someone, and that lives on the trip (`Trip.startedBy`,
-`Trip.canRemove`) rather than on the member, because it is a fact about who
-started *that trip*, not a rank a person carries between trips.
+can do the same things. The single asymmetry is the removal power, and it
+lives on the trip (`Trip.startedBy`, `Trip.canRemove`) rather than on the
+member, because it is a fact about who started *that trip*, not a rank a
+person carries between trips.
 
-`Trip.canRemove` is false for removing yourself. Leaving a trip is a different
-action, available to everyone (`docs/design/`, 6e "Leave this trip"), and what
-happens to a trip whose starter leaves has not been decided — `supabase/README.md`
-lists it under "What this model does not handle yet". This package answers the
-part that is settled and declines the part that is not.
+`src/trip_powers.dart` is where the whole permission model is written, as
+functions over the few facts each rule needs — the app holds a roster long
+before it can build a whole `Trip`, and one rule written twice is one rule
+that will eventually be two. `Trip`'s own methods delegate to it.
+
+- **Removal** is the one asymmetry, and it is narrower than a group admin:
+  it removes a member and does nothing else. It cannot promote anyone,
+  moderate a photo, or make another person into a starter, so nothing may
+  call its holder an "admin" or draw the role as a title
+  (`docs/decisions/2026-08-22-starter-and-container.md` §1).
+- **When the starter leaves, it passes to the longest-standing member.** No
+  dialog names a successor. There is always exactly one holder and it is
+  never nobody, which is why `Trip` no longer requires its starter to be on
+  it. Two people who joined on the same day are separated by member id —
+  arbitrary, but the *same* arbitrary answer on every phone, which is what a
+  party agreeing offline needs.
+- **Renaming and minting an invite are flat.** Any member does either.
+- **Deleting is the starter's, and only while the trip holds nobody else's
+  photos** — after that nobody can, the starter included, because deleting
+  cascades eight people's memories. It does not pass on when the starter
+  leaves; a trip whose starter has gone is a trip nobody can delete.
+- **Revoking a code** belongs to whoever minted it, or to the starter.
+
+`Trip.canRemove` is false for removing yourself: leaving a trip is a
+different action, available to everyone (`docs/design/`, 6e "Leave this
+trip"), and it is not modelled here.
+
+## Invite codes, and when they die
+
+Three spoken words, forgiving of order and spelling
+(`docs/decisions/2026-08-22-grill-round-one.md` §5), drawn as `otter maple 42`
+on design surfaces 6d and 15c — two words and a two-digit number, which is
+still three things a person says. `InviteCode.matches` accepts them in any
+order, in any case, through any punctuation, and one edit out per word, where
+a swapped pair of adjacent letters counts as one edit because that is how
+people mistype. Every word in the vocabulary is at least three edits from
+every other word, which is what makes that slack unambiguous, and a test pins
+it rather than trusting it.
+
+**A code carries no expiry of its own.** It dies when its trip closes and at
+no other time, so `TripInvite.standingAt` is *told* the trip's close rather
+than remembering a second copy of it: two timestamps for one rule are two
+chances to disagree about when a trip is over. The close itself is
+`tripClosesAt` — trip end plus the fourteen-day grace — and the book's rule
+is deliberately not modelled beside it, because the book never expires and
+the two were unbundled on purpose
+(`docs/decisions/2026-08-22-grace-window.md`).
+
+This package still has no randomness, so it does not mint codes: `InviteCode.draw`
+turns three numbers a caller already has into a code, and where those numbers
+come from is the app's seam's business.
 
 ## Stops, and `itinerary_parser`
 
@@ -209,8 +257,10 @@ above it, which is the exact cost the package exists to avoid.
 - **No book, no cairn, no trail.** The cairn is what the trip turns into
   (`docs/decisions/2026-08-22-design-calls.md` §6) and is drawn from the days;
   it is not a separate thing to model. The book's page design is still open.
-- **No invite codes or account lifecycle.** Both live in the backend, and the
-  backend flags what it has not settled.
+- **No account lifecycle.** Signing in, display names arriving from a
+  provider, and what deleting an account does to the photos it credited are
+  the backend's, and the backend flags what it has not settled. `InviteCode`
+  is the code's own grammar and nothing about the accounts it admits.
 - `PhotoRef.origin` says whether the app took a photo when it pinged someone or
   whether it came off the camera roll, because the two carry different-quality
   timestamps. **The gate treats them identically**, because the rule is "a
@@ -233,8 +283,10 @@ above it, which is the exact cost the package exists to avoid.
   instant" answer of its own, because refusing to guess is that package's job
   and it does it better.
 - **It validates shape, not truth.** It will refuse a trip whose days run
-  backwards or whose starter is not on it. It has no idea whether a trip is
-  real, whether a `MemberId` exists, or whether a photo was ever uploaded.
+  backwards or that holds the same person twice. It has no idea whether a
+  trip is real, whether a `MemberId` exists, or whether a photo was ever
+  uploaded. It will not refuse a trip whose starter has left, because that is
+  an ordinary trip.
 
 ## Testing
 
@@ -257,7 +309,13 @@ The tests are aimed at the parts that are genuinely subtle, not the getters:
   leaving the day open.
 - `test/day_pool_test.dart` — timeline ordering, deleting only your own photo,
   contributors surviving deletion, and the `DayPool.of`-on-reload trap.
-- `test/trip_test.dart` — the trips that cannot be built, and removal as the
-  only asymmetry.
+- `test/trip_test.dart` — the trips that cannot be built, removal as the only
+  asymmetry, and the power passing when the starter leaves.
+- `test/trip_powers_test.dart` — the whole permission model in one place: the
+  one narrow power, the flat rest, and the delete gate that shuts for
+  everybody once somebody else's photos are in.
+- `test/invite_code_test.dart` — a code said back in the wrong order, in the
+  wrong case and a letter out; the vocabulary's separation, which is what
+  makes that safe; and a code dying with its trip and at no other time.
 - `test/values_test.dart` — dates the calendar does not have, clocks no zone
   has, the star rule, and a photo timestamp that is not UTC.
