@@ -90,6 +90,22 @@ ink specimen (`18i`). One question is escalated, not decided: how a
 written line dresses — four registers drawn and priced on the captain's
 board (`18e`), flagged `needs-decision` on the status file.
 
+## Corrections to an exported round
+
+Rounds are exported as they were drawn and are not revised for taste. One
+correction has been made, because the drawn record contradicted a settled
+decision:
+
+- **13c's camera annotation** (round 7, 25 August 2026) said the two frames
+  fire "at the same instant". The dual-camera spike settled **back-then-front
+  sequential** capture, recorded in
+  `docs/decisions/2026-08-22-camera-like-bereal.md`; round 10's review had
+  already flagged the line as stale. The annotation now reads as a sequence in
+  `2026-08-22-round7-handoff.zip` (`CameraBackFirst.dc.html`, `canvas.json`,
+  `cairn-round7.html`) and in `2026-08-22-round7-review.html`. Nothing else in
+  round 7 was touched, and the board's drawing was already correct. Round 10's
+  note stands as the record of how it was found.
+
 ## House system
 
 Paper `#FFF4E4` · sticker `#FFFDF8` · ink `#43382C` · muted `#8C7B66` ·
