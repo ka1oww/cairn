@@ -39,8 +39,7 @@ was never happening in the book.
 **Closed:** no book editor, now or later. If it is ever revisited it is a new
 feature with its own argument, not a restoration of something implied.
 
-**Still open:** the book's treatment — generated, handmade, or the derived
-blend. This decision deliberately does *not* close it. The case against the
-handmade look was that a generated book contains no human labour; captions are
-human labour, so that argument stays weakened and the fork stays live. It
-belongs to design round ten.
+**Settled since:** the book's treatment — generated, handmade, or the derived
+blend — was open at the time of this decision and did not close here. It was
+answered on 23 August: the blend, `17d`. See
+[the book's treatment](2026-08-23-book-treatment.md).

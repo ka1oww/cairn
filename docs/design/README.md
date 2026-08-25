@@ -12,7 +12,7 @@ produced it and the alternatives it beat. The `.zip` is the full export.
 | 22 Aug 2026 | `2026-08-22-handoff.zip` | The day page, the shut gate, the capture, the trip cairn, the one notification |
 | 22 Aug 2026 (round 7) | `2026-08-22-round7-handoff.zip` | The retired simultaneous surfaces redrawn on the scattered model, every trip surface at eight people, and first surfaces for the alert level, the import promise, the starter and the container, and joining mid-trip |
 | 22 Aug 2026 (round 8) | `2026-08-22-round8-handoff.zip` | The screen after the paste: the confident read, the uncertain read, correcting the parse, and the paste that wouldn't parse |
-| 22 Aug 2026 (round 9) | `2026-08-22-round9-handoff.zip` | The book interior, drawn against the printed reference: the cover, the day spread in two honest treatments plus a recommended blend, the quiet and full days, the closer where the cairn appears, and the non-photo cell |
+| 22 Aug 2026 (round 9) | `2026-08-22-round9-handoff.zip` | The book interior, drawn against the printed reference: the cover, the day spread in two honest treatments plus the blend that was settled on 23 August, the quiet and full days, the closer where the cairn appears, and the non-photo cell |
 | 22 Aug 2026 (round 10) | `2026-08-22-round10-handoff.zip` | The two surfaces the book decisions created: where a word is written (the caption line at the capture breath, words-later on your own print, the wordless book) and the page as paper (Blurb's measured 8×10 geometry, round nine re-read against the fold, the four-up, the printed colophon and the ink specimen) |
 
 `2026-08-22-round7-review.html`, `2026-08-22-round8-review.html`,
@@ -62,8 +62,14 @@ handoff, not from the earlier sketches. `2g`'s book page and `7e`'s
 spread and colophon cards are superseded by the turn-17 surfaces
 (`17b`/`17d` day spread, `17e`–`17f` at the volume extremes, `17g` the
 closer); `7e`'s middle card — the long-press slide-to-day correction —
-still stands as drawn. The recommended treatment is `17d`, the blend:
-treatment A warmed only by what the app already owns. Round 9's two open
+still stands as drawn. The treatment is **settled**: `17d`, the blend --
+treatment A warmed only by what the app already owns. It stopped being a
+recommendation on 23 August ([the book's
+treatment](../decisions/2026-08-23-book-treatment.md)), which also carries
+the rule the drawing is an instance of: *the book may only look handmade in
+ways that are true.* The two treatments it beat -- admit it is generated,
+simulate the handmade -- stay drawn in the round-9 handoff as the argument
+that produced it. Round 9's two open
 questions were both decided on 22 August: the cover's face is the
 **photograph** (`17a`, with the cairn signing the foot — `13e`'s
 pile-as-portrait cover is superseded), and **authored words are in**:

@@ -93,5 +93,6 @@ per day, photos in the order they happened, digital only.
 
 *Closed since: the reference landed and round nine drew the interior — see
 [book round nine](2026-08-22-book-round-nine.md) and
-[no book editor](2026-08-22-book-no-editor.md). The treatment fork stays open
-for round ten.*
+[no book editor](2026-08-22-book-no-editor.md). The treatment fork itself was
+settled on 23 August — see
+[the book's treatment](2026-08-23-book-treatment.md).*
