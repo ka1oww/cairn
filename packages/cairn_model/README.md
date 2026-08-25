@@ -26,6 +26,7 @@ dart test
 | Photo | `PhotoRef` | A pointer to one photo in the shared pool. The bytes are elsewhere. |
 | The day's pool | `DayPool` | One day's slice of the shared pool, plus everyone who has ever contributed to it. |
 | Gate | `GateState` | Whether a day's page is open to one person, and why. |
+| Where a day stands | `DayStanding` | Behind us, being lived, or still ahead — the only thing the gate asks about time. |
 | A date | `CalendarDate` | Three numbers a human would write. Not an instant. |
 | A time of day | `ClockTime` | Read off a clock. Not an instant either. |
 
@@ -96,21 +97,43 @@ app, and the one thing scattering the daily ping did not touch
 screen: it shows the shape of the day, obscured — times and names visible,
 images not (`docs/decisions/2026-08-22-design-calls.md` §4).
 
+**The gate applies to the day you are living, and to no other day.** That is
+the round-one decision in one line — *"A day that is over belongs to the party.
+The gate applies to today only."*
+(`docs/decisions/2026-08-22-grill-round-one.md` §1) — and it is why
+`Trip.gateFor` takes a `now`: which day is in progress is a question about the
+clock, asked once, in `TripDay.standingAt`.
+
 Two things open a day, and nothing else does:
 
-- **You contributed to it.** `GateState.openedByContribution`.
-- **It was over before you joined.** `GateState.openBecauseJoinedLater`.
-  Someone joining on day 3 gets days 1 and 2 outright: the trail belongs to the
-  trip, not the person, and joining hands them the shared past rather than two
-  hollow days they can never fix (`docs/design/`, direction 3d "Joined on day
-  3", which the design record draws and names).
+- **You contributed to it.** `GateState.openedByContribution`. This outranks
+  the clock, so a day you answered reads the same way that evening and a week
+  later.
+- **It is over.** `GateState.openBecauseTheDayIsOver`. Every day that has
+  sealed is open to everyone on the trip — the people who answered it, the
+  people who did not, and the person who arrived the following morning. The
+  gate exists to make you contribute to the day you are living, never to punish
+  you afterwards for one you did not
+  (`docs/decisions/2026-08-22-last-calls.md` §3).
+
+A day still ahead is shut for its own reason,
+`GateState.shutUntilTheDayArrives`, rather than "awaiting contribution": there
+is nothing in it to show and nothing you could put in it, so promising that
+contributing would open it would be a promise about a day nobody has reached.
 
 Not on that list: starting the trip. `Trip.gateFor` does not look at
-`Trip.startedBy`, and a test pins that.
+`Trip.startedBy`, and a test pins that. Nor is it on `Member.joinedOnDay` any
+more — that used to be the second key, back when a past day otherwise stayed
+shut forever; now that every past day is open the late joiner's case is simply
+the ordinary one, and their arrival is something the interface marks once
+(`docs/design/`, 15d) rather than a reason a gate reports.
 
 `GateState` is one enum rather than a boolean plus a reason, because an open
 gate with a "still waiting for you" reason is not a state the app has — and
-this way it is not a state anyone can build either.
+this way it is not a state anyone can build either. The four-line rule itself
+is `GateState.decide`, so that the app's own state layer — which has no roster
+and therefore no `Trip` to ask — answers the gate through the same lines rather
+than a second copy of them.
 
 **Deleting your own photo leaves the day open.** Contributing is something a
 person did; a photo is a thing that exists, and deleting the thing does not
@@ -227,9 +250,11 @@ The tests are aimed at the parts that are genuinely subtle, not the getters:
   between two days on different clocks, and a trip that lives the same date
   twice across the date line.
 - `test/gate_test.dart` — the gate opening on contribution, staying shut for
-  everyone else including the person who started the trip, a mid-trip joiner
-  seeing every past day freely, and a member deleting their own photo leaving
-  the day open.
+  everyone else standing in the day including the person who started the trip,
+  every day that is over opening to the whole party at that day's own midnight,
+  a day still ahead being shut for its own reason, a mid-trip joiner seeing
+  exactly what everyone else sees, and a member deleting their own photo
+  leaving the day open.
 - `test/day_pool_test.dart` — timeline ordering, deleting only your own photo,
   contributors surviving deletion, and the `DayPool.of`-on-reload trap.
 - `test/trip_test.dart` — the trips that cannot be built, and removal as the

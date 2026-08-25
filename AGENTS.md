@@ -90,6 +90,19 @@ import what is written there, not here.
   a day's photos are ordered by `cairn_model.DayPool`, not by the screen. A
   tile whose bytes are not on this phone is a permanent state of a pool eight
   people share, not a loading spinner.
+- **The gate is one rule, written once.** `cairn_model`'s `GateState.decide`
+  is it: the gate applies to the day being lived, and every day that has sealed
+  is open to everyone on the trip whether they answered it or not
+  (`docs/decisions/2026-08-22-grill-round-one.md` §1). `Trip.gateFor` answers
+  with it for a real trip; `lib/app_state/day_gate.dart` answers with it for
+  this one-phone slice, which has no roster to build a `Trip` from and so gates
+  on `localMemberId` and on the photos still in the pool -- both are seams
+  Phase 2 closes, and the second one has a trap the server already avoids with
+  `day_unlocks` (deleting your photo must never re-shut a day you opened). The
+  only other copy of the rule is `day_page_is_open` in SQL, and that one is
+  deliberate (`docs/architecture.md`, invariant 2). A copy per surface is the
+  thing to refuse in review. The Pool is its one live consumer today, because
+  the gate withholds photographs and no other built surface draws one.
 - Widget tests over the stack must open Drift with
   `closeStreamsSynchronously: true` or teardown hangs silently at 0% CPU —
   the header comment in `test/paste_confirm_flow_test.dart` explains the

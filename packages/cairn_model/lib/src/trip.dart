@@ -155,35 +155,48 @@ final class Trip {
       isMember(remover) &&
       isMember(target);
 
-  /// Whether the day [pool] holds is open to [viewer], and why.
+  /// Whether the day [pool] holds is open to [viewer] at [now], and why.
   ///
-  /// A member sees a day when they have contributed to it, or when the day
-  /// ended before they joined. Nothing else opens it: not being the person who
-  /// started the trip, not how long ago the day was, not how many other people
-  /// answered.
+  /// **The gate applies to the day being lived, and to no other day**
+  /// (`docs/decisions/2026-08-22-grill-round-one.md` §1). A member sees a day
+  /// when they have contributed to it, and sees every day that is already over
+  /// whether they contributed or not — a day that has sealed belongs to the
+  /// party. Nothing else opens it: not being the person who started the trip,
+  /// not how many other people answered, and not how long ago it was, because
+  /// "over" is the whole of that question.
+  ///
+  /// [now] is required rather than read from a clock here, because this
+  /// package has none: a trip has one clock and it follows the itinerary's leg
+  /// (`docs/decisions/2026-08-22-last-calls.md` §4), so the instant is the
+  /// caller's to supply and each day is then read on its own clock.
+  ///
+  /// [Member.joinedOnDay] deliberately plays no part. It used to open the days
+  /// before someone arrived, back when every other past day stayed shut; now
+  /// that every past day is open the late joiner's case is the ordinary one,
+  /// and their arrival is a thing the interface marks once
+  /// (`docs/design/`, 15d) rather than a reason a gate reports.
   ///
   /// Throws [ArgumentError] if [viewer] is not on this trip. A non-member has
   /// no gate state because they have no access to reach a gate with — the
   /// photo rows are not even visible to them (`supabase/README.md`, the
   /// `photos_select_trip_member` policy). Answering "shut" for them would
   /// quietly suggest there is a way in.
-  GateState gateFor({required MemberId viewer, required DayPool pool}) {
-    final member = memberOrNull(viewer);
-    if (member == null) {
+  GateState gateFor({
+    required MemberId viewer,
+    required DayPool pool,
+    required DateTime now,
+  }) {
+    if (!isMember(viewer)) {
       throw ArgumentError.value(
         viewer,
         'viewer',
         'is not on this trip, so has no view of it at all',
       );
     }
-    final day = this.day(pool.dayNumber);
-    if (pool.hasContributed(viewer)) {
-      return GateState.openedByContribution;
-    }
-    if (day.number < member.joinedOnDay) {
-      return GateState.openBecauseJoinedLater;
-    }
-    return GateState.shutAwaitingContribution;
+    return GateState.decide(
+      standing: day(pool.dayNumber).standingAt(now),
+      hasContributed: pool.hasContributed(viewer),
+    );
   }
 
   @override

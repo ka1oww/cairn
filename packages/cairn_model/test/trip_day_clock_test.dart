@@ -124,4 +124,34 @@ void main() {
     expect(crossing.day(1).date, crossing.day(2).date);
     expect(crossing.day(2).startsAt.isAfter(crossing.day(1).startsAt), isTrue);
   });
+
+  group('where a day stands is read on that day\'s own clock', () {
+    test('day 2 is still in progress after the London evening has begun', () {
+      // 14:00 UTC on the 5th is 15:00 in London and 23:00 in Tokyo: London
+      // has moved on and Tokyo has not, and day 2 is a Tokyo day.
+      expect(trip.day(2).standingAt(afterLanding), DayStanding.inProgress);
+    });
+
+    test('the gap between two days on different clocks belongs to neither',
+        () {
+      // Day 2 seals at Tokyo midnight (15:00 UTC); day 3 opens at London
+      // midnight (23:00 UTC). The hours between are in no day at all, and
+      // that is reported honestly rather than papered over: day 2 is walked
+      // and day 3 has not arrived.
+      final between = DateTime.utc(2026, 6, 5, 18);
+      expect(trip.day(2).standingAt(between), DayStanding.walked);
+      expect(trip.day(3).standingAt(between), DayStanding.notYet);
+      expect(trip.day(2).containsInstant(between), isFalse);
+      expect(trip.day(3).containsInstant(between), isFalse);
+    });
+
+    test('a day is walked from its own midnight, inclusive', () {
+      final seals = trip.day(2).endsAt;
+      expect(
+        trip.day(2).standingAt(seals.subtract(const Duration(milliseconds: 1))),
+        DayStanding.inProgress,
+      );
+      expect(trip.day(2).standingAt(seals), DayStanding.walked);
+    });
+  });
 }

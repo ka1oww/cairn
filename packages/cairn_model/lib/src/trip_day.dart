@@ -1,5 +1,6 @@
 import 'calendar_date.dart';
 import 'clock_time.dart';
+import 'day_standing.dart';
 import 'equality.dart';
 import 'stop.dart';
 import 'trip_clock.dart';
@@ -132,6 +133,19 @@ final class TripDay {
   bool containsInstant(DateTime instant) {
     final utc = instant.toUtc();
     return !utc.isBefore(startsAt) && utc.isBefore(endsAt);
+  }
+
+  /// Where this day stands at [instant] — behind us, being lived, or still
+  /// ahead — read on this day's own clock and no other.
+  ///
+  /// This is what the gate asks about time, and asking it here is what keeps
+  /// the answer tied to the clock the day was fixed on: a day that began in
+  /// Tokyo seals at Tokyo's midnight even for someone reading it in London.
+  DayStanding standingAt(DateTime instant) {
+    final utc = instant.toUtc();
+    if (utc.isBefore(startsAt)) return DayStanding.notYet;
+    if (utc.isBefore(endsAt)) return DayStanding.inProgress;
+    return DayStanding.walked;
   }
 
   /// The hour [instant] reads as on *this day's* clock — the time printed
