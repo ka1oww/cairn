@@ -40,7 +40,8 @@ caught and refused the same day, in
 
 ## Still open
 
-- The book's treatment, re-asked in light of authored words. Belongs to
-  design round ten.
 - Where and when people write. Binding night was the round-nine suggestion
   and has not been designed.
+
+The treatment fork this reopened was settled on 23 August: 17d, the blend —
+see [the book's treatment](2026-08-23-book-treatment.md).
