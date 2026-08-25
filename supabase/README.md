@@ -89,8 +89,16 @@ A photo's key is:
 trips/<trip_id>/photos/<photo_id>/original.<ext>
 ```
 
-and, if a thumbnail is generated, `.../thumbnail.<ext>` alongside it. A
-composed day page's key is `trips/<trip_id>/pages/<day_page_id>.<ext>`.
+`original.<ext>` holds the frame exactly as the camera wrote it: the upload
+signs a PUT and transforms nothing, so what lands is what the phone took. A
+photo id is minted once and `r2_object_key` is `unique`, so no second *row*
+can ever claim an original — but note `r2-upload-url` will re-sign a key it
+has signed before, so a client that re-uploads under the same photo id
+overwrites an original. Nothing does that today; a client that starts to is
+breaking this rule, not extending it.
+If a smaller derived variant is generated it is `.../thumbnail.<ext>`
+*alongside* the original, never in place of it. A composed day page's key is
+`trips/<trip_id>/pages/<day_page_id>.<ext>`.
 
 The app never lists an R2 bucket to show a trip's pool. It queries
 `photos where trip_id = $1` (RLS-filtered to members only) and reads
@@ -414,10 +422,17 @@ person signing in with both providers on the same address gets one
   egress past its bundled allowance while R2 never does. Source:
   [developers.cloudflare.com/r2/pricing](https://developers.cloudflare.com/r2/pricing/).
 
-At ten friends and five trips a year, cost is not the constraint: R2 free
-storage lasts into year three on the lighter reading of the photo volume, and
-runs to a few dollars a month on the heavier one. The two things that actually
-bite are operational — the pause, and unbounded accumulation over years.
+The bill has been measured rather than estimated, and the numbers are in
+[docs/storage-and-cost.md](../docs/storage-and-cost.md) — read that before
+quoting a figure here. In short: an original off a phone is about 3 MB, so at
+the ping's own volume a fortnight for eight people is 0.31 GB and the free
+10 GB holds roughly thirty-two such trips at once; at five trips a year that
+allowance lasts into year six. The heavier reading, once the import sweep lets
+a day's whole camera roll into the pool, is 3.14 GB a trip and a few dollars a
+*year*, not a month. Storage is the only line in this backend that will ever
+bill — egress is free, and operations are three orders of magnitude inside
+their allowances. The two things that actually bite are operational: the
+pause, and unbounded accumulation over years.
 
 ## What this model does not handle yet
 
@@ -426,9 +441,16 @@ Being honest about the edges:
 - **No download path is built.** Only `r2-upload-url` exists. See the
   requirements above — this is where the worst potential leak lives, because
   it is a blank the next person fills in.
-- **No thumbnail generation pipeline.** `photos.r2_thumbnail_key` and
-  `day_pages` assume a thumbnail/composed image gets uploaded, but
-  nothing here generates one — that's phone-side image work.
+- **No derived-variant pipeline.** `photos.r2_thumbnail_key` and `day_pages`
+  allow for a smaller derived image and a composed page being uploaded, but
+  nothing here generates either — that's phone-side image work. Note what such
+  a pipeline may and may not do: a derived variant is written *alongside*
+  `r2_object_key` and never over it, because the pool stores the original
+  (`docs/decisions/2026-08-22-grill-round-one.md` §3) and the trip's handover
+  promise is a full-size set. The phone needs no variant to *show* a photo
+  small — `lib/screens/photo_frame.dart` decodes the original down to the box
+  it is drawn in — so a variant here is a bandwidth optimisation for other
+  people's photos, and an optional one.
 - **Nothing reconciles rows against R2 objects.** An upload that lands and
   whose row insert never happens leaves an orphan object, invisible to every
   client and costing storage forever; a row whose upload never landed shows a

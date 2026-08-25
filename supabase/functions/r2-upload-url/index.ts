@@ -82,6 +82,12 @@ Deno.serve(async (req) => {
     return new Response("not a member of this trip", { status: 403 });
   }
 
+  // `original.<ext>`, and only that. The pool stores the frame the camera
+  // wrote, untouched (docs/decisions/2026-08-22-grill-round-one.md §3) --
+  // this function signs a PUT and transforms nothing, and it must never be
+  // taught to sign a downsized or re-encoded object under this key. A
+  // derived variant, if one is ever generated, gets `thumbnail.<ext>`
+  // beside it.
   const ext = contentType === "image/png" ? "png" : contentType === "image/heic" ? "heic" : "jpg";
   const objectKey = `trips/${tripId}/photos/${photoId}/original.${ext}`;
 

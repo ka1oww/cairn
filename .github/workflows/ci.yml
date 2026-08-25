@@ -122,9 +122,12 @@ jobs:
 
   # The application at the repository root: Drift codegen (lib/**/*.g.dart
   # is not checked in -- see the root .gitignore), analysis, tests.
-  # `flutter analyze` is scoped to lib/ and test/ because a bare run from
-  # the root would also walk learning/ and packages/ -- separate projects
+  # `flutter analyze` is scoped to lib/, test/ and tool/ because a bare run
+  # from the root would also walk learning/ and packages/ -- separate projects
   # with their own dependency contexts, each covered by its own job here.
+  # tool/ is named explicitly: the analyzer reports diagnostics for the files
+  # it is given, not for everything they import, so a test importing a script
+  # does not get that script analyzed.
   app-tests:
     runs-on: ubuntu-latest
     steps:
@@ -147,7 +150,7 @@ jobs:
       - run: flutter pub get
       - name: Generate Drift code
         run: dart run build_runner build
-      - run: flutter analyze lib test
+      - run: flutter analyze lib test tool
       - run: flutter test
 
   # The scaffold's claim is an app that actually builds for the phone, so CI

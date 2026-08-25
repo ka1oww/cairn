@@ -25,7 +25,8 @@ ping and every server call are not built yet.
 
 `docs/roadmap.md` is the authority on what is built, what is not, and the order
 the rest arrives in; `docs/architecture.md` maps every node and is honest about
-the gaps.
+the gaps. `docs/storage-and-cost.md` is what the shared photo pool costs to
+keep, measured against a real camera roll rather than estimated.
 
 ## Stack
 

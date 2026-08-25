@@ -32,6 +32,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_state/pool_view.dart';
+import 'photo_frame.dart';
 
 class PoolScreen extends ConsumerWidget {
   const PoolScreen({super.key});
@@ -240,9 +241,12 @@ class _Tile extends StatelessWidget {
             icon: Icons.photo_outlined,
             iconKey: Key('pool-photo-${photo.id}-awaiting'),
           ),
-        (false, final String here) => Image.file(
-            File(here),
-            key: Key('pool-photo-${photo.id}-image'),
+        // Through [PhotoFrame], never `Image.file` directly: the file is
+        // the original the pool keeps, and a tile this size decodes a tile's
+        // worth of it. See lib/screens/photo_frame.dart.
+        (false, final String here) => PhotoFrame(
+            file: File(here),
+            imageKey: Key('pool-photo-${photo.id}-image'),
             fit: BoxFit.cover,
           ),
       },

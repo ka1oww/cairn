@@ -218,8 +218,12 @@ roster or a stale plan
 ([grill round one](decisions/2026-08-22-grill-round-one.md) §2).
 
 The pool stores **originals**; resizing is for display only (§3 of the same
-decision). Sizing the storage bill is work still to do, but it is work, not a
-decision.
+decision). The bill has now been measured rather than guessed at:
+[what the pool costs](storage-and-cost.md). At the ping's own volume a
+fortnight for eight is 0.31 GB and R2's free 10 GB holds about thirty-two such
+trips; let people import their rolls as well and the archive runs to a few
+dollars a year. Not free, and not a reason to keep anything smaller than the
+original.
 
 **Why second:** the gate, the pool and the day page are all inherently
 multi-person. They cannot be honestly built or judged with one device. This is
@@ -366,7 +370,6 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
 - Autofill the itinerary from a Wanderlog export.
 - Google sign-in with accounts keyed to their own id rather than Apple's.
 - Standing ops so Cairn survives the quiet months between trips.
-- Sizing the storage bill for originals from eight people.
 
 **Undecided and deliberately parked:** what happens to in-transit photos on a
 trip that crosses several timezones in one day.
@@ -393,10 +396,17 @@ Each of these has already cost time, or is certain to.
   means the project will sleep. That is what the dormancy work is for.
 - **Google closed the shared-albums API to third-party apps in March 2025.** Any
   design that assumes an existing shared album is a dead end.
-- **Cloudflare R2's free tier is 10 GB, and the pool keeps originals.** Eight
-  people photographing a fortnight will exceed a free allowance sized for
-  thumbnails. Cheap, not free — but the bill has never actually been sized, and
-  that measurement is queued work.
+- **Cloudflare R2's free tier is 10 GB, and the pool keeps originals.** Now
+  measured rather than guessed: an original off a phone is about 3 MB, so the
+  ping's own volume — one photograph per person per day — puts 0.31 GB into a
+  fortnight's pool for eight and sits well inside the free allowance. What
+  moves that by an order of magnitude is the import sweep, not the trip: at ten
+  imported photographs each a day the same trip is 3.14 GB and the archive
+  starts billing in year one. Cheap either way, and never free in the sense of
+  unbounded. See [what the pool costs](storage-and-cost.md), and note the trap
+  that measurement fell into first — most files in a photo library are not
+  photographs a camera took, and sizing from their median understates the bill
+  about fourteenfold.
 - **Row-level security refuses by filtering to zero rows, not by raising.** A test
   asserting "this was rejected" can pass while testing nothing. This already
   burned one analysis. Assert on the state of the table afterwards, never on
