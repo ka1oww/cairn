@@ -82,9 +82,20 @@ class BackCameraSource implements CameraSource {
     if (back.isEmpty) {
       throw const CameraRefused('This device has no back camera.');
     }
+    // `max`, not `high`. The pool stores the **original**
+    // (docs/decisions/2026-08-22-grill-round-one.md §3), and the handover
+    // promise is a full-size set, so the largest frame the sensor will give
+    // is the frame this app is entitled to keep. `ResolutionPreset.high` is
+    // 720p on iOS (`camera_avfoundation` maps it to `.hd1280x720`) -- a
+    // downsize applied before the bytes ever reach the store, which no later
+    // layer could undo. `max` selects the device's highest-resolution format
+    // instead, and the plugin falls back down the ladder on a device that
+    // cannot offer it, so asking for it is never the thing that fails.
+    // Every smaller size the app shows is derived at decode time by
+    // `lib/screens/photo_frame.dart` and never written back over this file.
     final controller = CameraController(
       back.first,
-      ResolutionPreset.high,
+      ResolutionPreset.max,
       enableAudio: false,
     );
     try {
@@ -93,6 +104,9 @@ class BackCameraSource implements CameraSource {
       final at = DateTime.now().toUtc();
       final dir = await _frameDirectory();
       final path = '${dir.path}/${at.microsecondsSinceEpoch}.jpg';
+      // A byte-for-byte copy, deliberately: no re-encode, no strip, no
+      // recompression. The file the plugin wrote is the original, and this
+      // is only where it is filed.
       await File(shot.path).copy(path);
       return CapturedFrame(path: path, takenAtUtc: at);
     } on CameraException catch (e) {

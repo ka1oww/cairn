@@ -28,10 +28,12 @@ import what is written there, not here.
 - Drift's generated code (`lib/**/*.g.dart`) is not checked in (root
   `.gitignore`): run `dart run build_runner build` after checkout, before
   analyzing or testing the app.
-- Analyze with `flutter analyze lib test` from the root. A bare
+- Analyze with `flutter analyze lib test tool` from the root. A bare
   `flutter analyze` also walks `learning/` and `packages/` -- separate
   projects with their own dependency contexts -- and reports their
-  unfetched dependencies as errors.
+  unfetched dependencies as errors. `tool/` is named because the analyzer
+  reports on the files it is *given*, not on everything they import: a test
+  importing a script does not get that script analyzed.
 - iOS only, deliberately: no `android/` exists and the dev machine has no
   Android SDK. The build gate is
   `flutter build ios --simulator --no-codesign`.
@@ -76,6 +78,22 @@ import what is written there, not here.
   no microphone string is needed. The ping's schedule is real
   (`trip_moments`) but dealt for a stub party of one, and `NotificationEdge`
   is not implemented against iOS -- nothing actually buzzes yet.
+- **The stored frame is the original, and every displayed size is derived.**
+  Settled 2026-08-22 (`docs/decisions/2026-08-22-grill-round-one.md` §3);
+  the trip's full-size handover promise rests on it. Two halves, and both
+  are load-bearing: `BackCameraSource` asks for `ResolutionPreset.max`
+  (`high` is 720p on iOS -- a downsize no later layer could undo) and files
+  the plugin's file with a byte-for-byte copy; and **every photo surface
+  draws through `lib/screens/photo_frame.dart`**, which decodes the original
+  down to the box it lands in and never writes. A bare `Image.file` on a
+  stored photo is the thing to refuse in review -- it looks right and costs
+  ~48 MB of image cache per 12-megapixel tile. The decode size is
+  fit-aware, because reading the wrong edge is silent both ways. What the
+  rule costs is measured, not estimated: `docs/storage-and-cost.md`, from
+  `tool/measure_photo_corpus.dart`. Re-run the tool rather than adding a
+  second estimate beside the first -- two disagreeing estimates is the state
+  that file was written to end, and the trap it fell into first is that most
+  files in a photo library are not photographs a camera took.
 - **A photo row is an index, not the photograph**: Drift's `photos` table
   holds the row, the frame is a file in the app's documents directory, and
   that mirrors Postgres-plus-R2 on the server on purpose. The seam over it has

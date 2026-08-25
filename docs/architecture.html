@@ -441,7 +441,7 @@
 </div>
 <div class="node nb" style="left:1140px;top:1200px;width:180px">
   <span class="chip">not built</span><h4>Cloudflare R2</h4>
-  <p>Private bucket, photo bytes, zero egress. Never listed — the photos row <b>is</b> the pointer.</p>
+  <p>Private bucket, photo bytes, zero egress. Holds <b>originals</b>, untouched; a derived variant may sit beside one, never over it. Never listed — the photos row <b>is</b> the pointer. The 10&nbsp;GB free tier is the only line that ever bills (measured: docs/storage-and-cost.md).</p>
 </div>
 <div class="maplabel" style="left:660px;top:1005px;width:400px">
   the server holds only the pool, membership, the shared clock and the itinerary as a stored shared fact — pings and gate evaluation never move server-side
@@ -543,8 +543,10 @@
       <li><b>The book’s interior is designed</b> — round 9 drew it against the captain’s printed reference; the printed page is not designed, and the book is deliberately after the first release.</li>
       <li><b>In-transit photos on a multi-zone day are parked</b> — refusal (<code>outsideTrip</code>)
       plus manual placement is the current answer.</li>
-      <li><b>Thumbnails, keepalive, CI:</b> no thumbnail pipeline; the between-trips dormancy
-      keepalive is planned only; no CI runs any test on any PR.</li>
+      <li><b>Derived variants, keepalive, CI:</b> no server-side variant pipeline, and none
+      is needed to draw a photo small — the phone decodes the stored original down to its
+      box (lib/screens/photo_frame.dart); the between-trips dormancy keepalive is planned
+      only; no CI runs any test on any PR.</li>
       <li><b>Nothing has touched a hosted Supabase project or a real R2 bucket.</b>
       <code>supabase db push</code> against a throwaway project is still the gate.</li>
     </ul>

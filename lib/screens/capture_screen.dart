@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_state/capture_flow.dart';
+import 'photo_frame.dart';
 
 class CaptureScreen extends ConsumerWidget {
   const CaptureScreen({super.key});
@@ -118,9 +119,12 @@ class _Breath extends ConsumerWidget {
         Expanded(
           child: Align(
             alignment: Alignment.topLeft,
-            child: Image.file(
-              File(breath.framePath),
-              key: const Key('capture-frame'),
+            // The frame on disk is the full-size original the pool will
+            // keep; the breath shows a screen's worth of it and leaves the
+            // file alone. See lib/screens/photo_frame.dart.
+            child: PhotoFrame(
+              file: File(breath.framePath),
+              imageKey: const Key('capture-frame'),
               fit: BoxFit.contain,
               // A frame that will not decode is still a real capture and
               // still has an hour; losing the sheet over it would lose the

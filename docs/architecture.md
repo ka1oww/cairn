@@ -254,7 +254,7 @@ nothing about pings fired or who has answered today.
 | **Supabase Auth (GoTrue)** | not built — no project; Apple provider is a dashboard step; Google queued | (platform service) | Postgres (`auth.uid()` in every policy), client adapter, edge functions | Accounts. Sign in with Apple first; display name editable at join because providers supply legal names. |
 | **`r2-upload-url` edge fn** | partial — code exists (membership check fixed in #9), never deployed | Postgres (re-checks membership as the caller), R2 (mints a 5-minute presigned PUT) | The only write path for photo bytes | Exists solely because the R2 secret cannot live in the app binary. |
 | **`r2-download-url` edge fn** | **not built** — requirements settled in `supabase/README.md` | Postgres (**must call `day_page_is_open` before signing**), R2 (presigned GET) | The gate itself: a version that skips the check is the single worst potential leak in the app | The bucket is private; every read needs a signature; gating the signature is what makes the shut gate real rather than a curtain. |
-| **Cloudflare R2** | not built — bucket not created; plan settled | nothing | Both edge functions; the app's byte transfers; the 10 GB free tier is a real ceiling | Photo bytes and day-page composites at zero egress. Postgres is the index; R2 is never listed — the `photos` row *is* the pointer. |
+| **Cloudflare R2** | not built — bucket not created; plan settled | nothing | Both edge functions; the app's byte transfers; the 10 GB free tier is a real ceiling, and the only line in the backend that ever bills — measured in [docs/storage-and-cost.md](storage-and-cost.md) | Photo bytes and day-page composites at zero egress. Holds **originals**, untouched; a derived variant may sit beside one but never replaces it. Postgres is the index; R2 is never listed — the `photos` row *is* the pointer. |
 
 ### Platform edges — wiring not built; the platform provides them
 
@@ -423,10 +423,14 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
 - **In-transit photos on a multi-timezone day are parked.** A photo taken
   between two days' zones can be `outsideTrip` by refusal; manual placement
   is the current answer.
-- **Thumbnails and keepalive.** No thumbnail pipeline exists (phone-side
-  work). The dormancy keepalive that protects the free tier between trips is
-  planned, not built. (CI exists since #13 and covers the packages, the
-  JS-safety golden, the RLS probe, the learning demo and the app.)
+- **Derived variants and keepalive.** No server-side variant pipeline exists
+  (phone-side work), and none is needed to show a photo small: the pool keeps
+  the original and `lib/screens/photo_frame.dart` decodes it down to whatever
+  box it is drawn in, so a stored variant would only ever save bandwidth
+  fetching somebody else's photo. When one is built it is written *beside* the
+  original and never over it. The dormancy keepalive that protects the free
+  tier between trips is planned, not built. (CI exists since #13 and covers the
+  packages, the JS-safety golden, the RLS probe, the learning demo and the app.)
 - **Nothing has ever touched a hosted Supabase project or a real R2 bucket.**
   The schema's verification is real but local; `supabase db push` against a
   throwaway project is still the gate before anything real.

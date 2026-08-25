@@ -19,9 +19,32 @@ create table if not exists public.photos (
   -- photos is a `select ... where trip_id = $1` against this table --
   -- never an R2 ListObjects call. See supabase/README.md for the exact
   -- key shape.
+  --
+  -- This key holds the **original**, exactly as the camera wrote it: the
+  -- pool stores originals and resizing is for display only
+  -- (docs/decisions/2026-08-22-grill-round-one.md §3), which is what the
+  -- trip's full-size handover promise rests on. Nothing may re-encode,
+  -- strip or downsize the object behind this key, and nothing may write it
+  -- twice: an original is immutable, which is also why a client can cache
+  -- its bytes forever. `unique` enforces the half of that a database can --
+  -- no second row may claim an original -- and the other half is a rule a
+  -- client keeps, since r2-upload-url will re-sign a key it has signed
+  -- before. See supabase/README.md.
   r2_object_key text not null unique,
+
+  -- An optional smaller derived variant, written *alongside* the original
+  -- and never over it. Nullable because it is an optimisation, not a
+  -- requirement: a phone shows a photo small by decoding the original down
+  -- to the box it draws in (lib/screens/photo_frame.dart), so this key only
+  -- ever saves bandwidth fetching somebody else's photo. Nothing generates
+  -- one yet.
   r2_thumbnail_key text unique,
+
   content_type text not null,
+
+  -- The original's size and pixel dimensions, never a variant's. This is
+  -- the column the storage bill is counted in -- see
+  -- docs/storage-and-cost.md, where it is measured rather than guessed.
   byte_size bigint not null check (byte_size > 0),
   width integer check (width > 0),
   height integer check (height > 0),
