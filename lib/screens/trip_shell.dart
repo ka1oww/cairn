@@ -1,10 +1,11 @@
 // SCREENS band (docs/architecture.md): knows app state and nothing below it.
 //
 // The container. The app's destinations are tabs, not a stack you navigate
-// out of — Today, the Trail, and (design surface 2e) the Pool. **The Pool is
-// not built, so it is not here**: a greyed-out tab is chrome for a thing that
-// does not exist, which is the same principle that keeps photo slots off the
-// day page. Adding it is one entry in `_destinations` and one root widget.
+// out of — Today, the Trail and the Pool, which is design surface 2e's whole
+// structure. The Pool was absent rather than greyed out until it existed; it
+// exists now, and it arrived the way that comment promised — one entry in
+// `_destinations` and one root widget. The principle stands for whatever is
+// next: a greyed-out tab is chrome for a thing that does not exist.
 //
 // Trip-level actions hang off the Trail's own title and never off a tab
 // (surface 6e, "off the trail's title, never a fourth tab"); the temporary
@@ -19,6 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_state/day_view.dart';
 import 'day_page.dart';
+import 'pool_screen.dart';
 import 'trail_screen.dart';
 
 /// One tab of the container.
@@ -27,7 +29,7 @@ typedef _Destination = ({String label, IconData icon, Widget root});
 const _destinations = <_Destination>[
   (label: 'Today', icon: Icons.wb_sunny_outlined, root: _TodayTab()),
   (label: 'Trail', icon: Icons.route_outlined, root: TrailScreen()),
-  // (label: 'Pool', icon: Icons.grid_view_outlined, root: PoolScreen()),
+  (label: 'Pool', icon: Icons.grid_view_outlined, root: PoolScreen()),
 ];
 
 class TripShell extends StatefulWidget {

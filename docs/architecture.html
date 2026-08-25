@@ -142,15 +142,16 @@
     Every piece of the app as a node; an arrow means <b>“knows about”</b> and always points
     downward. Point at any node and its inward arrows are what breaks if it changes.
     Drawn 22 Aug 2026 from <code>main</code> (PRs #7–#10 merged) and design round 7 (PR #11);
-    updated the same day for the app scaffold, and 24 Aug 2026 for the
-    paste-and-confirm flow — the first real screens — and Today, the day page
-    that replaced its placeholder as the launch surface.
+    updated the same day for the app scaffold, 24 Aug 2026 for the
+    paste-and-confirm flow — the first real screens — Today, the day page
+    that replaced its placeholder as the launch surface, and the Trail with
+    the tab container; and 25 Aug 2026 for the Pool, the third tab.
     The greppable twin of this page is <a href="architecture.md">architecture.md</a>.
   </p>
 </header>
 
 <div class="noapp">
-  <b>The app has a way in, and a trip with two destinations in it.</b>
+  <b>The app has a way in, and a trip with all three of its destinations in it.</b>
   <span>The paste-and-confirm slice replaced the scaffold's proving screen and its disposable
   <code>trip_drafts</code> table: paste a plan, see what was understood with the doubt surfaced
   per cause, flip ambiguous dates in one tap, accept — and the itinerary persists into Drift,
@@ -158,7 +159,10 @@
   page for today's date — the day's identity, its stops in pasted order, a time only where the
   plan starred one. The Trail added the trip-level view — one node per day on the winding path,
   a flag on today — and the real container it and Today live in: a tab bar built so the Pool
-  becomes a third entry, and shown without one until it exists. There is one day screen and no
+  becomes a third entry, and shown without one until it existed. The Pool is now that third
+  entry: the trip's photos grouped by day, newest first, over a <i>read-only</i> seam with an
+  empty in-memory pool behind it — capture and every write path land separately, so what a
+  phone sees today is the empty state. There is one day screen and no
   separate day detail; the Trail opens that same widget for every node it draws.
   <code>lib/README.md</code> spells these bands as
   directories. <b>Every other designed screen, the three services, the platform glue and the
@@ -270,8 +274,8 @@
 </svg>
 
 <!-- ======================= band labels ======================= -->
-<div class="band" style="top:0px"><span>Screens</span><em>partial — paste-and-confirm, the day page and the Trail built, in a real tab container (Today · Trail; the Pool slots in when it exists); the rest drawn in docs/design · they know app state and nothing below it</em></div>
-<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>partial — the paste flow's state, the day view and the trail view; the services not built</em></div>
+<div class="band" style="top:0px"><span>Screens</span><em>partial — paste-and-confirm, the day page, the Trail and the Pool built, in a real tab container (Today · Trail · Pool); the rest drawn in docs/design · they know app state and nothing below it</em></div>
+<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>partial — the paste flow's state, the day view, the trail view and the pool view; the services not built</em></div>
 <div class="band" style="top:415px"><span>Platform edges (iOS)</span><em>wiring not built · services know the platform; the platform knows nothing of Cairn</em></div>
 <div class="band" style="top:562px"><span>The repositories seam</span><em>partial — scaffolded · the most expensive layer to skip</em></div>
 <div class="band" style="top:772px"><span>Storage</span><em>partial — Drift scaffolded, remote not built; only the seam knows both exist</em></div>
@@ -293,9 +297,10 @@
   <span class="chip">not built</span><h4>Capture</h4>
   <p>Answers the ping. Back camera + front inset; 30-min window; late path open.</p>
 </div>
-<div class="node nb" style="left:606px;top:22px;width:170px;height:130px">
-  <span class="chip">not built</span><h4>Pool</h4>
+<div class="node partial" style="left:606px;top:22px;width:170px;height:130px">
+  <span class="chip">partial</span><h4>Pool</h4>
   <p>Plumbing: the trip’s photos in a plain, fast grid by day. Not a destination.</p>
+  <span class="sub">the screen built over a read seam; no photo can exist yet, so it shows its empty state</span>
 </div>
 <div class="node nb" style="left:788px;top:22px;width:170px;height:130px">
   <span class="chip">not built</span><h4>Book</h4>
@@ -320,7 +325,7 @@
 <div class="node partial" style="left:340px;top:250px;width:420px;height:115px">
   <span class="chip">partial</span><h4>Riverpod providers</h4>
   <p>One source of truth per question. A watched repository stream flows through a provider; writing a row updates every watching screen with no manual wiring. Calls <b>itinerary_parser</b> for the confirm flow.</p>
-  <span class="sub">the paste flow's state, the saved-plan stream, the day view and the trail view — nothing of the Pool or capture yet</span>
+  <span class="sub">the paste flow's state, the saved-plan stream, the day view, the trail view and the pool view — nothing of capture yet</span>
 </div>
 <div class="node nb" style="left:800px;top:250px;width:240px;height:115px">
   <span class="chip">not built</span><h4>Import sweep</h4>
@@ -366,6 +371,7 @@
   <i>and</i> that a network exists. Above it, nobody can tell where an answer came from.
   Everything awkward about offline-first lives here so it lives nowhere else:</p>
   <div class="chips">
+    <i>photos out: read-only, no store behind it yet</i>
     <i>outbox: bytes first, row second</i>
     <i>day_pages insert → update fallback</i>
     <i>deletions need refetch</i>

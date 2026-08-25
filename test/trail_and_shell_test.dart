@@ -328,13 +328,17 @@ void main() {
     expect(find.byKey(const Key('trail-node-1')), findsOneWidget);
   });
 
-  testWidgets('the Pool is absent rather than shown disabled', (tester) async {
+  testWidgets('the container holds three destinations and no fourth',
+      (tester) async {
     await arriveOnTrail(tester, today: day(15));
 
+    // Surface 2e's whole structure, now that the Pool exists. Trip-level
+    // actions still hang off the Trail's title rather than becoming a
+    // fourth tab (6e), which is what the count here pins.
     expect(find.byKey(const Key('tab-today')), findsOneWidget);
     expect(find.byKey(const Key('tab-trail')), findsOneWidget);
-    expect(find.byKey(const Key('tab-pool')), findsNothing);
-    expect(find.text('Pool'), findsNothing);
+    expect(find.byKey(const Key('tab-pool')), findsOneWidget);
+    expect(find.byType(NavigationDestination), findsNWidgets(3));
   });
 
   testWidgets('the temporary way back hangs off the trip, not off a day',

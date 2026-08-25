@@ -38,15 +38,16 @@ import what is written there, not here.
 - The launch surface: `RootScreen` opens on the paste box until an itinerary
   is accepted into Drift, then on the trip — `TripShell`, whose tabs open on
   **Today**. Each flow's whole brain is one file in `lib/app_state/`
-  (`paste_flow.dart`, `day_view.dart`, `trail_view.dart`); screens render
-  their view models and never import the parser or `cairn_model`.
+  (`paste_flow.dart`, `day_view.dart`, `trail_view.dart`, `pool_view.dart`);
+  screens render their view models and never import the parser or
+  `cairn_model`.
 - **The container is `lib/screens/trip_shell.dart`**: a tab per destination,
   each owning its own `Navigator` so a day page opened from the Trail
-  survives a switch to Today and back. The design's structure is three tabs
-  (Today, Trail, Pool); the Pool is **absent, not disabled**, and slots in as
-  one entry in `_destinations`. Trip-level actions hang off the Trail's title
-  and never a fourth tab — the temporary route back to the paste box lives
-  there.
+  survives a switch to Today and back. It holds all three of the design's
+  destinations (Today, Trail, Pool) and no fourth: trip-level actions hang
+  off the Trail's title, and the temporary route back to the paste box lives
+  there. Anything drawn but not built stays **absent, not disabled** — that
+  is how the Pool waited, and how the next one should.
 - **There is one day screen and no separate day detail.** Today is
   `DayPage(date:)` handed today's date; the Trail opens the same widget for
   every node, through `DayPage.planDay(n)`. Two ways in, one screen: the
@@ -59,13 +60,26 @@ import what is written there, not here.
   plan skips gets a `GapDay` page but never a node, because every drawing
   numbers the path over the plan's own days ("Day 4 of 8"). The winding
   geometry is the screen's identity, not decoration.
+- **The Pool is read-only, and empty.** `PhotoRepository`
+  (`lib/repositories/photo_repository.dart`) is the trip's photo *read* seam;
+  `bootstrap.dart` binds it to an `InMemoryPhotoPool` with nothing in it,
+  because no write path exists. Tests build the populated state through
+  `bootstrapApp(photos:)`. Two rules the screen depends on: a photo's day is
+  the `dayNumber` already on its `PhotoRef` — never re-derived from
+  `photo_day_assignment` on read, since a person may have overridden it — and
+  a day's photos are ordered by `cairn_model.DayPool`, not by the screen. A
+  tile whose bytes are not on this phone is a permanent state of a pool eight
+  people share, not a loading spinner.
 - Widget tests over the stack must open Drift with
   `closeStreamsSynchronously: true` or teardown hangs silently at 0% CPU —
   the header comment in `test/paste_confirm_flow_test.dart` explains the
   mechanism. Read it before writing any test that pumps the app. Since the
   container landed, every tab stays in the tree but the unselected ones are
   *offstage*: finders skip those by default, so a plain `find.byKey` sees
-  only the tab you are standing on, and a tap only reaches it.
+  only the tab you are standing on, and a tap only reaches it. A test that
+  pumps `bootstrapApp` and then its own `ProviderScope` must key that scope
+  (`UniqueKey`): Riverpod refuses to update a scope whose override count
+  changed, and every new binding in `bootstrap.dart` changes it.
 - Fixture-writing trap: a `Day 1 - Tokyo, 14 June 2027` header does *not*
   give the day a date (the whole tail becomes the place); only a date-shaped
   header (`Mon 14 June 2027 - Tokyo`, `3/11/2027 - Tokyo`) resolves
