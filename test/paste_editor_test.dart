@@ -222,6 +222,23 @@ void main() {
       expect(dayNumbered(2).doubt, isNull);
     });
 
+    test(
+      'a day answered "leave it empty" asks again once emptied again',
+      () {
+        paste('Day 1 - Tokyo\n- Senso-ji\n\nDay 2 - Hakone\n');
+        expect(dayNumbered(2).doubt?.cause, DayDoubtCause.noStops);
+
+        flow().confirmDay(2);
+        expect(dayNumbered(2).doubt, isNull);
+
+        flow().addStop(2, 'Onsen');
+        expect(dayNumbered(2).doubt, isNull);
+
+        flow().removeStop(dayNumbered(2).stops.single.id);
+        expect(dayNumbered(2).doubt?.cause, DayDoubtCause.noStops);
+      },
+    );
+
     group('the date a title named', () {
       test('is offered, not bound', () {
         paste();

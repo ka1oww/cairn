@@ -358,6 +358,11 @@ class _DraftDay {
 
   /// True once the person has said this day reads right as it stands.
   bool confirmed = false;
+
+  /// The stop count [confirmed] was last true for. A day whose stop count
+  /// has since moved away from this is no longer answered for — emptiness is
+  /// live state, not a verdict the parser or the person handed down once.
+  int confirmedStopCount = 0;
 }
 
 class _DraftAside {
@@ -508,6 +513,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
     final day = _dayNumbered(dayNumber);
     if (day == null) return;
     day.confirmed = true;
+    day.confirmedStopCount = day.stops.length;
     _rebuildReview();
   }
 
@@ -893,7 +899,12 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// The surfaced doubt for a day, or null when it reads clean — either the
   /// parser was sure, or the person has answered.
   DayDoubt? _doubtFor(_DraftDay day, _Draft draft) {
-    if (day.confirmed) return null;
+    if (day.confirmed) {
+      if (day.stops.length == day.confirmedStopCount) return null;
+      final doubt = _emptiedDoubt(day);
+      if (doubt == null) day.confirmedStopCount = day.stops.length;
+      return doubt;
+    }
 
     final uncertainty = day.uncertainty;
     if (uncertainty == null) return _emptiedDoubt(day);
