@@ -518,8 +518,9 @@
       <code>cairn_model</code>’s <code>trip_powers.dart</code> holds the whole model — rename and
       mint flat, delete gated once others’ photos exist, revoke by minter or starter, removal power
       passing to the longest-standing member — and the trip’s sheet asks it before every act. The
-      migrations still have starter-only rename/delete and an 8-character code; the timezone power
-      has nowhere to live until a trip clock is stored.</li>
+      migrations still have starter-only rename/delete and a <code>max_uses</code> the phone has no
+      notion of, though the three-word code and its death at the trip’s close are reconciled now; the
+      timezone power has nowhere to live until a trip clock is stored.</li>
       <li><b>An invite code is real and cannot let anybody in.</b> Minting, rotating, revoking and
       expiry-with-the-trip are built, and saying a code back is answered honestly for every case
       this phone can see. Joining needs a membership that reaches another phone — Phase 2.</li>

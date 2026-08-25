@@ -344,9 +344,11 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   power passing silently to the longest-standing member when the starter
   leaves — and the trip's own surface asks it before every act. The migrations
   in `supabase/` still have starter-only rename/delete with no photo condition
-  and no succession, and an 8-character code generator rather than three
-  words. The timezone power has nowhere to live yet: no trip clock is stored,
-  so there is nothing to change.
+  and no succession, and a `max_uses` the phone has no notion of. The
+  three-word grammar and the trip-close expiry are reconciled: the migration
+  mints two words and a number, forgives order and spelling by the same rule,
+  and refuses a code whose trip has closed. The timezone power has nowhere to
+  live yet: no trip clock is stored, so there is nothing to change.
 - **An invite code is real, canonical and revocable — and cannot let anybody
   in.** Minting, rotating and revoking are implemented, expiry is derived from
   the trip's close (never stored as a second timestamp), and saying a code

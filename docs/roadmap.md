@@ -311,12 +311,20 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
   a real invite code and somebody actually joining. Everything on this side of
   it is built — roster, roles, three-word codes that die with the trip, and the
   door that reads them back — and honestly says so when it cannot reach a trip.
-- Put the three-word grammar on the server: `supabase/migrations/` still mints
-  an 8-character code, still carries a per-invite `expires_at` (the single
-  timestamp the grace-window decision exists to prevent) and `max_uses`, and
-  still has starter-only rename/delete with no photo condition and no
-  succession. The phone and the schema now disagree about the same settled
-  decisions, and the schema is the half that is wrong.
+- Finish reconciling the schema with the settled decisions. The three-word
+  grammar is on the server now — `supabase/migrations/0005_trip_invites.sql`
+  mints two words and a number, forgives order and spelling by the same rule
+  the phone forgives them by, and kills a code at the trip's close instead of
+  at a per-invite `expires_at` (the single timestamp the grace-window decision
+  exists to prevent), with `tests/rls_probe.py` reading the Dart vocabulary to
+  keep the two halves from drifting. What is still unreconciled: `max_uses`,
+  which the phone has no notion of, and starter-only rename/delete with no
+  photo condition and no succession.
+- Throttle `redeem_trip_invite`. Three spoken words are a little over six
+  hundred thousand codes where eight characters were ~850 billion, and each
+  guess covers a neighbourhood of near-spellings. Sayable was the point and
+  the trade is the decision's; the rate limit it assumes is not written yet,
+  at the database level or above it.
 - The itinerary as a shared, propagated fact; membership changes reaching every
   phone.
 - The trip's close at trip end + 14 days as a *stored* rule. It is derived

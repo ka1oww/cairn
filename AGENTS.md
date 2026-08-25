@@ -165,6 +165,20 @@ Sharp edges worth knowing before touching this directory again:
   reason, never add `force row level security` to any table here -- it
   re-enables the recursion. Both directions are demonstrated by
   `supabase/tests/recursion_mechanism.py`.
+- **The invite grammar exists twice, and the probe is what keeps the two
+  copies honest.** A code is three spoken words, forgiving of order and of one
+  letter per word, and it dies at the trip's close -- end date plus fourteen
+  days, in the trip's own clock, never a stored `expires_at`. The phone's half
+  is `cairn_model`'s `invite_code.dart` / `trip_close.dart`; the server's is
+  `0005_trip_invites.sql`, and a code minted on one side is typed into the
+  other, so they have to agree letter for letter. `tests/rls_probe.py` reads
+  the Dart word list and the grace out of those files and compares them rather
+  than trusting the copies to stay in step -- extend that check, never a third
+  copy. Two traps in the SQL half: the edit distance is written out rather than
+  taken from `fuzzystrmatch`, whose `levenshtein()` prices a swapped pair of
+  letters at two and would refuse near-spellings the phone accepts; and
+  uniqueness and lookup are both over `invite_code_key(code)`, the canonical
+  spelling, never over the text as written.
 - Migrations in `supabase/migrations/` are numbered and dependency-ordered.
   Only one forward reference remains, and it is irreducible: `0003_trips.sql`
   defers its own RLS policies to `0004_trip_members.sql`, because `trips` must
