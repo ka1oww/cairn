@@ -94,7 +94,16 @@ void main() {
 
   /// The day page on its own, over the same store — the claim that Today is
   /// nothing but this widget handed today's date.
+  ///
+  /// The key is load-bearing. These tests pump the whole app first and this
+  /// scope second, and Riverpod refuses to *update* a scope whose override
+  /// count changed ("overrides cannot be removed/added"). Without a key
+  /// Flutter reuses the element and hands it a shorter override list; the
+  /// key makes it a new scope instead. It fails the moment `bootstrapApp`
+  /// binds a provider this helper does not, which is exactly what happened
+  /// when the Pool's seam arrived.
   Widget dayPageAt(DateTime date, {required DateTime today}) => ProviderScope(
+        key: UniqueKey(),
         overrides: [
           tripRepositoryProvider.overrideWithValue(TripRepository(db)),
           todayProvider.overrideWithValue(today),

@@ -5,7 +5,7 @@
 This file records **what is built, what is not, and the order the rest arrives in** —
 and, where the order is not obvious, why it is that order.
 
-Last true as of 22 August 2026.
+Last true as of 25 August 2026.
 
 ---
 
@@ -68,8 +68,8 @@ estimated mid-to-late October; the slack is the point.
 
 ## Where this is now
 
-**Foundations are done. The app has a way in, and a trip with two
-destinations in it.**
+**Foundations are done. The app has a way in, and a trip with all three of
+its destinations in it.**
 
 The paste-and-confirm flow is built and tested: paste a plan, see what the
 parser understood day by day with its doubt surfaced per cause, flip
@@ -92,15 +92,34 @@ trip is a winding path of one node per day in itinerary order, a flag on the
 day you are standing in, ink road behind you and dashes ahead; tapping any
 node — past, ahead, or a day whose date was never given — opens that day's
 page, which is the same day page and not a second one. Today and the Trail
-are tabs; the Pool becomes a third when it exists and is not shown as a
-disabled stub until then. The edges are built with it: before the trip
+became tabs, with the Pool left out rather than shown as a disabled stub
+until it existed — which it now does. The edges are built with it: before the trip
 starts, after it ends, a one-day trip, and a date the plan skips (which gets
 a day page but no node, because the drawings number the path over the plan's
 own days).
 
+**The Pool is the third tab**, and the container now holds the whole of
+surface 2e's structure. It is the trip's photos in one shared place, grouped
+by the day each was assigned to and read newest first, with a count over the
+lot. It is plumbing by decision ([first calls](decisions/2026-08-21-first-calls.md),
+"The Pool is plumbing") and it is built as one: structure and states in the
+theme's own colours, and none of the sticker treatment, the taker's initial
+chip or the dashed "+" tile, each of which waits on something that does not
+exist yet. Both its states are real — an empty pool is a written line rather
+than a skeleton grid, and a photo whose bytes are not on this phone is a tile
+waiting for them rather than a broken one, which is a permanent state of a
+pool eight people share.
+
+**The Pool is empty in the app as built, and that is the honest state.** What
+landed is the *read* seam — `PhotoRepository`, bound in `bootstrap.dart` to an
+in-memory pool with nothing in it — and the screen over it. Capture, the store
+behind it and every write path are a separate slice, and no photo can exist
+until they land.
+
 The itinerary is local-only until it becomes the shared, propagated fact of
-Phase 2. Photos on the day page and on the Trail's nodes, the gate and the
-Pool are still not built. Beneath it: four pure-Dart libraries, a backend schema, a
+Phase 2. Photos themselves are still not built: capture, the store that holds
+them, the day page's photo timeline, the Trail's filled node, and the gate.
+Beneath it: four pure-Dart libraries, a backend schema, a
 dual-camera spike, the decision record, and the design handoffs, all
 tested.
 
@@ -114,7 +133,7 @@ tested.
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **The way in, Today and the Trail.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, and the tab container holding them. Photos, the gate and the Pool not started. |
+| The Flutter app | **The way in, Today, the Trail and the Pool.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, the shared pool's read seam and the screen over it, and the three-tab container holding them. Photos themselves, capture and the gate not started. |
 
 ---
 
@@ -168,7 +187,10 @@ half — the photo timeline that makes the day an artefact, its plan half
 having landed early with Today — the back-only capture, and the late-photo
 path for a missed ping. The Trail's own path landed early alongside Today;
 what is left of it here is the node a day's photos fill, which is the whole
-reward of that screen and cannot be drawn before photos exist.
+reward of that screen and cannot be drawn before photos exist. The Pool's
+structure landed early the same way, over a read seam with nothing behind it;
+what is left of it here is the photograph in the tile, and the taker's initial
+chip once a roster exists.
 
 **Why third:** these are the parts people actually see and the parts most likely
 to change once you have used them. Building them on top of a working pool means
