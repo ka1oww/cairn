@@ -51,8 +51,9 @@ class TrailScreen extends ConsumerWidget {
         child: switch (trail) {
           AsyncData(value: final TrailView view) => _Trail(view: view),
           AsyncData() => const SizedBox.shrink(),
-          AsyncError(:final error) =>
-            Center(child: Text('Failed to read: $error')),
+          AsyncError(:final error) => Center(
+            child: Text('Failed to read: $error'),
+          ),
           _ => const Center(child: CircularProgressIndicator()),
         },
       ),
@@ -125,8 +126,9 @@ class _Header extends ConsumerWidget {
                   Text(
                     view.detail!,
                     key: const Key('trail-detail'),
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ],
@@ -147,10 +149,10 @@ class _TripSheetButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => IconButton(
-        key: const Key('trip-sheet-open'),
-        icon: const Icon(Icons.expand_more),
-        onPressed: () => showTripSheet(context),
-      );
+    key: const Key('trip-sheet-open'),
+    icon: const Icon(Icons.expand_more),
+    onPressed: () => showTripSheet(context),
+  );
 }
 
 /// The path and everything standing on it.
@@ -161,16 +163,14 @@ class _Path extends StatelessWidget {
   final double width;
 
   Offset _centre(int index) => Offset(
-        width * (index.isEven ? _leftOfPath : _rightOfPath),
-        _padTop + index * _stepY,
-      );
+    width * (index.isEven ? _leftOfPath : _rightOfPath),
+    _padTop + index * _stepY,
+  );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final centres = [
-      for (var i = 0; i < view.nodes.length; i++) _centre(i),
-    ];
+    final centres = [for (var i = 0; i < view.nodes.length; i++) _centre(i)];
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -236,11 +236,11 @@ int _solidSegments(List<TrailNode> nodes) {
 }
 
 double _diameter(TrailNode node) => switch (node) {
-      TrailNode(isToday: true) => 80,
-      TrailNode(state: TrailNodeState.past) => 68,
-      TrailNode(isNextUp: true) => 72,
-      _ => 64,
-    };
+  TrailNode(isToday: true) => 80,
+  TrailNode(state: TrailNodeState.past) => 68,
+  TrailNode(isNextUp: true) => 72,
+  _ => 64,
+};
 
 /// One day on the path.
 ///
@@ -375,9 +375,12 @@ class _NodePainter extends CustomPainter {
 
     if (state == TrailNodeState.ahead && !isNextUp) {
       // The dashed "not yet" ring — the same mark the road ahead wears.
-      canvas.drawPath(_dashed(Path()..addOval(
-        Rect.fromCircle(center: centre, radius: radius),
-      )), ring);
+      canvas.drawPath(
+        _dashed(
+          Path()..addOval(Rect.fromCircle(center: centre, radius: radius)),
+        ),
+        ring,
+      );
       return;
     }
     canvas.drawCircle(centre, radius, ring);
@@ -402,10 +405,10 @@ class _Flag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CustomPaint(
-        key: const Key('trail-flag'),
-        size: const Size(40, 30),
-        painter: _FlagPainter(color: color),
-      );
+    key: const Key('trail-flag'),
+    size: const Size(40, 30),
+    painter: _FlagPainter(color: color),
+  );
 }
 
 class _FlagPainter extends CustomPainter {

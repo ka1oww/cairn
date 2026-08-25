@@ -73,27 +73,28 @@ PooledPhoto photo(
   required int onDay,
   required int hour,
   String? path,
-}) =>
-    PooledPhoto(
-      ref: PhotoRef(
-        id: PhotoId(id),
-        dayNumber: onDay,
-        contributor: MemberId('anyone'),
-        takenAt: DateTime.utc(2027, 6, 13 + onDay, hour),
-        origin: PhotoOrigin.pinged,
-      ),
-      localPath: path,
-    );
+}) => PooledPhoto(
+  ref: PhotoRef(
+    id: PhotoId(id),
+    dayNumber: onDay,
+    contributor: MemberId('anyone'),
+    takenAt: DateTime.utc(2027, 6, 13 + onDay, hour),
+    origin: PhotoOrigin.pinged,
+  ),
+  localPath: path,
+);
 
 /// A real 1×1 PNG on disk, so a tile with bytes has bytes to point at.
 File writeTinyPng() {
   final file = File(
     '${Directory.systemTemp.createTempSync('cairn_pool').path}/tile.png',
   );
-  file.writeAsBytesSync(base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAE'
-    'hQGAhKmMIQAAAABJRU5ErkJggg==',
-  ));
+  file.writeAsBytesSync(
+    base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAE'
+      'hQGAhKmMIQAAAABJRU5ErkJggg==',
+    ),
+  );
   addTearDown(() => file.parent.deleteSync(recursive: true));
   return file;
 }
@@ -101,10 +102,14 @@ File writeTinyPng() {
 void main() {
   late AppDatabase db;
 
-  setUp(() => db = AppDatabase(DatabaseConnection(
+  setUp(
+    () => db = AppDatabase(
+      DatabaseConnection(
         NativeDatabase.memory(),
         closeStreamsSynchronously: true,
-      )));
+      ),
+    ),
+  );
   tearDown(() => db.close());
 
   Future<void> launch(
@@ -115,11 +120,9 @@ void main() {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(bootstrapApp(
-      database: db,
-      today: today,
-      photos: InMemoryPhotoPool(pool),
-    ));
+    await tester.pumpWidget(
+      bootstrapApp(database: db, today: today, photos: InMemoryPhotoPool(pool)),
+    );
     await tester.pump();
     await tester.pump();
   }
@@ -150,21 +153,24 @@ void main() {
     await openPool(tester);
   }
 
-  String textOf(Key key) => (find
-          .descendant(
-            of: find.byKey(key),
-            matching: find.byType(Text),
-            matchRoot: true,
-          )
-          .evaluate()
-          .first
-          .widget as Text)
-      .data!;
+  String textOf(Key key) =>
+      (find
+                  .descendant(
+                    of: find.byKey(key),
+                    matching: find.byType(Text),
+                    matchRoot: true,
+                  )
+                  .evaluate()
+                  .first
+                  .widget
+              as Text)
+          .data!;
 
   // ------------------------------------------------------------------ tab
 
-  testWidgets('the Pool is the third tab, beside Today and the Trail',
-      (tester) async {
+  testWidgets('the Pool is the third tab, beside Today and the Trail', (
+    tester,
+  ) async {
     await launch(tester, today: day(15));
     await accept(tester, tripPaste);
 
@@ -177,8 +183,9 @@ void main() {
     expect(textOf(const Key('pool-headline')), 'The Pool');
   });
 
-  testWidgets('the Pool keeps its place when you leave the tab and come back',
-      (tester) async {
+  testWidgets('the Pool keeps its place when you leave the tab and come back', (
+    tester,
+  ) async {
     await arriveInPool(tester, today: day(15));
     expect(find.byKey(const Key('pool-empty')), findsOneWidget);
 
@@ -206,8 +213,9 @@ void main() {
     expect(find.byKey(const Key('pool-day-3')), findsNothing);
   });
 
-  testWidgets('the pool is empty in the app as built — nothing writes to it',
-      (tester) async {
+  testWidgets('the pool is empty in the app as built — nothing writes to it', (
+    tester,
+  ) async {
     // The default binding, with no seeded pool: the state a phone is
     // actually in today.
     tester.view.physicalSize = const Size(800, 3000);
@@ -224,13 +232,18 @@ void main() {
 
   // -------------------------------------------------------- photos in it
 
-  testWidgets('every photo of the trip is here, grouped by its day',
-      (tester) async {
-    await arriveInPool(tester, today: day(15), pool: [
-      photo('a', onDay: 1, hour: 10),
-      photo('b', onDay: 1, hour: 8),
-      photo('c', onDay: 2, hour: 9),
-    ]);
+  testWidgets('every photo of the trip is here, grouped by its day', (
+    tester,
+  ) async {
+    await arriveInPool(
+      tester,
+      today: day(15),
+      pool: [
+        photo('a', onDay: 1, hour: 10),
+        photo('b', onDay: 1, hour: 8),
+        photo('c', onDay: 2, hour: 9),
+      ],
+    );
 
     expect(textOf(const Key('pool-count')), '3 photos');
     expect(find.byKey(const Key('pool-empty')), findsNothing);
@@ -248,10 +261,11 @@ void main() {
 
   testWidgets('days read newest first, and the day names itself as the day '
       'page does', (tester) async {
-    await arriveInPool(tester, today: day(15), pool: [
-      photo('a', onDay: 1, hour: 10),
-      photo('c', onDay: 2, hour: 9),
-    ]);
+    await arriveInPool(
+      tester,
+      today: day(15),
+      pool: [photo('a', onDay: 1, hour: 10), photo('c', onDay: 2, hour: 9)],
+    );
 
     final newest = tester.getTopLeft(find.byKey(const Key('pool-day-2'))).dy;
     final older = tester.getTopLeft(find.byKey(const Key('pool-day-1'))).dy;
@@ -263,28 +277,40 @@ void main() {
     expect(textOf(const Key('pool-day-1-date')), '14 June');
   });
 
-  testWidgets('a day says "today" where every other day counts its photos',
-      (tester) async {
-    await arriveInPool(tester, today: day(15), pool: [
-      photo('a', onDay: 1, hour: 10),
-      photo('b', onDay: 1, hour: 8),
-      photo('c', onDay: 2, hour: 9),
-    ]);
+  testWidgets('a day says "today" where every other day counts its photos', (
+    tester,
+  ) async {
+    await arriveInPool(
+      tester,
+      today: day(15),
+      pool: [
+        photo('a', onDay: 1, hour: 10),
+        photo('b', onDay: 1, hour: 8),
+        photo('c', onDay: 2, hour: 9),
+      ],
+    );
 
     expect(textOf(const Key('pool-day-2-detail')), 'today');
     expect(textOf(const Key('pool-day-1-detail')), '2 photos');
   });
 
-  testWidgets('a day\'s photos are in the order they were taken',
-      (tester) async {
-    await arriveInPool(tester, today: day(15), pool: [
-      photo('later', onDay: 1, hour: 17),
-      photo('earlier', onDay: 1, hour: 8),
-    ]);
+  testWidgets('a day\'s photos are in the order they were taken', (
+    tester,
+  ) async {
+    await arriveInPool(
+      tester,
+      today: day(15),
+      pool: [
+        photo('later', onDay: 1, hour: 17),
+        photo('earlier', onDay: 1, hour: 8),
+      ],
+    );
 
     // Both sit in the same row of the grid, so the earlier one is to the
     // left. Oldest first is `cairn_model.DayPool`'s rule, not this screen's.
-    final earlier = tester.getTopLeft(find.byKey(const Key('pool-photo-earlier')));
+    final earlier = tester.getTopLeft(
+      find.byKey(const Key('pool-photo-earlier')),
+    );
     final later = tester.getTopLeft(find.byKey(const Key('pool-photo-later')));
     expect(earlier.dx < later.dx, isTrue);
   });
@@ -292,10 +318,14 @@ void main() {
   testWidgets('a tile shows the image when its bytes are on this phone, and '
       'says it is waiting when they are not', (tester) async {
     final file = writeTinyPng();
-    await arriveInPool(tester, today: day(15), pool: [
-      photo('mine', onDay: 1, hour: 8, path: file.path),
-      photo('theirs', onDay: 1, hour: 9),
-    ]);
+    await arriveInPool(
+      tester,
+      today: day(15),
+      pool: [
+        photo('mine', onDay: 1, hour: 8, path: file.path),
+        photo('theirs', onDay: 1, hour: 9),
+      ],
+    );
 
     expect(find.byKey(const Key('pool-photo-mine-image')), findsOneWidget);
     expect(find.byKey(const Key('pool-photo-mine-awaiting')), findsNothing);
@@ -304,20 +334,25 @@ void main() {
     expect(find.byKey(const Key('pool-photo-theirs-image')), findsNothing);
   });
 
-  testWidgets('a photo on a day the plan does not claim is still shown',
-      (tester) async {
+  testWidgets('a photo on a day the plan does not claim is still shown', (
+    tester,
+  ) async {
     // The plan holds three days; this photo says it belongs to a fourth.
     // Dropping it silently is the one thing the Pool must never do.
-    await arriveInPool(tester, today: day(15), pool: [
-      photo('orphan', onDay: 9, hour: 12),
-    ]);
+    await arriveInPool(
+      tester,
+      today: day(15),
+      pool: [photo('orphan', onDay: 9, hour: 12)],
+    );
 
     expect(find.byKey(const Key('pool-photo-orphan')), findsOneWidget);
     expect(textOf(const Key('pool-day-9-title')), 'Day 9');
     expect(textOf(const Key('pool-day-9-date')), 'date open');
   });
 
-  testWidgets('a day accepted with its date still open says so', (tester) async {
+  testWidgets('a day accepted with its date still open says so', (
+    tester,
+  ) async {
     await arriveInPool(
       tester,
       today: day(15),

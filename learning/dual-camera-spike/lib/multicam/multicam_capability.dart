@@ -44,16 +44,18 @@ enum MultiCamSupport {
 class MultiCamCapability {
   MultiCamCapability._();
 
-  static const MethodChannel _channel =
-      MethodChannel('cairn.dualcamera/multicam');
+  static const MethodChannel _channel = MethodChannel(
+    'cairn.dualcamera/multicam',
+  );
 
   static Future<MultiCamSupport> probe() async {
     if (kIsWeb || !Platform.isIOS) {
       return MultiCamSupport.notProbedOnThisPlatform;
     }
     try {
-      final supported =
-          await _channel.invokeMethod<bool>('isMultiCamSupported');
+      final supported = await _channel.invokeMethod<bool>(
+        'isMultiCamSupported',
+      );
       return (supported ?? false)
           ? MultiCamSupport.supported
           : MultiCamSupport.unsupported;

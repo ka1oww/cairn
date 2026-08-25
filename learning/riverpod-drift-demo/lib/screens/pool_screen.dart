@@ -30,7 +30,10 @@ class PoolScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
-          Text('Photos per day', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Photos per day',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const Text(
             '(join Stops → Photos, GROUP BY day — see watchPhotoCountsPerDay in database.dart)',
             style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
@@ -41,7 +44,9 @@ class PoolScreen extends ConsumerWidget {
             error: (err, stack) => Text('Error: $err'),
             data: (counts) {
               if (counts.isEmpty) {
-                return const Text('No photos yet — add one from the Today tab.');
+                return const Text(
+                  'No photos yet — add one from the Today tab.',
+                );
               }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,7 +67,8 @@ class PoolScreen extends ConsumerWidget {
                             // this demo has no design work, on purpose.
                             child: FractionallySizedBox(
                               alignment: Alignment.centerLeft,
-                              widthFactor: row.photoCount /
+                              widthFactor:
+                                  row.photoCount /
                                   counts
                                       .map((c) => c.photoCount)
                                       .reduce((a, b) => a > b ? a : b),

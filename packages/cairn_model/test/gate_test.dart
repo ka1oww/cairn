@@ -138,8 +138,7 @@ void main() {
       }
     });
 
-    test("it opens at the day's own midnight and not a moment before",
-        () {
+    test("it opens at the day's own midnight and not a moment before", () {
       final seals = trip.day(3).endsAt;
       expect(
         trip.gateFor(
@@ -190,7 +189,9 @@ void main() {
         GateState.shutUntilTheDayArrives,
       );
       expect(
-        trip.gateFor(viewer: mum, pool: DayPool.empty(4), now: during(3)).isOpen,
+        trip
+            .gateFor(viewer: mum, pool: DayPool.empty(4), now: during(3))
+            .isOpen,
         isFalse,
       );
     });
@@ -321,8 +322,7 @@ void main() {
 
     test('without a contribution, only a walked day is open', () {
       expect(
-        GateState.decide(
-            standing: DayStanding.walked, hasContributed: false),
+        GateState.decide(standing: DayStanding.walked, hasContributed: false),
         GateState.openBecauseTheDayIsOver,
       );
       expect(
@@ -331,8 +331,7 @@ void main() {
         GateState.shutAwaitingContribution,
       );
       expect(
-        GateState.decide(
-            standing: DayStanding.notYet, hasContributed: false),
+        GateState.decide(standing: DayStanding.notYet, hasContributed: false),
         GateState.shutUntilTheDayArrives,
       );
     });

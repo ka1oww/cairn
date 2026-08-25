@@ -40,8 +40,12 @@ Day 2 - Nara
   test('photo_day_assignment: GPS rung resolves via embedded tz data', () {
     final result = assignPhotoToDay(
       photo: const PhotoMetadata(
-        exifLocalTimestamp:
-            LocalDateTime(year: 2026, month: 8, day: 23, hour: 10),
+        exifLocalTimestamp: LocalDateTime(
+          year: 2026,
+          month: 8,
+          day: 23,
+          hour: 10,
+        ),
         gpsLatitude: 35.6812,
         gpsLongitude: 139.7671,
       ),

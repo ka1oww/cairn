@@ -55,8 +55,7 @@ class HomeScreen extends StatelessWidget {
                         'this build -- but that flag alone is not proof a '
                         'live session works (it reads true on Simulator '
                         'too). See README.',
-                  MultiCamSupport.unsupported =>
-                    'This device does not support true AVCaptureMultiCamSession capture.',
+                  MultiCamSupport.unsupported => 'This device does not support true AVCaptureMultiCamSession capture.',
                   MultiCamSupport.notProbedOnThisPlatform || null =>
                     'True-simultaneous-capture probe: not wired up for this '
                         'platform in this spike (iOS only -- see README).',

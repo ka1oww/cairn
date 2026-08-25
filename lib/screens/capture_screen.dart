@@ -45,8 +45,9 @@ class CaptureScreen extends ConsumerWidget {
           child: switch (state) {
             final Framing framing => _Framing(framing: framing),
             final TheBreath breath => _Breath(breath: breath),
-            final CaptureRefusedState refused =>
-              _Refused(reason: refused.reason),
+            final CaptureRefusedState refused => _Refused(
+              reason: refused.reason,
+            ),
             CaptureClosed() => const SizedBox.shrink(),
           },
         ),
@@ -67,18 +68,23 @@ class _Framing extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('YOUR MOMENT',
-            key: const Key('capture-eyebrow'),
-            style: theme.textTheme.labelSmall
-                ?.copyWith(letterSpacing: 1.4, fontWeight: FontWeight.bold)),
+        Text(
+          'YOUR MOMENT',
+          key: const Key('capture-eyebrow'),
+          style: theme.textTheme.labelSmall?.copyWith(
+            letterSpacing: 1.4,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 10),
         Text(
           // Surface 10c: on a late capture the timer simply is not there, so
           // there is nothing to have failed. The card states the deal in the
           // app's own deadpan instead.
           switch ((framing.isLate, framing.isLastStretch)) {
-            (true, _) => "Your slot was teatime. It's fine — whatever you "
-                'take now lands at the hour it\'s taken.',
+            (true, _) =>
+              "Your slot was teatime. It's fine — whatever you "
+                  'take now lands at the hour it\'s taken.',
             (false, true) => 'last stretch',
             (false, false) => 'a while yet',
           },
@@ -162,8 +168,9 @@ class _Breath extends ConsumerWidget {
         Text(
           'blank is the usual',
           key: const Key('capture-word-whisper'),
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 18),
         FilledButton(
@@ -197,9 +204,11 @@ class _Refused extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(reason,
-            key: const Key('capture-refused'),
-            style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          reason,
+          key: const Key('capture-refused'),
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const Spacer(),
         TextButton(
           key: const Key('capture-leave'),

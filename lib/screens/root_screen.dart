@@ -27,8 +27,9 @@ class RootScreen extends ConsumerWidget {
       AsyncData(value: null) => const _PasteFlow(),
       AsyncData() when repasting => const _PasteFlow(),
       AsyncData() => const TripShell(),
-      AsyncError(:final error) =>
-        Scaffold(body: Center(child: Text('Failed to read: $error'))),
+      AsyncError(:final error) => Scaffold(
+        body: Center(child: Text('Failed to read: $error')),
+      ),
       _ => const Scaffold(body: Center(child: CircularProgressIndicator())),
     };
   }

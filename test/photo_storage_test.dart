@@ -23,10 +23,12 @@ void main() {
 
   setUp(() {
     minted = 0;
-    db = AppDatabase(DatabaseConnection(
-      NativeDatabase.memory(),
-      closeStreamsSynchronously: true,
-    ));
+    db = AppDatabase(
+      DatabaseConnection(
+        NativeDatabase.memory(),
+        closeStreamsSynchronously: true,
+      ),
+    );
     photos = PhotoStore(db, mintId: () => 'photo-${++minted}');
   });
   tearDown(() => db.close());
@@ -40,15 +42,14 @@ void main() {
     required DateTime taken,
     String? word,
     PhotoOrigin origin = PhotoOrigin.pinged,
-  }) =>
-      photos.keep(
-        dayNumber: day,
-        contributor: MemberId(by),
-        takenAt: taken,
-        origin: origin,
-        filePath: '/frames/${taken.microsecondsSinceEpoch}.png',
-        word: word,
-      );
+  }) => photos.keep(
+    dayNumber: day,
+    contributor: MemberId(by),
+    takenAt: taken,
+    origin: origin,
+    filePath: '/frames/${taken.microsecondsSinceEpoch}.png',
+    word: word,
+  );
 
   test('a kept photo round-trips through the seam unchanged', () async {
     final kept = await keep(day: 4, taken: at(14, 50), word: 'we CAUGHT it');
@@ -74,19 +75,21 @@ void main() {
     expect(read.ref.origin, PhotoOrigin.pinged);
   });
 
-  test('the pool comes back in time order, so a late photo sits at its hour',
-      () async {
-    await keep(taken: at(8, 40));
-    await keep(taken: at(23, 40)); // the late answer
-    await keep(taken: at(13, 5));
+  test(
+    'the pool comes back in time order, so a late photo sits at its hour',
+    () async {
+      await keep(taken: at(8, 40));
+      await keep(taken: at(23, 40)); // the late answer
+      await keep(taken: at(13, 5));
 
-    final pool = await photos.watchTripPhotos().first;
-    expect(
-      [for (final p in pool) p.ref.takenAt.hour],
-      [8, 13, 23],
-      reason: 'a photo taken late lands at its true hour, not at the end',
-    );
-  });
+      final pool = await photos.watchTripPhotos().first;
+      expect(
+        [for (final p in pool) p.ref.takenAt.hour],
+        [8, 13, 23],
+        reason: 'a photo taken late lands at its true hour, not at the end',
+      );
+    },
+  );
 
   test('a blank line is no word at all, not an empty one', () async {
     await keep(taken: at(9), word: '   ');
@@ -106,7 +109,10 @@ void main() {
     final kept = await keep(taken: at(9), word: 'first thought');
 
     await photos.writeWord(kept.ref.id, 'second thought');
-    expect((await photos.watchTripPhotos().first).single.word, 'second thought');
+    expect(
+      (await photos.watchTripPhotos().first).single.word,
+      'second thought',
+    );
 
     await photos.writeWord(kept.ref.id, '');
     expect((await photos.watchTripPhotos().first).single.word, isNull);
@@ -130,7 +136,9 @@ void main() {
 
   test('the pool stream re-emits when a photo is kept', () async {
     final seen = <int>[];
-    final sub = photos.watchTripPhotos().listen((pool) => seen.add(pool.length));
+    final sub = photos.watchTripPhotos().listen(
+      (pool) => seen.add(pool.length),
+    );
     await pumpEventQueue();
     await keep(taken: at(9));
     await pumpEventQueue();
@@ -162,10 +170,9 @@ void main() {
     final file = File('${dir.path}/cairn.sqlite');
     addTearDown(() => dir.deleteSync(recursive: true));
 
-    final before = AppDatabase(DatabaseConnection(
-      NativeDatabase(file),
-      closeStreamsSynchronously: true,
-    ));
+    final before = AppDatabase(
+      DatabaseConnection(NativeDatabase(file), closeStreamsSynchronously: true),
+    );
     await before.replaceItinerary(
       days: [(number: 1, dateIso: '2027-06-14', place: 'Tokyo')],
       stops: [(dayNumber: 1, position: 0, text: 'Senso-ji', timeIso: null)],
@@ -176,10 +183,9 @@ void main() {
     await before.customStatement('PRAGMA user_version = 2');
     await before.close();
 
-    final after = AppDatabase(DatabaseConnection(
-      NativeDatabase(file),
-      closeStreamsSynchronously: true,
-    ));
+    final after = AppDatabase(
+      DatabaseConnection(NativeDatabase(file), closeStreamsSynchronously: true),
+    );
     addTearDown(after.close);
 
     expect(await after.watchItineraryDays().first, hasLength(1));
@@ -195,13 +201,14 @@ void main() {
     expect(await after.readPhotos(), hasLength(1));
   });
 
-  test('every photo the seam keeps is a photo the store already had',
-      () async {
+  test('every photo the seam keeps is a photo the store already had', () async {
     // Guards the one thing an id minter can silently break: two photos
     // sharing an id would have the second overwrite the first.
     await keep(taken: at(9));
     await keep(taken: at(10));
-    final ids = [for (final p in await photos.watchTripPhotos().first) p.ref.id];
+    final ids = [
+      for (final p in await photos.watchTripPhotos().first) p.ref.id,
+    ];
     expect(ids.toSet(), hasLength(2));
   });
 }

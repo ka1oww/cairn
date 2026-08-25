@@ -29,7 +29,12 @@ import 'trip_providers.dart';
 enum DayConfidence { high, medium, low }
 
 /// Why a day is doubted — drives which copy and which ask the screen shows.
-enum DayDoubtCause { weekdayWithoutDate, dateWithoutYear, barePlaceName, noStops }
+enum DayDoubtCause {
+  weekdayWithoutDate,
+  dateWithoutYear,
+  barePlaceName,
+  noStops,
+}
 
 /// One stop as the confirmation screen shows it: the text as pasted, and a
 /// time label exactly when the parser starred it (the star rule — a found,
@@ -172,8 +177,7 @@ class ItineraryReview {
     required this.keptLines,
   });
 
-  int get totalStops =>
-      days.fold(0, (sum, day) => sum + day.stops.length);
+  int get totalStops => days.fold(0, (sum, day) => sum + day.stops.length);
 
   int get unsureCount => days.where((d) => d.needsEye).length;
 
@@ -204,16 +208,18 @@ class PasteReview extends PasteFlowState {
 // The notifier.
 // ---------------------------------------------------------------------------
 
-final pasteFlowProvider =
-    NotifierProvider<PasteFlow, PasteFlowState>(PasteFlow.new);
+final pasteFlowProvider = NotifierProvider<PasteFlow, PasteFlowState>(
+  PasteFlow.new,
+);
 
 /// **Temporary.** True while the person has asked to paste a different plan
 /// from the day page, which is the only way back to the paste box once an
 /// itinerary is saved. The real container — the Trail, the Pool and the tab
 /// bar between them — arrives with those slices and takes this over; until
 /// then the root screen watches this alongside the saved itinerary.
-final repasteRequestedProvider =
-    NotifierProvider<RepasteRequest, bool>(RepasteRequest.new);
+final repasteRequestedProvider = NotifierProvider<RepasteRequest, bool>(
+  RepasteRequest.new,
+);
 
 class RepasteRequest extends Notifier<bool> {
   @override
@@ -367,7 +373,9 @@ class PasteFlow extends Notifier<PasteFlowState> {
     // the row (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md), so
     // accepting a plan with the phone in flight mode still produces a trip
     // with a real, durable id.
-    await ref.read(membershipStoreProvider).startTrip(
+    await ref
+        .read(membershipStoreProvider)
+        .startTrip(
           starter: model.MemberId(localMemberId),
           starterDisplayName: localMemberName,
           now: ref.read(nowProvider),
@@ -495,29 +503,32 @@ class PasteFlow extends Notifier<PasteFlowState> {
     }
 
     return switch (uncertainty) {
-      ip.DayUncertainty.weekdayWithoutDate =>
-        _weekdayDoubt(day, allDays, uncertainty.explanation),
+      ip.DayUncertainty.weekdayWithoutDate => _weekdayDoubt(
+        day,
+        allDays,
+        uncertainty.explanation,
+      ),
       ip.DayUncertainty.dateWithoutYear => _yearDoubt(uncertainty.explanation),
       ip.DayUncertainty.barePlaceName => DayDoubt(
-          cause: DayDoubtCause.barePlaceName,
-          explanation: uncertainty.explanation,
-          ask: 'Nothing in the text marked '
-              '${day.place == null ? 'this line' : '"${day.place}"'} as its '
-              'own day — it read like one from where it sits. Your call:',
-          options: const [
-            DayAskOption("It's a day", ConfirmAsIs()),
-          ],
-        ),
+        cause: DayDoubtCause.barePlaceName,
+        explanation: uncertainty.explanation,
+        ask:
+            'Nothing in the text marked '
+            '${day.place == null ? 'this line' : '"${day.place}"'} as its '
+            'own day — it read like one from where it sits. Your call:',
+        options: const [DayAskOption("It's a day", ConfirmAsIs())],
+      ),
       ip.DayUncertainty.noStops => DayDoubt(
-          cause: DayDoubtCause.noStops,
-          explanation: uncertainty.explanation,
-          ask: 'Found the day, nothing in it. A rest day — or lines I '
-              "couldn't read?",
-          options: const [
-            DayAskOption('+ Add a stop', AddStop()),
-            DayAskOption('leave it empty', ConfirmAsIs()),
-          ],
-        ),
+        cause: DayDoubtCause.noStops,
+        explanation: uncertainty.explanation,
+        ask:
+            'Found the day, nothing in it. A rest day — or lines I '
+            "couldn't read?",
+        options: const [
+          DayAskOption('+ Add a stop', AddStop()),
+          DayAskOption('leave it empty', ConfirmAsIs()),
+        ],
+      ),
       // Unreachable: mapped to the nothing-read state above.
       ip.DayUncertainty.headerlessBlock => null,
     };
@@ -535,7 +546,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
       return DayDoubt(
         cause: DayDoubtCause.weekdayWithoutDate,
         explanation: explanation,
-        ask: 'The plan calls this one ${weekdayName(named)}, and no date '
+        ask:
+            'The plan calls this one ${weekdayName(named)}, and no date '
             "nearby pins down which ${weekdayName(named)} — I don't guess "
             'dates. Your call:',
         options: const [DayAskOption('Pick the date', PickDate())],
@@ -548,7 +560,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
       return DayDoubt(
         cause: DayDoubtCause.weekdayWithoutDate,
         explanation: explanation,
-        ask: 'The plan calls this one ${weekdayName(named)}. Where it sits, '
+        ask:
+            'The plan calls this one ${weekdayName(named)}. Where it sits, '
             "that's ${dayMonthLabel(candidate)} — and it is a "
             "${weekdayName(named)}. I still don't guess dates. Your call:",
         options: [
@@ -567,7 +580,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
     return DayDoubt(
       cause: DayDoubtCause.weekdayWithoutDate,
       explanation: explanation,
-      ask: 'The plan calls this one ${weekdayName(named)}. Where it sits, '
+      ask:
+          'The plan calls this one ${weekdayName(named)}. Where it sits, '
           "it'd be the ${ordinal(candidate.day)} — a "
           "${weekdayName(candidate.weekday)} — and I don't guess dates. "
           'Your call:',
@@ -586,7 +600,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
     return DayDoubt(
       cause: DayDoubtCause.dateWithoutYear,
       explanation: explanation,
-      ask: 'The plan gives a day and a month but never a year, and I '
+      ask:
+          'The plan gives a day and a month but never a year, and I '
           "don't guess years. One answer covers every date in the paste:",
       options: [
         DayAskOption("It's $thisYear", UseYear(thisYear)),

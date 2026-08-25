@@ -67,10 +67,14 @@ DateTime day(int dayOfJune) => DateTime.utc(2027, 6, dayOfJune);
 void main() {
   late AppDatabase db;
 
-  setUp(() => db = AppDatabase(DatabaseConnection(
+  setUp(
+    () => db = AppDatabase(
+      DatabaseConnection(
         NativeDatabase.memory(),
         closeStreamsSynchronously: true,
-      )));
+      ),
+    ),
+  );
   tearDown(() => db.close());
 
   Future<void> launch(WidgetTester tester, {required DateTime today}) async {
@@ -115,45 +119,54 @@ void main() {
   /// Something inside the day page the Trail pushed, told apart from Today's
   /// — the back control exists only on a pushed one.
   Finder pushedDay(Key key) => find.descendant(
-        of: find.ancestor(
-          of: find.byKey(const Key('day-back')),
-          matching: find.byType(DayPage),
-        ),
-        matching: find.byKey(key),
-      );
+    of: find.ancestor(
+      of: find.byKey(const Key('day-back')),
+      matching: find.byType(DayPage),
+    ),
+    matching: find.byKey(key),
+  );
 
-  String textIn(Finder finder) => (find
-          .descendant(of: finder, matching: find.byType(Text), matchRoot: true)
-          .evaluate()
-          .first
-          .widget as Text)
-      .data!;
+  String textIn(Finder finder) =>
+      (find
+                  .descendant(
+                    of: finder,
+                    matching: find.byType(Text),
+                    matchRoot: true,
+                  )
+                  .evaluate()
+                  .first
+                  .widget
+              as Text)
+          .data!;
 
   String textOf(Key key) => textIn(find.byKey(key));
 
-  testWidgets('one node per day of the plan, in itinerary order down the path',
-      (tester) async {
-    await arriveOnTrail(tester, today: day(15));
+  testWidgets(
+    'one node per day of the plan, in itinerary order down the path',
+    (tester) async {
+      await arriveOnTrail(tester, today: day(15));
 
-    expect(find.byKey(const Key('trail-node-1')), findsOneWidget);
-    expect(find.byKey(const Key('trail-node-2')), findsOneWidget);
-    expect(find.byKey(const Key('trail-node-3')), findsOneWidget);
-    expect(find.byKey(const Key('trail-node-4')), findsNothing);
+      expect(find.byKey(const Key('trail-node-1')), findsOneWidget);
+      expect(find.byKey(const Key('trail-node-2')), findsOneWidget);
+      expect(find.byKey(const Key('trail-node-3')), findsOneWidget);
+      expect(find.byKey(const Key('trail-node-4')), findsNothing);
 
-    // Down the screen in plan order, and alternating sides — the winding is
-    // the screen, not decoration.
-    final centres = [
-      for (final n in [1, 2, 3])
-        tester.getCenter(find.byKey(Key('trail-node-$n'))),
-    ];
-    expect(centres[0].dy, lessThan(centres[1].dy));
-    expect(centres[1].dy, lessThan(centres[2].dy));
-    expect(centres[0].dx, lessThan(centres[1].dx));
-    expect(centres[2].dx, lessThan(centres[1].dx));
-  });
+      // Down the screen in plan order, and alternating sides — the winding is
+      // the screen, not decoration.
+      final centres = [
+        for (final n in [1, 2, 3])
+          tester.getCenter(find.byKey(Key('trail-node-$n'))),
+      ];
+      expect(centres[0].dy, lessThan(centres[1].dy));
+      expect(centres[1].dy, lessThan(centres[2].dy));
+      expect(centres[0].dx, lessThan(centres[1].dx));
+      expect(centres[2].dx, lessThan(centres[1].dx));
+    },
+  );
 
-  testWidgets('the flag sits on today, and the header counts the day',
-      (tester) async {
+  testWidgets('the flag sits on today, and the header counts the day', (
+    tester,
+  ) async {
     await arriveOnTrail(tester, today: day(15));
 
     expect(textOf(const Key('trail-headline')), 'Day 2 of 3');
@@ -168,8 +181,9 @@ void main() {
     expect(find.byKey(const Key('trail-today-word')), findsOneWidget);
   });
 
-  testWidgets('past, today and ahead are drawn as three different things',
-      (tester) async {
+  testWidgets('past, today and ahead are drawn as three different things', (
+    tester,
+  ) async {
     await arriveOnTrail(tester, today: day(15));
 
     expect(find.byKey(const Key('trail-node-1-past')), findsOneWidget);
@@ -207,8 +221,9 @@ void main() {
     expect(find.byKey(const Key('trail-node-3')), findsOneWidget);
   });
 
-  testWidgets('a past day opens in the past tense, as Today renders it',
-      (tester) async {
+  testWidgets('a past day opens in the past tense, as Today renders it', (
+    tester,
+  ) async {
     await arriveOnTrail(tester, today: day(15));
 
     await tester.tap(find.byKey(const Key('trail-node-1')));
@@ -219,26 +234,28 @@ void main() {
   });
 
   testWidgets(
-      "a date-open day's node opens its day page, its date still open",
-      (tester) async {
-    // The whole plan is undated: no node can be reached by any date, and the
-    // path is the only way to any of them.
-    await arriveOnTrail(tester, today: day(15), paste: dateOpenPaste);
+    "a date-open day's node opens its day page, its date still open",
+    (tester) async {
+      // The whole plan is undated: no node can be reached by any date, and the
+      // path is the only way to any of them.
+      await arriveOnTrail(tester, today: day(15), paste: dateOpenPaste);
 
-    expect(textOf(const Key('trail-headline')), '2 days planned');
-    expect(find.byKey(const Key('trail-flag')), findsNothing);
+      expect(textOf(const Key('trail-headline')), '2 days planned');
+      expect(find.byKey(const Key('trail-flag')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('trail-node-2')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('trail-node-2')));
+      await tester.pumpAndSettle();
 
-    // Day two — which Today can never show, because no date selects it.
-    expect(textIn(pushedDay(const Key('day-eyebrow'))), 'DAY 2 OF 2');
-    expect(textIn(pushedDay(const Key('day-title'))), 'Kyoto');
-    expect(textIn(pushedDay(const Key('day-date'))), 'date open');
-  });
+      // Day two — which Today can never show, because no date selects it.
+      expect(textIn(pushedDay(const Key('day-eyebrow'))), 'DAY 2 OF 2');
+      expect(textIn(pushedDay(const Key('day-title'))), 'Kyoto');
+      expect(textIn(pushedDay(const Key('day-date'))), 'date open');
+    },
+  );
 
-  testWidgets('a date-open day beside dated ones is reachable too',
-      (tester) async {
+  testWidgets('a date-open day beside dated ones is reachable too', (
+    tester,
+  ) async {
     await arriveOnTrail(tester, today: day(14), paste: halfDatedPaste);
 
     expect(find.byKey(const Key('trail-node-1-today')), findsOneWidget);
@@ -286,7 +303,9 @@ void main() {
     expect(find.byKey(const Key('trail-flag')), findsOneWidget);
   });
 
-  testWidgets('a date the plan skips gets no node, and no flag', (tester) async {
+  testWidgets('a date the plan skips gets no node, and no flag', (
+    tester,
+  ) async {
     // 16 June is inside the trip and belongs to no day of the plan. The
     // drawings number the path over the plan's own days, so there is nothing
     // for the flag to sit on and the header takes the gap day's voice.
@@ -315,8 +334,9 @@ void main() {
     expect(textIn(pushedDay(const Key('day-eyebrow'))), 'DAY 1 OF 3');
   });
 
-  testWidgets('tapping the tab you are on returns it to its root',
-      (tester) async {
+  testWidgets('tapping the tab you are on returns it to its root', (
+    tester,
+  ) async {
     await arriveOnTrail(tester, today: day(15));
 
     await tester.tap(find.byKey(const Key('trail-node-1')));
@@ -328,8 +348,9 @@ void main() {
     expect(find.byKey(const Key('trail-node-1')), findsOneWidget);
   });
 
-  testWidgets('the container holds three destinations and no fourth',
-      (tester) async {
+  testWidgets('the container holds three destinations and no fourth', (
+    tester,
+  ) async {
     await arriveOnTrail(tester, today: day(15));
 
     // Surface 2e's whole structure, now that the Pool exists. Trip-level
@@ -341,8 +362,9 @@ void main() {
     expect(find.byType(NavigationDestination), findsNWidgets(3));
   });
 
-  testWidgets('the temporary way back hangs off the trip, not off a day',
-      (tester) async {
+  testWidgets('the temporary way back hangs off the trip, not off a day', (
+    tester,
+  ) async {
     await arriveOnTrail(tester, today: day(15));
 
     await tester.tap(find.byKey(const Key('trip-sheet-open')));
@@ -350,8 +372,9 @@ void main() {
     await tester.tap(find.byKey(const Key('start-over')));
     await tester.pumpAndSettle();
 
-    final input =
-        tester.widget<TextField>(find.byKey(const Key('paste-input')));
+    final input = tester.widget<TextField>(
+      find.byKey(const Key('paste-input')),
+    );
     expect(input.controller!.text, '');
   });
 }

@@ -77,12 +77,13 @@ final testTripId = TripId.mint(List.filled(16, 0x5a));
 /// The ping this phone is dealt on [date], computed the way the app computes
 /// it. The instant is a hash of the trip, the party and the date, so a test
 /// cannot choose it — it has to ask for it.
-tm.Ping pingOn(DateTime date, {Duration utcOffset = Duration.zero}) =>
-    tm.dayAssignment(
+tm.Ping pingOn(DateTime date, {Duration utcOffset = Duration.zero}) => tm
+    .dayAssignment(
       tripId: testTripId.value,
       party: tm.Party(const [localMemberId]),
       day: tm.TripDay(date: date, utcOffset: utcOffset),
-    ).pingFor(localMemberId)!;
+    )
+    .pingFor(localMemberId)!;
 
 /// A camera that hands back a real image file without a device.
 class FakeCamera implements CameraSource {
@@ -161,8 +162,9 @@ void main() {
 
     test('the last two minutes are the last stretch, and not before', () {
       expect(
-        (callAt(DateTime.utc(2027, 6, 14, 12, 7, 59)) as MomentOpen)
-            .isLastStretch,
+        (callAt(
+          DateTime.utc(2027, 6, 14, 12, 7, 59),
+        ) as MomentOpen).isLastStretch,
         isFalse,
       );
       expect(
@@ -203,11 +205,11 @@ void main() {
     final party = tm.Party(const [localMemberId]);
 
     TripPlan plan(List<DateTime?> dates) => TripPlan(
-          days: [
-            for (final (i, date) in dates.indexed)
-              PlanDay(number: i + 1, date: date, stops: const []),
-          ],
-        );
+      days: [
+        for (final (i, date) in dates.indexed)
+          PlanDay(number: i + 1, date: date, stops: const []),
+      ],
+    );
 
     test('one ping per dated day, in time order', () {
       final pings = pingsForPlan(
@@ -258,7 +260,10 @@ void main() {
         memberId: localMemberId,
         tripId: testTripId,
       )) {
-        expect(ping.localTimeOfDay, greaterThanOrEqualTo(const Duration(hours: 8)));
+        expect(
+          ping.localTimeOfDay,
+          greaterThanOrEqualTo(const Duration(hours: 8)),
+        );
         expect(
           ping.localTimeOfDay,
           lessThanOrEqualTo(const Duration(hours: 22, minutes: 30)),
@@ -271,15 +276,15 @@ void main() {
       // must agree without asking each other anything
       // (docs/architecture.md, invariant 4).
       List<DateTime> run() => [
-            for (final p in pingsForPlan(
-              plan: plan([day(14), day(15)]),
-              party: party,
-              utcOffset: Duration.zero,
-              memberId: localMemberId,
-              tripId: testTripId,
-            ))
-              p.at,
-          ];
+        for (final p in pingsForPlan(
+          plan: plan([day(14), day(15)]),
+          party: party,
+          utcOffset: Duration.zero,
+          memberId: localMemberId,
+          tripId: testTripId,
+        ))
+          p.at,
+      ];
       expect(run(), run());
     });
 
@@ -291,10 +296,12 @@ void main() {
         memberId: localMemberId,
         tripId: testTripId,
       );
-      final container = ProviderContainer(overrides: [
-        pingScheduleProvider.overrideWithValue(schedule),
-        nowProvider.overrideWithValue(day(15)),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          pingScheduleProvider.overrideWithValue(schedule),
+          nowProvider.overrideWithValue(day(15)),
+        ],
+      );
       addTearDown(container.dispose);
 
       final due = container.read(pingRegistrationProvider);
@@ -307,7 +314,8 @@ void main() {
       expect(
         edge.registered.map((p) => p.at).toList(),
         due.map((p) => p.at).toList(),
-        reason: 'the edge holds exactly the deal, never the deal plus an old '
+        reason:
+            'the edge holds exactly the deal, never the deal plus an old '
             'one — two interruptions in a day is the one thing the mechanic '
             'promises never to do',
       );
@@ -344,13 +352,15 @@ void main() {
       tester.view.physicalSize = const Size(800, 2600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(bootstrapApp(
-        database: db,
-        today: today,
-        now: now,
-        utcOffset: Duration.zero,
-        camera: camera ?? FakeCamera(frames, takenAtUtc: now),
-      ));
+      await tester.pumpWidget(
+        bootstrapApp(
+          database: db,
+          today: today,
+          now: now,
+          utcOffset: Duration.zero,
+          camera: camera ?? FakeCamera(frames, takenAtUtc: now),
+        ),
+      );
       await tester.pump();
       await tester.pump();
     }
@@ -364,19 +374,22 @@ void main() {
       await tester.pump();
     }
 
-    String textOf(Key key) => (find
-            .descendant(
-              of: find.byKey(key),
-              matching: find.byType(Text),
-              matchRoot: true,
-            )
-            .evaluate()
-            .first
-            .widget as Text)
-        .data!;
+    String textOf(Key key) =>
+        (find
+                    .descendant(
+                      of: find.byKey(key),
+                      matching: find.byType(Text),
+                      matchRoot: true,
+                    )
+                    .evaluate()
+                    .first
+                    .widget
+                as Text)
+            .data!;
 
-    testWidgets('before your minute, today says so and asks for nothing',
-        (tester) async {
+    testWidgets('before your minute, today says so and asks for nothing', (
+      tester,
+    ) async {
       final ping = pingOn(day(14));
       await launch(
         tester,
@@ -385,8 +398,10 @@ void main() {
       );
       await accept(tester, tripPaste);
 
-      expect(textOf(const Key('capture-call')),
-          'Your minute is somewhere in today.');
+      expect(
+        textOf(const Key('capture-call')),
+        'Your minute is somewhere in today.',
+      );
       // It never says when. A ping you can see coming is a ping you can pose
       // for (docs/decisions/2026-08-22-the-moment.md).
       expect(find.textContaining(ping.localLabel), findsNothing);
@@ -420,7 +435,9 @@ void main() {
       expect(textOf(const Key('capture-word-whisper')), 'blank is the usual');
 
       await tester.enterText(
-          find.byKey(const Key('capture-word')), 'we CAUGHT it');
+        find.byKey(const Key('capture-word')),
+        'we CAUGHT it',
+      );
       await tester.pump();
 
       await tester.tap(find.byKey(const Key('capture-keep')));
@@ -466,7 +483,9 @@ void main() {
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
       await tester.enterText(
-          find.byKey(const Key('capture-word')), 'we CAUGHT it');
+        find.byKey(const Key('capture-word')),
+        'we CAUGHT it',
+      );
       await tester.pump();
       await tester.tap(find.byKey(const Key('capture-keep')));
       await tester.pumpAndSettle();
@@ -485,8 +504,9 @@ void main() {
       expect(find.byKey(Key('pool-photo-$id-awaiting')), findsNothing);
     });
 
-    testWidgets('the word is skippable, and blank is stored as no word',
-        (tester) async {
+    testWidgets('the word is skippable, and blank is stored as no word', (
+      tester,
+    ) async {
       final ping = pingOn(day(14));
       await launch(tester, today: day(14), now: ping.at);
       await accept(tester, tripPaste);
@@ -530,8 +550,9 @@ void main() {
       expect(find.byKey(const Key('capture-keep')), findsOneWidget);
     });
 
-    testWidgets('leaving without keeping throws the frame away',
-        (tester) async {
+    testWidgets('leaving without keeping throws the frame away', (
+      tester,
+    ) async {
       final ping = pingOn(day(14));
       final camera = FakeCamera(frames, takenAtUtc: ping.at);
       await launch(tester, today: day(14), now: ping.at, camera: camera);
@@ -578,8 +599,9 @@ void main() {
       expect(kept.single.takenAtUtcIso, late.toIso8601String());
     });
 
-    testWidgets('a camera that will not open says so, and keeps nothing',
-        (tester) async {
+    testWidgets('a camera that will not open says so, and keeps nothing', (
+      tester,
+    ) async {
       final ping = pingOn(day(14));
       await launch(
         tester,
@@ -594,13 +616,16 @@ void main() {
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
 
-      expect(textOf(const Key('capture-refused')),
-          'The camera would not open.');
+      expect(
+        textOf(const Key('capture-refused')),
+        'The camera would not open.',
+      );
       expect(await db.readPhotos(), isEmpty);
     });
 
-    testWidgets('a day whose date is still open asks nothing of anyone',
-        (tester) async {
+    testWidgets('a day whose date is still open asks nothing of anyone', (
+      tester,
+    ) async {
       final ping = pingOn(day(14));
       await launch(tester, today: day(14), now: ping.at);
       await accept(tester, halfDatedPaste);

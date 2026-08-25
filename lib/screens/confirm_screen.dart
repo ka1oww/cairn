@@ -83,7 +83,8 @@ class _Headline extends StatelessWidget {
     if (unsure == 0) {
       final days = review.days.length;
       final stops = review.totalStops;
-      title = '$days ${days == 1 ? 'day' : 'days'}, '
+      title =
+          '$days ${days == 1 ? 'day' : 'days'}, '
           '$stops ${stops == 1 ? 'stop' : 'stops'}.';
       subtitle = 'Read right here on the phone — your plan never left it.';
     } else {
@@ -91,8 +92,9 @@ class _Headline extends StatelessWidget {
       title = clean == 0
           ? '${unsure == 1 ? 'One day needs' : '$unsure days need'} your eye.'
           : '$clean read clean. '
-              '${unsure == 1 ? 'One needs' : '$unsure need'} your eye.';
-      subtitle = "It knows which lines it wasn't sure of — that's the point "
+                '${unsure == 1 ? 'One needs' : '$unsure need'} your eye.';
+      subtitle =
+          "It knows which lines it wasn't sure of — that's the point "
           'of it.';
     }
     return Column(
@@ -126,17 +128,18 @@ class _MonthFirstCard extends ConsumerWidget {
           children: [
             Text(
               readMonthFirst ? '3/11  →  March 11th' : '3/11  →  3 November',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(fontFamily: 'monospace'),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontFamily: 'monospace',
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               readMonthFirst
                   ? 'Every date in the paste is being read month-first — '
-                      'one flip covered them all.'
+                        'one flip covered them all.'
                   : 'Dates here read day-first. If your plan speaks '
-                      'month-first — March 11th — flip it once, and every '
-                      'date in the paste follows together.',
+                        'month-first — March 11th — flip it once, and every '
+                        'date in the paste follows together.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
@@ -145,9 +148,11 @@ class _MonthFirstCard extends ConsumerWidget {
               onPressed: () => ref
                   .read(pasteFlowProvider.notifier)
                   .readMonthFirst(!readMonthFirst),
-              child: Text(readMonthFirst
-                  ? 'Read day-first instead'
-                  : 'These are month-first dates'),
+              child: Text(
+                readMonthFirst
+                    ? 'Read day-first instead'
+                    : 'These are month-first dates',
+              ),
             ),
           ],
         ),
@@ -165,9 +170,7 @@ class _DayNumber extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       number.toString().padLeft(2, '0'),
-      style: Theme.of(context)
-          .textTheme
-          .labelMedium
+      style: Theme.of(context).textTheme.labelMedium
           ?.copyWith(color: Theme.of(context).colorScheme.primary),
     );
   }
@@ -195,10 +198,7 @@ class _FullDayCard extends StatelessWidget {
                 _DayNumber(day.number),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    day.title,
-                    style: theme.textTheme.titleSmall,
-                  ),
+                  child: Text(day.title, style: theme.textTheme.titleSmall),
                 ),
                 if (day.dateLabel != null)
                   Text(day.dateLabel!, style: theme.textTheme.bodySmall),
@@ -208,9 +208,7 @@ class _FullDayCard extends StatelessWidget {
             Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: [
-                for (final stop in day.stops) _StopChip(stop: stop),
-              ],
+              children: [for (final stop in day.stops) _StopChip(stop: stop)],
             ),
           ],
         ),
@@ -244,8 +242,9 @@ class _StopChip extends StatelessWidget {
             child: Text(
               stop.text,
               style: stop.isStarred
-                  ? theme.textTheme.bodySmall
-                      ?.copyWith(fontWeight: FontWeight.bold)
+                  ? theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    )
                   : theme.textTheme.bodySmall,
             ),
           ),
@@ -259,8 +258,9 @@ class _StopChip extends StatelessWidget {
               ),
               child: Text(
                 stop.timeLabel!,
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: Colors.brown.shade800),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.brown.shade800,
+                ),
               ),
             ),
           ],
@@ -331,8 +331,8 @@ class _UnsureDayCard extends ConsumerWidget {
                 _DayNumber(day.number),
                 const SizedBox(width: 8),
                 Expanded(
-                    child:
-                        Text(day.title, style: theme.textTheme.titleSmall)),
+                  child: Text(day.title, style: theme.textTheme.titleSmall),
+                ),
                 Text(
                   day.dateLabel ?? 'date open',
                   style: theme.textTheme.bodySmall,
@@ -344,9 +344,7 @@ class _UnsureDayCard extends ConsumerWidget {
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: [
-                  for (final stop in day.stops) _StopChip(stop: stop),
-                ],
+                children: [for (final stop in day.stops) _StopChip(stop: stop)],
               ),
             ],
             const SizedBox(height: 8),
@@ -450,10 +448,14 @@ class _KeptAsideTile extends StatelessWidget {
               dense: true,
               title: Text(
                 line.text,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(fontFamily: 'monospace'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                ),
               ),
-              subtitle: Text(line.explanation, style: theme.textTheme.bodySmall),
+              subtitle: Text(
+                line.explanation,
+                style: theme.textTheme.bodySmall,
+              ),
             ),
         ],
       ),

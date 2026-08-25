@@ -150,13 +150,13 @@ class TheBreath extends CaptureState {
   });
 
   TheBreath _with({String? word, bool? isKeeping}) => TheBreath(
-        framePath: framePath,
-        takenAtUtc: takenAtUtc,
-        hourLabel: hourLabel,
-        word: word ?? this.word,
-        isRetakeSpent: isRetakeSpent,
-        isKeeping: isKeeping ?? this.isKeeping,
-      );
+    framePath: framePath,
+    takenAtUtc: takenAtUtc,
+    hourLabel: hourLabel,
+    word: word ?? this.word,
+    isRetakeSpent: isRetakeSpent,
+    isKeeping: isKeeping ?? this.isKeeping,
+  );
 }
 
 /// The camera would not open, in words a person can read.
@@ -189,19 +189,17 @@ final todaysPlanDayProvider = Provider<int?>((ref) {
 /// Only today ever has one. The late path runs to midnight and stops there:
 /// a day that is over belongs to the whole party, and adding to it a week
 /// later is a different feature (the import sweep), not this one.
-final captureCallProvider = Provider.family<CaptureCall, DateTime>(
-  (ref, date) {
-    if (date != ref.watch(todayProvider)) return const NoMomentHere();
-    final dayNumber = ref.watch(todaysPlanDayProvider);
-    if (dayNumber == null) return const NoMomentHere();
-    return captureCallFor(
-      ping: ref.watch(todaysPingProvider),
-      now: ref.watch(nowProvider),
-      answeredAt: _myPhotoToday(ref, dayNumber)?.ref.takenAt,
-      utcOffset: ref.watch(tripUtcOffsetProvider),
-    );
-  },
-);
+final captureCallProvider = Provider.family<CaptureCall, DateTime>((ref, date) {
+  if (date != ref.watch(todayProvider)) return const NoMomentHere();
+  final dayNumber = ref.watch(todaysPlanDayProvider);
+  if (dayNumber == null) return const NoMomentHere();
+  return captureCallFor(
+    ping: ref.watch(todaysPingProvider),
+    now: ref.watch(nowProvider),
+    answeredAt: _myPhotoToday(ref, dayNumber)?.ref.takenAt,
+    utcOffset: ref.watch(tripUtcOffsetProvider),
+  );
+});
 
 PooledPhoto? _myPhotoToday(Ref ref, int dayNumber) {
   // `tripPhotosProvider` is the app's one subscription to the pool — the same
@@ -227,7 +225,9 @@ CaptureCall captureCallFor({
 }) {
   // Answered outranks everything, including a window that is still open: one
   // ping is one photograph, and the day is now open to you.
-  if (answeredAt != null) return MomentAnswered(clockLabel(answeredAt, utcOffset));
+  if (answeredAt != null) {
+    return MomentAnswered(clockLabel(answeredAt, utcOffset));
+  }
   if (ping == null) return const NoMomentHere();
   if (now.isBefore(ping.at)) return const MomentAhead();
   final closes = ping.at.add(captureWindow);
@@ -252,8 +252,9 @@ String clockLabel(DateTime utcInstant, Duration utcOffset) {
       '${local.minute.toString().padLeft(2, '0')}';
 }
 
-final captureFlowProvider =
-    NotifierProvider<CaptureFlow, CaptureState>(CaptureFlow.new);
+final captureFlowProvider = NotifierProvider<CaptureFlow, CaptureState>(
+  CaptureFlow.new,
+);
 
 class CaptureFlow extends Notifier<CaptureState> {
   /// Survives the trip back through [Framing], which is the whole point: the
@@ -272,8 +273,10 @@ class CaptureFlow extends Notifier<CaptureState> {
   void open() {
     final call = ref.read(captureCallProvider(ref.read(todayProvider)));
     state = switch (call) {
-      MomentOpen(:final isLastStretch) =>
-        Framing(isLastStretch: isLastStretch, isLate: false),
+      MomentOpen(:final isLastStretch) => Framing(
+        isLastStretch: isLastStretch,
+        isLate: false,
+      ),
       MomentLate() => const Framing(isLastStretch: false, isLate: true),
       _ => const CaptureClosed(),
     };
@@ -294,7 +297,10 @@ class CaptureFlow extends Notifier<CaptureState> {
       state = TheBreath(
         framePath: frame.path,
         takenAtUtc: frame.takenAtUtc,
-        hourLabel: clockLabel(frame.takenAtUtc, ref.read(tripUtcOffsetProvider)),
+        hourLabel: clockLabel(
+          frame.takenAtUtc,
+          ref.read(tripUtcOffsetProvider),
+        ),
         isRetakeSpent: _retakeSpent,
       );
     } on CameraRefused catch (e) {
@@ -338,7 +344,9 @@ class CaptureFlow extends Notifier<CaptureState> {
     final dayNumber = ref.read(todaysPlanDayProvider);
     if (dayNumber == null) return;
     state = breath._with(isKeeping: true);
-    await ref.read(photoStoreProvider).keep(
+    await ref
+        .read(photoStoreProvider)
+        .keep(
           dayNumber: dayNumber,
           contributor: model.MemberId(localMemberId),
           takenAt: breath.takenAtUtc,

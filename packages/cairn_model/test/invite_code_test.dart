@@ -46,13 +46,13 @@ void main() {
     });
 
     test('the same word twice is refused — three things, not two', () {
-      expect(
-          () => InviteCode('otter', 'otter', 42), throwsA(isA<ArgumentError>()));
+      expect(() => InviteCode('otter', 'otter', 42),
+          throwsA(isA<ArgumentError>()));
     });
 
     test('a one-digit or three-digit number is refused', () {
-      expect(() => InviteCode('otter', 'maple', 7),
-          throwsA(isA<ArgumentError>()));
+      expect(
+          () => InviteCode('otter', 'maple', 7), throwsA(isA<ArgumentError>()));
       expect(() => InviteCode('otter', 'maple', 100),
           throwsA(isA<ArgumentError>()));
     });
@@ -73,8 +73,7 @@ void main() {
     });
 
     test('the same draw twice never puts the same word in both places', () {
-      final drawn =
-          InviteCode.draw(firstDraw: 5, secondDraw: 0, numberDraw: 0);
+      final drawn = InviteCode.draw(firstDraw: 5, secondDraw: 0, numberDraw: 0);
       expect(drawn.firstWord, isNot(drawn.secondWord));
     });
   });
@@ -137,7 +136,8 @@ void main() {
       expect(InviteCode.words.toSet().length, InviteCode.words.length);
     });
 
-    test('keeps every pair three edits apart — a swap counting as one — '
+    test(
+        'keeps every pair three edits apart — a swap counting as one — '
         'which is what makes one letter of slack unambiguous', () {
       for (var i = 0; i < InviteCode.words.length; i++) {
         for (var j = i + 1; j < InviteCode.words.length; j++) {

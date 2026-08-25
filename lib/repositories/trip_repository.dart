@@ -19,9 +19,11 @@ class ConfirmedItinerary {
   final List<ConfirmedDay> days;
   final List<KeptLine> keptAside;
 
-  ConfirmedItinerary({required List<ConfirmedDay> days, List<KeptLine> keptAside = const []})
-      : days = List.unmodifiable(days),
-        keptAside = List.unmodifiable(keptAside);
+  ConfirmedItinerary({
+    required List<ConfirmedDay> days,
+    List<KeptLine> keptAside = const [],
+  }) : days = List.unmodifiable(days),
+       keptAside = List.unmodifiable(keptAside);
 }
 
 /// One confirmed day. [date] stays null when the person accepted the plan

@@ -16,7 +16,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_drift_demo/main.dart';
 
 void main() {
-  testWidgets('Today tab renders its title and add-photo button', (tester) async {
+  testWidgets('Today tab renders its title and add-photo button', (
+    tester,
+  ) async {
     // TripApp assumes a ProviderScope ancestor (main() supplies one at the
     // real app's root) — tests have to provide their own, same as any other
     // InheritedWidget dependency a widget under test relies on.

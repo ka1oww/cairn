@@ -67,7 +67,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen> {
     final controller = CameraController(
       back,
       ResolutionPreset.medium,
-      enableAudio: false, // stills only -- no reason to ask for microphone access.
+      enableAudio:
+          false, // stills only -- no reason to ask for microphone access.
     );
     await controller.initialize();
     return _CameraSetup(
@@ -167,14 +168,15 @@ class _MomentCameraScreenState extends State<MomentCameraScreen> {
                 _DiagnosticStrip(setup: setup, probe: _multiCamProbe),
                 Expanded(
                   child: DualCameraFrame(
-                    subject: (_phase == _CapturePhase.capturingFront ||
-                            _phase == _CapturePhase.switchingLens) &&
+                    subject:
+                        (_phase == _CapturePhase.capturingFront ||
+                                _phase == _CapturePhase.switchingLens) &&
                             _controller != null &&
                             _controller!.value.isInitialized
                         ? CameraPreview(_controller!)
                         : (setup.controller.value.isInitialized
-                            ? CameraPreview(setup.controller)
-                            : const ColoredBox(color: Colors.black)),
+                              ? CameraPreview(setup.controller)
+                              : const ColoredBox(color: Colors.black)),
                     inset: _phase == _CapturePhase.live
                         ? const _PendingFrontInset()
                         : null,
@@ -256,8 +258,7 @@ class _DiagnosticStrip extends StatelessWidget {
                 MultiCamSupport.unsupported =>
                   'isMultiCamSupported: false. This device/OS cannot run '
                       'true simultaneous capture.',
-                MultiCamSupport.notProbedOnThisPlatform || null =>
-                  'True simultaneous capture: not probed on this platform (see README).',
+                MultiCamSupport.notProbedOnThisPlatform || null => 'True simultaneous capture: not probed on this platform (see README).',
               };
               return Text(
                 label,
@@ -272,7 +273,11 @@ class _DiagnosticStrip extends StatelessWidget {
 }
 
 class _ShutterBar extends StatelessWidget {
-  const _ShutterBar({required this.phase, required this.error, required this.onShutter});
+  const _ShutterBar({
+    required this.phase,
+    required this.error,
+    required this.onShutter,
+  });
 
   final _CapturePhase phase;
   final String? error;
@@ -297,7 +302,10 @@ class _ShutterBar extends StatelessWidget {
           if (phase == _CapturePhase.error && error != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text(error!, style: const TextStyle(color: Colors.redAccent)),
+              child: Text(
+                error!,
+                style: const TextStyle(color: Colors.redAccent),
+              ),
             ),
           Text(label, style: const TextStyle(color: Colors.white)),
           const SizedBox(height: 12),

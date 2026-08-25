@@ -79,7 +79,7 @@ abstract interface class PhotoRepository {
 /// It emits once and completes, because nothing can change it.
 class InMemoryPhotoPool implements PhotoRepository {
   InMemoryPhotoPool([Iterable<PooledPhoto> photos = const []])
-      : _photos = List.unmodifiable(photos);
+    : _photos = List.unmodifiable(photos);
 
   final List<PooledPhoto> _photos;
 
@@ -128,8 +128,12 @@ class PhotoStore implements PhotoRepository {
 
   /// The photos on one day of the plan, oldest first.
   Stream<List<PooledPhoto>> watchPhotosForDay(int dayNumber) =>
-      watchTripPhotos().map((photos) =>
-          [for (final p in photos) if (p.ref.dayNumber == dayNumber) p]);
+      watchTripPhotos().map(
+        (photos) => [
+          for (final p in photos)
+            if (p.ref.dayNumber == dayNumber) p,
+        ],
+      );
 
   /// Keeps one photo, and hands back the reference to it.
   ///
@@ -175,25 +179,25 @@ class PhotoStore implements PhotoRepository {
   /// (design round 10, `18c`); *whose* print may be written on is a rule
   /// for the band above, not for the store.
   Future<void> writeWord(PhotoId id, String? word) => _db.updatePhotoWord(
-        id: id.value,
-        word: word == null || word.trim().isEmpty ? null : word,
-      );
+    id: id.value,
+    word: word == null || word.trim().isEmpty ? null : word,
+  );
 
   static PooledPhoto _toPhoto(Photo row) => PooledPhoto(
-        ref: PhotoRef(
-          id: PhotoId(row.id),
-          dayNumber: row.dayNumber,
-          contributor: MemberId(row.contributorId),
-          takenAt: DateTime.parse(row.takenAtUtcIso).toUtc(),
-          origin: PhotoOrigin.values.firstWhere(
-            (o) => o.name == row.origin,
-            // A row whose origin we cannot read is still a real photograph;
-            // losing it would be worse than reading its instant as merely
-            // derived, which is what `imported` already means.
-            orElse: () => PhotoOrigin.imported,
-          ),
-        ),
-        localPath: row.filePath,
-        word: row.word,
-      );
+    ref: PhotoRef(
+      id: PhotoId(row.id),
+      dayNumber: row.dayNumber,
+      contributor: MemberId(row.contributorId),
+      takenAt: DateTime.parse(row.takenAtUtcIso).toUtc(),
+      origin: PhotoOrigin.values.firstWhere(
+        (o) => o.name == row.origin,
+        // A row whose origin we cannot read is still a real photograph;
+        // losing it would be worse than reading its instant as merely
+        // derived, which is what `imported` already means.
+        orElse: () => PhotoOrigin.imported,
+      ),
+    ),
+    localPath: row.filePath,
+    word: row.word,
+  );
 }

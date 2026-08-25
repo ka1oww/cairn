@@ -77,8 +77,7 @@ double? governingEdge(BoxFit fit, double maxWidth, double maxHeight) =>
       BoxFit.contain ||
       BoxFit.fill ||
       BoxFit.fitWidth ||
-      BoxFit.scaleDown =>
-        maxWidth,
+      BoxFit.scaleDown => maxWidth,
       BoxFit.none => null,
     };
 
@@ -108,21 +107,24 @@ class PhotoFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-        builder: (context, constraints) {
-          final edge =
-              governingEdge(fit, constraints.maxWidth, constraints.maxHeight);
-          return Image.file(
-            file,
-            key: imageKey,
-            fit: fit,
-            cacheWidth: edge == null
-                ? null
-                : displayDecodeWidth(
-                    logicalEdge: edge,
-                    devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
-                  ),
-            errorBuilder: errorBuilder,
-          );
-        },
+    builder: (context, constraints) {
+      final edge = governingEdge(
+        fit,
+        constraints.maxWidth,
+        constraints.maxHeight,
       );
+      return Image.file(
+        file,
+        key: imageKey,
+        fit: fit,
+        cacheWidth: edge == null
+            ? null
+            : displayDecodeWidth(
+                logicalEdge: edge,
+                devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+              ),
+        errorBuilder: errorBuilder,
+      );
+    },
+  );
 }
