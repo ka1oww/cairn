@@ -235,7 +235,7 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`), `photos`, and the trip itself: `trip_facts` (one row: which trip, what it is called, who started it), `trip_members` (the roster, with no role column and never one) and `trip_invite_codes` (minted and revoked, with no expiry column — a code dies with its trip and that rule is not stored twice). Schema v4: v2 dropped the scaffold's disposable `trip_drafts` demo, v3 added photos, v4 added the trip's three | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) but **not yet recorded in a decision file**. |
+| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`), `photos`, and the trip itself: `trip_facts` (one row: which trip, what it is called, who started it), `trip_members` (the roster, with no role column and never one) and `trip_invite_codes` (minted and revoked, with no expiry column — a code dies with its trip and that rule is not stored twice). Schema v4: v2 dropped the scaffold's disposable `trip_drafts` demo, v3 added photos, v4 added the trip's three | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) and recorded in [`docs/decisions/2026-08-25-riverpod-and-drift.md`](decisions/2026-08-25-riverpod-and-drift.md). |
 | **Supabase/R2 client adapter** | not built | Supabase Auth, Postgres (PostgREST under RLS), both edge functions, R2 (presigned PUT/GET) | Repositories — nothing else in the app may import a Supabase or HTTP symbol | Wraps the session JWT, the RLS-filtered queries, the edge-function calls, and the direct-to-R2 byte transfers behind one interface the repositories consume. |
 
 ### Backend (`supabase/` + Cloudflare)
@@ -363,10 +363,6 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
 - **Sync and conflict policy is undecided** beyond three written notes
   (outbox ordering, `day_pages` insert→update fallback, deletion refetch).
   No reconciliation of rows against R2 objects exists in any direction.
-- **Riverpod and Drift are validated and now built on, not decided.** The
-  learning demo makes the argument and the app commits code to both, and the
-  root `README.md` now names them as the stack; what is still missing is a
-  decision file recording the choice. The map draws them as the plan, flagged.
 - **The ping is dealt over a real roster that holds one person.** The
   derivation and the schedule were always real; the party is now read from the
   trip's own members rather than stubbed, and the collision-free promise is

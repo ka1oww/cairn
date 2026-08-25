@@ -407,7 +407,7 @@
 <div class="node partial" style="left:150px;top:805px;width:410px;height:120px">
   <span class="chip">partial</span><h4>Drift store — local SQLite</h4>
   <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Holds the itinerary tables (days, stops, set-aside lines), <code>photos</code> — the local index whose bytes sit beside it on disk, the same split as Postgres and R2 — and the trip: <code>trip_facts</code>, <code>trip_members</code> (no role column, ever) and <code>trip_invite_codes</code> (no expiry column; a code dies with its trip). Schema v4; the trip_drafts demo is dropped.</p>
-  <span class="sub">choice validated in the demo and now built on, not yet recorded in a decision file</span>
+  <span class="sub">choice validated in the demo, built on, and recorded in docs/decisions/2026-08-25-riverpod-and-drift.md</span>
 </div>
 <div class="node nb" style="left:800px;top:805px;width:410px;height:120px">
   <span class="chip">not built</span><h4>Supabase / R2 client adapter</h4>
