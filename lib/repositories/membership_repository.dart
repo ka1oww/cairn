@@ -36,7 +36,12 @@ import '../storage/drift/app_database.dart';
 /// `MemberId`, `TripInvite` — so no band above has to translate one.
 class TripMembership {
   /// The trip's id: what the ping derivation seeds itself from.
-  final String tripId;
+  ///
+  /// Minted on this phone when the trip was started and durable from that
+  /// instant (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md), so
+  /// nothing above here has to hold a trip that has no name yet, and nothing
+  /// re-deals the pings when the trip first syncs.
+  final TripId tripId;
 
   /// What the trip is called, or null while nobody has named it. Naming is
   /// flat, so this is nobody's in particular.
@@ -121,7 +126,7 @@ class MembershipStore implements MembershipRepository {
         final members = await _db.readTripMembers();
         final codes = await _db.readTripInviteCodes();
         return TripMembership(
-          tripId: trip.tripId,
+          tripId: TripId(trip.tripId),
           name: trip.name,
           startedBy: MemberId(trip.startedByMemberId),
           members: [
@@ -147,33 +152,38 @@ class MembershipStore implements MembershipRepository {
         );
       });
 
-  /// Starts the trip, if this phone has not started one, and gives it its
-  /// first code.
+  /// Starts the trip, if this phone has not started one, gives it its first
+  /// code, and hands back the trip's id.
   ///
   /// Accepting a pasted plan is what starts a trip — there is no other door,
   /// and the person who accepted it is the starter. Idempotent, because
   /// pasting a different plan replaces the itinerary and replacing your own
   /// itinerary is not starting a second trip.
   ///
+  /// **Nobody tells it what the trip is called.** The id is minted where the
+  /// row is written ([AppDatabase.startTripIfAbsent]), so there is no window
+  /// in which a caller holds an id the store has not kept, and no caller can
+  /// hand in an id of its own invention
+  /// (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md).
+  ///
   /// The code is minted here rather than waiting to be asked for, because
   /// "eight people can join with three spoken words" is the first release's
   /// own line (docs/decisions/2026-08-22-first-release.md) and a trip whose
   /// code has to be summoned first is a trip nobody can be let into while
   /// the phone is in somebody else's hand.
-  Future<void> startTrip({
-    required String tripId,
+  Future<TripId> startTrip({
     required MemberId starter,
     required String starterDisplayName,
     required DateTime now,
   }) async {
-    await _db.startTripIfAbsent(
-      tripId: tripId,
+    final tripId = await _db.startTripIfAbsent(
       starterId: starter.value,
       starterDisplayName: starterDisplayName,
     );
     if ((await _db.readTripInviteCodes()).isEmpty) {
       await mintInvite(by: starter, now: now);
     }
+    return tripId;
   }
 
   /// Renames the trip, or clears the name with a blank. Any member may

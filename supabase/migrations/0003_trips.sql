@@ -5,6 +5,22 @@
 -- kept on the phone. This table holds no stops, no places and no times of
 -- day; it holds the trip's clock and its dates, which are a different thing.
 create table if not exists public.trips (
+  -- **The phone mints this id, and this table keeps it.** A trip is created
+  -- offline -- on the plane, in the taxi -- so the id cannot wait on a round
+  -- trip here (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md). The
+  -- default below therefore fires only for a client that omits the column;
+  -- an insert that names the id keeps the one it was given, which is what the
+  -- app does. The insert policy in 0004_trip_members.sql checks
+  -- `created_by = auth.uid()` and says nothing about the id, deliberately.
+  --
+  -- Two consequences for whoever writes the sync:
+  --
+  --   * NEVER reissue. The phone's ping schedule seeds itself from this
+  --     string (packages/trip_moments), so handing back a different id
+  --     re-deals every remaining day of the trip with nothing raising.
+  --   * The first sync of a trip is a plain `insert`, never an upsert. A uuid
+  --     collision is vanishingly unlikely, but `on conflict do update` would
+  --     merge two parties' trips into one where an insert raises.
   id uuid primary key default gen_random_uuid(),
   name text not null,
   created_by uuid not null references public.profiles (id) on delete restrict,

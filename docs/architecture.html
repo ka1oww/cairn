@@ -155,7 +155,8 @@
 <div class="noapp">
   <b>The app has a way in, and a trip with all three of its destinations in it.</b>
   <span>The paste-and-confirm slice replaced the scaffold's proving screen and its disposable
-  <code>trip_drafts</code> table: paste a plan, see what was understood with the doubt surfaced
+  <code>trip_drafts</code> table &mdash; the sidestep in which a drafted trip carried no id at
+  all, now closed at both ends: paste a plan, see what was understood with the doubt surfaced
   per cause, flip ambiguous dates in one tap, accept — and the itinerary persists into Drift,
   local-only for now. Today then replaced that slice's placeholder: the app opens on the day
   page for today's date — the day's identity, its stops in pasted order, a time only where the
@@ -406,7 +407,7 @@
 <!-- ======================= storage ======================= -->
 <div class="node partial" style="left:150px;top:805px;width:410px;height:120px">
   <span class="chip">partial</span><h4>Drift store — local SQLite</h4>
-  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Holds the itinerary tables (days, stops, set-aside lines), <code>photos</code> — the local index whose bytes sit beside it on disk, the same split as Postgres and R2 — and the trip: <code>trip_facts</code>, <code>trip_members</code> (no role column, ever) and <code>trip_invite_codes</code> (no expiry column; a code dies with its trip). Schema v4; the trip_drafts demo is dropped.</p>
+  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Holds the itinerary tables (days, stops, set-aside lines), <code>photos</code> — the local index whose bytes sit beside it on disk, the same split as Postgres and R2 — and the trip: <code>trip_facts</code>, <code>trip_members</code> (no role column, ever) and <code>trip_invite_codes</code> (no expiry column; a code dies with its trip). Schema v5; the trip_drafts demo is dropped, and v5 gives a trip written before the mint a real uuid. <code>trip_facts.trip_id</code> is minted here on the phone &mdash; the counterpart of <code>trips.id</code>'s <code>default gen_random_uuid()</code>, moved so a trip can be started with no connection.</p>
   <span class="sub">choice validated in the demo, built on, and recorded in docs/decisions/2026-08-25-riverpod-and-drift.md</span>
 </div>
 <div class="node nb" style="left:800px;top:805px;width:410px;height:120px">
@@ -499,7 +500,9 @@
       <li><b>The trip clock has one source</b> — the <code>trips</code> row. No phone ever infers
       it; two phones inferring differently is silent schedule drift.</li>
       <li><b>The ping derivation is frozen.</b> Any change splits devices mid-trip; the only safe
-      change is a loud namespace bump (v2 → v3).</li>
+      change is a loud namespace bump (v2 → v3). <b>The trip id is one of its inputs</b>, so the
+      id is frozen too: the phone mints it and the server keeps it rather than reissuing.
+      Renumbering a trip re-deals every remaining day of it, silently.</li>
       <li><b>Multiplication and addition, never bit-shifts</b> — dart2js ints are 32-bit under
       shifts. Golden tests pin it.</li>
       <li><b>RLS refuses by filtering, not raising.</b> Assert on table state afterwards, never on

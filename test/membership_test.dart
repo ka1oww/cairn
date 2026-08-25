@@ -52,6 +52,14 @@ Day 2 - Kyoto
 
 DateTime day(int dayOfJune) => DateTime.utc(2027, 6, dayOfJune);
 
+/// A trip id of the shape the phone actually mints
+/// (docs/decisions/2026-08-25-the-trip-mints-its-own-id.md), stood up here by
+/// hand because these tests seed the read side of the seam and never start a
+/// trip through the store. The bytes are arbitrary; that it is a real uuid is
+/// not — an id that would not survive a round trip through `trips.id` is not
+/// the thing these tests are standing in for.
+final aTrip = TripId.mint(List.filled(16, 0xa7));
+
 /// One photo of [by]'s, on day 1.
 PooledPhoto photoBy(String by) => PooledPhoto(
   ref: PhotoRef(
@@ -332,7 +340,7 @@ void main() {
         'minutes', () async {
       final container = containerWith(
         TripMembership(
-          tripId: 'a-trip',
+          tripId: aTrip,
           startedBy: MemberId(localMemberId),
           members: eight(),
         ),
@@ -356,7 +364,7 @@ void main() {
             party: party,
             utcOffset: Duration.zero,
             memberId: member.id.value,
-            tripId: 'a-trip',
+            tripId: aTrip,
           );
           for (final ping in pings) {
             if (ping.at.difference(date).inDays.abs() <= 1 &&
@@ -388,7 +396,7 @@ void main() {
     test('a party of one is still a party', () async {
       final container = containerWith(
         TripMembership(
-          tripId: 'a-trip',
+          tripId: aTrip,
           startedBy: MemberId(localMemberId),
           members: [
             Member(

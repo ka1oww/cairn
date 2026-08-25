@@ -64,7 +64,10 @@ Two things that are *not* arrows:
 **The app has a way in, and a trip with all three of its destinations in
 it.** The
 paste-and-confirm slice replaced the scaffold's proving screen and its
-disposable `trip_drafts` table: a person can paste a plan, see what the
+disposable `trip_drafts` table — the sidestep that let a drafted trip carry no
+id at all, now closed at both ends
+(`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`): a person can paste
+a plan, see what the
 parser understood day by day with its doubt surfaced per cause, flip
 ambiguous dates month-first in one tap, and accept — which persists the
 itinerary through the seam into Drift. Today (`fm/cairn-screen-today`) then
@@ -84,7 +87,10 @@ frame beside it on disk. The trip itself
 (`fm/cairn-roles-and-container`) is now a stored thing rather than an implied
 one: a roster, the fact of who started it, and three-word invite codes that
 die when the trip closes — with the whole permission model in `cairn_model`
-and a sheet off the Trail's title over it. The party the pings are dealt
+and a sheet off the Trail's title over it. It also has a **real id from the
+instant it is started** (`fm/cairn-tripid-before-sync`): the phone mints the
+uuid rather than waiting for Postgres to, so a trip can be created in flight
+mode and the id it is born with is the id it keeps after it first syncs. The party the pings are dealt
 across is that roster, so the stub member is gone; it holds one person,
 because nothing carries a membership to another phone yet. The itinerary is
 **local-only**, and so is the pool — nobody else's bytes arrive until Phase 2;
@@ -235,7 +241,7 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`), `photos`, and the trip itself: `trip_facts` (one row: which trip, what it is called, who started it), `trip_members` (the roster, with no role column and never one) and `trip_invite_codes` (minted and revoked, with no expiry column — a code dies with its trip and that rule is not stored twice). Schema v4: v2 dropped the scaffold's disposable `trip_drafts` demo, v3 added photos, v4 added the trip's three | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) and recorded in [`docs/decisions/2026-08-25-riverpod-and-drift.md`](decisions/2026-08-25-riverpod-and-drift.md). |
+| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`), `photos`, and the trip itself: `trip_facts` (one row: which trip, what it is called, who started it), `trip_members` (the roster, with no role column and never one) and `trip_invite_codes` (minted and revoked, with no expiry column — a code dies with its trip and that rule is not stored twice). Schema v5: v2 dropped the scaffold's disposable `trip_drafts` demo, v3 added photos, v4 added the trip's three, v5 gave a pre-mint trip a real uuid | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) and recorded in [`docs/decisions/2026-08-25-riverpod-and-drift.md`](decisions/2026-08-25-riverpod-and-drift.md). |
 | **Supabase/R2 client adapter** | not built | Supabase Auth, Postgres (PostgREST under RLS), both edge functions, R2 (presigned PUT/GET) | Repositories — nothing else in the app may import a Supabase or HTTP symbol | Wraps the session JWT, the RLS-filtered queries, the edge-function calls, and the direct-to-R2 byte transfers behind one interface the repositories consume. |
 
 ### Backend (`supabase/` + Cloudflare)
@@ -313,6 +319,11 @@ a "change one, change all" edge:
 4. **The `trip_moments` derivation is frozen.** Hash, seed namespace, window,
    inset, arithmetic. Changing any of it mid-trip splits the schedule between
    app versions; the only safe change is a loud one (`v2` → `v3`).
+   **The trip id is one of its inputs, so the id is frozen too**: it is minted
+   on the phone when the trip is started and the server keeps it rather than
+   reissuing (`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`).
+   Renumbering a trip re-deals every remaining day of it, silently, with
+   nothing raising anywhere.
 5. **JavaScript-safe arithmetic.** Dart `int` bitwise operators are 32-bit
    under dart2js, so the derivation uses multiplication and addition, never
    shifts. Golden tests pin it. Do not "simplify" it back.

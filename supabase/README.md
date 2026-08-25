@@ -17,7 +17,7 @@ the same claim the previous version of this file made.
 | Table | Why it exists |
 | --- | --- |
 | `profiles` | One row per person, and the durable home of the name credited under every photo. Auto-created by a trigger on `auth.users` insert. Has **no foreign key to `auth.users`**, on purpose — see [Deletion](#deletion-the-login-goes-the-credit-stays). |
-| `trips` | A named container, plus the shared trip clock (timezone, dates, waking window). Holds no itinerary data — that stays on the phone. |
+| `trips` | A named container, plus the shared trip clock (timezone, dates, waking window). Holds no itinerary data — that stays on the phone. **`trips.id` is minted by the phone, not here**; see [Who names a trip](#who-names-a-trip). |
 | `trip_members` | The root of every access-control check in this schema. A row is reachable by a user if and only if they have a matching `(trip_id, user_id)` row here. Carries **no role column**; see [Roles are flat](#roles-are-flat-except-one-thing). |
 | `trip_invites` | Invite codes — three spoken words each — kept in their own table rather than a column on `trips` so a code can be rotated, revoked, or usage-limited without touching trip identity, and a trip can have more than one outstanding code. Carries **no expiry column**; a code dies when its trip closes and at no other time. See [How someone joins](#how-someone-joins-a-trip). |
 | `photos` | One row per photo in the pool. The bytes live in R2; this row is the index the app queries and the thing RLS protects. |
@@ -142,6 +142,28 @@ The row stores everything needed to redo that computation or challenge it:
 `photos.contributor_id` (not nullable, `references profiles`), enforced at
 insert time by an RLS `with check` that the inserting user must be
 tagging *themselves* (`contributor_id = auth.uid()`), not anyone else.
+
+## Who names a trip
+
+**The phone mints `trips.id`, and this schema keeps it**
+(`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`). A trip is created
+offline — the moment somebody pastes an itinerary is the moment they are least
+likely to have signal — so the id cannot wait on a round trip to this table.
+The app writes a version-4 uuid into Drift's `trip_facts` the instant the trip
+is started, and the first sync inserts a `trips` row carrying that id.
+
+Nothing in the schema had to change for this. `id uuid primary key default
+gen_random_uuid()` fires **only** when the client omits the column, and
+`trips_insert_self` checks `created_by = auth.uid()` and says nothing about
+the id. Two rules for whoever writes the sync, both recorded on the column
+itself in `0003_trips.sql`:
+
+- **Never reissue an id.** `packages/trip_moments` seeds each person's daily
+  ping slot from the trip id, so handing a phone a different id re-deals every
+  remaining day of the trip — silently, with nothing raising anywhere.
+- **The first sync of a trip is a plain `insert`, never an upsert.** A uuid
+  collision between two phones is vanishingly unlikely, but `on conflict do
+  update` would merge two parties' trips into one where a plain insert raises.
 
 ## The shared trip clock
 
