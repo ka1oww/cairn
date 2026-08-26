@@ -162,3 +162,28 @@ create policy "photos_delete_contributor"
   on public.photos for delete
   to authenticated
   using ( photos.contributor_id = auth.uid() );
+
+-- A photo belongs to the trip it was taken on. Correcting which *day* it
+-- landed on is a person's own business and stays theirs after the close
+-- (above); moving it to another trip is not the same act and no part of the
+-- app asks for it -- it is only the shape of a hole. The insert policy shuts
+-- the pool of a closed trip, and without this a member of two trips could
+-- land a photograph in one and then repoint the row at the archive the close
+-- exists to freeze. WITH CHECK cannot see the old row, so the lock is a
+-- trigger, exactly as `trip_invites.trip_id`'s is in 0005_trip_invites.sql.
+create or replace function public.photos_lock_trip_id()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.trip_id is distinct from old.trip_id then
+    raise exception 'photos.trip_id cannot be changed once set';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists photos_lock_trip_id on public.photos;
+create trigger photos_lock_trip_id
+  before update on public.photos
+  for each row execute function public.photos_lock_trip_id();

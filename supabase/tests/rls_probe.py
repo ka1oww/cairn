@@ -49,6 +49,7 @@ def dart_grace_hours():
 PHOTO_A = "aaaaaaaa-0000-0000-0000-000000000001"
 PHOTO_B = "bbbbbbbb-0000-0000-0000-000000000001"
 PHOTO_C = "cccccccc-0000-0000-0000-000000000001"
+PHOTO_D = "dddddddd-0000-0000-0000-000000000001"
 
 
 def main():
@@ -472,6 +473,22 @@ def main():
     check(str(after_trip) == str(before_trip), "and the row's trip_id is unchanged",
           f"{before_trip} -> {after_trip}")
 
+    # The same lock, for the same reason, on the row the close actually
+    # freezes. `photos_insert_trip_member` shuts a closed trip's pool, and a
+    # photo that could be repointed afterwards would walk straight round it.
+    print("\n== nor can a photo be repointed to another trip ==")
+    c.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                       content_type, byte_size)
+             values (:id, :t, :u, 'k/c-iceland', 'image/jpeg', 10)""",
+          id=PHOTO_D, t=iceland, u=carol)
+    status, rows = c.try_run(
+        "update public.photos set trip_id = :t where id = :id", t=japan, id=PHOTO_D)
+    check(status == "err" and "cannot be changed" in str(rows),
+          "even by the person who took it, into a trip she is also on", repr(rows)[:80])
+    check(str(db.run("select trip_id from public.photos where id = :id", id=PHOTO_D)[0][0])
+          == str(iceland),
+          "and it is still in the trip it was taken on")
+
     # ------------------------------------------------- the itinerary as a fact
     #
     # The plan is a shared stored fact since 0010_trip_itinerary.sql, merged
@@ -621,6 +638,36 @@ def main():
         "values (:t, 9, now())", t=norway)
     check(status == "err", "nor write one round the function, straight into the table",
           repr(rows)[:80])
+
+    # ---------------------------------------- and a closed trip's plan is fixed
+    #
+    # The phone refuses first (`TripSync._reconcile` -> `SyncStanding.archived`),
+    # and this is the other half of it, for the reason the pool's close has two:
+    # eight phones means one wrong clock. Judged on the table afterwards and not
+    # only on the raise, per invariant 6 -- the refusal has to happen before the
+    # first insert, not after a half-written merge.
+    print("\n== a closed trip's plan is the record, and takes no more pushes ==")
+    before_days = db.run("select day_number, place, day_date from public.trip_itinerary_days "
+                         "where trip_id = :t order by day_number", t=norway)
+    db.run("update public.trips set start_date = current_date - 44, "
+           "end_date = current_date - 40 where id = :t", t=norway)
+    status, rows = sync(b, norway, T3, [day(1, T3, "Rewritten"), day(9, T3, "Invented")])
+    check(status == "err" and "closed" in str(rows),
+          "pushing a plan into a closed trip is refused", repr(rows)[:90])
+    after_days = db.run("select day_number, place, day_date from public.trip_itinerary_days "
+                        "where trip_id = :t order by day_number", t=norway)
+    check(after_days == before_days,
+          "and nothing was written -- no day rewritten and no day invented",
+          f"{before_days} -> {after_days}")
+    status, rows = sync(c, norway, "-infinity", [])
+    check(status == "err" and "closed" in str(rows),
+          "and the pull is refused with it: after the close there is nothing to reconcile",
+          repr(rows)[:90])
+    db.run("update public.trips set start_date = current_date, "
+           "end_date = current_date + 4 where id = :t", t=norway)
+    status, rows = sync(c, norway, "-infinity", [])
+    check(status == "ok", "while the same call on the same trip, still open, goes through",
+          repr(rows)[:90])
 
     print("\n== the roster reads as one statement, and only for the party ==")
     status, rows = b.try_run(

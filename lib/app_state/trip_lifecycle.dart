@@ -7,19 +7,23 @@
 // rule is `GateState.decide` and this band only supplies its inputs
 // (`day_gate.dart` says the same thing about itself, for the same reason).
 //
-// What this file supplies is the one input the domain cannot work out: *when
-// the trip ends*, from a saved plan whose days carry bare calendar dates and
-// no clock. That arithmetic used to sit inside `trip_settings.dart` because
-// the code's expiry line was the only thing that needed it; three more
-// callers need it now — capture, the paste flow and the sync — so it moved
-// here rather than being reached for sideways.
+// What this file supplies is the one input the domain cannot work out for
+// itself: *when the trip ends*, read off a saved plan whose days carry bare
+// calendar dates and no clock. The arithmetic over those dates is the
+// domain's too (`cairn_model`'s `tripEndsAtFrom`) and is deliberately not
+// restated here — the sync's `_endsAt` calls the same function from the other
+// side of the seam, and a rule written on both sides is a rule that drifts.
+// What is left here is reading the plan and handing it over in plan order.
 //
 // Two things worth knowing before changing anything in it:
 //
-//  - **A plan with no dates has not ended.** It is `underway`, deliberately,
-//    and not "closed" or "unknown". Nothing here guesses a date, and a trip
-//    takes its ending the moment its plan has one — the same answer
-//    `TripInvite.standingAt` gives a null close.
+//  - **A trip ends at the end of its last day, and a plan whose last day has
+//    no date has not ended.** It is `underway`, deliberately, and not
+//    "closed" or "unknown" — an undated tail is an end nobody knows yet, and
+//    ending on the last *dated* day instead would archive a trip whose
+//    travellers are still on it. Nothing here guesses a date, and a trip
+//    takes its ending the moment its plan's last day has one — the same
+//    answer `TripInvite.standingAt` gives a null close.
 //  - **The end is midnight on the trip's own clock, not UTC midnight.** The
 //    same acknowledged approximation as `todayProvider` and
 //    `tripUtcOffsetProvider`: one offset for the whole trip, read off the
@@ -39,27 +43,24 @@ import 'trip_providers.dart';
 // The derivations, kept pure so the two instants can be read in one sitting.
 // ---------------------------------------------------------------------------
 
-/// The instant [plan]'s last day seals, or null while the plan has no dates
-/// to end on.
+/// The instant [plan]'s last day seals, or null while that end is not known.
 ///
-/// A day's date is a bare calendar date carried at UTC midnight; the day
-/// itself ends at the *next* midnight on the trip's clock. Undated days play
-/// no part — they cannot be the end of anything, because nothing knows when
-/// they are.
+/// The rule is the domain's — `cairn_model`'s [model.tripEndsAtFrom], which
+/// the sync's own `_endsAt` calls too, so the ending cannot be one thing on
+/// screen and another on the wire. What this supplies is the shape it needs:
+/// the plan's day dates in the plan's own order, nulls kept, since which day
+/// is *last* is the whole of the question.
 DateTime? tripEndsAtFor(TripPlan? plan, Duration utcOffset) {
   if (plan == null) return null;
-  DateTime? last;
-  for (final day in plan.days) {
-    final date = day.date;
-    if (date == null) continue;
-    if (last == null || date.isAfter(last)) last = date;
-  }
-  if (last == null) return null;
-  return last.add(const Duration(days: 1)).subtract(utcOffset);
+  final days = plan.days.toList()..sort((a, b) => a.number.compareTo(b.number));
+  return model.tripEndsAtFrom(
+    dayDatesInPlanOrder: [for (final day in days) day.date],
+    utcOffset: utcOffset,
+  );
 }
 
 /// The instant [plan] closes to new photos — and with it the instant its
-/// codes die — or null while the plan has no dates to end on.
+/// codes die — or null while the plan has no known ending.
 ///
 /// The rule is the domain's (`cairn_model`'s `tripClosesAt`: the trip's end
 /// plus the grace) and is deliberately not spelled out again here. The book's
@@ -108,7 +109,8 @@ String? tripEndingLine({
 // Providers.
 // ---------------------------------------------------------------------------
 
-/// The instant the trip's last day seals, or null while its dates are open.
+/// The instant the trip's last day seals, or null while its last day's date
+/// is still open.
 final tripEndsAtProvider = Provider<DateTime?>(
   (ref) => tripEndsAtFor(
     ref.watch(savedItineraryProvider).value,
@@ -117,7 +119,7 @@ final tripEndsAtProvider = Provider<DateTime?>(
 );
 
 /// The instant the trip closes to new photographs and its codes die, or null
-/// while its dates are open.
+/// while its last day's date is still open.
 final tripClosesAtProvider = Provider<DateTime?>(
   (ref) => tripCloseFor(
     ref.watch(savedItineraryProvider).value,

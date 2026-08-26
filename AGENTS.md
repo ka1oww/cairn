@@ -136,7 +136,9 @@ import what is written there, not here.
   never re-stamp a day's clock (that is what makes two phones push at each
   other forever), **an archived trip is not reconciled at all** (it returns
   `SyncStanding.archived` before the first round trip, so a pull cannot apply
-  somebody's plan over a closed record), and **a reconcile that changed nothing
+  somebody's plan over a closed record — and the server refuses the same call
+  for the same reason, `sync_trip_itinerary` raising on `trip_closes_at`,
+  because one of eight phones has a wrong clock), and **a reconcile that changed nothing
   must write nothing**,
   because the plan's own Drift stream is what asks for the next sync. The whole
   path is dormant today: it needs a `--dart-define`d project and a session, and
@@ -209,17 +211,20 @@ import what is written there, not here.
 - **A trip ends, and where it stands is one rule written once.**
   `cairn_model`'s `tripStandingAt` turns `(now, endsAt)` into underway / grace
   / archived, and every surface and write path asks it through
-  `tripStandingProvider` (`lib/app_state/trip_lifecycle.dart`, which also owns
-  the one thing the domain cannot work out: when a saved plan of bare calendar
-  dates *ends*). A second comparison of dates above that provider is the thing
+  `tripStandingProvider` (`lib/app_state/trip_lifecycle.dart`, which reads the
+  saved plan of bare calendar dates and hands its days to the domain's
+  `tripEndsAtFrom` — the arithmetic is shared with `TripSync._endsAt`, so an
+  ending cannot be one thing on screen and another on the wire). A second
+  comparison of dates above that provider is the thing
   to refuse in review. The shape is
   `docs/decisions/2026-08-26-the-ending.md`: seventy-two hours of grace taking
   nothing but late photographs, then the record is fixed. Three things worth
   knowing before touching it. **The read-only half is a permission**, in
   `trip_powers.dart`, so a new caller inherits it — with `canDeleteTrip` the
-  one deliberate exception (discarding a record is not editing it). **A plan
-  with no dates has not ended**, and is `underway` rather than closed or
-  unknown. And **the grace's real intake is not built**: capture only writes to
+  one deliberate exception (discarding a record is not editing it). **A trip ends at the end of its *last*
+  day**, so a plan whose last day carries no date has not ended and is
+  `underway` rather than closed or unknown — ending on the last *dated* day
+  would archive a half-dated plan mid-trip. And **the grace's real intake is not built**: capture only writes to
   today, so the window's door is the import sweep, and until that exists the
   rule sits at the write path (`CaptureFlow.turnTheDayOver`) rather than on a
   button. The number itself is written twice and never three times — here and

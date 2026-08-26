@@ -319,11 +319,26 @@ declare
   v_pocket_at timestamptz := coalesce(p_pocket_revised_at, '-infinity');
   v_won integer[];
   v_stored_pocket_at timestamptz;
+  v_closes_at timestamptz;
   v_result jsonb;
 begin
   if not public.is_trip_member(p_trip_id, auth.uid()) then
     raise exception 'not a member of this trip'
       using errcode = 'insufficient_privilege';
+  end if;
+
+  -- An archived trip is not reconciled at all -- neither half of the round
+  -- trip. The phone refuses first (`TripSync._reconcile` returns
+  -- `SyncStanding.archived` before reaching the network), and this is the
+  -- other half of that, for the reason `photos_insert_trip_member` has one:
+  -- eight phones means one wrong clock, and a phone still running a build
+  -- from before the ending would push its plan over a fixed record. Refused
+  -- before the first insert below, so a closed trip's plan is unchanged and
+  -- not merely un-returned -- and the pull is refused with it, because after
+  -- the close there is nothing left to reconcile in either direction.
+  v_closes_at := public.trip_closes_at(p_trip_id);
+  if v_closes_at is not null and now() >= v_closes_at then
+    raise exception 'this trip has closed';
   end if;
 
   insert into public.trip_itineraries (trip_id, plan_revised_at, pocket_revised_at)

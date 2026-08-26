@@ -385,14 +385,24 @@ a "change one, change all" edge:
     sides.** `cairn_model.tripStandingAt` is the only thing that turns
     `(now, endsAt)` into underway / grace / archived; the app reaches it
     through `tripStandingProvider` and nothing above that provider compares
-    dates itself, exactly as with the gate (#2). The *close* is then a
-    coupling like #2 and #9: seventy-two hours after the last day seals, on
-    the phone (`graceAfterATrip`) and in SQL (`trip_grace_after_end()`), with
+    dates itself, exactly as with the gate (#2). The `endsAt` it is handed is
+    decided once too: `cairn_model.tripEndsAtFrom` turns the plan's day dates
+    in plan order plus the trip's offset into an instant, and *both* sides of
+    the sync seam call it — `tripEndsAtFor` in the app-state band and
+    `TripSync._endsAt` in the repositories band — because a trip that has
+    ended on screen and not on the wire is the coupling this list exists to
+    name. A trip ends at the end of its last day, so a plan whose last day is
+    undated has no known end and is underway. The *close* is then a coupling
+    like #2 and #9: seventy-two hours after the last day seals, on the phone
+    (`graceAfterATrip`) and in SQL (`trip_grace_after_end()`), with
     `supabase/tests/rls_probe.py` reading the Dart constant to compare them.
     Both halves shut the pool — `CaptureFlow.turnTheDayOver` and
-    `photos_insert_trip_member` — because eight phones means one wrong clock.
-    What the close does not take, on either side, is a person's hold on their
-    own photograph. See `docs/decisions/2026-08-26-the-ending.md`.
+    `photos_insert_trip_member`, the latter backed by a trigger that forbids
+    a photo being repointed at another trip — and both halves shut the plan
+    — `TripSync._reconcile` and `sync_trip_itinerary` — because eight phones
+    means one wrong clock. What the close does not take, on either side, is a
+    person's hold on their own photograph. See
+    `docs/decisions/2026-08-26-the-ending.md`.
 
 ---
 

@@ -188,14 +188,44 @@ void main() {
       );
     });
 
-    test('an undated tail does not extend the trip', () {
-      // Days 4 and 5 were accepted with their dates still open. The trip
-      // still ends when the last day anybody dated ends.
+    test('an undated tail means the trip has not ended', () {
+      // Day 3 was accepted with its date still open. A trip ends at the end
+      // of its *last* day, so this trip's ending is not known yet -- reading
+      // it as the last dated day would archive it while its travellers were
+      // still on it, three days after day 2.
       final plan = TripPlan(
         days: [
           PlanDay(number: 1, date: june(14), stops: const []),
           PlanDay(number: 2, date: june(16), stops: const []),
           PlanDay(number: 3, date: null, stops: const []),
+        ],
+      );
+      expect(tripEndsAtFor(plan, Duration.zero), isNull);
+      expect(tripCloseFor(plan, Duration.zero), isNull);
+      expect(
+        tripStandingFor(plan, Duration.zero, DateTime.utc(2040)),
+        model.TripStanding.underway,
+        reason: 'however late it is asked',
+      );
+    });
+
+    test('a gap in the middle of a dated plan still ends it', () {
+      final plan = TripPlan(
+        days: [
+          PlanDay(number: 1, date: june(14), stops: const []),
+          PlanDay(number: 2, date: null, stops: const []),
+          PlanDay(number: 3, date: june(16), stops: const []),
+        ],
+      );
+      expect(tripEndsAtFor(plan, Duration.zero), theTripEnds);
+    });
+
+    test('the plan is read in day order, not in the order it arrives', () {
+      final plan = TripPlan(
+        days: [
+          PlanDay(number: 3, date: june(16), stops: const []),
+          PlanDay(number: 1, date: june(14), stops: const []),
+          PlanDay(number: 2, date: june(15), stops: const []),
         ],
       );
       expect(tripEndsAtFor(plan, Duration.zero), theTripEnds);

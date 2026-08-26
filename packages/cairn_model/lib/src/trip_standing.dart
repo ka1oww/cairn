@@ -94,3 +94,36 @@ TripStanding tripStandingAt({
   }
   return TripStanding.archived;
 }
+
+/// The instant a plan whose days carry the bare calendar dates
+/// [dayDatesInPlanOrder] ends, on a trip whose clock is [utcOffset] from UTC —
+/// or null while that end is not known.
+///
+/// **A trip ends at the end of its last day, and no other day.** The list is
+/// the plan's own order, one entry per day, null where a day was accepted with
+/// its date still open; only the final entry decides. If the plan's last day
+/// carries no date the trip's end is *unknown*, and `tripStandingAt` reads
+/// that as [TripStanding.underway] — an undated tail can no more end a trip
+/// than an undated plan can, and taking the last *dated* day instead would
+/// archive a trip whose travellers are still on it. An empty plan has no last
+/// day and so no end either.
+///
+/// Each date is a bare calendar date carried at UTC midnight; the day itself
+/// ends at the *next* midnight on the trip's clock, which is what [utcOffset]
+/// subtracts. It is the caller's one offset for the whole trip, not the
+/// device's zone at the instant of asking — the same approximation the trip's
+/// clock makes everywhere else until a stored one lands.
+///
+/// **Written here and not on either side of the seam**: the app's
+/// `tripEndsAtFor` and the sync's `TripSync._endsAt` both call this, so the
+/// rule above cannot be true on one phone's screen and false in its network
+/// layer.
+DateTime? tripEndsAtFrom({
+  required List<DateTime?> dayDatesInPlanOrder,
+  required Duration utcOffset,
+}) {
+  if (dayDatesInPlanOrder.isEmpty) return null;
+  final last = dayDatesInPlanOrder.last;
+  if (last == null) return null;
+  return last.add(const Duration(days: 1)).subtract(utcOffset);
+}

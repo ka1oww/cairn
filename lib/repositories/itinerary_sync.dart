@@ -627,19 +627,29 @@ class TripSync {
   String _stamp() => now().toUtc().toIso8601String();
 
   /// The instant this phone's plan ends, on the trip's clock, or null while
-  /// every day's date is still open.
+  /// its last day's date is still open.
   ///
   /// Read off the stored itinerary rather than taken from above, because
   /// nothing above this seam knows this class exists — that is the whole
   /// arrangement, and a trip's ending handed in from a provider would break
-  /// it. Undated days play no part: they cannot be the end of anything.
+  /// it. The *rule* is not this side's either: `tripEndsAtFrom` decides it,
+  /// the same call `tripEndsAtFor` makes on the app's side, so a plan whose
+  /// last day is undated is as unended here as it is on screen. All this owes
+  /// it is the days in plan order, nulls kept, since which day is last is the
+  /// whole of the question.
   Future<DateTime?> _endsAt() async {
-    final dates = [
-      for (final day in await database.readItineraryDays()) ?day.dateIso,
-    ]..sort();
-    if (dates.isEmpty) return null;
-    final last = DateTime.parse('${dates.last}T00:00:00Z').toUtc();
-    return last.add(const Duration(days: 1)).subtract(utcOffset());
+    final days = (await database.readItineraryDays()).toList()
+      ..sort((a, b) => a.number.compareTo(b.number));
+    return tripEndsAtFrom(
+      dayDatesInPlanOrder: [
+        for (final day in days)
+          if (day.dateIso case final iso?)
+            DateTime.parse('${iso}T00:00:00Z').toUtc()
+          else
+            null,
+      ],
+      utcOffset: utcOffset(),
+    );
   }
 
   /// Which day of the trip somebody joined on, worked out from the plan.

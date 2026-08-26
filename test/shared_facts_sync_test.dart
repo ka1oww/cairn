@@ -1220,5 +1220,36 @@ void main() {
 
       expect(outcome.standing, SyncStanding.synced);
     });
+
+    test('a plan whose last day is undated has not ended either, on this side '
+        'of the seam as much as on the screen', () async {
+      // Days 1 and 2 are dated a fortnight ago and day 3 was accepted with
+      // its date still open. Read as "ends on the last dated day" this
+      // trip would be archived and the sync silent while its travellers
+      // were still on it -- which is exactly what `tripEndsAtFrom`, the
+      // one copy of the rule that `tripEndsAtFor` also calls, refuses.
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([
+          confirmed(1, 'Oslo', date: CalendarDate(2027, 6, 14)),
+          confirmed(2, 'Bergen', date: CalendarDate(2027, 6, 16)),
+          confirmed(3, 'Tromso'),
+        ]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: sharedTrip(id, const []));
+
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: () => DateTime.utc(2027, 6, 21),
+        utcOffset: () => Duration.zero,
+      ).syncNow();
+
+      expect(outcome.standing, SyncStanding.synced);
+      expect(server.pushes, hasLength(1));
+    });
   });
 }

@@ -79,7 +79,7 @@ phones and one of them has a wrong clock:
 | No new photographs | `CaptureFlow.turnTheDayOver` / `open` | `photos_insert_trip_member` |
 | Codes die | `TripInvite.standingAt` | `redeem_trip_invite` via `trip_closes_at` |
 | The plan cannot be replaced | `PasteFlow.accept` | — (the phone owns the plan's shape) |
-| No sync at all | `TripSync._reconcile` → `SyncStanding.archived` | — |
+| No sync at all | `TripSync._reconcile` → `SyncStanding.archived` | `sync_trip_itinerary` via `trip_closes_at` |
 
 What the close does **not** take is a person's hold on their own photograph:
 correcting which day it landed on, or removing it, stays theirs afterwards, on
@@ -97,6 +97,11 @@ lands. Two travellers sixteen hours apart therefore see the archive shut
 sixteen hours apart, which is correct: it shuts at the end of *the trip's*
 third day home, and the trip has one clock.
 
-A plan with no dates has not ended. It is `underway`, deliberately, and never
-"closed" or "unknown" — nothing in this app guesses a date, so nothing in it
-expires on one.
+A trip ends at the end of its **last** day, and a plan whose last day carries
+no date has not ended: it is `underway`, deliberately, and never "closed" or
+"unknown" — nothing in this app guesses a date, so nothing in it expires on
+one. That covers a plan with no dates at all and equally a plan dated only as
+far as day 3 of 8, which ending on the last *dated* day would archive while
+its travellers were still on it. The arithmetic is `cairn_model`'s
+`tripEndsAtFrom`, over the plan's day dates in plan order, and both sides of
+the sync seam call it rather than restating it.

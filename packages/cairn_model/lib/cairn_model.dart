@@ -20,7 +20,8 @@ export 'src/trip_clock.dart' show TripClock;
 export 'src/trip_close.dart' show graceAfterATrip, tripClosesAt;
 export 'src/trip_day.dart' show TripDay;
 export 'src/trip_invite.dart' show InviteStanding, TripInvite;
-export 'src/trip_standing.dart' show TripStanding, tripStandingAt;
+export 'src/trip_standing.dart'
+    show TripStanding, tripEndsAtFrom, tripStandingAt;
 export 'src/trip_powers.dart'
     show
         canDeleteTrip,
