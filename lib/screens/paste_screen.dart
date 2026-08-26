@@ -229,7 +229,6 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
                 style: _serif.copyWith(fontSize: 15, color: _muted),
               ),
               ..._importFeedback(importState),
-              const SizedBox(height: 16),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) => TextField(
