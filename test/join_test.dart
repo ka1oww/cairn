@@ -89,9 +89,11 @@ void main() {
 
   String spokenCode() => textOf(const Key('trip-code')).replaceAll('\n', ' ');
 
-  /// Out of the sheet, back to the paste box, and through the second door.
+  /// Out of the sheet, back to the paste box — which over a running trip is
+  /// the re-paste, holding the plan rather than throwing it away — and
+  /// through the second door, which is on that screen in both its modes.
   Future<void> goToTheDoor(WidgetTester tester) async {
-    await tester.tap(find.byKey(const Key('start-over')));
+    await tester.tap(find.byKey(const Key('trip-repaste')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('join-door')));
     await tester.pumpAndSettle();

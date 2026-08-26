@@ -49,7 +49,8 @@ import what is written there, not here.
   `capture_flow.dart`, `ping_schedule.dart`); screens render their view models
   and never import the parser or `cairn_model`.
 - **`lib/logic/` holds pure decision cores the app-state band calls** — no
-  Flutter, no Riverpod, no IO. Its first resident is the re-paste merge
+  Flutter, no Riverpod, no IO. It holds the plan said back as pasteable text
+  (`plan_text.dart`) and, its first resident, the re-paste merge
   (`repaste_merge.dart`, tested in `test/repaste_merge_test.dart`), whose
   rules are settled: match repasted days to saved days by date first (a
   full-year title candidate counts for matching but is never bound, and one
@@ -91,16 +92,44 @@ import what is written there, not here.
   review: `_resolveCandidate` rolls a year-less candidate off the first date
   already bound in the draft — `todayProvider` when there is none — and the
   sheet shows the weekday it worked out, so a wrong year is visible before it
-  binds and not after.
+  binds and not after. **Dating the *first* day dates the whole plan**, though:
+  `setDayDate` runs `_fillDatesFromFirstDay` down the draft (day two the day
+  after, and so on) whenever the day it just dated is the first one. Later days
+  stay individually adjustable, and dating one of those fills nothing; the
+  trade-off, deliberate and written on `setDayDate`, is that re-dating day one
+  re-runs the fill over a later day someone adjusted by hand. Day one is the
+  anchor, and moving the anchor moves the plan.
 - **The container is `lib/screens/trip_shell.dart`**: a tab per destination,
   each owning its own `Navigator` so a day page opened from the Trail
   survives a switch to Today and back. It holds all three of the design's
   destinations (Today, Trail, Pool) and no fourth: trip-level actions hang
   off the Trail's title, where the chevron opens `TripSheet` — the roster,
-  the trip's live code, rename, new words, the gated delete, and the
-  temporary route back to the paste box. Anything drawn but not built stays
-  **absent, not disabled** — that is how the Pool waited, how leaving and
-  removing wait now, and how the next one should.
+  the trip's live code, rename, new words, the gated delete, and the two
+  entries that change a running trip's plan without destroying it. Anything
+  drawn but not built stays **absent, not disabled** — that is how the Pool
+  waited, how leaving and removing wait now, and how the next one should.
+- **Editing never requires deleting the trip, and there is no destructive
+  re-paste.** The old "Paste a different plan" hatch is gone; re-introducing
+  one is the thing to refuse in review. The sheet's *Edit the whole plan*
+  opens the same read-back editor over the live plan (`PasteFlow.editLivePlan`;
+  `planEditorProvider` is what `RootScreen` watches to draw it) and **nothing
+  is written until Save** — `cancelPlanEdit` leaves the trip untouched. The
+  sheet's *Re-paste the plan text* hands the paste box the plan said back as
+  text (`lib/logic/plan_text.dart`) and reading it **merges** into the plan
+  (`lib/logic/repaste_merge.dart`) instead of replacing it: what the new text
+  no longer carries is displaced into the set-aside, never deleted. Two traps.
+  The merge is `lib/logic/`'s shared module and `mergeRepaste` is called from
+  exactly one place (`PasteFlow._mergeReparse`), so the whole rule stays
+  swappable in one edit; keep it that way. And **every route from the
+  editor back to the paste box must stay in merge mode**, and so must
+  every *re*-read once inside it: `startOver` redirects to
+  `repasteCurrentPlan`, and `_mergesInsteadOfReplacing` (the frozen baseline,
+  not "is the paste box open") is what routes the month-first flip and the
+  year answer, whose second read would otherwise fall through to a plain parse
+  and overwrite the trip with whatever text was in the box. That is the hatch
+  this removed. A day the merge leaves in place keeps its **number**,
+  and that alone is what keeps its photographs: `photos.dayNumber` is the only
+  link, and nothing re-files photos when a plan is saved.
 - **The phone mints the trip's id, and the server keeps it**
   (`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`). A trip must be
   startable in flight mode, and the ping schedule seeds itself from the id, so
@@ -245,7 +274,8 @@ import what is written there, not here.
   today, so the window's door is the import sweep, and until that exists the
   rule sits at the write path (`CaptureFlow.turnTheDayOver`) rather than on a
   button. The plan is refused the same way: the paste box stays reachable on
-  an archived trip — it is also the only door to joining another one — and
+  an archived trip, through the trip sheet's re-paste entry — it is also the
+  only door to joining another one — and
   only `PasteFlow.accept` refuses, with the confirm screen showing the read in
   full and a sentence where the accept button was. The number itself is
   written twice and never three times — here and

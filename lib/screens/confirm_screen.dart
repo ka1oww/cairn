@@ -27,6 +27,13 @@
 // can be dragged back. And a date a title named is offered, never assumed —
 // the sheet says which weekday it worked out, so a wrong year is visible
 // before it is bound.
+//
+// The same editor draws a trip that is already running (screen 3, "Edit the
+// whole plan"). Only the foot of the screen differs, and it differs because
+// the stakes do: a plan on its way in is accepted, a plan already running is
+// *saved over*, so the button says so, a cancel that leaves the trip exactly
+// as it was sits beside it, and the re-paste is offered from here. Nothing
+// above the foot knows which mode it is in — the editing is the same editing.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -75,7 +82,9 @@ class ConfirmScreen extends ConsumerWidget {
               FilledButton(
                 key: const Key('accept-button'),
                 onPressed: () => ref.read(pasteFlowProvider.notifier).accept(),
-                child: const Text('Looks right'),
+                child: Text(
+                  review.editingLivePlan ? 'Save changes' : 'Looks right',
+                ),
               )
             else
               Text(
@@ -84,14 +93,32 @@ class ConfirmScreen extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             const SizedBox(height: 8),
-            Center(
-              child: TextButton(
-                key: const Key('back-to-paste'),
-                onPressed: () =>
-                    ref.read(pasteFlowProvider.notifier).startOver(),
-                child: const Text('Back to the paste'),
+            if (review.editingLivePlan) ...[
+              Center(
+                child: TextButton(
+                  key: const Key('repaste-plan'),
+                  onPressed: () =>
+                      ref.read(pasteFlowProvider.notifier).repasteCurrentPlan(),
+                  child: const Text('Re-paste the plan text'),
+                ),
               ),
-            ),
+              Center(
+                child: TextButton(
+                  key: const Key('cancel-plan-edit'),
+                  onPressed: () =>
+                      ref.read(pasteFlowProvider.notifier).cancelPlanEdit(),
+                  child: const Text('Cancel — leave the trip as it is'),
+                ),
+              ),
+            ] else
+              Center(
+                child: TextButton(
+                  key: const Key('back-to-paste'),
+                  onPressed: () =>
+                      ref.read(pasteFlowProvider.notifier).startOver(),
+                  child: const Text('Back to the paste'),
+                ),
+              ),
           ],
         ),
       ),
@@ -116,7 +143,9 @@ class _Headline extends StatelessWidget {
       title =
           '$days ${days == 1 ? 'day' : 'days'}, '
           '$stops ${stops == 1 ? 'stop' : 'stops'}.';
-      subtitle = 'Tap anything to fix it. Nothing is final yet.';
+      subtitle = review.editingLivePlan
+          ? 'Tap anything to fix it. Nothing changes until you save.'
+          : 'Tap anything to fix it. Nothing is final yet.';
     } else {
       final clean = review.cleanCount;
       title = clean == 0
@@ -1403,8 +1432,24 @@ class _NothingReadView extends ConsumerWidget {
             FilledButton(
               key: const Key('paste-something-else'),
               onPressed: () => ref.read(pasteFlowProvider.notifier).startOver(),
-              child: const Text('Paste something else'),
+              child: Text(
+                review.editingLivePlan
+                    ? 'Back to the text'
+                    : 'Paste something else',
+              ),
             ),
+            // Over a running trip this state is reachable — the person emptied
+            // the text — and the trip must not be stranded behind it. Nothing
+            // has been saved, so leaving costs nothing.
+            if (review.editingLivePlan)
+              Center(
+                child: TextButton(
+                  key: const Key('cancel-plan-edit'),
+                  onPressed: () =>
+                      ref.read(pasteFlowProvider.notifier).cancelPlanEdit(),
+                  child: const Text('Cancel — leave the trip as it is'),
+                ),
+              ),
           ],
         ),
       ),

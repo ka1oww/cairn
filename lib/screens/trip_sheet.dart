@@ -18,10 +18,19 @@
 // nothing propagates a departure anywhere yet), no removing anyone (there is
 // nobody else on this phone's roster to remove), and no badge or title
 // anywhere: "started it" is a fact beside a name, never a rank.
+//
+// Absent for a different reason: **"Paste a different plan" is gone.** It was
+// the only way to change a running trip's plan and it did so by throwing the
+// trip away. Design round 4's screen 3 replaces it with the two entries above
+// the deletion — edit the plan, or re-paste its text — and neither destroys
+// anything. Deleting stays, as a choice rather than as the only path to a
+// change. Re-introducing a destructive re-paste is the thing to refuse in
+// review.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_state/paste_flow.dart';
+import '../app_state/trip_providers.dart';
 import '../app_state/trip_settings.dart';
 
 /// Slides the trip's sheet over whatever is behind it.
@@ -158,6 +167,47 @@ class _Sheet extends ConsumerWidget {
             const SizedBox(height: 20),
             _Code(view: view),
 
+            // Screen 3's two entries. They exist only over an accepted trip:
+            // with no plan saved there is nothing to edit and nothing to say
+            // back, and the paste box is already the whole screen.
+            //
+            // They stay on a *closed* trip, and that is deliberate: the paste
+            // box behind them is also the join door, and shutting it would
+            // lock somebody out of ever joining another trip because their
+            // last one ended. What an archived trip refuses is the write at
+            // the end of the route — `PasteFlow.accept` returns without
+            // saving and the read-back says so in words
+            // (`docs/decisions/2026-08-26-the-ending.md`).
+            if (ref.watch(savedItineraryProvider).value != null) ...[
+              const Divider(height: 32),
+              _PlanEntry(
+                buttonKey: const Key('trip-edit-plan'),
+                label: 'Edit the whole plan',
+                caption:
+                    'Opens the editor over the trip as it stands. Nothing '
+                    'changes until you save, and days you leave alone keep '
+                    'their photos.',
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  ref.read(pasteFlowProvider.notifier).editLivePlan();
+                },
+              ),
+              const SizedBox(height: 8),
+              _PlanEntry(
+                buttonKey: const Key('trip-repaste'),
+                label: 'Re-paste the plan text',
+                caption:
+                    'Reopens the paste box holding this plan as text. Edit '
+                    'it, read it again, and the change is merged in — nothing '
+                    'is thrown away.',
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  ref.read(pasteFlowProvider.notifier).editLivePlan();
+                  ref.read(pasteFlowProvider.notifier).repasteCurrentPlan();
+                },
+              ),
+            ],
+
             const SizedBox(height: 20),
             Text(
               view.deletion.line,
@@ -172,22 +222,6 @@ class _Sheet extends ConsumerWidget {
                 onPressed: () => _delete(context, ref),
                 child: const Text('Delete this trip'),
               ),
-
-            const Divider(height: 32),
-            // **Temporary**, and the last of what the overflow menu held: the
-            // one route back to the paste box. It goes when a trip can be
-            // re-read without being thrown away. It stays on a closed trip
-            // because the paste box is also the join door; what the closed
-            // trip refuses is the accept at the end of it, and the read-back
-            // says so — see `PasteFlow.pasteAnother`.
-            TextButton(
-              key: const Key('start-over'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                ref.read(pasteFlowProvider.notifier).pasteAnother();
-              },
-              child: const Text('Paste a different plan'),
-            ),
           ],
         ),
       ),
@@ -226,6 +260,46 @@ class _Sheet extends ConsumerWidget {
     // is about to stop existing.
     if (context.mounted) Navigator.of(context).pop();
     await ref.read(tripActionsProvider).deleteTrip();
+  }
+}
+
+/// One of screen 3's two plan entries: a quiet full-width button with the
+/// sentence that says what it will and will not do underneath it. The
+/// sentence is the point — both of these change a trip that is already
+/// running, and neither may look like it might destroy it.
+class _PlanEntry extends StatelessWidget {
+  const _PlanEntry({
+    required this.buttonKey,
+    required this.label,
+    required this.caption,
+    required this.onPressed,
+  });
+
+  final Key buttonKey;
+  final String label;
+  final String caption;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton(
+          key: buttonKey,
+          onPressed: onPressed,
+          child: Text(label),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          caption,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
   }
 }
 
