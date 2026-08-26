@@ -1,4 +1,6 @@
 // SCREENS band (docs/architecture.md): knows app state and nothing below it.
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,6 +20,12 @@ const _oliveSoft = Color(0xFFE4E9D2);
 const _boxFill = Color(0xFFFBFAF0);
 const _coralSoft = Color(0xFFF7E3DC);
 const _coralInk = Color(0xFF8F3B2D);
+
+/// What the paste box spends on its own frame, vertically: the 14 px content
+/// padding top and bottom plus the widest border (2 px, focused) on each
+/// edge. The ghost sample is bounded to what is left, so it can never paint
+/// outside the box.
+const _boxInsideInset = 14 * 2 + 2 * 2;
 
 const _serif = TextStyle(
   fontFamily: 'Georgia',
@@ -222,32 +230,55 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
               ),
               ..._importFeedback(importState),
               Expanded(
-                child: TextField(
-                  key: const Key('paste-input'),
-                  controller: _controller,
-                  maxLines: null,
-                  minLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: const TextStyle(fontSize: 14, color: _ink),
-                  decoration: InputDecoration(
-                    // The ghost sample: a real full plan, fading as you type.
-                    hintText: sampleItinerary,
-                    hintStyle: TextStyle(
-                      fontSize: 13,
-                      height: 1.5,
-                      color: _muted.withValues(alpha: 0.55),
-                    ),
-                    filled: true,
-                    fillColor: _boxFill,
-                    contentPadding: const EdgeInsets.all(14),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: _olive, width: 1.5),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: _olive, width: 2),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => TextField(
+                    key: const Key('paste-input'),
+                    controller: _controller,
+                    maxLines: null,
+                    minLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: const TextStyle(fontSize: 14, color: _ink),
+                    decoration: InputDecoration(
+                      // The ghost sample: a real full plan, fading as you type.
+                      // It is handed over as a *widget* rather than as
+                      // `hintText`, and bounded to the box's own inside: a hint
+                      // taller than the field is vertically centred by
+                      // InputDecorator, so the 25-line sample used to paint its
+                      // first lines ABOVE the green border and onto whatever
+                      // sat there (the subhead, an error card). Bounded and
+                      // top-aligned, any excess clips inside the border instead,
+                      // in every state that shortens the box.
+                      hint: SizedBox(
+                        height: math.max(
+                          0,
+                          constraints.maxHeight - _boxInsideInset,
+                        ),
+                        child: ClipRect(
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: Text(
+                              sampleItinerary,
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.5,
+                                color: _muted.withValues(alpha: 0.55),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: _boxFill,
+                      contentPadding: const EdgeInsets.all(14),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: _olive, width: 1.5),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: _olive, width: 2),
+                      ),
                     ),
                   ),
                 ),

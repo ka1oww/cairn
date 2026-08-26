@@ -61,8 +61,9 @@ void main() {
   Future<FakeFilePicker> launch(
     WidgetTester tester, {
     List<PickedBytes?> picks = const [],
+    Size size = const Size(800, 2600),
   }) async {
-    tester.view.physicalSize = const Size(800, 2600);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final picker = FakeFilePicker(picks);
@@ -251,6 +252,44 @@ void main() {
     expect(find.byKey(const Key('import-pill')), findsOneWidget);
     expect(find.byKey(const Key('try-example')), findsNothing);
     expect(find.byKey(const Key('build-by-hand')), findsNothing);
+  });
+
+  testWidgets('the ghost sample never paints outside the box, in any state', (
+    tester,
+  ) async {
+    // The pill row shortens the box enough on a real phone that the 25-line
+    // ghost sample no longer fits, and InputDecorator vertically centres a
+    // hint taller than its field: the first lines used to paint ABOVE the
+    // green border, over the subhead and over the error card. A phone-sized
+    // view is what makes that reproducible — the other tests run tall.
+    final junk = List<int>.generate(256, (i) => i * 37 % 256);
+    junk[0] = 0x00;
+    await launch(
+      tester,
+      size: const Size(402, 874),
+      picks: [
+        PickedBytes(
+          fileName: 'mystery.txt',
+          extension: 'txt',
+          bytes: Uint8List.fromList(junk),
+        ),
+      ],
+    );
+
+    void expectHintInsideBox() {
+      final box = tester.getRect(find.byKey(const Key('paste-input')));
+      final hint = tester.getRect(find.text(sampleItinerary));
+      expect(hint.top, greaterThanOrEqualTo(box.top));
+      expect(hint.bottom, lessThanOrEqualTo(box.bottom));
+    }
+
+    expectHintInsideBox();
+
+    // And again with the refusal card taking another band off the box.
+    await tester.tap(find.byKey(const Key('import-pill')));
+    await tester.pump();
+    expect(find.byKey(const Key('import-error')), findsOneWidget);
+    expectHintInsideBox();
   });
 
   testWidgets('with nothing to say, the box keeps its gap under the subhead', (
