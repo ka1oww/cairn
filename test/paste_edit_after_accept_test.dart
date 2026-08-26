@@ -461,7 +461,10 @@ void main() {
       find.textContaining('The plan calls this one Saturday'),
       findsOneWidget,
     );
-    expect(find.textContaining("it'd be the 17th — a Thursday"), findsOneWidget);
+    expect(
+      find.textContaining("it'd be the 17th — a Thursday"),
+      findsOneWidget,
+    );
     // The three days the plan already held were answered before it was ever
     // accepted; the merge does not re-open them.
     expect(find.textContaining('The plan calls this one Monday'), findsNothing);

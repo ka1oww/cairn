@@ -762,7 +762,12 @@ void main() {
           place: 'Tokyo',
           stops: [pStop('Senso-ji')],
         ),
-        pDay(2, place: 'Nara', stops: [pStop('Todai-ji')], candidate: ambiguous),
+        pDay(
+          2,
+          place: 'Nara',
+          stops: [pStop('Todai-ji')],
+          candidate: ambiguous,
+        ),
       ];
 
       final result = mergeRepaste(current: current, repasted: repasted);
@@ -840,33 +845,36 @@ void main() {
       expect(result.days[2].confidence, ip.Confidence.low);
     });
 
-    test('a matched day reports no parse doubt, however unsure the re-paste '
-        'was about it: the person answered for that day before it was saved', () {
-      final current = [
-        day(1, date: jun14, place: 'Tokyo', stops: [mStop('Senso-ji')]),
-        day(2, place: 'Kyoto', stops: [mStop('Fushimi Inari')]),
-      ];
-      final repasted = [
-        pDay(
-          1,
-          date: DateTime(2027, 6, 14),
-          place: 'Tokyo',
-          stops: [pStop('Senso-ji'), pStop('Ueno park')],
-        ),
-        // Position-matched onto day 2, which is undated and stays undated.
-        pWeekdayDay(2, place: 'Kyoto', stops: [pStop('Fushimi Inari')]),
-      ];
+    test(
+      'a matched day reports no parse doubt, however unsure the re-paste '
+      'was about it: the person answered for that day before it was saved',
+      () {
+        final current = [
+          day(1, date: jun14, place: 'Tokyo', stops: [mStop('Senso-ji')]),
+          day(2, place: 'Kyoto', stops: [mStop('Fushimi Inari')]),
+        ];
+        final repasted = [
+          pDay(
+            1,
+            date: DateTime(2027, 6, 14),
+            place: 'Tokyo',
+            stops: [pStop('Senso-ji'), pStop('Ueno park')],
+          ),
+          // Position-matched onto day 2, which is undated and stays undated.
+          pWeekdayDay(2, place: 'Kyoto', stops: [pStop('Fushimi Inari')]),
+        ];
 
-      final result = mergeRepaste(current: current, repasted: repasted);
+        final result = mergeRepaste(current: current, repasted: repasted);
 
-      expect(result.days[0].origin, MergedDayOrigin.mergedByDate);
-      expect(result.days[0].uncertainty, isNull);
-      expect(result.days[0].confidence, ip.Confidence.high);
-      expect(result.days[1].origin, MergedDayOrigin.mergedByPosition);
-      expect(result.days[1].headerWeekday, isNull);
-      expect(result.days[1].uncertainty, isNull);
-      expect(result.days[1].confidence, ip.Confidence.high);
-    });
+        expect(result.days[0].origin, MergedDayOrigin.mergedByDate);
+        expect(result.days[0].uncertainty, isNull);
+        expect(result.days[0].confidence, ip.Confidence.high);
+        expect(result.days[1].origin, MergedDayOrigin.mergedByPosition);
+        expect(result.days[1].headerWeekday, isNull);
+        expect(result.days[1].uncertainty, isNull);
+        expect(result.days[1].confidence, ip.Confidence.high);
+      },
+    );
 
     test('a kept day reports no parse doubt either', () {
       final current = [
