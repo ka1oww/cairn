@@ -131,6 +131,14 @@ void main() {
       expect(maxDisplayDecodeEdge, greaterThan(430 * 3));
     });
 
+    test('the ceiling stands at 2560 device pixels', () {
+      // Pinned literally on purpose: 2560 is a deliberate trade of image
+      // cache against sharpness headroom (see the constant's doc comment),
+      // and drift in either direction should fail loudly here rather than
+      // slide through a relative assertion like the ones above.
+      expect(maxDisplayDecodeEdge, 2560);
+    });
+
     // The fit is not a detail. Reading the wrong edge is silent in both
     // directions — soft photographs one way, a several-times-oversized
     // decode the other.
