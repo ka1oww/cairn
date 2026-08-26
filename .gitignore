@@ -39,3 +39,6 @@ android/key.properties
 __pycache__/
 *.pyc
 .venv/
+
+# Cloudflare Workers local state
+.wrangler/
