@@ -452,7 +452,7 @@ Three defines steer it, all read at compile time:
 
 | Define | Default | What it does |
 | --- | --- | --- |
-| `CAIRN_SUPABASE_URL` | the hosted project | Where the backend is. **Pass it empty to turn the backend off entirely** — the sync goes dormant and the phone is purely local, which is what every test gets. |
+| `CAIRN_SUPABASE_URL` | the hosted project | Where the backend is. **Pass it empty to turn the backend off entirely** — the sync goes dormant and the phone is purely local. Note that this is *not* what keeps `flutter test` off the network: the suite passes no defines, so `SharedFactsConfig.fromEnvironment` inside it is this project. What stops it reaching out is that `bootstrapApp` defaults its `sessions` to `NoSession` and `_startSharedFactsSync` returns early on one, so nothing ever signs in and nothing is sent. |
 | `CAIRN_SUPABASE_ANON_KEY` | the hosted project's publishable key | Identifies the project. Grants nothing on its own: every table here is behind RLS keyed on `auth.uid()`, so a request with no session reaches zero rows. |
 | `CAIRN_TRIP_TIMEZONE` | *absent* | The trip's IANA clock. Without it the sync reports `awaitingTripRow` and never creates the shared `trips` row — see below. |
 

@@ -38,8 +38,11 @@ import 'package:cairn_model/cairn_model.dart';
 /// ```
 ///
 /// Passing an empty URL is how a build asks for *no* backend at all, which is
-/// what every test does and what the app did before the project existed: the
-/// sync reports itself dormant and the phone is entirely local.
+/// what the app did before the project existed: the sync reports itself
+/// dormant and the phone is entirely local. It is not how the test suite stays
+/// offline — `flutter test` passes no defines, so this is the hosted project
+/// there too, and what keeps it from reaching out is that every test binds
+/// [NoSession] (`bootstrap.dart`).
 class SharedFactsConfig {
   final String url;
   final String anonKey;
