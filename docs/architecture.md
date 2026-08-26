@@ -119,9 +119,10 @@ replaced and the sync goes quiet. No archive *presentation* was built; the
 book and the handover are still after the line. Everything else between the
 screens and the packages — photos on the day page and the Trail, the import
 sweep, the rest of the platform glue, the R2 half of the adapter — is still
-**not built**, and the right edge is unchanged: the backend schema is verified
-only against a local Postgres, no hosted Supabase project exists, no R2 bucket
-has been created, nothing is deployed.
+**not built**, and the right edge has moved only where the Supabase half is
+concerned: a hosted Supabase project exists with all ten migrations applied
+(the adversarial RLS suite still runs only against a local Postgres), but no
+R2 bucket has been created and no photo byte moves between phones.
 `lib/README.md` spells this map's bands as directories — read it alongside
 this file.
 
@@ -596,9 +597,11 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   Cloudflare Worker outside the app's bands entirely; `supabase/README.md`'s
   Free-tier limits section is the authority on it. (CI exists since #13 and covers the
   packages, the JS-safety golden, the RLS probe, the learning demo and the app.)
-- **Nothing has ever touched a hosted Supabase project or a real R2 bucket.**
-  The schema's verification is real but local; `supabase db push` against a
-  throwaway project is still the gate before anything real.
+- **The hosted Supabase project is real; a real R2 bucket still is not.**
+  All ten migrations are applied to the hosted project and an ordinary build
+  points at it, but only the permitted paths have ever been walked there — the
+  adversarial verification (the RLS probe) still runs against a throwaway
+  local Postgres, and must keep running there. No R2 bucket exists.
 
 ---
 

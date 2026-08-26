@@ -68,7 +68,7 @@ keep, measured against a real camera roll rather than estimated.
 | --- | --- |
 | `lib/`, `ios/` | The Flutter app. `lib/README.md` is the authority on its layout. |
 | `packages/` | Pure-Dart packages the app is written against, kept Flutter-free. |
-| `supabase/` | The backend schema and its local tests. Nothing is hosted yet. |
+| `supabase/` | The backend schema and its local tests, applied to a hosted Supabase project an ordinary build points at. |
 | `learning/` | Throwaway demos built to make a technical decision. Not the app. |
 
 ## Where the thinking lives
