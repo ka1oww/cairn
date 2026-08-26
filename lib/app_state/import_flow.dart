@@ -24,7 +24,15 @@ import 'file_picker_edge.dart';
 // new format lands.
 // ---------------------------------------------------------------------------
 
-const List<PlanTextExtractor> planExtractors = [PlainTextExtractor()];
+// Slice C's csv sits ahead of plain text: both read decodable text, and
+// only the extension can tell them apart, so csv must get the registry's
+// extension-gated claim first (see csv_extractor.dart).
+const List<PlanTextExtractor> planExtractors = [
+  CsvExtractor(),
+  PlainTextExtractor(),
+  DocxExtractor(),
+  XlsxExtractor(),
+];
 
 /// What the real document picker may offer: every extension some registered
 /// extractor claims. Sorted so the UTType list is stable.

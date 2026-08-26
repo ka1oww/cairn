@@ -182,7 +182,9 @@ void main() {
     expect(boxText(tester), '');
     expect(find.byKey(const Key('import-error')), findsNothing);
     expect(find.byKey(const Key('import-pill')), findsOneWidget);
-    expect(picker.lastAllowedExtensions, {'txt'});
+    // Every extension some registered extractor claims — slice C added
+    // docx/xlsx/csv to the registry alongside slice A's txt.
+    expect(picker.lastAllowedExtensions, {'csv', 'txt', 'docx', 'xlsx'});
   });
 
   testWidgets('unreadable bytes refuse into the error card, box untouched', (

@@ -10,7 +10,16 @@ environment:
   sdk: ^3.0.0
 
 dependencies:
+  archive: ^3.6.1
+  csv: ^8.0.0
+  excel: ^4.0.6
+  xml: ^6.6.1
 
 dev_dependencies:
   test: ^1.25.0
   lints: ^4.0.0
+  # Dev-only: the round-trip test feeds the dialect renderer's output back
+  # through the real parser (plan_rows.dart's honesty guard) — never a
+  # runtime dependency of the package itself.
+  itinerary_parser:
+    path: ../itinerary_parser
