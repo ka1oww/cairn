@@ -24,7 +24,11 @@ library;
 import 'dart:typed_data';
 
 export 'src/plain_text_extractor.dart'
-    show PlainTextExtractor, maxPlainBytes;
+    show
+        PlainTextExtractor,
+        maxPlainBytes,
+        unreadableFileSentence,
+        emptyFileSentence;
 
 /// One picked file, already read into memory by the app's picker edge.
 /// The package never does IO: bytes in, text out.
