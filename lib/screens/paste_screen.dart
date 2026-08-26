@@ -184,7 +184,9 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
         ),
       ];
     }
-    return const [];
+    // Nothing to say: still hold the screen's original 16 px gap between the
+    // subhead and the box, which the feedback branches take the place of.
+    return const [SizedBox(height: 16)];
   }
 
   @override

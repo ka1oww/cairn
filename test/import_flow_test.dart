@@ -252,4 +252,17 @@ void main() {
     expect(find.byKey(const Key('try-example')), findsNothing);
     expect(find.byKey(const Key('build-by-hand')), findsNothing);
   });
+
+  testWidgets('with nothing to say, the box keeps its gap under the subhead', (
+    tester,
+  ) async {
+    // The import feedback takes the place of the screen's original spacer,
+    // so the idle state has to still hold it: without the gap the box border
+    // abuts the subhead and the ghost sample overlaps it.
+    await launch(tester);
+
+    final subhead = tester.getRect(find.byKey(const Key('paste-subhead')));
+    final box = tester.getRect(find.byKey(const Key('paste-input')));
+    expect(box.top - subhead.bottom, 16.0);
+  });
 }
