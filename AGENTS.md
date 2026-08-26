@@ -52,9 +52,9 @@ import what is written there, not here.
 - The launch surface: `RootScreen` opens on the paste box until an itinerary
   is accepted into Drift, then on the trip — `TripShell`, whose tabs open on
   **Today**. Each flow's whole brain is one file in `lib/app_state/`
-  (`paste_flow.dart`, `day_view.dart`, `trail_view.dart`, `pool_view.dart`,
-  `capture_flow.dart`, `ping_schedule.dart`); screens render their view models
-  and never import the parser or `cairn_model`.
+  (`paste_flow.dart`, `import_flow.dart`, `day_view.dart`, `trail_view.dart`,
+  `pool_view.dart`, `capture_flow.dart`, `ping_schedule.dart`); screens render
+  their view models and never import the parser or `cairn_model`.
 - **`lib/logic/` holds pure decision cores the app-state band calls** — no
   Flutter, no Riverpod, no IO. It holds the plan said back as pasteable text
   (`plan_text.dart`) and, its first resident, the re-paste merge
@@ -485,6 +485,15 @@ Sharp edges worth knowing before touching this directory again:
     just failed to answer (it spawns a fresh worker and destroys the
     library), so awaiting it re-hangs the caller and issuing it blindly can
     crash a later read.
+  - **`archive` is pinned to ^3 by an override, and both pubspecs carry it.**
+    `pdfrx_engine` asks for `archive` ^4 (through `image`) while `excel` --
+    the only maintained xlsx reader -- is pinned to ^3 and does not compile
+    against ^4, so one app cannot read both a spreadsheet and a PDF without
+    holding `archive` at ^3. Nothing on the PDF path touches the archive API,
+    which is why it compiles. The override lives in *both*
+    `packages/plan_extraction/pubspec.yaml` (for `dart test`) and the root
+    `pubspec.yaml` (for the app), because an override inside a path
+    dependency is ignored.
   - **PDFium reaches the phone by a different road than it reaches
     `dart test`.** `pdfium_dart`'s build hook returns without emitting
     anything when the target is iOS, so the app depends on `pdfium_flutter`

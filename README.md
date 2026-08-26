@@ -5,9 +5,10 @@ travelling together.
 
 > Today's plan on the way out, today's memories on the way back.
 
-One person pastes a rough itinerary before the trip. The trip renders as a winding
-path with one node per day and a flag on today; days advance by the clock, never by
-completing anything. Everyone opens it in the morning to see what the day holds.
+One person pastes a rough itinerary before the trip — or imports the file it came
+in, which fills the same box with the plan's own text to correct before accepting.
+The trip renders as a winding path with one node per day and a flag on today; days
+advance by the clock, never by completing anything. Everyone opens it in the morning to see what the day holds.
 During the day, photos are taken — including BeReal-style dual shots — and photos
 from the camera roll are swept in when the app is opened (iOS offers no background
 import, and the app promises nothing more than that). Everything lands in a shared
@@ -20,7 +21,8 @@ This is a passion project, not a business. There is no monetisation goal.
 Under construction, and running. The app builds and opens on a phone: paste a
 rough itinerary, confirm what the parser read, and land on **Today** — the day
 screen the Trail opens for every other day too. A plan can also be **read out
-of a file** rather than typed: a document (`.txt`, `.csv`, `.docx` or `.xlsx`,
+of a file** rather than typed: a document (`.txt`, `.csv`, `.docx`, `.xlsx`
+or `.pdf`, a printed Wanderlog plan included,
 and the app says which formats this build actually reads) or a photo or
 screenshot put through on-device text recognition. Either way the text lands
 in the paste box for the person to see and fix before the parser reads it, and

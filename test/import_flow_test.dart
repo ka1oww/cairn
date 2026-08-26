@@ -199,13 +199,10 @@ void main() {
     ).readAsBytesSync();
     await launch(
       tester,
-      picks: [
-        PickedBytes(fileName: 'plan.pdf', extension: 'pdf', bytes: pdf),
-      ],
+      picks: [PickedBytes(fileName: 'plan.pdf', extension: 'pdf', bytes: pdf)],
     );
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
     expect(find.text('Reading plan.pdf…'), findsOneWidget);
 
     // Past the engine's liveness bound, and the screen moves.

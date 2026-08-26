@@ -286,6 +286,42 @@ void main() {
     });
   });
 
+  group('past the page cap', () {
+    // Risk 7's cap is a *partial success*, not a refusal: a person can fix a
+    // partial read in the box and cannot fix a dead end. No committed fixture
+    // is this long -- 100 pages of Chrome print is megabytes -- so the plan
+    // is built here, one day per page, which is also the shape the
+    // furniture rule must survive (a `Day N` header repeats on every page
+    // and must never be mistaken for a running header).
+    final long = PickedBytes(
+      fileName: 'long-plan.pdf',
+      extension: 'pdf',
+      bytes: _manyPagePdf(120),
+    );
+
+    test('reads what it can and says how much, rather than refusing', () async {
+      final result = await extractor.extract(long);
+      expect(
+        result,
+        isA<ExtractedText>(),
+        reason: result is ExtractionFailure
+            ? '${result.kind}: ${result.explanation}'
+            : null,
+      );
+      final read = result as ExtractedText;
+      expect(read.notes, ['Read the first $maxPdfPages of 120 pages']);
+
+      final lines = contentLines(read.text);
+      expect(lines, hasLength(maxPdfPages));
+      // In order, from the first page to the hundredth, and every day header
+      // still there: the furniture rule needs a phrase, so a per-page day
+      // marker survives however often it repeats.
+      expect(lines.first, 'Day 1 - Stop 1');
+      expect(lines[maxPdfPages - 1], 'Day $maxPdfPages - Stop $maxPdfPages');
+      expect(lines, isNot(contains('Day 101 - Stop 101')));
+    });
+  });
+
   group('the engine never hangs', () {
     // The failure this stands for is a PDFium that cannot be loaded at all:
     // `pdfrx_engine` throws that inside its worker isolate, so the future
@@ -357,4 +393,50 @@ class _StalledExtractor extends PdfExtractor {
   @override
   Future<PdfDocument> openDocument(PickedBytes file) =>
       Completer<PdfDocument>().future;
+}
+
+/// A minimal, uncompressed [pageCount]-page PDF whose page *n* carries the
+/// single line `Day n - Stop n`. Hand-built rather than committed: the cap
+/// this exercises is 100 pages, and a real print that long is megabytes of
+/// binary for one assertion.
+Uint8List _manyPagePdf(int pageCount) {
+  final out = BytesBuilder();
+  final offsets = <int>[];
+  void obj(int n, String body) {
+    offsets.add(out.length);
+    out.add(ascii.encode('$n 0 obj\n$body\nendobj\n'));
+  }
+
+  out.add(ascii.encode('%PDF-1.4\n'));
+  // 1 = catalog, 2 = the page tree, 3 = the font, then a page/content pair.
+  final kids = [
+    for (var i = 0; i < pageCount; i++) '${4 + i * 2} 0 R',
+  ].join(' ');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Count $pageCount /Kids [$kids] >>');
+  obj(3, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  for (var i = 0; i < pageCount; i++) {
+    final page = 4 + i * 2;
+    final content = page + 1;
+    obj(
+      page,
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] '
+      '/Resources << /Font << /F1 3 0 R >> >> /Contents $content 0 R >>',
+    );
+    final stream =
+        'BT /F1 12 Tf 72 700 Td (Day ${i + 1} - Stop ${i + 1}) Tj ET';
+    obj(content, '<< /Length ${stream.length} >>\nstream\n$stream\nendstream');
+  }
+
+  final startxref = out.length;
+  final size = offsets.length + 1;
+  final trailer = StringBuffer('xref\n0 $size\n0000000000 65535 f \n');
+  for (final offset in offsets) {
+    trailer.write('${offset.toString().padLeft(10, '0')} 00000 n \n');
+  }
+  trailer.write(
+    'trailer\n<< /Size $size /Root 1 0 R >>\nstartxref\n$startxref\n%%EOF\n',
+  );
+  out.add(ascii.encode(trailer.toString()));
+  return out.toBytes();
 }
