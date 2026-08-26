@@ -95,6 +95,9 @@ abstract interface class PlanTextExtractor {
   /// bytes via [matches] so a mis-named file routes correctly.
   Set<String> get extensions;
 
+  /// A cheap sniff, bounded to a prefix of the bytes however large the file
+  /// is: routing runs on the UI thread, before the extraction hops to an
+  /// isolate, so this must never do [extract]'s work over a whole file.
   bool matches(PickedBytes file);
 
   /// Synchronous, pure, never throws.

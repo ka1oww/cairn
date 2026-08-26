@@ -34,6 +34,12 @@ const String emptyFileSentence = "That file didn't contain any text.";
 /// near this.
 const int maxPlainBytes = 25 * 1024 * 1024;
 
+/// How much of a file [PlanTextExtractor.matches] looks at. Routing happens
+/// on the UI thread, before the isolate hop, so the sniff decodes a prefix
+/// and never the whole file; an encoding is decided in the first few lines
+/// or not at all.
+const int _sniffBytes = 64 * 1024;
+
 class PlainTextExtractor implements PlanTextExtractor {
   const PlainTextExtractor();
 
@@ -43,7 +49,7 @@ class PlainTextExtractor implements PlanTextExtractor {
   @override
   bool matches(PickedBytes file) {
     if (_hasBinaryMagic(file.bytes)) return false;
-    final text = _tryDecode(file.bytes);
+    final text = _tryDecode(_sniffPrefix(file.bytes));
     if (text == null) return false;
     return !_readsAsBinaryGarbage(text);
   }
@@ -92,6 +98,25 @@ class PlainTextExtractor implements PlanTextExtractor {
 // ---------------------------------------------------------------------------
 // Decoding
 // ---------------------------------------------------------------------------
+
+/// The leading slice [PlanTextExtractor.matches] sniffs. A cut mid-character
+/// would read as garbage to the ladder, so the slice steps back off a partial
+/// UTF-8 sequence and keeps an even length for the UTF-16 rungs.
+Uint8List _sniffPrefix(Uint8List bytes) {
+  if (bytes.length <= _sniffBytes) return bytes;
+  var end = _sniffBytes;
+  var stepped = 0;
+  while (end > 0 &&
+      stepped < 4 &&
+      bytes[end - 1] >= 0x80 &&
+      bytes[end - 1] < 0xC0) {
+    end--;
+    stepped++;
+  }
+  if (end > 0 && bytes[end - 1] >= 0xC0) end--;
+  if (end.isOdd) end--;
+  return Uint8List.sublistView(bytes, 0, end);
+}
 
 /// The ladder's answer: the decoded text, or null when no rung could hold
 /// the bytes as text.
@@ -255,7 +280,11 @@ bool _readsAsBinaryGarbage(String text) {
   var suspicious = 0;
   for (final rune in text.runes) {
     if (rune == 0xFFFD) suspicious++;
-    if (rune <= 0x1F && rune != 0x09 && rune != 0x0A && rune != 0x0C) {
+    if (rune <= 0x1F &&
+        rune != 0x09 &&
+        rune != 0x0A &&
+        rune != 0x0C &&
+        rune != 0x0D) {
       suspicious++;
     } else if (rune >= 0x7F && rune < 0xA0) {
       suspicious++;

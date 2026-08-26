@@ -231,4 +231,40 @@ void main() {
       }
     });
   });
+
+  group('short lines and long files', () {
+    test('CRLF short lines are not mistaken for binary', () {
+      const text = 'Day 1\r\nSenso-ji\r\nUeno Park\r\n';
+      final picked = named('notepad.txt', utf8.encode(text));
+      expect(extractor.matches(picked), isTrue);
+      final result = extractor.extract(picked);
+      expect(result, isA<ExtractedText>());
+      expect((result as ExtractedText).text, 'Day 1\nSenso-ji\nUeno Park\n');
+    });
+
+    test('lone CR line endings read as lines too', () {
+      final picked = named('classic.txt', utf8.encode('Day 1\rSenso-ji\rUeno\r'));
+      expect(extractor.matches(picked), isTrue);
+      final result = extractor.extract(picked);
+      expect((result as ExtractedText).text, 'Day 1\nSenso-ji\nUeno\n');
+    });
+
+    test('routing sniffs a prefix, so a huge file still claims and refuses', () {
+      final bytes = utf8.encode('Day 1 - Tokyo\r\n' * 3000000);
+      expect(bytes.length, greaterThan(maxPlainBytes));
+      final picked = named('huge.txt', bytes);
+      expect(extractor.matches(picked), isTrue);
+      final failure = asFailure(extractor.extract(picked));
+      expect(failure.kind, ExtractionFailureKind.unreadable);
+      expect(failure.explanation, contains('25 MB'));
+    });
+
+    test('a huge binary file is still refused by the prefix sniff', () {
+      final bytes = <int>[
+        ...utf8.encode('%PDF-1.7'),
+        ...List.filled(30 * 1024 * 1024, 0x01),
+      ];
+      expect(extractor.matches(named('huge.txt', bytes)), isFalse);
+    });
+  });
 }
