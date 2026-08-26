@@ -87,7 +87,16 @@ const Map<String, int> _weekdays = {
 };
 
 final RegExp _weekdayDayMonth = RegExp(
-  r'^([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?(?:\s+(\d{4}))?\s*(?:[-:–—]\s*(.+))?$',
+  r'^([A-Za-z]+)\.?,?\s+(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?(?:\s+(\d{4}))?\s*(?:[-:–—]\s*(.+))?$',
+  caseSensitive: false,
+);
+
+// Weekday-then-month-day order (`Sat Jun 14`, `Saturday, June 14th`), the
+// `ddd, MMM Do` family US-style plans and Wanderlog prints use. Kept apart
+// from [_weekdayDayMonth] rather than folded into one alternation so each
+// shape's groups stay named by position.
+final RegExp _weekdayMonthDay = RegExp(
+  r'^([A-Za-z]+)\.?,?\s+([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\s*(?:[-:–—]\s*(.+))?$',
   caseSensitive: false,
 );
 
@@ -150,6 +159,21 @@ DateHeaderMatch? tryParseDateHeader(
         weekday: weekday,
         day: int.parse(m.group(2)!),
         month: month,
+        year: m.group(4) != null ? int.parse(m.group(4)!) : null,
+        trailingText: _cleanTrailing(m.group(5)),
+      );
+    }
+  }
+
+  m = _weekdayMonthDay.firstMatch(line);
+  if (m != null) {
+    final weekday = _weekday(m.group(1)!);
+    final month = _month(m.group(2)!);
+    if (weekday != null && month != null) {
+      return DateHeaderMatch(
+        weekday: weekday,
+        month: month,
+        day: int.parse(m.group(3)!),
         year: m.group(4) != null ? int.parse(m.group(4)!) : null,
         trailingText: _cleanTrailing(m.group(5)),
       );
