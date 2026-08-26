@@ -5,6 +5,19 @@ on:
   push:
     branches: [main]
 
+# A second push to the same branch makes the first run's answer worthless, but
+# without this it keeps running and keeps billing -- and app-ios-simulator-build
+# is on a macOS runner, whose minutes bill at ten times the Linux rate. Every
+# job here fails instantly and identically once the account's spending limit is
+# reached ("The job was not started because recent account payments have failed
+# or your spending limit needs to be increased"), which reads exactly like a
+# repo-wide code regression and is not one. Superseded runs are cancelled so the
+# limit is spent on the commit actually under review. main is exempt: its runs
+# are the record of what the branch was merged as, so they are never cancelled.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   DART_SDK_VERSION: "3.13.1"
   FLUTTER_VERSION: "3.47.1"
