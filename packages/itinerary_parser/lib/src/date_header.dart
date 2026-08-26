@@ -137,16 +137,33 @@ int _fullYear(int y) {
   return y >= 70 ? 1900 + y : 2000 + y;
 }
 
-// The far end of a range: an optional weekday word followed by a day and a
-// named month in either order. Anchored at the start of the trailing text
-// and deliberately a shape test rather than a second pass of the whole
-// matcher, so a chain of three dates is refused exactly as a pair is.
-final RegExp _dateRunPrefix = RegExp(
-  r'^(?:([A-Za-z]+)\.?,?\s+)?'
-  r'(?:(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)'
-  r'|([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?)\b',
+// The far end of a range: a day and a named month in either order, with an
+// optional weekday word ahead of them. Anchored at the start of the trailing
+// text and deliberately a shape test rather than a second pass of the whole
+// matcher, so a chain of three dates is refused exactly as a pair is. Both
+// alignments are tried on their own, never through one greedy leading group,
+// so `Jun 18 Osaka` and `18 June Osaka` get the same answer.
+final RegExp _monthDayRun = RegExp(
+  r'^([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b',
   caseSensitive: false,
 );
+
+final RegExp _dayMonthRun = RegExp(
+  r'^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?\b',
+  caseSensitive: false,
+);
+
+final RegExp _weekdayLead = RegExp(
+  r'^([A-Za-z]+)\.?,?\s+',
+  caseSensitive: false,
+);
+
+bool _opensWithDayAndMonth(String text) {
+  final monthFirst = _monthDayRun.firstMatch(text);
+  if (monthFirst != null && _month(monthFirst.group(1)!) != null) return true;
+  final dayFirst = _dayMonthRun.firstMatch(text);
+  return dayFirst != null && _month(dayFirst.group(2)!) != null;
+}
 
 /// True when [text] opens with a date run rather than a place name, i.e. it
 /// is the far end of a range like `Sat, Jun 14th - Wed, Jun 18th`. A line
@@ -154,12 +171,10 @@ final RegExp _dateRunPrefix = RegExp(
 /// decline it and it stays an ordinary line.
 bool _beginsWithDateRun(String? text) {
   if (text == null) return false;
-  final m = _dateRunPrefix.firstMatch(text);
-  if (m == null) return false;
-  final lead = m.group(1);
-  if (lead != null && _weekday(lead) == null) return false;
-  if (m.group(2) != null) return _month(m.group(3)!) != null;
-  return _month(m.group(4)!) != null;
+  if (_opensWithDayAndMonth(text)) return true;
+  final lead = _weekdayLead.firstMatch(text);
+  if (lead == null || _weekday(lead.group(1)!) == null) return false;
+  return _opensWithDayAndMonth(text.substring(lead.end));
 }
 
 /// Tries each recognized date-header shape against [line] (already

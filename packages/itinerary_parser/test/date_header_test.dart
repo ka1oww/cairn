@@ -123,6 +123,13 @@ void main() {
       expect(tryParseDateHeader('Sat, 14th Jun — Wed, 18th Jun'), isNull);
     });
 
+    test('a range end reads the same in either date order', () {
+      expect(tryParseDateHeader('Sat, Jun 14th — Jun 18 Osaka'), isNull);
+      expect(tryParseDateHeader('Sat, Jun 14th — 18 June Osaka'), isNull);
+      expect(tryParseDateHeader('Sat, Jun 14th — May 1 Museum'), isNull);
+      expect(tryParseDateHeader('Sat, Jun 14th — 1 May Museum'), isNull);
+    });
+
     test('a chain of three dates is refused as well', () {
       expect(
         tryParseDateHeader('Sat, Jun 14th — Wed, Jun 18th — Fri, Jun 20th'),
