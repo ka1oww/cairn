@@ -29,8 +29,8 @@ const List<PlanTextExtractor> planExtractors = [PlainTextExtractor()];
 /// What the real document picker may offer: every extension some registered
 /// extractor claims. Sorted so the UTType list is stable.
 Set<String> get supportedImportExtensions => {
-      for (final extractor in planExtractors) ...extractor.extensions,
-    };
+  for (final extractor in planExtractors) ...extractor.extensions,
+};
 
 /// The pill's honest sub-line: only the formats this build actually reads.
 String get supportedFormatsLabel =>
@@ -97,11 +97,10 @@ class ImportSucceeded {
 /// How an extraction reaches a worker. Production hands the pure extractor
 /// call to `Isolate.run`; tests inject the direct call, because a real
 /// isolate under `testWidgets`' fake clock hangs silently (CLAUDE.md).
-typedef ExtractionRunner =
-    Future<ExtractionResult> Function(
-      PlanTextExtractor extractor,
-      PickedBytes file,
-    );
+typedef ExtractionRunner = Future<ExtractionResult> Function(
+  PlanTextExtractor extractor,
+  PickedBytes file,
+);
 
 final extractionRunnerProvider = Provider<ExtractionRunner>((ref) {
   return (extractor, file) => Isolate.run(() => extractor.extract(file));
@@ -142,10 +141,7 @@ class ImportFlow extends Notifier<ImportState> {
     try {
       final result = await _read(picked);
       return switch (result) {
-        ExtractedText(:final text, :final notes) => _deliver(
-          text,
-          notes,
-        ),
+        ExtractedText(:final text, :final notes) => _deliver(text, notes),
         ExtractionFailure(:final kind, :final explanation) => _refuse(
           kind,
           explanation,
@@ -154,10 +150,7 @@ class ImportFlow extends Notifier<ImportState> {
     } catch (_) {
       // Extractors promise never to throw; this catches the ways the world
       // around one can still fail (a killed isolate, memory pressure).
-      return _refuse(
-        ExtractionFailureKind.unreadable,
-        unreadableFileSentence,
-      );
+      return _refuse(ExtractionFailureKind.unreadable, unreadableFileSentence);
     }
   }
 

@@ -76,8 +76,7 @@ class PlainTextExtractor implements PlanTextExtractor {
     // CRLF and lone CR become LF. The parser normalizes line endings too
     // (parser.dart does exactly this split), but the box should show what
     // the parser will see, not two slightly different texts.
-    final text =
-        decoded.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final text = decoded.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     if (text.trim().isEmpty) {
       return const ExtractionFailure(
         ExtractionFailureKind.empty,
@@ -194,7 +193,8 @@ String _decodeUtf16(Uint8List bytes, {required bool littleEndian}) {
           : (bytes[i] << 8) | bytes[i + 1];
       if (low >= 0xDC00 && low <= 0xDFFF) {
         i += 2;
-        buffer.writeCharCode(0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00));
+        buffer
+            .writeCharCode(0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00));
         continue;
       }
     }

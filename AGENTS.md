@@ -329,17 +329,16 @@ import what is written there, not here.
   pumps `bootstrapApp` and then its own `ProviderScope` must key that scope
   (`UniqueKey`): Riverpod refuses to update a scope whose override count
   changed, and every new binding in `bootstrap.dart` changes it. Two more
-   silent hangs, both at 0% CPU with no error: awaiting a drift *stream*
-   (`watch().first`) inside `testWidgets` never completes under the faked
-   clock -- read once instead (`AppDatabase.readPhotos`) -- and so does real
-   file I/O, so a fake camera must write its frame synchronously. The same
-   zone is why the import flow's extraction runner is injectable
-   (`extractionRunnerProvider`): production wraps the pure extractor call in
-   `Isolate.run`, and a real isolate inside `testWidgets` hangs silently, so
-   every test overrides it with the direct call (`bootstrapApp(extraction:)`).
-   A test that drives providers through a bare `ProviderContainer` instead
-   has the
-   opposite trap: **every provider is auto-dispose under Riverpod 3**, so an
+  silent hangs, both at 0% CPU with no error: awaiting a drift *stream*
+  (`watch().first`) inside `testWidgets` never completes under the faked
+  clock -- read once instead (`AppDatabase.readPhotos`) -- and so does real
+  file I/O, so a fake camera must write its frame synchronously. The same
+  zone is why the import flow's extraction runner is injectable
+  (`extractionRunnerProvider`): production wraps the pure extractor call in
+  `Isolate.run`, and a real isolate inside `testWidgets` hangs silently, so
+  every test overrides it with the direct call (`bootstrapApp(extraction:)`).
+  A test that drives providers through a bare `ProviderContainer` instead has
+  the opposite trap: **every provider is auto-dispose under Riverpod 3**, so an
   unlistened `StreamProvider` is disposed the moment `read` returns and its
   future never completes (a silent 30-second timeout), and an unlistened
   notifier forgets its state between two awaits. `container.listen(p, (_, _)

@@ -36,8 +36,8 @@ void main() {
     });
 
     test('UTF-8 BOM is stripped, not shown in the box', () {
-      final result =
-          extractor.extract(named('a.txt', [0xEF, 0xBB, 0xBF, ...utf8.encode('Day 1')]));
+      final result = extractor
+          .extract(named('a.txt', [0xEF, 0xBB, 0xBF, ...utf8.encode('Day 1')]));
       expect(result, isA<ExtractedText>());
       expect((result as ExtractedText).text, 'Day 1');
     });
@@ -46,7 +46,9 @@ void main() {
       final units = 'Mon 14 June 2027 - Tokyo'.codeUnits;
       final bytes = <int>[0xFF, 0xFE];
       for (final u in units) {
-        bytes..add(u & 0xFF)..add((u >> 8) & 0xFF);
+        bytes
+          ..add(u & 0xFF)
+          ..add((u >> 8) & 0xFF);
       }
       final result = extractor.extract(named('w.txt', bytes));
       expect(result, isA<ExtractedText>());
@@ -57,7 +59,9 @@ void main() {
       final units = 'Tue 15 June'.codeUnits;
       final bytes = <int>[0xFE, 0xFF];
       for (final u in units) {
-        bytes..add((u >> 8) & 0xFF)..add(u & 0xFF);
+        bytes
+          ..add((u >> 8) & 0xFF)
+          ..add(u & 0xFF);
       }
       final result = extractor.extract(named('w.txt', bytes));
       expect(result, isA<ExtractedText>());
@@ -68,7 +72,9 @@ void main() {
       final units = 'Day 2 - Kyoto, plainly ascii prose here'.codeUnits;
       final bytes = <int>[];
       for (final u in units) {
-        bytes..add(u & 0xFF)..add(0);
+        bytes
+          ..add(u & 0xFF)
+          ..add(0);
       }
       final result = extractor.extract(named('legacy.txt', bytes));
       expect(result, isA<ExtractedText>());
@@ -94,7 +100,8 @@ void main() {
       expect((result as ExtractedText).text, '\u201Chi\u201D');
     });
 
-    test('invalid UTF-8 that is also invalid Latin-1 prose still lands as '
+    test(
+        'invalid UTF-8 that is also invalid Latin-1 prose still lands as '
         'something readable — the ladder never refuses honest prose', () {
       // Mixed UTF-8 fragment + high bytes: falls off the strict rung into
       // the wide rung and comes out readable rather than refused.
@@ -116,7 +123,8 @@ void main() {
     });
 
     test('whitespace-only file -> empty failure too', () {
-      final result = extractor.extract(named('blank.txt', utf8.encode('\n \t\n')));
+      final result =
+          extractor.extract(named('blank.txt', utf8.encode('\n \t\n')));
       expect(asFailure(result).kind, ExtractionFailureKind.empty);
     });
 
@@ -139,7 +147,8 @@ void main() {
 
     test('known binary magic is refused even when ASCII-decodable', () {
       // %PDF- is plain ASCII, but a PDF is slice B's job, never ours.
-      final result = extractor.extract(named('x.txt', utf8.encode('%PDF-1.7\n%âãÏÓ\n')));
+      final result =
+          extractor.extract(named('x.txt', utf8.encode('%PDF-1.7\n%âãÏÓ\n')));
       expect(asFailure(result).kind, ExtractionFailureKind.unreadable);
     });
 
@@ -227,7 +236,8 @@ void main() {
       for (final name in ['empty.txt', 'blank.txt']) {
         final bytes = File('test/fixtures/$name').readAsBytesSync();
         final result = extractor.extract(named(name, bytes));
-        expect(asFailure(result).kind, ExtractionFailureKind.empty, reason: name);
+        expect(asFailure(result).kind, ExtractionFailureKind.empty,
+            reason: name);
       }
     });
   });
@@ -243,13 +253,15 @@ void main() {
     });
 
     test('lone CR line endings read as lines too', () {
-      final picked = named('classic.txt', utf8.encode('Day 1\rSenso-ji\rUeno\r'));
+      final picked =
+          named('classic.txt', utf8.encode('Day 1\rSenso-ji\rUeno\r'));
       expect(extractor.matches(picked), isTrue);
       final result = extractor.extract(picked);
       expect((result as ExtractedText).text, 'Day 1\nSenso-ji\nUeno\n');
     });
 
-    test('routing sniffs a prefix, so a huge file still claims and refuses', () {
+    test('routing sniffs a prefix, so a huge file still claims and refuses',
+        () {
       final bytes = utf8.encode('Day 1 - Tokyo\r\n' * 3000000);
       expect(bytes.length, greaterThan(maxPlainBytes));
       final picked = named('huge.txt', bytes);

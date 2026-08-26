@@ -55,7 +55,7 @@
 
   /* the map */
   .map-wrap{overflow-x:auto;background:var(--paper);border-radius:8px}
-  .map-inner{position:relative;width:1360px;height:1690px;margin:0 auto}
+  .map-inner{position:relative;width:1360px;height:1810px;margin:0 auto}
   .map-inner svg{position:absolute;inset:0;z-index:0}
 
   .band{
@@ -293,12 +293,12 @@
 
 <!-- ======================= band labels ======================= -->
 <div class="band" style="top:0px"><span>Screens</span><em>partial — paste-and-confirm, the day page, the Trail, the Pool and capture built, in a real tab container (Today · Trail · Pool); the rest drawn in docs/design · they know app state and nothing below it</em></div>
-<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>partial — the paste flow's state, the day view, the trail view, the pool view, the ping schedule, the capture flow and the pure decision cores in <code>lib/logic/</code>; the import sweep not built</em></div>
-<div class="band" style="top:415px"><span>Platform edges (iOS)</span><em>partial — the camera is driven behind a seam; the rest not wired · services know the platform, the platform knows nothing of Cairn</em></div>
+<div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>partial — the paste flow's state, the day view, the trail view, the pool view, the ping schedule, the capture flow, the file-import flow and the pure decision cores in <code>lib/logic/</code>; the import sweep not built</em></div>
+<div class="band" style="top:415px"><span>Platform edges (iOS)</span><em>partial — the camera and the document picker are driven behind seams; the rest not wired · services know the platform, the platform knows nothing of Cairn</em></div>
 <div class="band" style="top:562px"><span>The repositories seam</span><em>partial — scaffolded · the most expensive layer to skip</em></div>
 <div class="band" style="top:772px"><span>Storage</span><em>partial — Drift holds the itinerary and the photo index; the remote side speaks the shared facts and nothing else yet; only the seam knows both exist</em></div>
 <div class="band" style="top:952px"><span>Backend</span><em>partial · schema verified on local Postgres 17 and applied to the hosted project · R2 and the edge functions not deployed</em></div>
-<div class="band" style="top:1460px"><span>Domain — pure Dart</span><em>built · four siblings: none imports another, none imports cairn_model — the app layer translates</em></div>
+<div class="band" style="top:1460px"><span>Domain — pure Dart</span><em>partial · five siblings: none imports another, none imports cairn_model — the app layer translates</em></div>
 
 <!-- ======================= screens ======================= -->
 <div class="node partial" style="left:60px;top:22px;width:170px;height:130px">
@@ -346,7 +346,7 @@
 <div class="node partial" style="left:340px;top:250px;width:420px;height:115px">
   <span class="chip">partial</span><h4>Riverpod providers</h4>
   <p>One source of truth per question. A watched repository stream flows through a provider; writing a row updates every watching screen with no manual wiring. Calls <b>itinerary_parser</b> for the confirm flow, and the pure decision cores in <code>lib/logic/</code> — the re-paste merge and the plan said back as text — for decisions worth testing without a database, a widget or a clock.</p>
-  <span class="sub">the paste flow's state, the saved-plan stream, the day view, the trail view, the pool view, the ping schedule, the capture flow, the trip's sheet and the join door</span>
+  <span class="sub">the paste flow's state, the saved-plan stream, the day view, the trail view, the pool view, the ping schedule, the capture flow, the trip's sheet, the join door and the file-import flow — which fills the paste box and never auto-parses</span>
 </div>
 <div class="node nb" style="left:800px;top:250px;width:240px;height:115px">
   <span class="chip">not built</span><h4>Import sweep</h4>
@@ -362,6 +362,10 @@
 <div class="node nb" style="left:60px;top:445px;width:220px">
   <span class="chip">not built</span><h4>Local notifications</h4>
   <p>Ordinary alert level — never pierces Do&nbsp;Not&nbsp;Disturb. Delivery is the OS’s to refuse. The schedule reaches a seam and stops there: nothing registers it with iOS, which is the ping's last missing inch.</p>
+</div>
+<div class="node built" style="left:510px;top:445px;width:220px">
+  <span class="chip">built</span><h4>Document picker</h4>
+  <p>The import door, behind <code>FilePickerEdge</code>: the real picker on a phone, a fake answering from memory in tests. It offers exactly the formats the extractor registry claims, and nothing wider.</p>
 </div>
 <div class="node nb" style="left:760px;top:445px;width:140px">
   <span class="chip">not built</span><h4>Camera roll</h4>
@@ -468,6 +472,12 @@
   <span class="chip">built</span><h4>photo_day_assignment</h4>
   <p>Which day a photo belongs to: GPS-derived timezone over bare EXIF, a degradation ladder, a confidence on every answer. The authority for “which day is this instant”.</p>
   <span class="sub">trap: findLocation(longitude, latitude) — longitude first</span>
+</div>
+
+<div class="node partial" style="left:600px;top:1672px;width:400px;height:120px">
+  <span class="chip">partial</span><h4>plan_extraction</h4>
+  <p>The file-import contract: bytes in, honest lines of plan text out, so every format reduces to text <b>itinerary_parser</b> already reads. Typed refusals carry the sentence a person is shown.</p>
+  <span class="sub">the contract and the plain-text extractor built; PDF, screenshot OCR and calendar files not — the registry lives in <code>lib/app_state/import_flow.dart</code></span>
 </div>
 
 </div><!-- /map-inner -->

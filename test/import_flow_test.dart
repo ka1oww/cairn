@@ -80,9 +80,10 @@ void main() {
     return picker;
   }
 
-  String boxText(WidgetTester tester) => tester.widget<TextField>(
-        find.byKey(const Key('paste-input')),
-      ).controller!.text;
+  String boxText(WidgetTester tester) => tester
+      .widget<TextField>(find.byKey(const Key('paste-input')))
+      .controller!
+      .text;
 
   testWidgets('an imported txt fills the box, parses, accepts into Drift', (
     tester,
@@ -192,7 +193,11 @@ void main() {
     await launch(
       tester,
       picks: [
-        PickedBytes(fileName: 'mystery.txt', extension: 'txt', bytes: Uint8List.fromList(junk)),
+        PickedBytes(
+          fileName: 'mystery.txt',
+          extension: 'txt',
+          bytes: Uint8List.fromList(junk),
+        ),
       ],
     );
 
@@ -200,10 +205,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('import-error')), findsOneWidget);
-    expect(
-      find.textContaining("Couldn't read that file"),
-      findsOneWidget,
-    );
+    expect(find.textContaining("Couldn't read that file"), findsOneWidget);
     expect(boxText(tester), '');
 
     // Dismissing clears the card; the doors all stay usable.
@@ -220,17 +222,18 @@ void main() {
     await launch(
       tester,
       picks: [
-        PickedBytes(fileName: 'blank.txt', extension: 'txt', bytes: Uint8List(0)),
+        PickedBytes(
+          fileName: 'blank.txt',
+          extension: 'txt',
+          bytes: Uint8List(0),
+        ),
       ],
     );
 
     await tester.tap(find.byKey(const Key('import-pill')));
     await tester.pump();
 
-    expect(
-      find.text("That file didn't contain any text."),
-      findsOneWidget,
-    );
+    expect(find.text("That file didn't contain any text."), findsOneWidget);
     expect(boxText(tester), '');
   });
 
