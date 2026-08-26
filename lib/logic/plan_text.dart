@@ -7,21 +7,37 @@
 //
 // **The format is chosen to survive its own parser**, which is the whole
 // point of it — text this renders and the parser then reads must give back
-// the same plan. Two rules carry that:
+// the same plan. Three rules carry that:
 //
 //  - A dated day is written date-first (`Mon 14 June 2027 - Tokyo`), never
 //    `Day 1 - Tokyo, 14 June`. Only a date-shaped header binds a date; in a
 //    `Day N` header the whole tail becomes the place and the date is lost.
 //  - An undated day is written `Day N`, plus its place where it has one, so
 //    an open date stays open instead of being invented on the way out.
+//  - Every stop line is written with a bullet. A bullet is the one thing that
+//    stops the parser reading a line as a header: an unbulleted `Ueno Park`
+//    followed by a timed line is classified as a bare place name and opens a
+//    new day, which empties the day it came from and strands that day's
+//    photographs. `stripBullet` takes the marker off again on re-read, so the
+//    stop's own text is unchanged by the round trip.
 //
 // A stop's time is usually already inside the text the parser gave it
 // (`10:12 Train to Kyoto`, `Romancecar 9:05am`), so writing the time out again
-// would both duplicate it and mangle the line. It is written back only for a
-// stop whose text carries no time the parser can see — a time the person set
-// by hand in the editor, which is nowhere in the words. Whether a line carries
-// one is asked of the parser itself rather than guessed at with a pattern of
-// our own: the two must agree, and there is only one way to be sure they do.
+// would both duplicate it and mangle the line. **The stored time is the
+// authority**: it is written back whenever the line's own words do not carry
+// that same time — a time the person set by hand in the editor, whether the
+// words carry no time at all or a different one. A line reading `Lunch at
+// 12pm` whose time was set to 13:00 renders as `13:00 Lunch at 12pm`, and the
+// duplication is the accepted cost of not silently reverting the hand edit.
+// It costs one more thing, worth knowing: that line's *words* changed, so the
+// re-read is a change to the day rather than a no-op, and the wording it
+// replaced is filed in the set-aside — visible and draggable back, never
+// deleted, but reported as displaced when it was only reworded. Only a stop
+// whose words contradict its time pays this; every other line round-trips
+// untouched.
+// What time a line carries is asked of the parser itself rather than guessed
+// at with a pattern of our own: the two must agree, and there is only one way
+// to be sure they do.
 import 'package:cairn_model/cairn_model.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
@@ -73,15 +89,25 @@ String _header(ConfirmedDay day) {
 
 String _stopLine(Stop stop) {
   final time = stop.time;
-  if (time == null || _carriesATime(stop.text)) return stop.text;
-  return '${time.iso} ${stop.text}';
+  final written = _timeCarriedBy(stop.text);
+  final saysTheStoredTime =
+      time == null ||
+      (written != null &&
+          written.hour == time.hour &&
+          written.minute == time.minute);
+  return saysTheStoredTime
+      ? '$_bullet${stop.text}'
+      : '$_bullet${time.iso} ${stop.text}';
 }
 
-/// Whether the parser would find a time in this line if it read it again.
-/// Asked under a day header, because that is the only context in which the
+const _bullet = '- ';
+
+/// The time the parser would find in this line if it read it again, or null
+/// for a line whose words carry none. Asked under a day header and behind the
+/// bullet this renders with, because that is the only context in which the
 /// parser reads a line as a stop at all.
-bool _carriesATime(String text) {
-  final read = ip.parseItinerary('Day 1\n$text');
+ip.ParsedTime? _timeCarriedBy(String text) {
+  final read = ip.parseItinerary('Day 1\n$_bullet$text');
   final stops = read.days.isEmpty ? const <ip.Stop>[] : read.days.first.stops;
-  return stops.isNotEmpty && stops.first.time != null;
+  return stops.isEmpty ? null : stops.first.time;
 }

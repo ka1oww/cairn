@@ -130,11 +130,20 @@ import what is written there, not here.
   this removed. A day the merge leaves in place keeps its **number**,
   and that alone is what keeps its photographs: `photos.dayNumber` is the only
   link, and nothing re-files photos when a plan is saved. The merge never
-  renumbers, so that holds for every re-paste, not a subset of them. One
-  known gap remains: a displaced line's time —
-  `itinerary_set_asides` has no time column, so a set-aside stop's star
-  survives only until Save, and dragging it back after a reopen restores it
-  unstarred. Closing that needs a schema change.
+  renumbers, so a day's photographs never move — but *keeping* them is not the
+  same as keeping them with the right day. The position pass can pair a
+  repasted day with a **different** current day: drop the first of three
+  undated days from the re-paste text and `repasted[0]` pairs with
+  `current[0]`, so day 1 keeps its number and so its photographs while its
+  content becomes what was day 2's. Two more known gaps, both deferred. A
+  displaced line's time — `itinerary_set_asides` has no time column, so a
+  set-aside stop's star survives only until Save, and dragging it back after a
+  reopen restores it unstarred; closing that needs a schema change. And a
+  `MergedDayOrigin.appendedNew` day drops the parse's `uncertainty` and
+  `headerWeekday`, so a re-paste that appends `Sat - Nara` renders as a
+  confident read, saves with its date silently open and is never asked about;
+  closing that needs `MergedDay` to expose both for appended days, which is a
+  change to the shared merge module and is filed as a separate follow-up.
 - **The phone mints the trip's id, and the server keeps it**
   (`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`). A trip must be
   startable in flight mode, and the ping schedule seeds itself from the id, so

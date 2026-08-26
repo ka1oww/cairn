@@ -25,6 +25,11 @@ import 'package:cairn/storage/drift/app_database.dart';
 
 /// Three dated days. (14 June 2027 really is a Monday, 15 a Tuesday, 16 a
 /// Wednesday — the parser trusts a named weekday, so the fixture must too.)
+///
+/// Day 3's last two lines are the round trip's hard case, and they are here on
+/// purpose: `Nara Park` is a bare proper noun with a timed line under it, which
+/// is exactly what the parser reads as a day header when it arrives without a
+/// bullet. A rendering that dropped the bullets splits day 3 here.
 const tripPaste = '''
 Mon 14 June 2027 - Tokyo
 - Senso-ji
@@ -35,6 +40,8 @@ Tue 15 June 2027 - Kyoto
 
 Wed 16 June 2027 - Osaka
 - Dotonbori
+- Nara Park
+- 10:00 Coffee
 ''';
 
 DateTime day(int dayOfJune) => DateTime.utc(2027, 6, dayOfJune);
@@ -249,9 +256,12 @@ void main() {
     await tester.tap(find.byKey(const Key('read-button')));
     await tester.pumpAndSettle();
 
-    // Nothing changed, so nothing was displaced.
+    // Nothing changed, so nothing was displaced — and day 3 is still one day
+    // rather than two, which is the bullet doing its work.
     expect(find.text('Senso-ji'), findsOneWidget);
     expect(find.text('Dotonbori'), findsOneWidget);
+    expect(find.byKey(const Key('day-card-3')), findsOneWidget);
+    expect(find.byKey(const Key('day-card-4')), findsNothing);
 
     await tester.tap(find.byKey(const Key('accept-button')));
     await tester.pump();
@@ -287,7 +297,10 @@ void main() {
     expect(after.length, 3);
     expect(after[0], '1|2027-06-14|Tokyo|Senso-ji,Ueno Park');
     expect(after[1], '2|2027-06-15|Kyoto|Fushimi Inari');
-    expect(after[2], '3|2027-06-16|Osaka|Dotonbori,Osaka Castle');
+    expect(
+      after[2],
+      '3|2027-06-16|Osaka|Dotonbori,Nara Park,10:00 Coffee,Osaka Castle',
+    );
     // A merge, not a replacement: nothing had to be displaced to make room.
     expect(await storedSetAside(), isEmpty);
   });
@@ -303,7 +316,7 @@ void main() {
 
     await tester.enterText(
       find.byKey(const Key('paste-input')),
-      pasteBoxText(tester).replaceAll('Ueno Park\n', ''),
+      pasteBoxText(tester).replaceAll('- Ueno Park\n', ''),
     );
     await tester.tap(find.byKey(const Key('read-button')));
     await tester.pumpAndSettle();
@@ -372,7 +385,7 @@ void main() {
     expect(await storedPlan(), [
       '1|2027-06-14|Tokyo|Senso-ji,Ueno Park',
       '2|2027-06-15|Kyoto|Fushimi Inari',
-      '3|2027-06-16|Osaka|Dotonbori',
+      '3|2027-06-16|Osaka|Dotonbori,Nara Park,10:00 Coffee',
       '4|2027-03-11|Tokyo|Senso-ji',
     ]);
     expect(await storedSetAside(), isEmpty);
@@ -470,7 +483,7 @@ void main() {
     expect(await storedPlan(), [
       '1|2027-06-14|Tokyo|Senso-ji',
       '2|2027-06-15|Kyoto|Fushimi Inari',
-      '3|2027-06-16|Osaka|Dotonbori',
+      '3|2027-06-16|Osaka|Dotonbori,Nara Park,10:00 Coffee',
     ]);
     expect(await storedSetAside(), ['Ueno Park']);
   });
@@ -484,7 +497,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('paste-input')),
-      pasteBoxText(tester).replaceAll('Ueno Park\n', ''),
+      pasteBoxText(tester).replaceAll('- Ueno Park\n', ''),
     );
     await tester.tap(find.byKey(const Key('read-button')));
     await tester.pumpAndSettle();
@@ -535,5 +548,46 @@ void main() {
     final photos = await db.readPhotos();
     expect(photos.single.id, 'photo-on-day-2');
     expect(photos.single.dayNumber, 2);
+  });
+
+  testWidgets('a re-paste of a bare place name above a timed line keeps its '
+      'day, and its photographs', (tester) async {
+    // The whole round trip on the shape that used to break it: a bulleted
+    // proper-noun stop with a timed stop under it. Rendered without a bullet,
+    // `Ueno Park` came back as a day of its own — day 1 was emptied, the line
+    // was filed in the set-aside as displaced, and day 1's photographs stayed
+    // on a day that no longer said anything.
+    await launch(tester);
+    await accept(tester, 'Day 1 - Tokyo\n- Ueno Park\n- 10:00 Coffee\n');
+
+    await db.insertPhoto((
+      id: 'photo-on-day-1',
+      dayNumber: 1,
+      contributorId: 'me',
+      takenAtUtcIso: '2027-06-15T09:00:00.000Z',
+      origin: 'capture',
+      word: null,
+      filePath: '/nowhere/day1.jpg',
+    ));
+
+    await openEditor(tester);
+    await tester.tap(find.byKey(const Key('repaste-plan')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('read-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('day-card-1')), findsOneWidget);
+    expect(find.byKey(const Key('day-card-2')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('accept-button')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(await storedPlan(), ['1|null|Tokyo|Ueno Park,10:00 Coffee']);
+    expect(await storedSetAside(), isEmpty);
+
+    final photos = await db.readPhotos();
+    expect(photos.single.dayNumber, 1);
   });
 }

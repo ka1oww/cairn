@@ -246,7 +246,13 @@ sit here — "Paste a different plan", which changed a plan by throwing the trip
 away — is gone, and a second copy of it is the thing to refuse in review.
 A day the merge leaves in place keeps its **number**, which is what keeps its
 photographs: `photos.dayNumber` is the only link between a photo and a day, and
-nothing re-files photos when a plan is saved.
+nothing re-files photos when a plan is saved. Keeping them is not the same as
+keeping them with the right day, though: the merge's position pass can pair a
+repasted day with a different current day, so a day can keep its photographs
+while its content changes underneath them — drop the first of three undated
+days from the re-paste text and day 1 keeps its number and its photographs but
+takes what was day 2's content. That gap is known and deferred; `AGENTS.md`
+lists it beside the other two.
 
 **Capture is a route, not a destination** (`lib/screens/capture_screen.dart`).
 It is reached from the day's one call to action and nothing else: the day page

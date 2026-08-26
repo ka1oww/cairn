@@ -59,6 +59,15 @@ enum MergedDayOrigin {
 
   /// A repasted day no current day claimed; appended after the existing ones
   /// (rule 4).
+  ///
+  /// **A known, deferred gap lives here.** [MergedDay] carries no
+  /// `uncertainty` and no `headerWeekday`, so an appended day — content
+  /// nobody has confirmed — arrives at the confirm screen stripped of the
+  /// doubt the parser had about it: a re-paste that appends `Sat - Nara`
+  /// renders as a confident read, is saved with its date silently open and is
+  /// never asked about. Closing it needs [MergedDay] to expose both for
+  /// appended days, which is a change to this shared module and is filed as a
+  /// separate follow-up task rather than done here.
   appendedNew,
 }
 
