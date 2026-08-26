@@ -137,6 +137,22 @@ int _fullYear(int y) {
   return y >= 70 ? 1900 + y : 2000 + y;
 }
 
+/// True when [text] is itself a whole date header naming a day and a month,
+/// i.e. the far end of a range like `Sat, Jun 14th - Wed, Jun 18th` rather
+/// than a place name. Such a line names no single day, so the weekday-then-
+/// month-day shape declines it and the line stays an ordinary one.
+bool _isDateHeaderItself(
+  String? text, {
+  required bool monthFirstNumericDates,
+}) {
+  if (text == null) return false;
+  final inner = tryParseDateHeader(
+    text,
+    monthFirstNumericDates: monthFirstNumericDates,
+  );
+  return inner != null && inner.hasFullDate;
+}
+
 /// Tries each recognized date-header shape against [line] (already
 /// trimmed, and already known not to be a `Day N` header or a bulleted
 /// stop). Returns null if none match.
@@ -169,13 +185,19 @@ DateHeaderMatch? tryParseDateHeader(
   if (m != null) {
     final weekday = _weekday(m.group(1)!);
     final month = _month(m.group(2)!);
-    if (weekday != null && month != null) {
+    final trailing = _cleanTrailing(m.group(5));
+    if (weekday != null &&
+        month != null &&
+        !_isDateHeaderItself(
+          trailing,
+          monthFirstNumericDates: monthFirstNumericDates,
+        )) {
       return DateHeaderMatch(
         weekday: weekday,
         month: month,
         day: int.parse(m.group(3)!),
         year: m.group(4) != null ? int.parse(m.group(4)!) : null,
-        trailingText: _cleanTrailing(m.group(5)),
+        trailingText: trailing,
       );
     }
   }

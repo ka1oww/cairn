@@ -113,13 +113,17 @@ void main() {
       expect(m.trailingText, 'Tokyo');
     });
 
-    test('a date range reads as one header with the far end as place text',
-        () {
-      final m = tryParseDateHeader('Sat, Jun 14th — Wed, Jun 18th')!;
+    test('a date range is refused rather than read as one dated day', () {
+      expect(tryParseDateHeader('Sat, Jun 14th — Wed, Jun 18th'), isNull);
+      expect(tryParseDateHeader('Sat, Jun 14th - Sun, Jun 15th'), isNull);
+    });
+
+    test('an ordinary trailing place is unaffected by the range refusal', () {
+      final m = tryParseDateHeader('Sat, Jun 14th — Tokyo')!;
       expect(m.weekday, 6);
       expect(m.month, 6);
       expect(m.day, 14);
-      expect(m.trailingText, 'Wed, Jun 18th');
+      expect(m.trailingText, 'Tokyo');
     });
 
     test('month + day without a weekday still reads month-first', () {
