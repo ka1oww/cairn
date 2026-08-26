@@ -23,6 +23,9 @@ library;
 
 import 'dart:typed_data';
 
+export 'src/plain_text_extractor.dart'
+    show PlainTextExtractor, maxPlainBytes;
+
 /// One picked file, already read into memory by the app's picker edge.
 /// The package never does IO: bytes in, text out.
 class PickedBytes {
