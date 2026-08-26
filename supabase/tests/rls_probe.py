@@ -532,6 +532,25 @@ def main():
                  "where trip_id = :t and day_number = 3", t=norway)[0][0] == 0,
           "and the dropped day takes its stops with it")
 
+    # The merged plan comes back in the plan's own order, and the day number is
+    # a number. Ordering it as text hands back 1, 10, 11, 12, 2, 3... which the
+    # phone's settled-check reads as a plan that disagrees with its own, so it
+    # writes, and its own stream asks for the next sync, forever. Every check
+    # above indexes the days into a dict before asserting, which is exactly why
+    # none of them could see it -- so assert the array itself, and with enough
+    # days for a text sort to differ from a numeric one.
+    long_plan = [day(n, T3, f"Stop {n}") for n in range(1, 13)]
+    status, plan = sync(b, norway, T3, long_plan)
+    returned = [d["day_number"] for d in plan["days"]]
+    check(status == "ok" and returned == list(range(1, 13)),
+          "a plan of twelve days comes back in ascending numeric day order",
+          repr(returned))
+    status, plan = sync(c, norway, "-infinity", [])
+    returned = [d["day_number"] for d in plan["days"]]
+    check(returned == list(range(1, 13)),
+          "and a pure pull is ordered the same way, not by the text of the number",
+          repr(returned))
+
     print("\n== the set-aside pocket is one atom, and emptying it still counts ==")
     onsen = [{"position": 0, "source_line_number": 9,
               "line_text": "book the cabin", "explanation": "no day named"}]

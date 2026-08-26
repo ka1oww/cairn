@@ -489,6 +489,87 @@ void main() {
         reason: 'a settled reconcile writes nothing, so nothing re-triggers it',
       );
     });
+
+    test(
+      'and it stops even when the answer comes back in another order',
+      () async {
+        // The regression this pins: the RPC used to order the merged days by
+        // `day_number` as *text*, so a plan of ten days or more came back
+        // 1, 10, 11, 12, 2, 3... The phone agreed with every one of those days
+        // and still called the reconcile unsettled, because the check compared
+        // the two plans in the order each happened to arrive in. It wrote, its
+        // own stream asked for another sync, and the loop had no floor.
+        //
+        // The fake cannot find this on its own -- it echoes a push back in push
+        // order -- so the wire's order is scripted here on purpose.
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await startTrip(db);
+        final at = DateTime.utc(2027, 6, 1, 9);
+        final server = FakeServer(trip: sharedTrip(id, const []));
+        final sync = TripSync(database: db, facts: server);
+        addTearDown(sync.stop);
+
+        await TripRepository(db).saveItinerary(
+          plan([
+            for (var number = 1; number <= 12; number++)
+              confirmed(number, 'Place $number', stops: ['Walk $number']),
+          ]),
+          at: at,
+        );
+        await sync.syncNow();
+
+        final pushed = server.pushes.single;
+        final shuffled = [...pushed.days]
+          ..sort((a, b) => '${a.number}'.compareTo('${b.number}'));
+        expect(shuffled.map((day) => day.number), [
+          1,
+          10,
+          11,
+          12,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+        ], reason: 'the order a text sort of the day number actually produces');
+        server.holds = RemoteItinerary(
+          planRevisedAt: pushed.planRevisedAt,
+          pocketRevisedAt: pushed.pocketRevisedAt,
+          days: shuffled,
+          setAside: pushed.setAside,
+        );
+
+        var writes = 0;
+        final watching = db
+            .watchItineraryDays()
+            .skip(1)
+            .listen((_) => writes++);
+        addTearDown(watching.cancel);
+
+        final outcome = await sync.syncNow();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        expect(outcome.standing, SyncStanding.synced);
+        expect(
+          writes,
+          0,
+          reason: 'the phone agrees with this plan; only its ordering differs',
+        );
+
+        sync.start();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        expect(
+          server.pushes.length,
+          lessThan(6),
+          reason:
+              'a plan that only arrived out of order must not re-push forever',
+        );
+      },
+    );
   });
 
   group('a remote change is applied', () {

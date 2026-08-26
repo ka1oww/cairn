@@ -379,9 +379,18 @@ begin
   -- ---- days the push dropped ----------------------------------------------
   --
   -- Absent from the push AND no newer than the pushing phone's view of the
-  -- plan's shape. The second half is the whole subtlety: without it, a phone
-  -- that has not synced since yesterday would delete the day somebody added
-  -- this morning simply by not having it.
+  -- plan's shape. The second half is what the guard actually buys: a phone
+  -- that has merely fallen behind -- one that has not reshaped the plan
+  -- itself, and so still carries an old plan_revised_at -- cannot delete the
+  -- day somebody added this morning simply by not having it.
+  --
+  -- It is not an unconditional promise, and should not be read as one. The
+  -- moment the pushing phone reshapes the plan its own plan_revised_at
+  -- becomes now, which is newer than any day it has never heard of, and the
+  -- push does delete that day. That is last-write-wins on the plan's shape,
+  -- accepted for this slice exactly as it is accepted per day: the phone that
+  -- wrote last decides, and a phone that reshapes a plan it has not yet
+  -- pulled will drop somebody else's new day.
   delete from public.trip_itinerary_days t
   where t.trip_id = p_trip_id
     and t.revised_at <= v_plan
@@ -412,7 +421,7 @@ begin
     'plan_revised_at', i.plan_revised_at,
     'pocket_revised_at', i.pocket_revised_at,
     'days', coalesce((
-      select jsonb_agg(day order by day->>'day_number')
+      select jsonb_agg(day order by (day->>'day_number')::integer)
       from (
         select jsonb_build_object(
           'day_number', t.day_number,

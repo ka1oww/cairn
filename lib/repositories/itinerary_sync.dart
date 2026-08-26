@@ -304,6 +304,23 @@ class TripSync {
   /// The roster propagates on every reconcile and not only at join, which is
   /// the whole of the second half of this task: a phone that joined a party
   /// of three must learn about the fourth without being handed anything.
+  ///
+  /// **The gap sign-in must close, named where it is caused.** The party this
+  /// writes is the server's, and the server names people by their account id.
+  /// The app above does not: it still calls the person holding the phone
+  /// `localMemberId` — the literal string `me` — and asks the roster about
+  /// that id when it decides who may remove whom, who the ping schedule deals
+  /// to, and who the gate is answering for. Today nothing collides, because
+  /// [SessionSource] is bound to `NoSession` and this method never runs. The
+  /// first reconcile under a real session replaces the roster wholesale (see
+  /// the reason below), the `me` row goes with it, and every one of those
+  /// questions is then asked about somebody who is no longer a member.
+  ///
+  /// So it is one change and not two: whoever builds sign-in must make the
+  /// local member id the signed-in user's id *in the same change*, the way
+  /// `awaitingTripRow` is a gap this class names rather than papers over. A
+  /// mapping bolted on afterwards would be a second answer to "who am I",
+  /// which is the thing to refuse.
   Future<void> _applyRoster(RemoteTrip shared, TripFact local) async {
     final dayDates = [
       for (final day in await database.readItineraryDays())
@@ -478,28 +495,86 @@ class TripSync {
     List<ItinerarySetAsideRecord> incomingAsides,
   ) {
     String here() => [
-      for (final day in days)
-        '${day.number}|${day.dateIso}|${day.place}|${day.revisedAtUtcIso}',
+      ..._canonical([
+        for (final day in days)
+          (
+            [day.number],
+            '${day.number}|${day.dateIso}|${day.place}'
+                '|${day.revisedAtUtcIso}',
+          ),
+      ]),
       '--',
-      for (final stop in stops)
-        '${stop.dayNumber}|${stop.position}|${stop.stopText}|${stop.timeIso}',
+      ..._canonical([
+        for (final stop in stops)
+          (
+            [stop.dayNumber, stop.position],
+            '${stop.dayNumber}|${stop.position}|${stop.stopText}'
+                '|${stop.timeIso}',
+          ),
+      ]),
       '--',
-      for (final line in asides)
-        '${line.position}|${line.sourceLineNumber}|${line.lineText}'
-            '|${line.explanation}',
+      ..._canonical([
+        for (final line in asides)
+          (
+            [line.position],
+            '${line.position}|${line.sourceLineNumber}|${line.lineText}'
+                '|${line.explanation}',
+          ),
+      ]),
     ].join('\n');
     String there() => [
-      for (final day in incomingDays)
-        '${day.number}|${day.dateIso}|${day.place}|${day.revisedAtUtcIso}',
+      ..._canonical([
+        for (final day in incomingDays)
+          (
+            [day.number],
+            '${day.number}|${day.dateIso}|${day.place}'
+                '|${day.revisedAtUtcIso}',
+          ),
+      ]),
       '--',
-      for (final stop in incomingStops)
-        '${stop.dayNumber}|${stop.position}|${stop.text}|${stop.timeIso}',
+      ..._canonical([
+        for (final stop in incomingStops)
+          (
+            [stop.dayNumber, stop.position],
+            '${stop.dayNumber}|${stop.position}|${stop.text}|${stop.timeIso}',
+          ),
+      ]),
       '--',
-      for (final line in incomingAsides)
-        '${line.position}|${line.sourceLineNumber}|${line.text}'
-            '|${line.explanation}',
+      ..._canonical([
+        for (final line in incomingAsides)
+          (
+            [line.position],
+            '${line.position}|${line.sourceLineNumber}|${line.text}'
+                '|${line.explanation}',
+          ),
+      ]),
     ].join('\n');
     return here() == there();
+  }
+
+  /// The one rendering of a plan, in the plan's own order rather than the
+  /// wire's.
+  ///
+  /// The comparison above decides whether a reconcile writes, and a write
+  /// asks for the next sync — so a difference that is only an ordering is an
+  /// unbounded loop, not a cosmetic wobble. Nothing promises the server hands
+  /// days back in the order this phone reads them in, and the ordering it
+  /// once used sorted the day number as text (1, 10, 11, 2), so every plan of
+  /// ten days or more never settled. Sorting both sides by the numbers that
+  /// identify a row — a day by its number, a stop by (day, position), a
+  /// set-aside line by its position — makes the check answer the question it
+  /// meant to ask. It changes what counts as *ordered*, never what counts as
+  /// *equal*.
+  static List<String> _canonical(List<(List<int>, String)> entries) {
+    final sorted = entries.toList()
+      ..sort((a, b) {
+        for (var i = 0; i < a.$1.length && i < b.$1.length; i++) {
+          final order = a.$1[i].compareTo(b.$1[i]);
+          if (order != 0) return order;
+        }
+        return a.$2.compareTo(b.$2);
+      });
+    return [for (final entry in sorted) entry.$2];
   }
 
   String _stamp() => now().toUtc().toIso8601String();
