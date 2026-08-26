@@ -29,7 +29,14 @@ import 'package:flutter/material.dart';
 /// the size of the original by accident. Full-screen review on today's
 /// densest phone is comfortably under it, so in practice nothing is ever
 /// clamped by this number; it is the backstop, not the rule.
-const int maxDisplayDecodeEdge = 2048;
+///
+/// The value is a deliberate trade, not a derived one: 2560 leaves headroom
+/// for denser screens than today's at the cost of decode memory when the
+/// clamp actually bites — a frame clamped here costs about 14 MB of image
+/// cache against roughly 9 MB at 2048 (a full 12-megapixel decode costs
+/// about 48). It is pinned literally in `test/photo_originals_test.dart`,
+/// so moving it must land there consciously.
+const int maxDisplayDecodeEdge = 2560;
 
 /// How many device pixels wide to decode a photograph that will be drawn
 /// across [logicalEdge] logical pixels.
