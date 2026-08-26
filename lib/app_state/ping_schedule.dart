@@ -30,13 +30,25 @@ import 'trip_providers.dart';
 // trip. There is nothing to fall back to, and this file no longer offers one.
 // ---------------------------------------------------------------------------
 
-/// Who this phone is.
+/// Who this phone is when nothing has signed in.
 ///
-/// **Still a stand-in, and the last one here.** There is no sign-in, so there
-/// is no account id to be — the roster is real, this phone's row in it is
-/// real, and only the *name* of the person holding the phone is a local
-/// constant. Every photo taken here is credited to it.
+/// A trip started in flight mode is credited to this, and so is every photo
+/// taken before the phone ever reaches a server. It is not a uuid on purpose:
+/// the shared schema wants an `auth.users` id and this is visibly not one, so
+/// a push that carries it is refused loudly rather than writing a stranger's
+/// row (`repositories/itinerary_sync.dart`).
 const localMemberId = 'me';
+
+/// Who this phone is, as every surface asks it.
+///
+/// Overridden in `bootstrap.dart` with the signed-in account's id when there
+/// is a session, and left at [localMemberId] when there is not. It is a
+/// provider rather than a constant because that is the one change the roster
+/// needs: `itinerary_sync.dart` replaces the roster with the server's
+/// wholesale, and the server names people by their account id, so a phone
+/// still calling itself `me` would be asking the gate, the ping schedule and
+/// every "may I" about somebody who is not on the trip.
+final localMemberIdProvider = Provider<String>((ref) => localMemberId);
 
 /// What to call the person holding this phone until a sign-in says.
 ///
@@ -104,7 +116,7 @@ final pingScheduleProvider = Provider<List<tm.Ping>>((ref) {
     plan: ref.watch(savedItineraryProvider).value,
     party: party,
     utcOffset: ref.watch(tripUtcOffsetProvider),
-    memberId: localMemberId,
+    memberId: ref.watch(localMemberIdProvider),
     tripId: trip.tripId,
   );
 });

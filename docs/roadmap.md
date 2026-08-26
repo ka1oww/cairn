@@ -164,9 +164,11 @@ built and answers every case this phone can see; for a well-formed code
 belonging to somebody else's trip it says so plainly rather than spinning.
 That last step is Phase 2 and nothing else.
 
-The itinerary is local-only in practice: the sync that makes it a shared,
-propagated fact is built, but it stays dormant until Phase 2 gives it a hosted
-project and a sign-in. A pool of one phone's
+The itinerary syncs for real: the hosted project exists, an ordinary build
+points at it, and the phone signs in as an anonymous account until Apple lands.
+What is still Phase 2 is everything the *roster* needs — nothing carries a
+membership to another phone, so the party the plan syncs to is still one. A
+pool of one phone's
 photos is likewise only half the Pool — nobody else's bytes can arrive until
 Phase 2 moves them, and that is also what the gate is waiting on to matter.
 Still not built: the day page's photo timeline, the Trail's filled node, and
@@ -221,13 +223,13 @@ propagated to every phone, so the ping schedule is never dealt from a stale
 roster or a stale plan
 ([grill round one](decisions/2026-08-22-grill-round-one.md) §2).
 
-**The last of those has landed early, and dormant.** The itinerary and the
+**The last of those has landed early, and is live.** The itinerary and the
 roster are stored, merged last-write-wins per day, and reconciled by
 `lib/repositories/itinerary_sync.dart` over a first slice of the Supabase
-adapter. It is built and tested end to end against a fake backend, and it does
-nothing at all until this phase gives it the two things it is missing: a hosted
-project to point at, and a session to speak as. Accounts, the pool and the
-bytes are still the whole of the work here.
+adapter — against a hosted project, signed in as an anonymous GoTrue account
+(`supabase/README.md`). Real accounts, the pool and the bytes are still the
+whole of the work here, and so is the thing that makes a roster worth syncing:
+nothing yet carries a membership to a second phone.
 
 The pool stores **originals**; resizing is for display only (§3 of the same
 decision). The bill has now been measured rather than guessed at:
@@ -342,11 +344,12 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
   guess covers a neighbourhood of near-spellings. Sayable was the point and
   the trade is the decision's; the rate limit it assumes is not written yet,
   at the database level or above it.
-- Wake the itinerary and roster sync. The whole path is written and tested
-  (`lib/repositories/itinerary_sync.dart` over
-  `supabase/migrations/0010_trip_itinerary.sql`), and dormant: it has no hosted
-  project to point at and no session to speak as, so every reconcile reports
-  `dormant` and writes nothing.
+- ~~Wake the itinerary and roster sync.~~ **Done, 2026-08-26.** It points at
+  the hosted project by default and signs in anonymously;
+  `test/hosted_smoke_test.dart` is the live proof, and a green `flutter test`
+  is not. What is left of it is real sign-in: an account somebody owns, a
+  display name that is theirs, and a trip started offline under `'me'` — which
+  can never become a `trips` row and is a local trip for good.
 - The trip's close at trip end + 72 hours as a *stored* rule. Both halves
   derive it correctly now — `cairn_model`'s `tripStandingAt` on the phone, and
   `trip_closes_at()` on the server, which is what kills an invite code and

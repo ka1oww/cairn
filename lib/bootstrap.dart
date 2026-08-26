@@ -17,6 +17,7 @@ import 'repositories/membership_repository.dart';
 import 'repositories/photo_repository.dart';
 import 'repositories/trip_repository.dart';
 import 'storage/drift/app_database.dart';
+import 'storage/remote/gotrue_sessions.dart';
 import 'storage/remote/postgrest_shared_facts.dart';
 import 'storage/remote/shared_facts.dart';
 
@@ -44,6 +45,12 @@ import 'storage/remote/shared_facts.dart';
 /// eight different minutes seeds the read side and leaves the write side
 /// bound to the store. Bind them to two different objects in the app and the
 /// trip's own surface would go blank the moment somebody renamed it.
+///
+/// [sessions] and [memberId] arrive together and must never disagree: the
+/// first is what the sync speaks to the server with, the second is who the
+/// app thinks it is, and they are the same account. `main` acquires the
+/// session, reads the id off it and hands both in; a test hands in neither
+/// and gets [NoSession] and the local stand-in, which is the same pair.
 Widget bootstrapApp({
   AppDatabase? database,
   DateTime? today,
@@ -52,11 +59,13 @@ Widget bootstrapApp({
   CameraSource? camera,
   PhotoRepository? photos,
   MembershipRepository? membership,
+  SessionSource? sessions,
+  String? memberId,
 }) {
   final db = database ?? openAppDatabase();
   final store = PhotoStore(db);
   final roster = MembershipStore(db);
-  _startSharedFactsSync(db);
+  _startSharedFactsSync(db, sessions ?? const NoSession());
   return ProviderScope(
     overrides: [
       tripRepositoryProvider.overrideWithValue(TripRepository(db)),
@@ -68,33 +77,96 @@ Widget bootstrapApp({
       if (now != null) nowProvider.overrideWithValue(now),
       if (utcOffset != null) tripUtcOffsetProvider.overrideWithValue(utcOffset),
       if (camera != null) cameraSourceProvider.overrideWithValue(camera),
+      if (memberId != null) localMemberIdProvider.overrideWithValue(memberId),
     ],
     child: const CairnApp(),
   );
 }
 
 /// Starts keeping the trip's shared facts in step with the server's, if there
-/// is a server.
+/// is a server and somebody to be on it.
 ///
-/// **Nothing happens by default, and that is the honest state of things.**
-/// The URL and the publishable key arrive from `--dart-define`s that no
-/// checked-in file sets, so an ordinary build has no backend and behaves
-/// exactly as it did before the sync existed. Every test therefore takes this
-/// branch too, which is deliberate: a sync started under `testWidgets` would
-/// leave a timer pending and hang the test at teardown.
+/// The URL and the publishable key default to the hosted project
+/// ([SharedFactsConfig.fromEnvironment]), so this runs in an ordinary build.
+/// It does not run in a test: every test binds [NoSession] and passes an
+/// in-memory database, and the guard below is what keeps a sync from leaving
+/// a timer pending and hanging the test at teardown. A build that wants the
+/// old inert behaviour asks for it with `--dart-define=CAIRN_SUPABASE_URL=`.
 ///
 /// It is started here rather than exposed as a provider because no surface
 /// consumes it. The sync's whole job is to make the Drift store agree with
 /// seven other phones; every screen already reads that store, and a provider
 /// nobody watched would only invite one to.
-void _startSharedFactsSync(AppDatabase db) {
+void _startSharedFactsSync(AppDatabase db, SessionSource sessions) {
   const config = SharedFactsConfig.fromEnvironment;
-  if (!config.isConfigured) return;
+  if (!config.isConfigured || sessions is NoSession) return;
   TripSync(
     database: db,
-    // [NoSession] until Sign in with Apple lands: the sync will report
-    // itself dormant rather than pretend, which is the same shape the
-    // notification edge has.
-    facts: PostgrestSharedFacts(config: config, sessions: const NoSession()),
+    facts: PostgrestSharedFacts(config: config, sessions: sessions),
+    tripRow: _tripRowFromEnvironment,
   ).start(pollEvery: const Duration(minutes: 2));
+}
+
+/// The trip's clock, if the build was told it.
+///
+/// ```sh
+/// flutter run --dart-define=CAIRN_TRIP_TIMEZONE=Asia/Tokyo
+/// ```
+///
+/// Absent by default, and that is honest rather than lazy: `trips.timezone`
+/// is the one clock eight phones agree on, the app asks for country and city
+/// and derives the zone from them, and that question is asked at sign-in —
+/// which does not exist (`SyncStanding.awaitingTripRow` names this exact
+/// gap). Deriving `Etc/GMT-9` from the device's UTC offset would be a lie the
+/// first time somebody crossed a border. So the build may *tell* the app the
+/// zone, and until sign-in asks, nothing guesses it.
+const _tripTimeZone = String.fromEnvironment('CAIRN_TRIP_TIMEZONE');
+
+/// Answers with the shared `trips` row to create, or null to say "not yet".
+///
+/// Three things must be known and none of them is invented here:
+///
+///  * the zone, from the define above;
+///  * the trip's first and last dates, which are the plan's own resolved
+///    dates — a plan whose every date is still open cannot be a `trips` row,
+///    because `start_date` and `end_date` are `not null`;
+///  * the name, because `trips.name` is `not null` and the phone's is
+///    nullable. Pushing the app's own word for an unnamed trip would come
+///    back through the roster apply and *rename* the trip, so an unnamed trip
+///    waits instead. Naming it in the trip sheet is what starts the sync.
+Future<RemoteTripDraft?> _tripRowFromEnvironment(PendingTripRow pending) async {
+  final name = pending.name;
+  final first = pending.firstDateIso;
+  final last = pending.lastDateIso;
+  if (_tripTimeZone.isEmpty || name == null || first == null || last == null) {
+    return null;
+  }
+  return RemoteTripDraft(
+    id: pending.tripId,
+    name: name,
+    createdBy: pending.startedBy,
+    timeZone: _tripTimeZone,
+    startDateIso: first,
+    endDateIso: last,
+  );
+}
+
+/// Signs the phone in, or answers null when it cannot.
+///
+/// Called by `main` before the app is built, because the account's id *is*
+/// this phone's member id and a surface that drew itself as `me` and then
+/// became a uuid would have credited a photo to a member the roster does not
+/// hold. Null is an ordinary answer — no backend configured, or no route to
+/// one — and the app then runs entirely locally, which is the whole
+/// offline-first story.
+Future<SharedFactsSession?> signIn(SessionSource sessions) =>
+    sessions.current();
+
+/// The app's own [SessionSource]: an anonymous GoTrue account, kept across
+/// launches. See `storage/remote/gotrue_sessions.dart` for why it is
+/// anonymous and what Apple sign-in replaces.
+SessionSource deviceSessions() {
+  const config = SharedFactsConfig.fromEnvironment;
+  if (!config.isConfigured) return const NoSession();
+  return GotrueSessions(config: config, vault: FileSessionVault());
 }

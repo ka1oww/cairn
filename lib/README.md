@@ -17,10 +17,12 @@ imports are the arrows:
 seam above is the only layer that knows both exist — that is what
 `repositories/itinerary_sync.dart` is, and why it lives there rather than in
 either store. **Nothing outside `storage/remote/` may import an HTTP or
-Supabase symbol**, and nothing anywhere may hold a key: the project URL and
-the publishable anon key arrive from `--dart-define`s
-(`SharedFactsConfig.fromEnvironment`), and both are absent by default, so an
-ordinary build has no backend at all.
+Supabase symbol**, and **nothing anywhere may hold a secret**: the project URL
+and the publishable anon key are `--dart-define`s that default to the hosted
+project (`SharedFactsConfig.fromEnvironment`), which is why an ordinary build
+reaches it and a build told `CAIRN_SUPABASE_URL=` has no backend at all. The
+anon key is publishable by design and belongs in the repository; the
+service-role key and the database password never do.
 
 The DOMAIN band is not in `lib/` at all: it is the four pure-Dart packages
 under `packages/`, consumed as path dependencies and never modified.

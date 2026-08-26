@@ -140,10 +140,23 @@ import what is written there, not here.
   for the same reason, `sync_trip_itinerary` raising on `trip_closes_at`,
   because one of eight phones has a wrong clock), and **a reconcile that changed nothing
   must write nothing**,
-  because the plan's own Drift stream is what asks for the next sync. The whole
-  path is dormant today: it needs a `--dart-define`d project and a session, and
-  there is neither, so a green test suite is no evidence a hosted project
-  behaves. Nothing above the seam knows any of this exists, deliberately.
+  because the plan's own Drift stream is what asks for the next sync. Nothing
+  above the seam knows any of this exists, deliberately.
+- **The path is live, and only one test proves it.** An ordinary build points
+  at the hosted project (`SharedFactsConfig.fromEnvironment` defaults; the anon
+  key is publishable and belongs in the repo, the service-role key and the DB
+  password never do), signs in as a GoTrue *anonymous* account
+  (`lib/storage/remote/gotrue_sessions.dart`, the stand-in until Apple lands),
+  and the signed-in id becomes `localMemberIdProvider` — one change and not
+  two, because the roster is replaced wholesale with the server's and a phone
+  still calling itself `me` would ask the gate and the ping schedule about a
+  stranger. `flutter test` never reaches out: every widget test binds
+  `NoSession`, and the live check is
+  `flutter test test/hosted_smoke_test.dart --dart-define=CAIRN_HOSTED_SMOKE=true`.
+  **A green suite is still no evidence the hosted project behaves** — that is
+  what that one test is for, and `supabase/README.md` is the authority on the
+  defines, on why `CAIRN_TRIP_TIMEZONE` has no default, and on what the hosted
+  project has and has not actually done.
 - **The trip's three Drift tables do not re-emit for free.** `trip_facts`,
   `trip_members` and `trip_invite_codes` are read through one stream, and it
   is a `customSelect` over all three with `readsFrom` — minting a code

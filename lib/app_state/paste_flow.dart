@@ -726,7 +726,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
     await ref
         .read(membershipStoreProvider)
         .startTrip(
-          starter: model.MemberId(localMemberId),
+          starter: model.MemberId(ref.read(localMemberIdProvider)),
           starterDisplayName: localMemberName,
           now: ref.read(nowProvider),
         );

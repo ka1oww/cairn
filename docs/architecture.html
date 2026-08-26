@@ -297,7 +297,7 @@
 <div class="band" style="top:415px"><span>Platform edges (iOS)</span><em>partial — the camera is driven behind a seam; the rest not wired · services know the platform, the platform knows nothing of Cairn</em></div>
 <div class="band" style="top:562px"><span>The repositories seam</span><em>partial — scaffolded · the most expensive layer to skip</em></div>
 <div class="band" style="top:772px"><span>Storage</span><em>partial — Drift holds the itinerary and the photo index; the remote side speaks the shared facts and nothing else yet; only the seam knows both exist</em></div>
-<div class="band" style="top:952px"><span>Backend</span><em>partial · schema verified on local Postgres 17 — no hosted project, nothing deployed</em></div>
+<div class="band" style="top:952px"><span>Backend</span><em>partial · schema verified on local Postgres 17 and applied to the hosted project · R2 and the edge functions not deployed</em></div>
 <div class="band" style="top:1460px"><span>Domain — pure Dart</span><em>built · four siblings: none imports another, none imports cairn_model — the app layer translates</em></div>
 
 <!-- ======================= screens ======================= -->
@@ -377,7 +377,7 @@
 </div>
 <div class="node nb" style="left:1175px;top:445px;width:150px">
   <span class="chip">not built</span><h4>Sign in with Apple</h4>
-  <p>The first auth route.</p>
+  <p>The first auth route. An anonymous GoTrue account stands in and links in place when this lands, keeping the uuid.</p>
 </div>
 
 <!-- the rule card, in the corridor beside the funnel -->
@@ -418,7 +418,7 @@
 
 <!-- ======================= backend ======================= -->
 <div class="groupbox" style="left:640px;top:985px;width:695px;height:435px">
-  <span class="gtitle">Supabase project + Cloudflare — no hosted project exists</span>
+  <span class="gtitle">Supabase project + Cloudflare — hosted project live (2026-08-26); Cloudflare not started</span>
 </div>
 
 <div class="node partial" style="left:700px;top:1030px;width:180px;height:128px">
@@ -437,9 +437,9 @@
   <code>day_page_is_open</code> · <code>redeem_trip_invite</code> · <code>sync_trip_itinerary</code> · <code>trip_roster</code>.
   Verified by a 96-probe local suite; starter-and-container decisions not yet implemented.</p>
 </div>
-<div class="node nb" style="left:670px;top:1340px;width:230px">
-  <span class="chip">not built</span><h4>Supabase Auth</h4>
-  <p>Accounts; verifies Apple identities. Dashboard config not done.</p>
+<div class="node partial" style="left:670px;top:1340px;width:230px">
+  <span class="chip">partial</span><h4>Supabase Auth</h4>
+  <p>Accounts. <b>Anonymous sign-in is live</b> and is how the phone signs in today (<code>gotrue_sessions.dart</code>); the signed-in id <b>is</b> this phone's member id. Apple and Google are dashboard steps and are not enabled.</p>
 </div>
 <div class="node nb" style="left:1140px;top:1200px;width:180px">
   <span class="chip">not built</span><h4>Cloudflare R2</h4>
@@ -556,7 +556,7 @@
       <code>'me'</code>.</b> Nothing can hit that today (no session, so no roster ever lands), but
       whoever builds sign-in has to make the local id the signed-in user's in the same change.</li>
       <li><b>One fixed clock per trip on the server (v1).</b> First/last-day windows and the
-      country-change rule live only on the phone. Grill round one §2 made the itinerary a synced shared fact and the schema now holds it, merged last-write-wins per day; that rule is written twice on purpose &mdash; in <code>sync_trip_itinerary</code> and in <code>lib/repositories/itinerary_sync.dart</code> &mdash; and never three times. The whole path is dormant until there is a hosted project and a sign-in.</li>
+      country-change rule live only on the phone. Grill round one §2 made the itinerary a synced shared fact and the schema now holds it, merged last-write-wins per day; that rule is written twice on purpose &mdash; in <code>sync_trip_itinerary</code> and in <code>lib/repositories/itinerary_sync.dart</code> &mdash; and never three times. The path is live as of 2026-08-26: an ordinary build points at the hosted project and signs in anonymously, and the one thing that proves it is <code>test/hosted_smoke_test.dart</code> &mdash; a green <code>flutter test</code> proves nothing about a hosted project, because every widget test binds <code>NoSession</code>.</li>
       <li><b>The book’s interior is designed</b> — round 9 drew it against the captain’s printed reference; the printed page is not designed, and the book is deliberately after the first release.</li>
       <li><b>In-transit photos on a multi-zone day are parked</b> — refusal (<code>outsideTrip</code>)
       plus manual placement is the current answer.</li>
