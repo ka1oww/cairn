@@ -42,7 +42,13 @@ import what is written there, not here.
   importing a script does not get that script analyzed.
 - iOS only, deliberately: no `android/` exists and the dev machine has no
   Android SDK. The build gate is
-  `flutter build ios --simulator --no-codesign`.
+  `flutter build ios --simulator --no-codesign`. The signing configuration is
+  committed on purpose — `ios/Runner.xcodeproj/project.pbxproj` carries the
+  bundle id `com.ka1o.cairn` (`.RunnerTests` for the test target) and a
+  `DEVELOPMENT_TEAM`, because it used to live only as an uncommitted local edit
+  and a clean checkout could not build to a device. Nothing else in the repo
+  hardcodes the bundle id, and there are no entitlements, profiles or
+  `CODE_SIGN_STYLE` overrides to keep in step.
 - The launch surface: `RootScreen` opens on the paste box until an itinerary
   is accepted into Drift, then on the trip — `TripShell`, whose tabs open on
   **Today**. Each flow's whole brain is one file in `lib/app_state/`
