@@ -70,9 +70,9 @@ Two files sit outside the bands, deliberately:
   from the seam is a design smell; today none does.
 - **The platform edges are reached from `app_state/`, not from screens.**
   `camera_source.dart` imports `package:camera` and `package:path_provider`;
-  `file_picker_edge.dart` imports `package:file_picker` for the import door;
-  `ping_schedule.dart` owns the notification edge. That is the map's own
-  shape — the edges are drawn beside the app-state band, and "platform glue"
-  is an app-state node — so the rule to check in review is the one above it:
-  no screen ever names a plugin. Each edge is an interface with a real
-  implementation and a test one, so nothing above it needs a device to run.
+  `ping_schedule.dart` owns the notification edge; `file_picker_edge.dart`
+  owns the document picker the paste box's import pill opens. That is the
+  map's own shape — the edges are drawn beside the app-state band, and
+  "platform glue" is an app-state node — so the rule to check in review is the
+  one above it: no screen ever names a plugin. Each edge is an interface with
+  a real implementation and a test one, so nothing above it needs a device to run.

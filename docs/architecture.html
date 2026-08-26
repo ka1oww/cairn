@@ -346,7 +346,7 @@
 <div class="node partial" style="left:340px;top:250px;width:420px;height:115px">
   <span class="chip">partial</span><h4>Riverpod providers</h4>
   <p>One source of truth per question. A watched repository stream flows through a provider; writing a row updates every watching screen with no manual wiring. Calls <b>itinerary_parser</b> for the confirm flow, and the pure decision cores in <code>lib/logic/</code> — the re-paste merge and the plan said back as text — for decisions worth testing without a database, a widget or a clock.</p>
-  <span class="sub">the paste flow's state, the saved-plan stream, the day view, the trail view, the pool view, the ping schedule, the capture flow, the trip's sheet, the join door and the file-import flow — which fills the paste box and never auto-parses</span>
+  <span class="sub">the paste flow's state, the saved-plan stream, the day view, the trail view, the pool view, the ping schedule, the capture flow, the trip's sheet, the join door and the paste box's file door (<code>import_flow.dart</code>, over <code>plan_extraction</code>: it fills the box and never parses)</span>
 </div>
 <div class="node nb" style="left:800px;top:250px;width:240px;height:115px">
   <span class="chip">not built</span><h4>Import sweep</h4>
@@ -354,8 +354,8 @@
 </div>
 <div class="node partial" style="left:1080px;top:250px;width:240px;height:115px">
   <span class="chip">partial</span><h4>Platform glue</h4>
-  <p>Dual capture, the GPS tag at capture, the sign-in flow. Keeps screens platform-blind.</p>
-  <span class="sub">the camera is behind <code>CameraSource</code>, real on a device and a drawn stand-in without one; location and Apple sign-in not started</span>
+  <p>Dual capture, the GPS tag at capture, the document picker behind the import pill, the sign-in flow. Keeps screens platform-blind.</p>
+  <span class="sub">the camera is behind <code>CameraSource</code>, real on a device and a drawn stand-in without one; the picker behind <code>FilePickerEdge</code>; location and Apple sign-in not started</span>
 </div>
 
 <!-- ======================= platform edges ======================= -->

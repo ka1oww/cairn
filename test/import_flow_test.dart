@@ -1,7 +1,8 @@
 // The import flow, end to end through the real stack: a picked file read
 // behind the fake picker edge, its text landed in the existing paste box,
 // the same green button reading it, and the accepted itinerary persisted
-// into Drift — the plan §7 flow test, on slice A's plain-text path.
+// into Drift — the plan §7 flow test, over slice A's plain-text path and
+// slice C's docx/xlsx/csv fixtures.
 //
 // The two CLAUDE.md widget-test traps this file is shaped around:
 //
@@ -13,6 +14,7 @@
 //    forever on a drift stream shutdown that can never fire.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNotNull;
 import 'package:drift/native.dart';
@@ -308,5 +310,121 @@ void main() {
     final subhead = tester.getRect(find.byKey(const Key('paste-subhead')));
     final box = tester.getRect(find.byKey(const Key('paste-input')));
     expect(box.top - subhead.bottom, 16.0);
+  });
+
+  // --- slice C: the three formats the registry gained --------------------
+  //
+  // These drive the *committed binary fixtures* through the same door as the
+  // plain-text test above: the pill, the real registry's routing, the real
+  // extractor, the box, and the same green button. What the box holds is the
+  // person-visible half of slice C, so it is asserted literally.
+
+  PickedBytes fixture(String name) => PickedBytes(
+        fileName: name,
+        extension: name.split('.').last,
+        bytes: Uint8List.fromList(
+          File('packages/plan_extraction/test/fixtures/$name')
+              .readAsBytesSync(),
+        ),
+      );
+
+  testWidgets('an imported docx fills the box, parses, accepts into Drift', (
+    tester,
+  ) async {
+    await launch(tester, picks: [fixture('tables.docx')]);
+
+    await tester.tap(find.byKey(const Key('import-pill')));
+    await tester.pump();
+
+    // One line per WordprocessingML paragraph; the table's cells row-major.
+    expect(
+      boxText(tester),
+      'Mon 14 June 2027 - Tokyo\n'
+      '09:00\n'
+      'Senso-ji\n'
+      '12:00\n'
+      'Ramen in Asakusa\n'
+      'Tue 15 June 2027 - Kyoto\n'
+      'Fushimi Inari at dawn',
+    );
+
+    await tester.tap(find.byKey(const Key('read-button')));
+    await tester.pump();
+    expect(find.textContaining('2 days'), findsOneWidget);
+    expect(find.text('Monday · Tokyo'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('accept-button')));
+    await tester.pump();
+    await tester.pump();
+
+    final stops = await db.readItineraryStops();
+    expect(
+      stops.map((s) => s.stopText),
+      containsAll(['Senso-ji', 'Fushimi Inari at dawn']),
+    );
+  });
+
+  testWidgets('an imported xlsx with a date column lands in the dialect', (
+    tester,
+  ) async {
+    await launch(tester, picks: [fixture('dated-sheet.xlsx')]);
+
+    await tester.tap(find.byKey(const Key('import-pill')));
+    await tester.pump();
+
+    // The date-typed column drove the heuristic: dated headers, dash stops.
+    expect(boxText(tester), contains('Mon 14 June 2027'));
+    expect(boxText(tester), contains('- Senso-ji at 9:00'));
+    expect(boxText(tester), contains('Tue 15 June 2027'));
+
+    await tester.tap(find.byKey(const Key('read-button')));
+    await tester.pump();
+    expect(find.textContaining('2 days'), findsOneWidget);
+  });
+
+  testWidgets('an xlsx with no date column still lands as faithful lines', (
+    tester,
+  ) async {
+    await launch(tester, picks: [fixture('text-sheet.xlsx')]);
+
+    await tester.tap(find.byKey(const Key('import-pill')));
+    await tester.pump();
+
+    // The floor: never worse than pasting the same table as text.
+    expect(boxText(tester), contains('Senso-ji at 9:00'));
+    expect(boxText(tester), contains('Kyoto'));
+    expect(find.byKey(const Key('import-error')), findsNothing);
+  });
+
+  testWidgets('an imported csv with an ISO date column reads as two days', (
+    tester,
+  ) async {
+    await launch(tester, picks: [fixture('dated.csv')]);
+
+    await tester.tap(find.byKey(const Key('import-pill')));
+    await tester.pump();
+
+    expect(boxText(tester), contains('Mon 14 June 2027'));
+    expect(boxText(tester), contains('- Senso-ji at 9:00, then Ueno'));
+
+    await tester.tap(find.byKey(const Key('read-button')));
+    await tester.pump();
+    expect(find.textContaining('2 days'), findsOneWidget);
+  });
+
+  testWidgets('a password-protected docx refuses honestly, box untouched', (
+    tester,
+  ) async {
+    await launch(tester, picks: [fixture('encrypted.docx')]);
+
+    await tester.tap(find.byKey(const Key('import-pill')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('import-error')), findsOneWidget);
+    expect(
+      find.textContaining('damaged or password-protected'),
+      findsOneWidget,
+    );
+    expect(boxText(tester), '');
   });
 }
