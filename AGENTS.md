@@ -131,8 +131,8 @@ import what is written there, not here.
   answers a member, so the roster it returns necessarily contains the caller;
   a merge that kept a local row would resurrect somebody who left and deal
   them a ping). It reports a *standing*, never an error — dormant, no trip,
-  awaiting the trip row, offline, refused, synced — and offline means the local
-  copy is untouched and authoritative. Two rules to keep: applying a merge must
+  awaiting the trip row, offline, refused, archived, synced — and offline
+  means the local copy is untouched and authoritative. Two rules to keep: applying a merge must
   never re-stamp a day's clock (that is what makes two phones push at each
   other forever), **an archived trip is not reconciled at all** (it returns
   `SyncStanding.archived` before the first round trip, so a pull cannot apply
@@ -227,7 +227,11 @@ import what is written there, not here.
   would archive a half-dated plan mid-trip. And **the grace's real intake is not built**: capture only writes to
   today, so the window's door is the import sweep, and until that exists the
   rule sits at the write path (`CaptureFlow.turnTheDayOver`) rather than on a
-  button. The number itself is written twice and never three times — here and
+  button. The plan is refused the same way: the paste box stays reachable on
+  an archived trip — it is also the only door to joining another one — and
+  only `PasteFlow.accept` refuses, with the confirm screen showing the read in
+  full and a sentence where the accept button was. The number itself is
+  written twice and never three times — here and
   as `trip_grace_after_end()` in SQL, compared by `supabase/tests/rls_probe.py`.
 - **The gate is one rule, written once.** `cairn_model`'s `GateState.decide`
   is it: the gate applies to the day being lived, and every day that has sealed
@@ -306,8 +310,8 @@ Sharp edges worth knowing before touching this directory again:
   `supabase/tests/recursion_mechanism.py`.
 - **The invite grammar exists twice, and the probe is what keeps the two
   copies honest.** A code is three spoken words, forgiving of order and of one
-  letter per word, and it dies at the trip's close -- end date plus fourteen
-  days, in the trip's own clock, never a stored `expires_at`. The phone's half
+  letter per word, and it dies at the trip's close -- end date plus the grace,
+  in the trip's own clock, never a stored `expires_at`. The phone's half
   is `cairn_model`'s `invite_code.dart` / `trip_close.dart`; the server's is
   `0005_trip_invites.sql`, and a code minted on one side is typed into the
   other, so they have to agree letter for letter. `tests/rls_probe.py` reads
@@ -344,8 +348,9 @@ Sharp edges worth knowing before touching this directory again:
     so does the app: the rules live in one place because two copies drift.
     Also here: `InviteCode` (two words and a number, forgiving of order and of
     one edit, over a vocabulary whose words are pairwise three edits apart) and
-    `tripClosesAt` (trip end + the fourteen-day grace; the book's rule is not
-    this one and never expires). `TripId.mint` is the package's one exception
+    `tripClosesAt` (trip end + `graceAfterATrip`; the book's rule is not this
+    one and never expires) and `tripStandingAt`, the one place a trip's ending
+    is decided. `TripId.mint` is the package's one exception
     to "it invents nothing": it *formats* sixteen bytes a caller drew, the same
     division `InviteCode.draw` makes, so the package still has no randomness.
   - A day's clock is fixed where the day *starts* and never moves, so a photo taken after an afternoon border crossing still reads at the hour that day was on. `TripDay.sequence`'s per-day clock overrides mirror `photo_day_assignment`'s `timeZoneOverridesByDay` deliberately -- change one and the other has to follow.

@@ -69,14 +69,17 @@ the distance function is written out here rather than taken from
 and would refuse near-spellings the phone accepts.
 
 **A code carries no expiry of its own.** It dies when its trip closes —
-the last day's end in the trip's own clock, plus the fourteen-day grace, which
-is `trip_closes_at(trip_id)` here and `tripClosesAt` in `cairn_model`. After
-that every day of the trip is past, so a code that outlived it would open the
+the last day's end in the trip's own clock, plus the seventy-two-hour grace,
+which is `trip_closes_at(trip_id)` here and `tripClosesAt` in `cairn_model`.
+After that every day of the trip is past, so a code that outlived it would open the
 whole archive to whoever still remembered three words. There is deliberately
 no `expires_at` column: two timestamps for one rule are two chances to
 disagree about when a trip is over, which is the thing the
 [grace-window decision](../docs/decisions/2026-08-22-grace-window.md) exists
-to prevent.
+to prevent. The window's length is [the ending](../docs/decisions/2026-08-26-the-ending.md),
+and `trip_grace_after_end()` is the second and last copy of that number:
+`tests/rls_probe.py` reads `graceAfterATrip` out of the Dart and compares
+them.
 
 `redeem_trip_invite` is `SECURITY DEFINER` and is the *only* way to join a trip
 you didn't create. It has to be: a non-member cannot be granted `SELECT`
@@ -326,6 +329,8 @@ directions.
 | **Credit survives the person** | `profile_is_visible_to` (`0009`) resolves a name for anyone you travel with **or** anyone credited on a photo or trip in a trip you are in — because membership is exactly the thing that ends. |
 | **The trip's clock is one shared clock** | `trips_update_starter` / `trips_delete_starter` (`0004`) keep the trip row with the person who authored it, and `validate_trip_timezone` (`0003`) refuses a zone that is not real. |
 | **The plan is the trip's, and any member may change it** | Every policy on the four itinerary tables (`0010`) is plain membership through `is_trip_member`, with no starter branch and no contributor branch. Editing the plan is flat, like inviting and like naming: a trip is a thing eight people are on, not a thing one of them owns. |
+| **A closed trip takes no new photographs** | `photos_insert_trip_member` (`0006`) also requires `now() < trip_closes_at(...)`, and the `photos_lock_trip_id` trigger (`0006`) stops a row being repointed at a closed trip round it. Deliberately *not* on the update and delete policies: a person's hold on their own photograph — correcting its day, removing it — survives the close ([the ending](../docs/decisions/2026-08-26-the-ending.md)). |
+| **A closed trip's plan is the record** | `sync_trip_itinerary` (`0010`) raises on `trip_closes_at` before its first write, so neither half of the round trip runs and the stored plan is unchanged rather than merely un-returned. The phone refuses first (`TripSync._reconcile`); this is the half that holds when one of eight phones has a wrong clock. |
 | **A phone can only reach the plan through the merge** | `sync_trip_itinerary` is `security invoker` and re-checks membership itself, so it grants nothing the tables do not; the tables' own policies are what stop a non-member writing round it. |
 
 ### Why the gate is not an RLS policy
@@ -620,7 +625,7 @@ independently built clusters — 17.10 and a Homebrew 17.11 — so the results a
 not an artefact of one machine's setup.
 
 - All ten migrations apply cleanly, and apply again cleanly on a second run.
-- 98 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 109 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
@@ -628,7 +633,11 @@ not an artefact of one machine's setup.
   `updated_at` bumping on edit — plus the three-word invite grammar: the
   server's vocabulary compared word for word against the Dart the phone uses,
   order- and spelling-forgiving redemption, a code refused once its trip has
-  closed, and one still admitting people inside the grace — and the itinerary
+  closed, and one still admitting people inside the grace; the close itself —
+  a late photograph still landing inside the grace, a member of a closed trip
+  refused, that person's hold on their own photograph surviving it, a photo
+  that cannot be repointed at another trip, and a closed trip's plan taking
+  neither a push nor a pull — and the itinerary
   merge: a stale push losing, the day it did not lose left untouched, a fresh
   push replacing a day's stops with it, a phone unable to delete a day added
   after the shape it last saw, a current phone able to drop one, an emptied

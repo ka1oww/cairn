@@ -30,6 +30,7 @@ dart test
 | The day's pool | `DayPool` | One day's slice of the shared pool, plus everyone who has ever contributed to it. |
 | Gate | `GateState` | Whether a day's page is open to one person, and why. |
 | Where a day stands | `DayStanding` | Behind us, being lived, or still ahead — the only thing the gate asks about time. |
+| Where a trip stands | `TripStanding` | Underway, inside its grace, or archived — the only place the trip's ending is decided. |
 | A date | `CalendarDate` | Three numbers a human would write. Not an instant. |
 | A time of day | `ClockTime` | Read off a clock. Not an instant either. |
 
@@ -177,12 +178,21 @@ that will eventually be two. `Trip`'s own methods delegate to it.
   it. Two people who joined on the same day are separated by member id —
   arbitrary, but the *same* arbitrary answer on every phone, which is what a
   party agreeing offline needs.
-- **Renaming and minting an invite are flat.** Any member does either.
+- **Renaming and minting an invite are flat.** Any member does either, until
+  the trip closes.
 - **Deleting is the starter's, and only while the trip holds nobody else's
   photos** — after that nobody can, the starter included, because deleting
   cascades eight people's memories. It does not pass on when the starter
   leaves; a trip whose starter has gone is a trip nobody can delete.
 - **Revoking a code** belongs to whoever minted it, or to the starter.
+- **An archived trip is read-only, and that is a permission rather than a
+  presentation.** Removing, renaming, minting and revoking each take a
+  `TripStanding` and answer false once the trip has closed, so a new caller
+  inherits the rule instead of having to remember it. `canDeleteTrip`
+  deliberately takes no standing: discarding the record is not editing it, and
+  the condition above — nobody may delete a trip holding somebody else's
+  photographs — is what actually protects people
+  (`docs/decisions/2026-08-26-the-ending.md`).
 
 `Trip.canRemove` is false for removing yourself: leaving a trip is a
 different action, available to everyone (`docs/design/`, 6e "Leave this
@@ -222,14 +232,32 @@ it rather than trusting it.
 no other time, so `TripInvite.standingAt` is *told* the trip's close rather
 than remembering a second copy of it: two timestamps for one rule are two
 chances to disagree about when a trip is over. The close itself is
-`tripClosesAt` — trip end plus the fourteen-day grace — and the book's rule
-is deliberately not modelled beside it, because the book never expires and
-the two were unbundled on purpose
-(`docs/decisions/2026-08-22-grace-window.md`).
+`tripClosesAt` — trip end plus `graceAfterATrip`, which is seventy-two hours
+(`docs/decisions/2026-08-26-the-ending.md`) — and the book's rule is
+deliberately not modelled beside it, because the book never expires and the
+two were unbundled on purpose
+(`docs/decisions/2026-08-22-grace-window.md`, whose number this supersedes and
+whose split it does not).
 
 This package still has no randomness, so it does not mint codes: `InviteCode.draw`
 turns three numbers a caller already has into a code, and where those numbers
 come from is the app's seam's business.
+
+## Where a trip stands, decided once
+
+`tripStandingAt(now:, endsAt:)` in `src/trip_standing.dart` is the only thing
+that turns an instant into `underway` / `grace` / `archived`, exactly as
+`GateState.decide` is the only thing that decides a gate — a copy per layer is
+the thing to refuse in review. What each standing permits is on the enum
+itself (`takesPhotos`, `admitsJoiners`, `isReadOnly`), so a caller asks the
+question it actually has rather than re-deriving it from the name.
+
+The `endsAt` it is handed is decided once too: `tripEndsAtFrom` turns the
+plan's day dates in plan order plus the trip's offset into an instant. **A
+trip ends at the end of its *last* day**, so a plan whose last day carries no
+date has not ended and reads `underway` — ending on the last *dated* day would
+archive a half-dated plan while its travellers were still on it, and nothing
+in this package guesses a date.
 
 ## Stops, and `itinerary_parser`
 
@@ -336,6 +364,10 @@ The tests are aimed at the parts that are genuinely subtle, not the getters:
 - `test/trip_id_test.dart` — the minted spelling byte by byte, the version and
   variant nibbles stamped over whatever it is handed, and the ids that are not
   canonical: the pre-mint constant, an upper-cased uuid, a version-1 one.
+- `test/trip_standing_test.dart` — both boundaries to the microsecond, what
+  each standing permits, and a trip read on its own clock rather than UTC's;
+  `test/trip_ends_at_test.dart` — the plan an ending is read off, including
+  the last day that carries no date.
 - `test/invite_code_test.dart` — a code said back in the wrong order, in the
   wrong case and a letter out; the vocabulary's separation, which is what
   makes that safe; and a code dying with its trip and at no other time.
