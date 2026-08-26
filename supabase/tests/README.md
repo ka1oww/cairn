@@ -75,7 +75,7 @@ statement threw.
 
 Nothing here runs against the hosted project, and that is deliberate rather
 than pending. All ten migrations are applied there, but a single anonymous
-account cannot pose as the eight adversaries these 55 checks need, so no RLS
+account cannot pose as the eight adversaries these checks need, so no RLS
 *refusal* has ever been observed on the hosted project — only the permitted
 paths (`../README.md`, "What the hosted project has actually done"). These
 tests exercise core Postgres behaviour — the RLS engine, `auth.uid()`,

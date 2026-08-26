@@ -107,6 +107,6 @@ the app: an invented id would deal a schedule the trip does not have.
 
 Schema **v5** heals a trip written before the mint existed, replacing
 `'local-trip'` with a real uuid. **This is the only time a trip's id changes,
-and it can only happen before the id has ever left the phone** — no hosted
-project exists, so no server has seen any of these ids. After this, an id is
-the trip's for good.
+and it can only happen before the id has ever left the phone** — it was written
+before any hosted project existed, so no server had seen a `'local-trip'` id
+and none ever will. After this, an id is the trip's for good.

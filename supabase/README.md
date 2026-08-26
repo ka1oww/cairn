@@ -737,12 +737,12 @@ remote edit back down.
 
 **What it still does not prove.** The environment in `tests/supabase_env.sql`
 is a reconstruction of the parts a migration sees, not a Supabase clone; it is
-still what the 55 RLS checks run against, because a single anonymous account
-cannot pose as the eight adversaries they need. Nothing has exercised **more
-than one account at once** on the hosted project, so no RLS *refusal* has been
-observed there — only the permitted paths. GoTrue's real providers (identity
-linking, Apple's private relay), the edge functions, R2 and `pg_cron` were not
-exercised at all, and no photo has ever moved.
+still what the adversarial checks above run against, because a single anonymous
+account cannot pose as the eight adversaries they need. Nothing has exercised
+**more than one account at once** on the hosted project, so no RLS *refusal*
+has been observed there — only the permitted paths. GoTrue's real providers
+(identity linking, Apple's private relay), the edge functions, R2 and
+`pg_cron` were not exercised at all, and no photo has ever moved.
 
 ### A trap worth knowing before adding a test
 

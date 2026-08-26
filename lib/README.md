@@ -11,7 +11,7 @@ imports are the arrows:
 | `logic/` | LOGIC — pure decision cores inside app state's reach | `repositories/` value types, the domain packages; no Flutter, no Riverpod, no IO. Called by `app_state/` (and tests), never by `screens/` |
 | `repositories/` | THE SEAM | `storage/`, `package:cairn_model` |
 | `storage/drift/` | STORAGE (Drift store) | Drift, `package:cairn_model`, the device disk |
-| `storage/remote/` | STORAGE (Supabase/R2 adapter) | `package:http`, `package:cairn_model`, the network |
+| `storage/remote/` | STORAGE (Supabase/R2 adapter) | `package:http`, `package:cairn_model`, the network, and — for the session vault alone (`gotrue_sessions.dart`) — `package:path_provider` and the device disk |
 
 `storage/`'s two directories are peers and neither imports the other. The
 seam above is the only layer that knows both exist — that is what
@@ -40,7 +40,10 @@ Two files sit outside the bands, deliberately:
   `membershipStoreProvider`), and the app must bind each pair to the *same*
   object; binding them apart is how a captured photo or a renamed trip
   silently stops reaching the screen that reads it.
-- **`main.dart`** only calls `bootstrap.dart`.
+- **`main.dart`** imports nothing but `bootstrap.dart`. What it holds is an
+  order, not logic: it resolves who this phone is signed in as *before* it
+  builds the app, so nothing is ever credited to the offline stand-in and then
+  re-credited (the file's own header says why).
 
 ## Where the framework bends the map, written down
 

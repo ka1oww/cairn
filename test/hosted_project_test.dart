@@ -185,8 +185,7 @@ void main() {
       expect(vault.token, 'saved-refresh');
     });
 
-    test('a captive portal answering HTML is unreachable, not a refusal',
-        () async {
+    test('a captive portal answering HTML is unreachable, not a refusal', () async {
       final vault = MemoryVault(
         stored: const StoredSession(
           userId: 'user-a',
