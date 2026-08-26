@@ -1431,7 +1431,8 @@ class _NothingReadView extends ConsumerWidget {
             const SizedBox(height: 14),
             FilledButton(
               key: const Key('paste-something-else'),
-              onPressed: () => ref.read(pasteFlowProvider.notifier).startOver(),
+              onPressed: () =>
+                  ref.read(pasteFlowProvider.notifier).backToTheText(),
               child: Text(
                 review.editingLivePlan
                     ? 'Back to the text'

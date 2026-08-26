@@ -43,6 +43,24 @@ const removedByYouExplanation =
     'Removed by you — kept here, not deleted. Drag it back into a day to '
     'put it back.';
 
+/// The set-aside reasons that came from the person rather than from the
+/// parser: they took the stop out of a day themselves, or their own re-paste
+/// displaced it. Written once, because both the accepted plan being read back
+/// ([PasteFlow.editLivePlan]) and the merge itself have to agree on it —
+/// string comparisons in two places drift apart the moment a third reason is
+/// written. Every reason the merge can file a line under belongs here.
+const _personOriginatedAsideExplanations = <String>{
+  removedByYouExplanation,
+  merge.displacedByRepasteExplanation,
+};
+
+/// Whether a set-aside line got there by the person's own hand. Drives the
+/// tray's title — "set aside" for these, "couldn't place" for the parser's
+/// own unplaced lines — and survives a save and a reopen because it is
+/// derived from the reason that was persisted with the line.
+bool setAsideCameFromThePerson(String explanation) =>
+    _personOriginatedAsideExplanations.contains(explanation);
+
 // ---------------------------------------------------------------------------
 // View models — everything a screen may see, spoken in screen terms.
 // ---------------------------------------------------------------------------
@@ -783,7 +801,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
             text: line.text,
             explanation: line.explanation,
             sourceLineNumber: line.sourceLineNumber,
-            removedByPerson: line.explanation == removedByYouExplanation,
+            removedByPerson: setAsideCameFromThePerson(line.explanation),
           ),
       ],
     );
@@ -811,21 +829,31 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// for the text back are part of what the merge preserves, and a second
   /// read in the other date dialect re-merges these same two things rather
   /// than merging into its own last answer.
+  ///
+  /// **A degenerate draft never becomes the baseline.** A read that found no
+  /// days at all leaves a draft with nothing in it, and freezing *that* would
+  /// leave an empty plan to merge into — a replacement wearing a merge's
+  /// clothes, which is the hatch this slice removed. The last real plan is
+  /// kept instead.
   void _freezeMergeBaseline() {
     final draft = _draft;
     if (draft == null) return;
-    _mergeBaseline = _asConfirmedDays(draft);
+    final frozen = _asConfirmedDays(draft);
+    if (frozen.isEmpty && _mergeBaseline != null) return;
+    _mergeBaseline = frozen;
     _mergeBaselineAside = List.of(draft.aside);
   }
 
   /// Out of the paste box and back into the editor, the plan as it was before
   /// the re-paste was asked for. Nothing has been merged, so there is nothing
   /// to undo.
+  ///
+  /// The frozen baseline stays frozen: while a live plan is being edited,
+  /// once there is a baseline there is always a baseline, so every read from
+  /// here on is a merge whichever door it came through.
   void cancelRepaste() {
     if (!_repastingLivePlan) return;
     _repastingLivePlan = false;
-    _mergeBaseline = null;
-    _mergeBaselineAside = null;
     _rebuildReview();
   }
 
@@ -858,6 +886,24 @@ class PasteFlow extends Notifier<PasteFlowState> {
     state = PasteEditing(initialText: _text);
   }
 
+  /// The way out of the nothing-read state: the box again, holding the text
+  /// that was just read rather than the plan said back.
+  ///
+  /// Over a running trip this is the one route that must *not* re-freeze the
+  /// baseline. The draft that produced a nothing-read has no days in it, so
+  /// re-freezing would hand back an empty box and an empty plan to merge
+  /// into; the baseline the re-paste froze is still the right one, and the
+  /// text the person is being given back is the one that failed to read.
+  void backToTheText() {
+    if (!_editingLivePlan) {
+      state = PasteEditing(initialText: _text);
+      return;
+    }
+    if (_mergeBaseline == null) _freezeMergeBaseline();
+    _repastingLivePlan = true;
+    state = PasteEditing(initialText: _text, repastingLivePlan: true);
+  }
+
   /// The trip has been deleted, so the flow that made it starts again from
   /// nothing. Deliberately not [startOver], which keeps the paste: deleting
   /// is the one act that means gone, and handing back the plan somebody
@@ -885,6 +931,13 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// left it, not the parse it started as. The itinerary is local-only in
   /// this slice; syncing it as a shared fact is later work
   /// (docs/decisions/2026-08-22-grill-round-one.md §2).
+  ///
+  /// One thing the draft holds that the store does not: a set-aside line's
+  /// time. `itinerary_set_asides` has no time column, so a starred stop that
+  /// was set aside — by hand or by a re-paste displacing it — keeps its time
+  /// until this save and no further; dragging it back after a reopen restores
+  /// it unstarred. Pre-existing, and deliberately left for the schema change
+  /// that closes it.
   Future<void> accept() async {
     final draft = _draft;
     if (draft == null) return;
@@ -995,6 +1048,15 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// displaced. Nothing here re-decides any of it; this end carries the
   /// answer into the draft and carries the tray across, so swapping the
   /// module underneath is a file replacement.
+  ///
+  /// One piece of the parse has to survive the merge: **the date a repasted
+  /// day's own title only named.** The merge hands it back on the merged day
+  /// itself ([merge.MergedDay.dateCandidate]) rather than binding it — a day
+  /// the re-paste added whose title says `Nara, 17 June` has a date to offer,
+  /// and dropping the candidate would draw the new day clean and save it with
+  /// its date silently open. It is read off the merged day and never off
+  /// `result.days` by index: the merge returns the current plan's days first
+  /// and the appended ones after, so the two lists do not line up.
   void _mergeReparse() {
     final baseline = _mergeBaseline;
     if (baseline == null) return;
@@ -1008,6 +1070,10 @@ class PasteFlow extends Notifier<PasteFlowState> {
             number: day.number,
             place: day.place,
             date: _asDateTime(day.date),
+            candidate: day.dateCandidate,
+            // A merged day carries no other parser doubt: what the plan
+            // already held was answered before it was accepted, and the merge
+            // does not carry the rest of the parse's misgivings across.
             confidence: ip.Confidence.high,
             stops: [
               for (final stop in day.stops)
@@ -1039,7 +1105,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
             explanation: line.explanation,
             sourceLineNumber: 0,
             time: line.stop.time,
-            removedByPerson: true,
+            removedByPerson: setAsideCameFromThePerson(line.explanation),
           ),
         for (final line in result.unplacedLines)
           _DraftAside(
@@ -1070,9 +1136,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
       ),
   ];
 
-  static model.CalendarDate? _asCalendarDate(DateTime? date) => date == null
-      ? null
-      : model.CalendarDate.fromDateTimeIgnoringZone(date);
+  static model.CalendarDate? _asCalendarDate(DateTime? date) =>
+      date == null ? null : model.CalendarDate.fromDateTimeIgnoringZone(date);
 
   static DateTime? _asDateTime(model.CalendarDate? date) =>
       date == null ? null : DateTime(date.year, date.month, date.day);

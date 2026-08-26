@@ -129,7 +129,12 @@ import what is written there, not here.
   and overwrite the trip with whatever text was in the box. That is the hatch
   this removed. A day the merge leaves in place keeps its **number**,
   and that alone is what keeps its photographs: `photos.dayNumber` is the only
-  link, and nothing re-files photos when a plan is saved.
+  link, and nothing re-files photos when a plan is saved. The merge never
+  renumbers, so that holds for every re-paste, not a subset of them. One
+  known gap remains: a displaced line's time —
+  `itinerary_set_asides` has no time column, so a set-aside stop's star
+  survives only until Save, and dragging it back after a reopen restores it
+  unstarred. Closing that needs a schema change.
 - **The phone mints the trip's id, and the server keeps it**
   (`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`). A trip must be
   startable in flight mode, and the ping schedule seeds itself from the id, so

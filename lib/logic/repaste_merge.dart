@@ -112,6 +112,13 @@ class SetAsideItem {
   final int fromDayNumber;
 
   /// The displaced stop, as it stood in the current plan.
+  ///
+  /// Its time rides along here, but only as far as the next save:
+  /// `itinerary_set_asides` has no time column, so `PasteFlow.accept` writes
+  /// the line's text and reason and drops its time, and dragging it back after
+  /// a reopen restores it unstarred. Pre-existing — a stop the person removed
+  /// by hand loses its time the same way — and closing it needs a schema
+  /// change.
   final Stop stop;
 
   /// The person-showable reason ([displacedByRepasteExplanation]).

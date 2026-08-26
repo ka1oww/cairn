@@ -378,6 +378,131 @@ void main() {
     expect(await storedSetAside(), isEmpty);
   });
 
+  testWidgets('a day the re-paste adds still gets asked about its date', (
+    tester,
+  ) async {
+    // The merge does not carry a date a day's own title only *named* — the
+    // parser hands that back as a candidate, and the phone asks. A merge that
+    // pinned every day to Confidence.high and dropped the candidate would draw
+    // the new day clean and save it with its date silently open.
+    await launch(tester);
+    await accept(tester);
+    await openEditor(tester);
+    await tester.tap(find.byKey(const Key('repaste-plan')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('paste-input')),
+      '${pasteBoxText(tester)}\nDay 4 - Nara, 17 June\n- Todai-ji',
+    );
+    await tester.tap(find.byKey(const Key('read-button')));
+    await tester.pumpAndSettle();
+
+    // The offer is on day 4's header, and only on day 4's: the other three
+    // were dated before the trip started.
+    expect(find.byKey(const Key('date-prompt-4')), findsOneWidget);
+    expect(find.byKey(const Key('date-prompt-1')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('date-prompt-4')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('date-sheet-use-it')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('accept-button')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    final after = await storedPlan();
+    expect(after.length, 4);
+    expect(after[3], '4|2027-06-17|Nara|Todai-ji');
+  });
+
+  testWidgets('"Back to the text" gives the text back, and still merges', (
+    tester,
+  ) async {
+    // The nothing-read state over a running trip: the person emptied the box
+    // down to something with no days in it. The way out must hand back the
+    // text they just read — and must not re-freeze the merge baseline from
+    // that dayless draft, or the next read would merge into nothing, which is
+    // a replacement wearing a merge's clothes.
+    await launch(tester);
+    await accept(tester);
+    final before = await storedPlan();
+    await openEditor(tester);
+    await tester.tap(find.byKey(const Key('repaste-plan')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('paste-input')),
+      'just some words about the trip',
+    );
+    await tester.tap(find.byKey(const Key('read-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('paste-something-else')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('paste-something-else')));
+    await tester.pumpAndSettle();
+
+    // The text is back, not an empty box, and this is still the re-paste door.
+    expect(pasteBoxText(tester), 'just some words about the trip');
+    expect(find.byKey(const Key('cancel-repaste')), findsOneWidget);
+
+    // And a good read from here merges into the ORIGINAL plan: a text saying
+    // only day 1, and saying it without Ueno Park, takes day 1 over and
+    // displaces that one line while days 2 and 3 stay exactly as they were.
+    // Merged into an empty baseline there would be no day 1 to take over,
+    // nothing to displace, and the trip would have been quietly replaced.
+    await tester.enterText(
+      find.byKey(const Key('paste-input')),
+      'Mon 14 June 2027 - Tokyo\n- Senso-ji\n',
+    );
+    await tester.tap(find.byKey(const Key('read-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 line set aside'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('accept-button')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(before, hasLength(3));
+    expect(await storedPlan(), [
+      '1|2027-06-14|Tokyo|Senso-ji',
+      '2|2027-06-15|Kyoto|Fushimi Inari',
+      '3|2027-06-16|Osaka|Dotonbori',
+    ]);
+    expect(await storedSetAside(), ['Ueno Park']);
+  });
+
+  testWidgets('a line the re-paste displaced still reads "set aside" after a '
+      'save and a reopen', (tester) async {
+    await launch(tester);
+    await accept(tester);
+    await openEditor(tester);
+    await tester.tap(find.byKey(const Key('repaste-plan')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('paste-input')),
+      pasteBoxText(tester).replaceAll('Ueno Park\n', ''),
+    );
+    await tester.tap(find.byKey(const Key('read-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('accept-button')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    await openEditor(tester);
+    await tester.tap(find.byKey(const Key('set-aside-tile')));
+    await tester.pumpAndSettle();
+
+    // The person's own re-paste displaced it, so the tray owns it as theirs.
+    expect(find.text('Ueno Park'), findsOneWidget);
+    expect(find.textContaining('set aside'), findsWidgets);
+    expect(find.textContaining("couldn't place"), findsNothing);
+  });
+
   testWidgets('photos stay on the days a merge leaves alone', (tester) async {
     await launch(tester);
     await accept(tester);
