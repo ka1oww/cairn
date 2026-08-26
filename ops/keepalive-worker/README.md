@@ -26,7 +26,8 @@ of these two ways instead:
 cd ops/keepalive-worker
 wrangler dev --test-scheduled
 # then, in another shell:
-curl 'http://localhost:8787/__scheduled?cron=0+1+*+*+1'
+# the cron must be spelled exactly as wrangler.jsonc has it:
+curl 'http://localhost:8787/__scheduled?cron=0+1+*+*+1,3,5'
 ```
 
 or, against the deployed Worker, use the **Trigger** button on its
