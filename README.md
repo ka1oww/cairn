@@ -19,9 +19,12 @@ This is a passion project, not a business. There is no monetisation goal.
 
 Under construction, and running. The app builds and opens on a phone: paste a
 rough itinerary, confirm what the parser read, and land on **Today** — the day
-screen, which is also the screen the trail will open for any other day. Four
-pure-Dart domain packages sit under it. The trail, the pool, capture, the daily
-ping and every server call are not built yet.
+screen the Trail opens for every other day too. The Trail, the Pool and the
+capture that fills it are built, and four pure-Dart domain packages sit under
+them. Nothing buzzes yet: the daily ping's schedule is real but nothing is
+registered with iOS. The one server path that exists — the itinerary and the
+roster syncing to every phone — is built and tested but dormant: it waits on a
+hosted project to point at and a session to speak as.
 
 `docs/roadmap.md` is the authority on what is built, what is not, and the order
 the rest arrives in; `docs/architecture.md` maps every node and is honest about
@@ -38,10 +41,10 @@ keep, measured against a real camera roll rather than estimated.
   weighed against; the argument was first made in working code in
   `learning/riverpod-drift-demo/`.
 - **Supabase** (Postgres) and **Cloudflare R2** for the minimal backend, which
-  holds only the shared facts: the photo pool, trip membership and the shared
-  trip clock. The trail, the stars and the daily ping are computed on the
-  phone, so the app works fully offline. The schema is written and exercised against a local
-  Postgres; no hosted project exists yet.
+  holds only the shared facts: the photo pool, trip membership, the itinerary
+  and the shared trip clock. The trail, the stars and the daily ping are
+  computed on the phone, so the app works fully offline. The schema is written
+  and exercised against a local Postgres; no hosted project exists yet.
 - **Sign in with Apple** as the first auth route. Not built.
 
 ## Layout

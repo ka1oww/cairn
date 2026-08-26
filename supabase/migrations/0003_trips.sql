@@ -74,11 +74,12 @@ create table if not exists public.trips (
 --     time, and
 --   * a day that changes country holding the clock it started in.
 --
--- Both need the itinerary, which stays on the phone by decision, so putting
--- them in this table would mean syncing the itinerary -- a bigger change than
--- this correctness pass, and one the captain has not asked for. Until then a
--- trip that crosses zones runs on the clock it was created with, and the
--- daylight-saving slide is documented rather than solved.
+-- Both need the itinerary, which 0010 has since made a shared fact, so the
+-- ingredients now exist -- but deriving a per-day clock from them is a change
+-- to what a trip's clock *means*, not a place to put a column, and nobody has
+-- asked for it. Until then a trip that crosses zones runs on the clock it was
+-- created with, and the daylight-saving slide is documented rather than
+-- solved.
 
 drop trigger if exists trips_touch_updated_at on public.trips;
 create trigger trips_touch_updated_at

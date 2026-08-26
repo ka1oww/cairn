@@ -164,8 +164,9 @@ built and answers every case this phone can see; for a well-formed code
 belonging to somebody else's trip it says so plainly rather than spinning.
 That last step is Phase 2 and nothing else.
 
-The itinerary is local-only until it becomes the shared, propagated fact of
-Phase 2. A pool of one phone's
+The itinerary is local-only in practice: the sync that makes it a shared,
+propagated fact is built, but it stays dormant until Phase 2 gives it a hosted
+project and a sign-in. A pool of one phone's
 photos is likewise only half the Pool — nobody else's bytes can arrive until
 Phase 2 moves them, and that is also what the gate is waiting on to matter.
 Still not built: the day page's photo timeline, the Trail's filled node, and
@@ -219,6 +220,14 @@ from object storage, and the itinerary as a shared fact — edited once,
 propagated to every phone, so the ping schedule is never dealt from a stale
 roster or a stale plan
 ([grill round one](decisions/2026-08-22-grill-round-one.md) §2).
+
+**The last of those has landed early, and dormant.** The itinerary and the
+roster are stored, merged last-write-wins per day, and reconciled by
+`lib/repositories/itinerary_sync.dart` over a first slice of the Supabase
+adapter. It is built and tested end to end against a fake backend, and it does
+nothing at all until this phase gives it the two things it is missing: a hosted
+project to point at, and a session to speak as. Accounts, the pool and the
+bytes are still the whole of the work here.
 
 The pool stores **originals**; resizing is for display only (§3 of the same
 decision). The bill has now been measured rather than guessed at:
@@ -332,8 +341,11 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
   guess covers a neighbourhood of near-spellings. Sayable was the point and
   the trade is the decision's; the rate limit it assumes is not written yet,
   at the database level or above it.
-- The itinerary as a shared, propagated fact; membership changes reaching every
-  phone.
+- Wake the itinerary and roster sync. The whole path is written and tested
+  (`lib/repositories/itinerary_sync.dart` over
+  `supabase/migrations/0010_trip_itinerary.sql`), and dormant: it has no hosted
+  project to point at and no session to speak as, so every reconcile reports
+  `dormant` and writes nothing.
 - The trip's close at trip end + 14 days as a *stored* rule. It is derived
   correctly on the phone now (`cairn_model`'s `tripClosesAt`, which is what
   kills an invite code), but it is derived from the plan each time rather than

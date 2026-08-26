@@ -296,7 +296,7 @@
 <div class="band" style="top:212px"><span>App state — Riverpod &amp; services</span><em>partial — the paste flow's state, the day view, the trail view, the pool view, the ping schedule and the capture flow; the import sweep not built</em></div>
 <div class="band" style="top:415px"><span>Platform edges (iOS)</span><em>partial — the camera is driven behind a seam; the rest not wired · services know the platform, the platform knows nothing of Cairn</em></div>
 <div class="band" style="top:562px"><span>The repositories seam</span><em>partial — scaffolded · the most expensive layer to skip</em></div>
-<div class="band" style="top:772px"><span>Storage</span><em>partial — Drift holds the itinerary and the photo index, remote not built; only the seam knows both exist</em></div>
+<div class="band" style="top:772px"><span>Storage</span><em>partial — Drift holds the itinerary and the photo index; the remote side speaks the shared facts and nothing else yet; only the seam knows both exist</em></div>
 <div class="band" style="top:952px"><span>Backend</span><em>partial · schema verified on local Postgres 17 — no hosted project, nothing deployed</em></div>
 <div class="band" style="top:1460px"><span>Domain — pure Dart</span><em>built · four siblings: none imports another, none imports cairn_model — the app layer translates</em></div>
 
@@ -400,19 +400,20 @@
     <i>deletions need refetch</i>
     <i>package dialects → vocabulary</i>
     <i>itinerary in and out</i>
-    <i class="open">sync &amp; conflict policy undecided</i>
+    <i>shared facts reconcile: last write wins, per day</i>
+    <i class="open">photo sync &amp; conflict policy undecided</i>
   </div>
 </div>
 
 <!-- ======================= storage ======================= -->
 <div class="node partial" style="left:150px;top:805px;width:410px;height:120px">
   <span class="chip">partial</span><h4>Drift store — local SQLite</h4>
-  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Holds the itinerary tables (days, stops, set-aside lines), <code>photos</code> — the local index whose bytes sit beside it on disk, the same split as Postgres and R2 — and the trip: <code>trip_facts</code>, <code>trip_members</code> (no role column, ever) and <code>trip_invite_codes</code> (no expiry column; a code dies with its trip). Schema v5; the trip_drafts demo is dropped, and v5 gives a trip written before the mint a real uuid. <code>trip_facts.trip_id</code> is minted here on the phone &mdash; the counterpart of <code>trips.id</code>'s <code>default gen_random_uuid()</code>, moved so a trip can be started with no connection.</p>
+  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Holds the itinerary tables (days, stops, set-aside lines), <code>photos</code> — the local index whose bytes sit beside it on disk, the same split as Postgres and R2 — and the trip: <code>trip_facts</code>, <code>trip_members</code> (no role column, ever) and <code>trip_invite_codes</code> (no expiry column; a code dies with its trip). Schema v6; the trip_drafts demo is dropped, v5 gives a trip written before the mint a real uuid, and v6 adds every day's merge clock plus <code>sync_states</code> &mdash; the cursor into the shared copy, and the one table here holding no shared fact. <code>trip_facts.trip_id</code> is minted here on the phone &mdash; the counterpart of <code>trips.id</code>'s <code>default gen_random_uuid()</code>, moved so a trip can be started with no connection.</p>
   <span class="sub">choice validated in the demo, built on, and recorded in docs/decisions/2026-08-25-riverpod-and-drift.md</span>
 </div>
-<div class="node nb" style="left:800px;top:805px;width:410px;height:120px">
-  <span class="chip">not built</span><h4>Supabase / R2 client adapter</h4>
-  <p>Session JWT, RLS-filtered queries, edge-function calls, presigned byte transfers — behind one interface. Nothing else in the app may import a network symbol.</p>
+<div class="node partial" style="left:800px;top:805px;width:410px;height:120px">
+  <span class="chip">partial</span><h4>Supabase / R2 client adapter</h4>
+  <p>Session JWT, RLS-filtered queries, edge-function calls, presigned byte transfers — behind one interface. Nothing else in the app may import a network symbol. Built: the shared facts' half (<code>lib/storage/remote/</code>), plain HTTP over PostgREST. Not built: auth, the edge functions, R2. Where the project lives is a <code>--dart-define</code>, never a checked-in file &mdash; unset, it refuses before sending anything.</p>
 </div>
 
 <!-- ======================= backend ======================= -->
@@ -432,9 +433,9 @@
 <div class="node partial" style="left:670px;top:1180px;width:430px;height:135px">
   <span class="chip">partial</span><h4>Postgres schema + RLS</h4>
   <p><b>Membership is the root of every access check.</b> profiles · trips (the one shared clock)
-  · trip_members · trip_invites · photos · day_unlocks · day_pages ·
-  <code>day_page_is_open</code> · <code>redeem_trip_invite</code>.
-  Verified by a 55-probe local suite; starter-and-container decisions not yet implemented.</p>
+  · trip_members · trip_invites · photos · day_unlocks · day_pages · the itinerary's four ·
+  <code>day_page_is_open</code> · <code>redeem_trip_invite</code> · <code>sync_trip_itinerary</code> · <code>trip_roster</code>.
+  Verified by a 96-probe local suite; starter-and-container decisions not yet implemented.</p>
 </div>
 <div class="node nb" style="left:670px;top:1340px;width:230px">
   <span class="chip">not built</span><h4>Supabase Auth</h4>
@@ -538,10 +539,16 @@
       the real camera path works.</li>
       <li><b>No download path.</b> Only uploads exist. The requirements are written down — which is
       exactly why the blank is the most dangerous one on the map.</li>
-      <li><b>Sync &amp; conflict policy undecided</b> beyond three written notes; nothing
-      reconciles rows against R2 objects in either direction.</li>
+      <li><b>Sync &amp; conflict policy is settled for the itinerary and the roster</b> &mdash;
+      last write wins, per day, no conflict UI and no CRDT, which costs what last-write-wins
+      always costs: a phone with a fast clock wins edits it should lose. For photos it is
+      still undecided beyond three written notes, and nothing reconciles rows against R2
+      objects in either direction.</li>
+      <li><b>The shared roster will replace this phone's, and <code>localMemberId</code> is still
+      <code>'me'</code>.</b> Nothing can hit that today (no session, so no roster ever lands), but
+      whoever builds sign-in has to make the local id the signed-in user's in the same change.</li>
       <li><b>One fixed clock per trip on the server (v1).</b> First/last-day windows and the
-      country-change rule live only on the phone; grill round one §2 makes the itinerary a synced shared fact, but nothing implements that yet.</li>
+      country-change rule live only on the phone. Grill round one §2 made the itinerary a synced shared fact and the schema now holds it, merged last-write-wins per day; that rule is written twice on purpose &mdash; in <code>sync_trip_itinerary</code> and in <code>lib/repositories/itinerary_sync.dart</code> &mdash; and never three times. The whole path is dormant until there is a hosted project and a sign-in.</li>
       <li><b>The book’s interior is designed</b> — round 9 drew it against the captain’s printed reference; the printed page is not designed, and the book is deliberately after the first release.</li>
       <li><b>In-transit photos on a multi-zone day are parked</b> — refusal (<code>outsideTrip</code>)
       plus manual placement is the current answer.</li>

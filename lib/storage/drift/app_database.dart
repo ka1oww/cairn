@@ -8,6 +8,14 @@ import 'package:drift_flutter/drift_flutter.dart';
 
 part 'app_database.g.dart';
 
+/// The instant a row carries before anything has ever synced.
+///
+/// It is a real timestamp rather than null so the merge comparison is total —
+/// `revisedAtUtcIso` is the plan's clock and a null clock would need a special
+/// case at every comparison — and it is the epoch so that anything a phone or
+/// a server has actually said beats it.
+const beforeAnySync = '1970-01-01T00:00:00.000Z';
+
 /// One day of the confirmed itinerary, as accepted on the paste-and-confirm
 /// screen. The date is nullable on purpose: the parser never guesses a date
 /// it cannot resolve, and a person is allowed to accept the plan with a date
@@ -20,6 +28,22 @@ class ItineraryDays extends Table {
   TextColumn get dateIso => text().nullable()();
 
   TextColumn get place => text().nullable()();
+
+  /// When this day was last *changed*, on whichever phone changed it.
+  ///
+  /// **The merge clock**, and the local half of
+  /// `supabase/migrations/0010_trip_itinerary.sql`'s
+  /// `trip_itinerary_days.revised_at`. The itinerary is a shared stored fact
+  /// merged last-write-wins per day, so every day needs its own instant: a
+  /// day nobody touched must be able to lose to nothing, and a day this phone
+  /// edited offline must be able to win when it reconnects.
+  ///
+  /// It is stamped only when the day's *content* changes. Saving a plan whose
+  /// day 3 is byte-for-byte what was already stored leaves day 3's clock
+  /// alone — otherwise every save would claim every day and a phone that
+  /// merely re-accepted a plan would clobber everyone else's edits.
+  TextColumn get revisedAtUtcIso =>
+      text().withDefault(const Constant(beforeAnySync))();
 
   @override
   Set<Column> get primaryKey => {number};
@@ -206,6 +230,51 @@ class TripInviteCodes extends Table {
   Set<Column> get primaryKey => {code};
 }
 
+/// What this phone knows about the trip's *shared* copy of itself.
+///
+/// **Exactly one row, always id 1**, for the reason [TripFacts] has one. It is
+/// deliberately a table of its own rather than columns on [TripFacts]: the
+/// itinerary is written before the trip is started (accepting a plan saves the
+/// plan, then starts the trip), so a phone can hold a plan revision before it
+/// holds a trip at all.
+///
+/// Nothing here is a shared fact. Every column is this phone's own record of
+/// what it has said to the server and what the server last said back — the
+/// cursor, not the cargo.
+class SyncStates extends Table {
+  /// Always 1.
+  IntColumn get id => integer()();
+
+  /// The plan's *shape* revision: when the set of day numbers last changed.
+  ///
+  /// Separate from any day's own clock because deleting a day is not an edit
+  /// to a day — there is no row left to carry the instant. A push hands this
+  /// over so the server can tell "I dropped day 4" from "I have never heard
+  /// of day 4", which is the difference between removing a day and silently
+  /// deleting somebody else's new one
+  /// (`supabase/migrations/0010_trip_itinerary.sql`).
+  TextColumn get planRevisedAtUtcIso =>
+      text().withDefault(const Constant(beforeAnySync))();
+
+  /// The set-aside pocket's clock. The pocket has no days, so it is one atom
+  /// with one instant — and the instant lives here rather than on the lines so
+  /// that *emptying* the pocket still carries a revision.
+  TextColumn get pocketRevisedAtUtcIso =>
+      text().withDefault(const Constant(beforeAnySync))();
+
+  /// When the shared `trips` row was last confirmed to exist, or null while
+  /// this trip has never been seen by a server.
+  TextColumn get tripRowSyncedAtUtcIso => text().nullable()();
+
+  /// When the itinerary and the roster last reconciled successfully. Null
+  /// means never; an old value means the phone has been offline since.
+  TextColumn get itinerarySyncedAtUtcIso => text().nullable()();
+  TextColumn get rosterSyncedAtUtcIso => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     ItineraryDays,
@@ -215,6 +284,7 @@ class TripInviteCodes extends Table {
     TripFacts,
     TripMembers,
     TripInviteCodes,
+    SyncStates,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -226,7 +296,7 @@ class AppDatabase extends _$AppDatabase {
   final TripId Function() mint;
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -290,6 +360,30 @@ class AppDatabase extends _$AppDatabase {
               .write(TripFactsCompanion(tripId: Value(mint().value)));
         }
       }
+      if (from < 6) {
+        // The itinerary becomes a shared stored fact
+        // (docs/decisions/2026-08-22-grill-round-one.md §2), so every day
+        // grows the clock the merge is decided on and the phone grows a
+        // record of what it has told a server.
+        await m.addColumn(itineraryDays, itineraryDays.revisedAtUtcIso);
+        await m.createTable(syncStates);
+        // A plan already on this phone is the newest plan in existence: no
+        // Supabase project has ever been applied, so no server has seen any
+        // of it. Stamping it *now* rather than leaving it at the epoch is
+        // what stops the first sync of an upgraded phone reading as "I have
+        // nothing to say" and losing the whole plan to an empty server.
+        await customStatement(
+          "update itinerary_days set revised_at_utc_iso = "
+          "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+        );
+        await customStatement(
+          'insert into sync_states (id, plan_revised_at_utc_iso, '
+          'pocket_revised_at_utc_iso) '
+          "select 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), "
+          "strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
+          'where exists (select 1 from itinerary_days)',
+        );
+      }
     },
   );
 
@@ -312,9 +406,24 @@ class AppDatabase extends _$AppDatabase {
     itinerarySetAsides,
   )..orderBy([(t) => OrderingTerm.asc(t.position)])).get();
 
-  /// Replaces the stored itinerary wholesale, atomically. There is one
-  /// itinerary per phone in this slice (the trip is local-only until
-  /// cairn-shared-state-sync), so "save" means "replace".
+  /// The days, read once instead of watched — what the sync hands over.
+  Future<List<ItineraryDay>> readItineraryDays() => (select(
+    itineraryDays,
+  )..orderBy([(t) => OrderingTerm.asc(t.number)])).get();
+
+  /// Replaces the stored itinerary wholesale, atomically, **and stamps the
+  /// merge clocks** for whatever actually changed.
+  ///
+  /// "Replace" is still how a save is spelled — the confirm screen hands over
+  /// the whole plan and always did — but the itinerary is a shared fact now
+  /// (`supabase/migrations/0010_trip_itinerary.sql`), so a wholesale replace
+  /// that stamped every day would have this phone claim authorship of days it
+  /// merely still held, and clobber everyone else's edits on the next push.
+  /// So each day is compared with what is stored and only a day whose content
+  /// differs takes [nowUtcIso]; the rest keep the instant they came in with.
+  ///
+  /// The plan's *shape* revision moves only when the set of day numbers moves,
+  /// and the pocket's only when the pocket's contents do, for the same reason.
   ///
   /// Takes plain records rather than Drift companions so the repository
   /// above needs no Drift import — the seam may only know this band's
@@ -323,40 +432,234 @@ class AppDatabase extends _$AppDatabase {
     required List<ItineraryDayRecord> days,
     required List<ItineraryStopRecord> stops,
     required List<ItinerarySetAsideRecord> setAsides,
+    required String nowUtcIso,
   }) {
     return transaction(() async {
-      await delete(itineraryStops).go();
-      await delete(itinerarySetAsides).go();
-      await delete(itineraryDays).go();
-      await batch((b) {
-        b.insertAll(itineraryDays, [
+      final storedDays = await readItineraryDays();
+      final storedStops = await readItineraryStops();
+      final storedAsides = await readItinerarySetAsides();
+      final storedSync = await _syncStateRow();
+
+      final storedRevisions = {
+        for (final day in storedDays) day.number: day.revisedAtUtcIso,
+      };
+      final storedSignatures = {
+        for (final day in storedDays)
+          day.number: _daySignature(
+            dateIso: day.dateIso,
+            place: day.place,
+            stops: [
+              for (final stop in storedStops)
+                if (stop.dayNumber == day.number)
+                  (stop.position, stop.stopText, stop.timeIso),
+            ],
+          ),
+      };
+
+      final revisions = <int, String>{};
+      for (final day in days) {
+        final signature = _daySignature(
+          dateIso: day.dateIso,
+          place: day.place,
+          stops: [
+            for (final stop in stops)
+              if (stop.dayNumber == day.number)
+                (stop.position, stop.text, stop.timeIso),
+          ],
+        );
+        final unchanged = storedSignatures[day.number] == signature;
+        revisions[day.number] = unchanged
+            ? storedRevisions[day.number] ?? nowUtcIso
+            : nowUtcIso;
+      }
+
+      final shapeMoved =
+          storedRevisions.keys.toSet().length != revisions.length ||
+          !storedRevisions.keys.every(revisions.containsKey);
+      final pocketMoved =
+          _pocketSignature([
+            for (final line in storedAsides)
+              (
+                line.position,
+                line.sourceLineNumber,
+                line.lineText,
+                line.explanation,
+              ),
+          ]) !=
+          _pocketSignature([
+            for (final line in setAsides)
+              (
+                line.position,
+                line.sourceLineNumber,
+                line.text,
+                line.explanation,
+              ),
+          ]);
+
+      await _writeItinerary(
+        days: [
           for (final day in days)
-            ItineraryDaysCompanion.insert(
-              number: Value(day.number),
-              dateIso: Value(day.dateIso),
-              place: Value(day.place),
+            (
+              number: day.number,
+              dateIso: day.dateIso,
+              place: day.place,
+              revisedAtUtcIso: revisions[day.number] ?? nowUtcIso,
             ),
-        ]);
-        b.insertAll(itineraryStops, [
-          for (final stop in stops)
-            ItineraryStopsCompanion.insert(
-              dayNumber: stop.dayNumber,
-              position: stop.position,
-              stopText: stop.text,
-              timeIso: Value(stop.timeIso),
-            ),
-        ]);
-        b.insertAll(itinerarySetAsides, [
-          for (final line in setAsides)
-            ItinerarySetAsidesCompanion.insert(
-              position: line.position,
-              sourceLineNumber: line.sourceLineNumber,
-              lineText: line.text,
-              explanation: line.explanation,
-            ),
-        ]);
-      });
+        ],
+        stops: stops,
+        setAsides: setAsides,
+      );
+      await _writeSyncState(
+        SyncStatesCompanion(
+          planRevisedAtUtcIso: Value(
+            shapeMoved ? nowUtcIso : storedSync.planRevisedAtUtcIso,
+          ),
+          pocketRevisedAtUtcIso: Value(
+            pocketMoved ? nowUtcIso : storedSync.pocketRevisedAtUtcIso,
+          ),
+        ),
+      );
     });
+  }
+
+  /// Writes the itinerary the *server* handed back, carrying its revisions
+  /// rather than stamping new ones.
+  ///
+  /// The counterpart of [replaceItinerary] and deliberately a second method:
+  /// a local save decides what changed and stamps it, while an applied merge
+  /// has already been decided — re-stamping it here would make every pull
+  /// look like a local edit and start a push storm between two phones.
+  Future<void> applyRemoteItinerary({
+    required List<SyncedDayRecord> days,
+    required List<ItineraryStopRecord> stops,
+    required List<ItinerarySetAsideRecord> setAsides,
+    required String planRevisedAtUtcIso,
+    required String pocketRevisedAtUtcIso,
+    required String syncedAtUtcIso,
+  }) {
+    return transaction(() async {
+      await _writeItinerary(days: days, stops: stops, setAsides: setAsides);
+      await _writeSyncState(
+        SyncStatesCompanion(
+          planRevisedAtUtcIso: Value(planRevisedAtUtcIso),
+          pocketRevisedAtUtcIso: Value(pocketRevisedAtUtcIso),
+          itinerarySyncedAtUtcIso: Value(syncedAtUtcIso),
+        ),
+      );
+    });
+  }
+
+  Future<void> _writeItinerary({
+    required List<SyncedDayRecord> days,
+    required List<ItineraryStopRecord> stops,
+    required List<ItinerarySetAsideRecord> setAsides,
+  }) async {
+    await delete(itineraryStops).go();
+    await delete(itinerarySetAsides).go();
+    await delete(itineraryDays).go();
+    await batch((b) {
+      b.insertAll(itineraryDays, [
+        for (final day in days)
+          ItineraryDaysCompanion.insert(
+            number: Value(day.number),
+            dateIso: Value(day.dateIso),
+            place: Value(day.place),
+            revisedAtUtcIso: Value(day.revisedAtUtcIso),
+          ),
+      ]);
+      b.insertAll(itineraryStops, [
+        for (final stop in stops)
+          ItineraryStopsCompanion.insert(
+            dayNumber: stop.dayNumber,
+            position: stop.position,
+            stopText: stop.text,
+            timeIso: Value(stop.timeIso),
+          ),
+      ]);
+      b.insertAll(itinerarySetAsides, [
+        for (final line in setAsides)
+          ItinerarySetAsidesCompanion.insert(
+            position: line.position,
+            sourceLineNumber: line.sourceLineNumber,
+            lineText: line.text,
+            explanation: line.explanation,
+          ),
+      ]);
+    });
+  }
+
+  /// Everything about a day that two phones could disagree over. Ordering is
+  /// part of it: dragging a stop up a day changes nothing else about it.
+  static String _daySignature({
+    required String? dateIso,
+    required String? place,
+    required List<(int, String, String?)> stops,
+  }) {
+    final ordered = [...stops]..sort((a, b) => a.$1.compareTo(b.$1));
+    return [
+      dateIso ?? '',
+      place ?? '',
+      for (final (position, text, timeIso) in ordered)
+        '$position\u0000$text\u0000${timeIso ?? ''}',
+    ].join('\u0001');
+  }
+
+  static String _pocketSignature(List<(int, int, String, String)> lines) {
+    final ordered = [...lines]..sort((a, b) => a.$1.compareTo(b.$1));
+    return [
+      for (final (position, source, text, explanation) in ordered)
+        '$position\u0000$source\u0000$text\u0000$explanation',
+    ].join('\u0001');
+  }
+
+  // ------------------------------------------------------------ sync state
+
+  /// What this phone has told a server, and heard back. Never null: the row
+  /// is created on first read, so no caller has to hold "there is no state
+  /// yet" as a separate case from "nothing has synced yet".
+  Future<SyncState> readSyncState() => _syncStateRow();
+
+  Future<SyncState> _syncStateRow() async {
+    final existing = await (select(
+      syncStates,
+    )..where((t) => t.id.equals(_theOneTrip))).getSingleOrNull();
+    if (existing != null) return existing;
+    await into(syncStates)
+        .insert(SyncStatesCompanion.insert(id: const Value(_theOneTrip)));
+    return (select(
+      syncStates,
+    )..where((t) => t.id.equals(_theOneTrip))).getSingle();
+  }
+
+  /// Records what the last reconcile achieved. Only the fields named are
+  /// written, so a roster that synced while the itinerary did not leaves the
+  /// itinerary's cursor alone.
+  Future<void> markSynced({
+    String? tripRowSyncedAtUtcIso,
+    String? itinerarySyncedAtUtcIso,
+    String? rosterSyncedAtUtcIso,
+  }) async {
+    await _syncStateRow();
+    await _writeSyncState(
+      SyncStatesCompanion(
+        tripRowSyncedAtUtcIso: tripRowSyncedAtUtcIso == null
+            ? const Value.absent()
+            : Value(tripRowSyncedAtUtcIso),
+        itinerarySyncedAtUtcIso: itinerarySyncedAtUtcIso == null
+            ? const Value.absent()
+            : Value(itinerarySyncedAtUtcIso),
+        rosterSyncedAtUtcIso: rosterSyncedAtUtcIso == null
+            ? const Value.absent()
+            : Value(rosterSyncedAtUtcIso),
+      ),
+    );
+  }
+
+  Future<void> _writeSyncState(SyncStatesCompanion companion) async {
+    await _syncStateRow();
+    await (update(
+      syncStates,
+    )..where((t) => t.id.equals(_theOneTrip))).write(companion);
   }
 
   /// Every photo on this phone, oldest first.
@@ -488,6 +791,50 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Writes the roster the server handed over, replacing this phone's copy.
+  ///
+  /// Wholesale, and safely so: the server only answers a member, so the
+  /// roster it returns necessarily contains whoever asked
+  /// (`is_trip_member` gates every read of it). A merge that tried to
+  /// preserve a local row the server did not name would resurrect somebody
+  /// who had left — and a party with a ghost in it deals a ping to nobody
+  /// (`packages/trip_moments`: the party is an input).
+  ///
+  /// [startedByMemberId] rides along because it moves for the same reason and
+  /// at the same moment: on the server the starter is `trips.created_by`, and
+  /// a roster of account ids beside a starter who is still this phone's local
+  /// stand-in would leave `removalPowerHolder` answering about a person who
+  /// is not on the list.
+  Future<void> replaceRoster({
+    required List<TripMemberRecord> members,
+    String? startedByMemberId,
+    String? name,
+  }) {
+    return transaction(() async {
+      await delete(tripMembers).go();
+      await batch((b) {
+        b.insertAll(tripMembers, [
+          for (final member in members)
+            TripMembersCompanion.insert(
+              id: member.id,
+              displayName: member.displayName,
+              joinedOnDay: Value(member.joinedOnDay),
+            ),
+        ]);
+      });
+      if (startedByMemberId != null || name != null) {
+        await (update(tripFacts)..where((t) => t.id.equals(_theOneTrip))).write(
+          TripFactsCompanion(
+            startedByMemberId: startedByMemberId == null
+                ? const Value.absent()
+                : Value(startedByMemberId),
+            name: name == null ? const Value.absent() : Value(name),
+          ),
+        );
+      }
+    });
+  }
+
   /// Renames the trip, or clears the name with null.
   Future<int> renameTrip(String? name) =>
       (update(tripFacts)..where((t) => t.id.equals(_theOneTrip))).write(
@@ -530,6 +877,10 @@ class AppDatabase extends _$AppDatabase {
       await delete(tripInviteCodes).go();
       await delete(tripMembers).go();
       await delete(tripFacts).go();
+      // The cursors go with the trip they were cursors into. Leaving them
+      // would tell the next trip's first sync that it had already said
+      // things it never said.
+      await delete(syncStates).go();
     });
   }
 }
@@ -555,8 +906,21 @@ typedef PhotoRecord = ({
   String filePath,
 });
 
+/// The write-side shape [AppDatabase.replaceRoster] accepts.
+typedef TripMemberRecord = ({String id, String displayName, int joinedOnDay});
+
 /// The write-side shapes [AppDatabase.replaceItinerary] accepts.
 typedef ItineraryDayRecord = ({int number, String? dateIso, String? place});
+
+/// The same day, carrying the merge clock it arrived with. Only the sync
+/// speaks this shape: a local save hands over [ItineraryDayRecord] and lets
+/// the store decide which days it is entitled to stamp.
+typedef SyncedDayRecord = ({
+  int number,
+  String? dateIso,
+  String? place,
+  String revisedAtUtcIso,
+});
 typedef ItineraryStopRecord = ({
   int dayNumber,
   int position,

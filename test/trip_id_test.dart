@@ -47,6 +47,22 @@ Directory tempDirectory() {
 
 const you = 'me';
 
+/// Winds a freshly built database back to schema v4, the shape a phone had
+/// before the trip minted its own id.
+///
+/// Everything a later version *added* has to go, not only the version number:
+/// an upgrade that finds its own column already there fails outright. v5
+/// changed no table at all, so v4 and v5 differ only in the number; v6 added
+/// the itinerary's merge clock and the sync cursors
+/// (`supabase/migrations/0010_trip_itinerary.sql` is its other half).
+Future<void> windBackToV4(AppDatabase db) async {
+  await db.customStatement('DROP TABLE sync_states');
+  await db.customStatement(
+    'ALTER TABLE itinerary_days DROP COLUMN revised_at_utc_iso',
+  );
+  await db.customStatement('PRAGMA user_version = 4');
+}
+
 void main() {
   group('starting a trip with nothing to ask', () {
     test('mints an id there and then, and keeps it', () async {
@@ -201,12 +217,10 @@ void main() {
 
       // Stand up exactly what a phone on the old build had: the trip's
       // tables, and the constant every trip on this phone used to carry.
-      // v5 changes no table, so a current schema wound back to user_version 4
-      // *is* a v4 database.
       var db = AppDatabase(NativeDatabase(File(path)));
       await db.startTripIfAbsent(starterId: you, starterDisplayName: 'You');
       await db.customStatement("update trip_facts set trip_id = 'local-trip'");
-      await db.customStatement('pragma user_version = 4');
+      await windBackToV4(db);
       await db.close();
 
       db = AppDatabase(NativeDatabase(File(path)), mint: () => healed);
@@ -225,7 +239,7 @@ void main() {
         starterId: you,
         starterDisplayName: 'You',
       );
-      await db.customStatement('pragma user_version = 4');
+      await windBackToV4(db);
       await db.close();
 
       db = AppDatabase(NativeDatabase(File(path)), mint: () => healed);
@@ -242,7 +256,7 @@ void main() {
       final path = '${tempDirectory().path}/cairn.sqlite';
 
       var db = AppDatabase(NativeDatabase(File(path)));
-      await db.customStatement('pragma user_version = 4');
+      await windBackToV4(db);
       await db.close();
 
       db = AppDatabase(NativeDatabase(File(path)), mint: () => healed);

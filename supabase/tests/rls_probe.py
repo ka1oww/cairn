@@ -10,6 +10,7 @@ filtering to zero rows, not by raising, so "the statement errored" is the wrong
 assertion almost every time. Assert on the state of the table afterwards.
 """
 
+import json
 import os
 import re
 import sys
@@ -428,6 +429,173 @@ def main():
     after_trip = db.run("select trip_id from public.trip_invites where code = 'cedar willow 27'")[0][0]
     check(str(after_trip) == str(before_trip), "and the row's trip_id is unchanged",
           f"{before_trip} -> {after_trip}")
+
+    # ------------------------------------------------- the itinerary as a fact
+    #
+    # The plan is a shared stored fact since 0010_trip_itinerary.sql, merged
+    # last-write-wins per day. That rule is written twice on purpose -- in
+    # `sync_trip_itinerary` and on the phone in `lib/repositories/itinerary_sync.dart`
+    # -- so what matters here is that the SQL half behaves exactly as the Dart
+    # half assumes: a stale day loses, a fresh day wins, a day nobody pushed is
+    # not collaterally rewritten, and a phone that has not synced lately cannot
+    # delete what it has never seen.
+    #
+    # A trip of its own, because the trips above have been deliberately taken
+    # apart -- Alice has left Japan and had her login deleted by this point, and
+    # a merge test wants two members who are both still there.
+    print("\n== the itinerary is a shared fact, merged per day ==")
+
+    norway = str(
+        b.run(
+            """insert into public.trips (name, created_by, timezone, start_date, end_date)
+               values ('Norway', :u, 'Europe/Oslo', current_date, current_date + 4)
+               returning id""",
+            u=bob,
+        )[0][0]
+    )
+    b.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, 'anchor bison 61', :u)",
+          t=norway, u=bob)
+    c.run("select public.redeem_trip_invite('anchor bison 61')")
+
+    def sync(who, trip, plan_at, days, pocket_at="-infinity", pocket=()):
+        """One call, both directions: (status, merged plan) or (status, message)."""
+        status, rows = who.try_run(
+            "select public.sync_trip_itinerary(:t, :plan::timestamptz, :days::jsonb, "
+            ":pocket_at::timestamptz, :pocket::jsonb)",
+            t=trip, plan=plan_at, days=json.dumps(days),
+            pocket_at=pocket_at, pocket=json.dumps(list(pocket)),
+        )
+        if status != "ok":
+            return status, rows
+        payload = rows[0][0]
+        return status, json.loads(payload) if isinstance(payload, str) else payload
+
+    T1, T2, T3 = "2027-06-01T00:00:00Z", "2027-06-02T00:00:00Z", "2027-06-03T00:00:00Z"
+
+    def day(n, revised, place, stops=()):
+        return {
+            "day_number": n, "day_date": None, "place": place, "revised_at": revised,
+            "stops": [{"position": i, "stop_text": s, "time_of_day": None}
+                      for i, s in enumerate(stops)],
+        }
+
+    def numbered(plan):
+        return {d["day_number"]: d for d in plan["days"]}
+
+    def texts(plan, n):
+        return [s["stop_text"] for s in numbered(plan).get(n, {}).get("stops", [])]
+
+    status, plan = sync(b, norway, T1, [day(1, T1, "Oslo", ["Vigeland"]), day(2, T1, "Bergen")])
+    check(status == "ok" and len(plan["days"]) == 2,
+          "a member pushes a plan and gets the merged plan back", repr(plan)[:120])
+    check(texts(plan, 1) == ["Vigeland"],
+          "with each day's stops under it, in order", repr(numbered(plan)[1]["stops"]))
+
+    # Carol pulls by pushing nothing at all -- the joiner's case, and the one
+    # that must delete nothing.
+    status, plan = sync(c, norway, "-infinity", [])
+    check(status == "ok" and len(plan["days"]) == 2,
+          "a member with no plan of her own pulls the whole plan by pushing nothing",
+          repr(status))
+    check(db.run("select count(*) from public.trip_itinerary_days where trip_id = :t",
+                 t=norway)[0][0] == 2,
+          "and deletes nothing by not having it")
+
+    # Carol edits day 2. Bob then pushes the stale copy he still holds.
+    sync(c, norway, T2, [day(1, T1, "Oslo", ["Vigeland"]), day(2, T2, "Bergen", ["Bryggen"])])
+    status, plan = sync(b, norway, T1, [day(1, T1, "Oslo", ["Vigeland"]), day(2, T1, "Bergen")])
+    check(texts(plan, 2) == ["Bryggen"],
+          "a stale push does not overwrite a day somebody edited since", repr(texts(plan, 2)))
+    check(texts(plan, 1) == ["Vigeland"],
+          "and the day it did not lose is left exactly as it was", repr(texts(plan, 1)))
+
+    status, plan = sync(b, norway, T3, [day(1, T3, "Oslo", ["Holmenkollen"]),
+                                        day(2, T2, "Bergen", ["Bryggen"])])
+    check(texts(plan, 1) == ["Holmenkollen"],
+          "a newer push does overwrite, stops replaced with the day", repr(texts(plan, 1)))
+
+    # Deletion. Carol adds a day 3; Bob, whose view of the plan's shape is older
+    # than that, re-pushes a two-day plan.
+    sync(c, norway, T3, [day(1, T3, "Oslo", ["Holmenkollen"]),
+                         day(2, T2, "Bergen", ["Bryggen"]),
+                         day(3, T3, "Tromso")])
+    status, plan = sync(b, norway, T2, [day(1, T3, "Oslo", ["Holmenkollen"]),
+                                        day(2, T2, "Bergen", ["Bryggen"])])
+    check(sorted(numbered(plan)) == [1, 2, 3],
+          "a phone cannot delete a day added after the shape it last saw",
+          repr(sorted(numbered(plan))))
+    status, plan = sync(b, norway, T3, [day(1, T3, "Oslo", ["Holmenkollen"]),
+                                        day(2, T2, "Bergen", ["Bryggen"])])
+    check(sorted(numbered(plan)) == [1, 2],
+          "but a phone whose view is current can drop a day", repr(sorted(numbered(plan))))
+    check(db.run("select count(*) from public.trip_itinerary_stops "
+                 "where trip_id = :t and day_number = 3", t=norway)[0][0] == 0,
+          "and the dropped day takes its stops with it")
+
+    # The merged plan comes back in the plan's own order, and the day number is
+    # a number. Ordering it as text hands back 1, 10, 11, 12, 2, 3... which the
+    # phone's settled-check reads as a plan that disagrees with its own, so it
+    # writes, and its own stream asks for the next sync, forever. Every check
+    # above indexes the days into a dict before asserting, which is exactly why
+    # none of them could see it -- so assert the array itself, and with enough
+    # days for a text sort to differ from a numeric one.
+    long_plan = [day(n, T3, f"Stop {n}") for n in range(1, 13)]
+    status, plan = sync(b, norway, T3, long_plan)
+    returned = [d["day_number"] for d in plan["days"]]
+    check(status == "ok" and returned == list(range(1, 13)),
+          "a plan of twelve days comes back in ascending numeric day order",
+          repr(returned))
+    status, plan = sync(c, norway, "-infinity", [])
+    returned = [d["day_number"] for d in plan["days"]]
+    check(returned == list(range(1, 13)),
+          "and a pure pull is ordered the same way, not by the text of the number",
+          repr(returned))
+
+    print("\n== the set-aside pocket is one atom, and emptying it still counts ==")
+    onsen = [{"position": 0, "source_line_number": 9,
+              "line_text": "book the cabin", "explanation": "no day named"}]
+    sync(b, norway, T3, [day(1, T3, "Oslo", ["Holmenkollen"]), day(2, T2, "Bergen")],
+         pocket_at=T2, pocket=onsen)
+    status, plan = sync(c, norway, T3, [day(1, T3, "Oslo", ["Holmenkollen"]), day(2, T2, "Bergen")],
+                        pocket_at=T3, pocket=[])
+    check(plan["set_asides"] == [], "a newer push can empty the pocket", repr(plan["set_asides"]))
+    status, plan = sync(b, norway, T3, [day(1, T3, "Oslo", ["Holmenkollen"]), day(2, T2, "Bergen")],
+                        pocket_at=T2, pocket=onsen)
+    check(plan["set_asides"] == [],
+          "and a stale phone cannot refill it by still holding a line", repr(plan["set_asides"]))
+
+    print("\n== the plan is a trip's, and nobody else's ==")
+    status, rows = d.try_run(
+        "select count(*) from public.trip_itinerary_days where trip_id = :t", t=norway)
+    check(status == "ok" and rows[0][0] == 0,
+          "a non-member reads zero itinerary days, filtered not errored", repr(rows))
+    status, rows = sync(d, norway, T3, [day(1, T3, "Nowhere")])
+    check(status == "err", "and cannot push a plan into a trip he is not on", repr(rows)[:80])
+    check(db.run("select place from public.trip_itinerary_days "
+                 "where trip_id = :t and day_number = 1", t=norway)[0][0] == "Oslo",
+          "the day he aimed at is unchanged")
+    status, rows = d.try_run(
+        "insert into public.trip_itinerary_days (trip_id, day_number, revised_at) "
+        "values (:t, 9, now())", t=norway)
+    check(status == "err", "nor write one round the function, straight into the table",
+          repr(rows)[:80])
+
+    print("\n== the roster reads as one statement, and only for the party ==")
+    status, rows = b.try_run(
+        "select user_id, display_name from public.trip_roster where trip_id = :t order by joined_at",
+        t=norway)
+    names = sorted(row[1] for row in rows) if status == "ok" else []
+    check(status == "ok" and names == ["Bob", "Carol"],
+          "a member reads every co-member and their name in one read", repr(names))
+    status, rows = d.try_run("select count(*) from public.trip_roster where trip_id = :t", t=norway)
+    check(status == "ok" and rows[0][0] == 0,
+          "a non-member reads nobody -- the view invents no access", repr(rows))
+    columns = [row[0] for row in db.run(
+        "select column_name from information_schema.columns "
+        "where table_schema = 'public' and table_name = 'trip_roster'")]
+    check("joined_on_day" not in columns and "joined_at" in columns,
+          "and it hands over the instant, never the trip day -- the phone counts those",
+          f"columns={columns}")
 
     # ------------------------------------------------------------------- RLS
     print("\n== nothing is left open, and nothing forces RLS ==")

@@ -1,11 +1,19 @@
 # Backend: Supabase (accounts, trip membership, photo index) + R2 (photo bytes)
 
 This directory is the entire backend. It is deliberately tiny: it holds the
-shared photo pool, trip membership, and the one clock every phone on a trip
-has to agree on. The itinerary, the day trail, the stars, the ping schedule
+shared photo pool, trip membership, the itinerary, and the one clock every
+phone on a trip has to agree on. The day trail, the stars, the ping schedule
 and the record of who has answered today's ping are all computed and kept on
 the phone. The phone is the source of truth; the app works fully offline
-except for pool sync.
+except for pool sync and for reconciling those shared facts.
+
+**Storing a shared fact is not computing on the server**, and the line between
+the two is the one thing to hold on to when reading this file. The itinerary
+is *stored* here because eight phones have to agree on which days the trip has
+and what is on them ([the decision](../docs/decisions/2026-08-22-grill-round-one.md)
+§2). Nothing here derives a trail, a star, a ping or a gate from it; every one
+of those is worked out on each phone from the plan it holds, and moving any of
+them server-side would need its own decision.
 
 No Supabase project has been created and nothing here has been applied to a
 hosted project. It has, however, been run: see
@@ -17,13 +25,18 @@ the same claim the previous version of this file made.
 | Table | Why it exists |
 | --- | --- |
 | `profiles` | One row per person, and the durable home of the name credited under every photo. Auto-created by a trigger on `auth.users` insert. Has **no foreign key to `auth.users`**, on purpose — see [Deletion](#deletion-the-login-goes-the-credit-stays). |
-| `trips` | A named container, plus the shared trip clock (timezone, dates, waking window). Holds no itinerary data — that stays on the phone. **`trips.id` is minted by the phone, not here**; see [Who names a trip](#who-names-a-trip). |
+| `trips` | A named container, plus the shared trip clock (timezone, dates, waking window). The plan itself hangs off it in the three tables below. **`trips.id` is minted by the phone, not here**; see [Who names a trip](#who-names-a-trip). |
 | `trip_members` | The root of every access-control check in this schema. A row is reachable by a user if and only if they have a matching `(trip_id, user_id)` row here. Carries **no role column**; see [Roles are flat](#roles-are-flat-except-one-thing). |
 | `trip_invites` | Invite codes — three spoken words each — kept in their own table rather than a column on `trips` so a code can be rotated, revoked, or usage-limited without touching trip identity, and a trip can have more than one outstanding code. Carries **no expiry column**; a code dies when its trip closes and at no other time. See [How someone joins](#how-someone-joins-a-trip). |
 | `photos` | One row per photo in the pool. The bytes live in R2; this row is the index the app queries and the thing RLS protects. |
 | `day_unlocks` | The gate, as a durable fact: "this person contributed to this day". Written only by a trigger on `photos`, and never deleted by anything. See [The gate](#the-gate). |
 | `day_pages` | A day's finished, composed page — one image per trip per day, made lazily at share or bind time. This was `daily_moments` and modelled a four-up panel; the four-up is retired. |
 | `day_page_photos` | Which photos went into a composed page, and in what order. Ordered by `ordinal`, not seated in a 1-to-4 slot. |
+| `trip_itineraries` | One row per trip, holding the plan's two clocks: when its *shape* last moved, and when the set-aside pocket last did. Not columns on `trips`, because a phone holds a plan revision before the trip's shared row exists. See [The itinerary](#the-itinerary-a-shared-fact-merged-per-day). |
+| `trip_itinerary_days` | One row per day of the plan: its number, its date if the person has resolved one, its place, and **the instant it was last changed and by whom**. That instant is the merge atom. |
+| `trip_itinerary_stops` | The stops under a day, in the day's own order. Deliberately carries **no clock and no starred flag**: a stop cannot win or lose a merge independently of its day, and a stop is starred exactly when it has a time. |
+| `trip_itinerary_set_asides` | The lines the parser could not place, and the ones somebody took out of a day. Nothing a person pasted is ever deleted, so the pocket travels with the plan. One atom, one clock. |
+| `trip_roster` (view) | Not a table: `trip_members` joined to `profiles`, so a phone reads every co-member and their name in one statement. `security_invoker`, so the member's own RLS decides what it returns. It hands over `joined_at` and **never a trip day number** — which day an instant falls on is a function of the itinerary and the trip clock, and that is the phone's arithmetic. |
 
 Full column-level rationale is in the migration files themselves as
 comments — read those alongside this table, they're short.
@@ -197,10 +210,66 @@ hard-coded so every phone reads the same bounds.
 **One fixed clock per trip, in v1.** Two refinements from the planning record
 are deliberately not modelled: the first and last day following the itinerary's
 real arrival and departure times, and a day that changes country holding the
-clock it started in. Both need the itinerary, which stays on the phone by
-decision, so expressing them here would mean syncing the itinerary. Until then
-a trip that crosses zones runs on the clock it was created with, and the
-daylight-saving slide is documented rather than solved.
+clock it started in. Both need the itinerary, and until `0010` the itinerary
+was not here to need. It is now — so what stands between the schema and those
+two refinements is no longer the data but a decision, and neither is a change
+to make quietly. A per-day clock already exists on the phone
+(`cairn_model`'s `TripDay.sequence` takes per-day overrides, and
+`photo_day_assignment` mirrors them); expressing it here would mean deciding
+that a day's clock is a shared fact rather than each phone's reading of one.
+Until that decision, a trip that crosses zones runs on the clock it was
+created with, and the daylight-saving slide is documented rather than solved.
+
+## The itinerary: a shared fact, merged per day
+
+Until `0010` the plan lived only on the phone that pasted it, and nothing told
+another phone the trip had changed. It is stored here now
+([the decision](../docs/decisions/2026-08-22-grill-round-one.md) §2). Four
+tables and one function, and the function is where the whole design is.
+
+**The day is the merge atom.** A day's date, its place and its whole list of
+stops move together, because a person reorders and retimes a day as one act
+and merging inside it would produce a day nobody wrote. Two people editing two
+different days both keep their work; two people editing the same day, the
+later clock wins whole. `trip_itinerary_stops` therefore has no `revised_at`
+of its own — a stop cannot win or lose independently of its day.
+
+**Last write wins, on the writing phone's clock.** That is a real cost and it
+is accepted rather than hidden: a phone an hour fast wins edits it should
+lose. No CRDT, no vector clock, no conflict screen. What keeps it survivable
+is the atom size — the damage is one day of one plan, and it is visible to
+everyone at once.
+
+**Why a function rather than an upsert.** PostgREST has no client transaction
+and cannot express "overwrite this row only if what I hold is newer, and
+replace its children with mine only if it was". `sync_trip_itinerary` is one
+call that is both directions at once: it takes the pushing phone's whole plan,
+merges it, and returns the plan the trip holds afterwards. A phone with no plan
+of its own pulls by pushing nothing — an empty `p_days` at `-infinity` wins
+nothing and deletes nothing, which is exactly what a joiner needs.
+
+**Deleting a day is why the plan has a shape revision.** A removed day leaves
+no row to carry an instant, so "I dropped day 4" and "I have never heard of
+day 4" look identical in a push. `trip_itineraries.plan_revised_at` separates
+them: it moves when the *set* of day numbers moves, and the function deletes
+only days whose own `revised_at` is at or below the pushed shape. A phone six
+days behind cannot silently delete a day somebody added yesterday. The
+set-aside pocket gets its own clock for a sibling reason — the pocket is one
+atom, and *emptying* it has to carry a revision or a stale phone refills it
+forever.
+
+**The rule is written twice, and that is deliberate.** Here, in
+`sync_trip_itinerary`, and on the phone in
+`lib/repositories/itinerary_sync.dart`. It has to be both: the server must
+refuse a stale push it is told about, and the phone must know which of its own
+days survived the push it just made. A third copy would be the thing to refuse
+in review — the same rule the gate and the invite grammar are held to.
+
+**What did not move.** The trail's geometry, the stars, the ping schedule and
+the gate are still computed on each phone from the plan it holds. So is which
+trip day somebody joined on: `trip_roster` hands over `joined_at` and nothing
+else, because turning an instant into a day number needs the itinerary and the
+trip clock, and that arithmetic is the phone's.
 
 ## Row-level security
 
@@ -256,6 +325,8 @@ directions.
 | **A member joining mid-trip sees every past day freely** | The *absence* of any day predicate in `photos_select_trip_member` (`0006`), plus the first branch of `day_page_is_open`: any day already finished on the trip's clock is open to every member. |
 | **Credit survives the person** | `profile_is_visible_to` (`0009`) resolves a name for anyone you travel with **or** anyone credited on a photo or trip in a trip you are in — because membership is exactly the thing that ends. |
 | **The trip's clock is one shared clock** | `trips_update_starter` / `trips_delete_starter` (`0004`) keep the trip row with the person who authored it, and `validate_trip_timezone` (`0003`) refuses a zone that is not real. |
+| **The plan is the trip's, and any member may change it** | Every policy on the four itinerary tables (`0010`) is plain membership through `is_trip_member`, with no starter branch and no contributor branch. Editing the plan is flat, like inviting and like naming: a trip is a thing eight people are on, not a thing one of them owns. |
+| **A phone can only reach the plan through the merge** | `sync_trip_itinerary` is `security invoker` and re-checks membership itself, so it grants nothing the tables do not; the tables' own policies are what stop a non-member writing round it. |
 
 ### Why the gate is not an RLS policy
 
@@ -362,6 +433,20 @@ is the credit.
    supabase secrets set R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... \
      R2_SECRET_ACCESS_KEY=... R2_BUCKET_NAME=...
    ```
+7. **Tell the app where the project is, at build time.** Nothing in this
+   repository names a project or holds a key, and nothing should:
+   ```sh
+   flutter run --dart-define=CAIRN_SUPABASE_URL=https://<ref>.supabase.co \
+               --dart-define=CAIRN_SUPABASE_ANON_KEY=<publishable anon key>
+   ```
+   Both are read by `SharedFactsConfig.fromEnvironment`
+   (`lib/storage/remote/shared_facts.dart`), and both are absent by default —
+   an ordinary build has no backend at all and behaves exactly as it did
+   before any of this existed. The anon key is the *publishable* one: it is
+   designed to ship inside a client and grants nothing on its own, because
+   every table here is behind RLS keyed on `auth.uid()`. **The service-role
+   key belongs in neither a define nor this repository**; it bypasses every
+   policy on this page.
 
 ### Two traps in offering Apple and Google together
 
@@ -508,7 +593,21 @@ Being honest about the edges:
 - **Deletions are invisible to a pull cursor.** `updated_at` lets an *edit*
   sync; a row someone deleted on another phone is only noticed by refetching.
   Fine at this size (a roster is eight rows, a trip's photos are one query),
-  but it is a real limit of the cursor, not an oversight.
+  but it is a real limit of the cursor, not an oversight. The itinerary is the
+  one place it is already solved, and solved narrowly:
+  `trip_itineraries.plan_revised_at` is a *shape* revision, so a deleted day
+  is expressible without a tombstone table. Nothing else here has one.
+- **The itinerary merge is last-write-wins on the writing phone's clock.** A
+  phone whose clock is an hour fast wins edits it should lose, and there is no
+  detection of it and no conflict UI. That is the accepted price of the slice
+  (no CRDTs); what makes it survivable is that the day is the atom, so the
+  damage is one day of one plan and it is visible to everyone at once.
+- **Nothing pushes the itinerary to a phone; a phone asks.** There is no
+  Realtime subscription and no trigger that notifies. A change reaches another
+  phone when that phone next reconciles, which the app does on its own local
+  changes and on a timer. A trip's plan therefore has a propagation delay
+  measured in minutes, deliberately: a websocket held open for a fortnight is
+  the one thing a phone abroad on a battery cannot afford.
 
 ## Verification: what was actually run
 
@@ -520,8 +619,8 @@ throwaway Postgres; see that directory's README. It has been run green on two
 independently built clusters — 17.10 and a Homebrew 17.11 — so the results are
 not an artefact of one machine's setup.
 
-- All nine migrations apply cleanly, and apply again cleanly on a second run.
-- 77 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- All ten migrations apply cleanly, and apply again cleanly on a second run.
+- 98 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
@@ -529,7 +628,15 @@ not an artefact of one machine's setup.
   `updated_at` bumping on edit — plus the three-word invite grammar: the
   server's vocabulary compared word for word against the Dart the phone uses,
   order- and spelling-forgiving redemption, a code refused once its trip has
-  closed, and one still admitting people inside the grace.
+  closed, and one still admitting people inside the grace — and the itinerary
+  merge: a stale push losing, the day it did not lose left untouched, a fresh
+  push replacing a day's stops with it, a phone unable to delete a day added
+  after the shape it last saw, a current phone able to drop one, an emptied
+  set-aside pocket staying empty against a stale phone that still holds the
+  line, a non-member reading zero days and unable to push or write round the
+  function, and the roster view answering a member with every co-member's name
+  and a non-member with nobody, and the merged plan coming back ordered by the
+  day *number* rather than by the text of it.
 - The recursion fix is checked at the mechanism level
   (`tests/recursion_mechanism.py`): the whole schema is applied by an ordinary
   role that is neither superuser nor `BYPASSRLS`, the policies resolve, and
