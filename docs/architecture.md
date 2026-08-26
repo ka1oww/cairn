@@ -387,11 +387,14 @@ a "change one, change all" edge:
     through `tripStandingProvider` and nothing above that provider compares
     dates itself, exactly as with the gate (#2). The `endsAt` it is handed is
     decided once too: `cairn_model.tripEndsAtFrom` turns the plan's day dates
-    in plan order plus the trip's offset into an instant, and *both* sides of
-    the sync seam call it — `tripEndsAtFor` in the app-state band and
-    `TripSync._endsAt` in the repositories band — because a trip that has
-    ended on screen and not on the wire is the coupling this list exists to
-    name. A trip ends at the end of its last day, so a plan whose last day is
+    in plan order plus the trip's offset into an instant, and every caller on
+    the seam goes through it — `tripEndsAtFor` in the app-state band, and
+    both `TripSync._endsAt` and the `end_date` `_createSharedTrip` publishes
+    in the repositories band — because a trip that has ended on screen and not
+    on the wire is the coupling this list exists to name. A row that claimed
+    an end the phone did not agree with would shut the pool and refuse every
+    reconcile on a trip still being lived, so a plan whose last day is undated
+    publishes no end at all and waits in `awaitingTripRow`. A trip ends at the end of its last day, so a plan whose last day is
     undated has no known end and is underway. The *close* is then a coupling
     like #2 and #9: seventy-two hours after the last day seals, on the phone
     (`graceAfterATrip`) and in SQL (`trip_grace_after_end()`), with

@@ -320,6 +320,50 @@ void main() {
         reason: 'the plan\'s own resolved dates, not a guess',
       );
     });
+
+    test('and it claims no ending the phone does not know', () async {
+      // Days 1 and 2 are dated, day 3 is not. `tripEndsAtFrom` says the trip
+      // has no known end, so the row must not publish day 2 as one: the
+      // server would shut the pool and refuse every reconcile seventy-two
+      // hours later, on a trip the app is still offering codes on.
+      final db = inMemory();
+      addTearDown(db.close);
+      await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([
+          confirmed(1, 'Oslo', date: CalendarDate(2027, 6, 14)),
+          confirmed(2, 'Bergen', date: CalendarDate(2027, 6, 16)),
+          confirmed(3, 'Tromso'),
+        ]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: null);
+      PendingTripRow? asked;
+
+      final outcome = await TripSync(
+        database: db,
+        now: duringTheTrip,
+        facts: server,
+        tripRow: (pending) async {
+          asked = pending;
+          final ends = pending.lastDateIso;
+          if (ends == null) return null;
+          return RemoteTripDraft(
+            id: pending.tripId,
+            name: pending.name ?? 'Norway',
+            createdBy: pending.startedBy,
+            timeZone: 'Europe/Oslo',
+            startDateIso: pending.firstDateIso!,
+            endDateIso: ends,
+          );
+        },
+      ).syncNow();
+
+      expect(asked?.lastDateIso, isNull);
+      expect(asked?.firstDateIso, '2027-06-14');
+      expect(outcome.standing, SyncStanding.awaitingTripRow);
+      expect(server.created, isEmpty);
+    });
   });
 
   group('a local change is pushed', () {

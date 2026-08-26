@@ -132,8 +132,11 @@ class PendingTripRow {
   final String? name;
   final MemberId startedBy;
 
-  /// The plan's first and last *resolved* dates, or null when every day's
-  /// date is still open. A source is free to answer anyway, or to decline.
+  /// The plan's first *resolved* date, or null when every day's date is still
+  /// open, and the date of the plan's last day, or null when that day's date
+  /// is still open — `cairn_model`'s `tripEndsAtFrom` decides the second, so
+  /// the row cannot claim an ending the phone would not. A source is free to
+  /// answer anyway, or to decline.
   final String? firstDateIso;
   final String? lastDateIso;
 
@@ -320,19 +323,35 @@ class TripSync {
         detail: 'nothing can say what the trip clock is',
       );
     }
-    final dates =
+    final resolved =
         (await database.readItineraryDays())
             .map((day) => day.dateIso)
             .whereType<String>()
             .toList()
           ..sort();
+
+    // The trip's end is `tripEndsAtFrom`'s and nobody else's -- the same call
+    // `_endsAt` and the app's `tripEndsAtFor` make, because a row that
+    // published an end this phone disagreed with would shut the pool and
+    // refuse every reconcile on a trip still being lived. The helper answers
+    // with the *instant* the last day seals, which is midnight ending it on
+    // the trip's clock; the row wants that day's own calendar date, so it is
+    // read back the way it was worked out -- into the trip's clock, then back
+    // one day. Null when the plan's last day carries no date: `trips.end_date`
+    // is `not null` (0003_trips.sql) and inventing one to satisfy it would be
+    // the guess this whole rule exists to refuse, so the source declines and
+    // the sync waits in `awaitingTripRow` until the plan says.
+    final lastDay = (await _endsAt())
+        ?.add(utcOffset())
+        .subtract(const Duration(days: 1));
+
     final draft = await source(
       PendingTripRow(
         tripId: tripId,
         name: trip.name,
         startedBy: MemberId(trip.startedByMemberId),
-        firstDateIso: dates.isEmpty ? null : dates.first,
-        lastDateIso: dates.isEmpty ? null : dates.last,
+        firstDateIso: resolved.isEmpty ? null : resolved.first,
+        lastDateIso: lastDay?.toIso8601String().substring(0, 10),
       ),
     );
     if (draft == null) {

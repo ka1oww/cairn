@@ -41,6 +41,19 @@ Thu 17 June 2027 - Osaka
 - Dotonbori
 ''';
 
+/// Two dated days and a third left open — a plan that has dates and still
+/// has no ending, since a trip ends at the end of its *last* day.
+const openTailPaste = '''
+Mon 14 June 2027 - Tokyo
+- Senso-ji
+
+Tue 15 June 2027 - Kyoto
+- Fushimi Inari
+
+Day 3 - Osaka
+- Dotonbori
+''';
+
 /// A plan accepted with every date still open.
 const dateOpenPaste = '''
 Day 1 - Tokyo
@@ -220,6 +233,21 @@ void main() {
     expect(
       textOf(const Key('trip-code-expiry')),
       'Dies when the trip closes. This plan has no dates yet.',
+    );
+  });
+
+  testWidgets('nor can a plan whose last day alone is open, and it says which '
+      'of the two it is', (tester) async {
+    // Days 1 and 2 are dated, day 3 is not. A trip ends at the end of its
+    // last day, so this one has no known ending -- but the span above this
+    // line is showing 14-15 June, so "no dates yet" would be a plain
+    // contradiction of what is on the same sheet.
+    await openSheet(tester, today: day(15), paste: openTailPaste);
+
+    expect(textOf(const Key('trip-span')), '14–15 June · 3 days');
+    expect(
+      textOf(const Key('trip-code-expiry')),
+      'Dies when the trip closes. This plan\'s last day has no date yet.',
     );
   });
 

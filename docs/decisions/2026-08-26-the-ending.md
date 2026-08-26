@@ -103,5 +103,7 @@ no date has not ended: it is `underway`, deliberately, and never "closed" or
 one. That covers a plan with no dates at all and equally a plan dated only as
 far as day 3 of 8, which ending on the last *dated* day would archive while
 its travellers were still on it. The arithmetic is `cairn_model`'s
-`tripEndsAtFrom`, over the plan's day dates in plan order, and both sides of
-the sync seam call it rather than restating it.
+`tripEndsAtFrom`, over the plan's day dates in plan order, and every caller on
+the sync seam goes through it rather than restating it — including the
+`end_date` the shared `trips` row publishes, which is that same instant read
+back into the trip's clock and is simply absent while the plan's last day is.

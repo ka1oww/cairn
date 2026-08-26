@@ -71,8 +71,9 @@ class TripCode {
   /// The same code on one line, for reading aloud and for a test to name.
   final String spoken;
 
-  /// When it dies: `Dies with the trip, on 5 July.` — or, on a plan with no
-  /// dates yet, that the trip has not said when it ends.
+  /// When it dies: `Dies with the trip, on 5 July.` — or, on a plan that has
+  /// not said when it ends (no dates at all, or a last day still open), which
+  /// of those two it is.
   final String expiry;
 
   const TripCode({
@@ -322,7 +323,7 @@ TripSettingsView? tripSettingsFor({
         // The honest state of a roster on a phone that cannot yet be told
         // about anyone else. Not a spinner, and not an empty list either.
         : 'Just you so far. Nobody else\'s phone can reach this trip yet.',
-    code: live.isEmpty ? null : _codeLine(live.last, closesAt, utcOffset),
+    code: live.isEmpty ? null : _codeLine(live.last, plan, closesAt, utcOffset),
     codeNote: standing.admitsJoiners
         ? 'Say it out loud — that is the whole trick. Cairn cannot carry '
               'anyone here from their phone yet, so for now the words are the '
@@ -361,6 +362,7 @@ String? _noteFor(model.Member member, model.MemberId startedBy) {
 
 TripCode _codeLine(
   model.TripInvite invite,
+  TripPlan? plan,
   DateTime? closesAt,
   Duration utcOffset,
 ) {
@@ -368,16 +370,25 @@ TripCode _codeLine(
   return TripCode(
     words: [code.firstWord, code.secondWord, '${code.number}'],
     spoken: code.spoken,
+    // Truthful rather than reassuring: the code does die with the trip, and
+    // a null `closesAt` is the trip not having said when that is. There are
+    // two ways a plan gets there and they are not the same sentence — a plan
+    // with no dates at all, and a plan dated right up to a last day left
+    // open, which the span two lines above is already showing dates for.
     expiry: closesAt == null
-        // Truthful rather than reassuring: the code does die with the trip,
-        // and this plan has not said when the trip ends.
-        ? 'Dies when the trip closes. This plan has no dates yet.'
+        ? _undated(plan)
+              ? 'Dies when the trip closes. This plan has no dates yet.'
+              : 'Dies when the trip closes. This plan\'s last day has no '
+                    'date yet.'
         // `closesAt` is the instant the trip shuts, which is midnight at the
         // end of the last day it is open — so the date named is the day
         // before it, or the line would read a day late.
         : 'Dies with the trip, after ${dayMonthLabel(closesAt.add(utcOffset).subtract(const Duration(days: 1)))}.',
   );
 }
+
+bool _undated(TripPlan? plan) =>
+    plan == null || plan.days.every((day) => day.date == null);
 
 TripDeletion _deletion(
   TripMembership trip,
