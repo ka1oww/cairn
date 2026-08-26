@@ -15,6 +15,7 @@
 // The *live* round trip against the hosted project is `hosted_smoke_test.dart`
 // and is skipped unless asked for. See `supabase/README.md`.
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -33,11 +34,16 @@ Map<String, dynamic> claims(String jwt) {
 }
 
 class MemoryVault implements SessionVault {
-  String? token;
+  MemoryVault({this.stored});
+
+  StoredSession? stored;
+
+  String? get token => stored?.refreshToken;
+
   @override
-  Future<String?> read() async => token;
+  Future<StoredSession?> read() async => stored;
   @override
-  Future<void> write(String? refreshToken) async => token = refreshToken;
+  Future<void> write(StoredSession? session) async => stored = session;
 }
 
 /// A GoTrue answer, spelled the way GoTrue spells one.
@@ -71,7 +77,7 @@ void main() {
     test('an empty URL is how a build asks for no backend at all', () {
       const off = SharedFactsConfig(url: '', anonKey: 'anything');
       expect(off.isConfigured, isFalse);
-      expect(deviceSessions(), isA<GotrueSessions>());
+      expect(deviceSessions(config: off), isA<NoSession>());
     });
   });
 
@@ -102,7 +108,12 @@ void main() {
     });
 
     test('comes back as the same account it was last launch', () async {
-      final vault = MemoryVault()..token = 'saved-refresh';
+      final vault = MemoryVault(
+        stored: const StoredSession(
+          userId: 'user-a',
+          refreshToken: 'saved-refresh',
+        ),
+      );
       final paths = <String>[];
       final sessions = GotrueSessions(
         config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
@@ -123,7 +134,9 @@ void main() {
     });
 
     test('a refused refresh token is dropped, not retried forever', () async {
-      final vault = MemoryVault()..token = 'revoked';
+      final vault = MemoryVault(
+        stored: const StoredSession(userId: 'user-a', refreshToken: 'revoked'),
+      );
       final paths = <String>[];
       final sessions = GotrueSessions(
         config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
@@ -140,10 +153,19 @@ void main() {
       expect((await sessions.current())!.userId.value, 'user-b');
       expect(paths, ['/auth/v1/token', '/auth/v1/signup']);
       expect(vault.token, 'refresh-1');
+      // The id was replaced in the same write. A vault naming the old account
+      // beside the new account's token would have this phone introduce itself
+      // as somebody it can no longer speak as.
+      expect(vault.stored!.userId, 'user-b');
     });
 
     test('a server that cannot be reached keeps the saved token', () async {
-      final vault = MemoryVault()..token = 'saved-refresh';
+      final vault = MemoryVault(
+        stored: const StoredSession(
+          userId: 'user-a',
+          refreshToken: 'saved-refresh',
+        ),
+      );
       var calls = 0;
       final sessions = GotrueSessions(
         config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
@@ -163,6 +185,41 @@ void main() {
       expect(vault.token, 'saved-refresh');
     });
 
+    test('a captive portal answering HTML is unreachable, not a refusal',
+        () async {
+      final vault = MemoryVault(
+        stored: const StoredSession(
+          userId: 'user-a',
+          refreshToken: 'saved-refresh',
+        ),
+      );
+      var calls = 0;
+      final sessions = GotrueSessions(
+        config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
+        vault: vault,
+        client: MockClient((request) async {
+          calls++;
+          return http.Response('<html>sign in to the wifi</html>', 200);
+        }),
+      );
+
+      // Not an exception: `main` signs in on the boot path, so a throw here is
+      // an app that never renders a frame.
+      expect(await sessions.current(), isNull);
+      expect(calls, 1);
+      expect(vault.token, 'saved-refresh');
+    });
+
+    test('a refused handshake is unreachable too', () async {
+      final sessions = GotrueSessions(
+        config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
+        client: MockClient((request) async {
+          throw const HandshakeException('interception');
+        }),
+      );
+      expect(await sessions.current(), isNull);
+    });
+
     test('no backend configured is no session and no request', () async {
       var calls = 0;
       final sessions = GotrueSessions(
@@ -174,6 +231,51 @@ void main() {
       );
       expect(await sessions.current(), isNull);
       expect(calls, 0);
+    });
+  });
+
+  group('who the phone is on the boot path', () {
+    test('comes off the vault, with no network in it', () async {
+      var calls = 0;
+      final sessions = GotrueSessions(
+        config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
+        client: MockClient((request) async {
+          calls++;
+          return http.Response(sessionBody('user-a'), 200);
+        }),
+      );
+
+      final id = await resolveMemberId(
+        sessions,
+        MemoryVault(
+          stored: const StoredSession(userId: 'user-a', refreshToken: 'r'),
+        ),
+      );
+      expect(id, 'user-a');
+      expect(calls, 0, reason: 'the boot path must not wait on a server');
+    });
+
+    test('a first launch that is too slow runs as the stand-in', () async {
+      final sessions = GotrueSessions(
+        config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
+        client: MockClient((request) async {
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+          return http.Response(sessionBody('user-a'), 200);
+        }),
+      );
+
+      expect(
+        await resolveMemberId(
+          sessions,
+          MemoryVault(),
+          budget: const Duration(milliseconds: 20),
+        ),
+        isNull,
+      );
+    });
+
+    test('a build with no backend asks the vault nothing', () async {
+      expect(await resolveMemberId(const NoSession(), MemoryVault()), isNull);
     });
   });
 }

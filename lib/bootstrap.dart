@@ -151,22 +151,61 @@ Future<RemoteTripDraft?> _tripRowFromEnvironment(PendingTripRow pending) async {
   );
 }
 
-/// Signs the phone in, or answers null when it cannot.
+/// How long a first-ever launch may wait for an account before it gives up
+/// and runs as the stand-in.
 ///
-/// Called by `main` before the app is built, because the account's id *is*
-/// this phone's member id and a surface that drew itself as `me` and then
-/// became a uuid would have credited a photo to a member the roster does not
-/// hold. Null is an ordinary answer — no backend configured, or no route to
-/// one — and the app then runs entirely locally, which is the whole
-/// offline-first story.
-Future<SharedFactsSession?> signIn(SessionSource sessions) =>
-    sessions.current();
+/// Only a phone with nothing in its vault ever waits at all, and this is not
+/// the request timeout: `GotrueSessions` keeps its own ten seconds for the
+/// round trip, and ten seconds of blank screen on the boot path is well into
+/// the launch watchdog's territory. When the budget runs out the sign-in
+/// carries on behind the first frame — `GotrueSessions` serialises its calls,
+/// so the sync's next reconcile joins the same request rather than minting a
+/// second account — and the id it lands lands in the vault for the *next*
+/// launch. This one behaves like an offline one.
+const _startupSignInBudget = Duration(seconds: 3);
+
+/// Who this phone is, as every surface will ask it for the rest of the launch.
+///
+/// Resolved before the app is built, because the account's id *is* this
+/// phone's member id and a surface that drew itself as `me` and then became a
+/// uuid would have credited a photo to a member the roster does not hold. That
+/// is also why nothing here adopts an id that arrives *later*: the identity is
+/// fixed for the life of the launch, and a session that lands after the budget
+/// is picked up next time.
+///
+/// The vault is asked first and it usually answers: a phone that has signed in
+/// before knows its own id from a local file, with no network in it at all, so
+/// the boot path does not wait on a server to find out who it is. Refreshing
+/// the token is then the sync's business, behind the first frame.
+///
+/// Null is an ordinary answer — no backend configured, a first launch with no
+/// route to one — and the app then runs entirely locally under
+/// [localMemberId], which is the whole offline-first story.
+Future<String?> resolveMemberId(
+  SessionSource sessions,
+  SessionVault vault, {
+  Duration budget = _startupSignInBudget,
+}) async {
+  if (sessions is NoSession) return null;
+  final stored = await vault.read();
+  if (stored != null) return stored.userId;
+  final session = await sessions.current().timeout(
+    budget,
+    onTimeout: () => null,
+  );
+  return session?.userId.value;
+}
+
+/// Where this phone's account is kept between launches.
+SessionVault deviceVault() => FileSessionVault();
 
 /// The app's own [SessionSource]: an anonymous GoTrue account, kept across
 /// launches. See `storage/remote/gotrue_sessions.dart` for why it is
 /// anonymous and what Apple sign-in replaces.
-SessionSource deviceSessions() {
-  const config = SharedFactsConfig.fromEnvironment;
+SessionSource deviceSessions({
+  SharedFactsConfig config = SharedFactsConfig.fromEnvironment,
+  SessionVault? vault,
+}) {
   if (!config.isConfigured) return const NoSession();
-  return GotrueSessions(config: config, vault: FileSessionVault());
+  return GotrueSessions(config: config, vault: vault ?? deviceVault());
 }

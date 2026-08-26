@@ -461,8 +461,11 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
 - **The shared roster replaces this phone's, and this phone is now whoever
   signed in.** `localMemberIdProvider` (`lib/app_state/ping_schedule.dart`) is
   the account id when there is a session and the string `'me'` when there is
-  not; `main()` signs in before it builds the app so nothing is ever credited
-  to the stand-in and then re-credited. Two things this leaves open. A trip
+  not; `main()` resolves it before it builds the app — out of the session
+  vault, with no network round trip on the boot path — so nothing is ever
+  credited to the stand-in and then re-credited. The identity is fixed for the
+  life of the launch: an account minted too slowly on a first launch is stored
+  and picked up on the next one rather than adopted mid-session. Two things this leaves open. A trip
   *started* offline under `'me'` can never become a `trips` row —
   `created_by` references `profiles.id`, a uuid — and nothing migrates it; it
   is simply a local trip for good. And the roster the server hands back names

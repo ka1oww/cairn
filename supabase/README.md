@@ -484,8 +484,9 @@ through the roster apply and rename the trip).
 Sign in with Apple is the first real route and is not built. Until it is, the
 app uses a **GoTrue anonymous account**: `GotrueSessions`
 (`lib/storage/remote/gotrue_sessions.dart`) mints one on first launch and keeps
-its refresh token in the app's support directory, so the same account comes
-back on every launch. It is a real `auth.users` row, so `handle_new_user` mints
+its refresh token — and the account's id beside it — in the app's support
+directory, so the same account comes back on every launch, and a phone with no
+signal still knows which account it is without asking. It is a real `auth.users` row, so `handle_new_user` mints
 the profile every policy on this page compares against.
 
 Anonymous sign-ins therefore have to be **on** for the project:
@@ -494,13 +495,25 @@ Authentication -> Providers -> Anonymous sign-ins (or
 `{"external_anonymous_users_enabled": true}`). It is on for the hosted project
 as of 2026-08-26.
 
-The signed-in account's id *is* this phone's member id: `main()` signs in
-before it builds the app and hands the id to `bootstrapApp`, which overrides
+The signed-in account's id *is* this phone's member id: `main()` resolves it
+before it builds the app and hands it to `bootstrapApp`, which overrides
 `localMemberIdProvider`. That is one change and not two on purpose — the sync
 replaces the local roster with the server's wholesale, and a phone still
 calling itself `me` would then be asking the gate, the ping schedule and every
-"may I" about somebody the trip does not hold. A phone that cannot reach the
-server gets no session, keeps the local stand-in, and runs entirely offline.
+"may I" about somebody the trip does not hold.
+
+Resolving it does **not** mean waiting for the network. `resolveMemberId`
+(`lib/bootstrap.dart`) reads the id out of the vault, which is a local file, so
+an ordinary launch reaches its first frame with no round trip at all and the
+token refresh happens behind it, on the sync's first reconcile. Only a
+first-ever launch has an account to mint, and that one waits at most three
+seconds — a separate budget from `GotrueSessions`'s ten-second request
+timeout — before running as the local stand-in. The identity is then **fixed
+for the life of the launch**: a session that lands after the budget is written
+to the vault and picked up next launch, never adopted mid-session, because a
+surface that drew itself as `me` and then became a uuid would credit a photo to
+somebody the roster does not hold. A phone that cannot reach the server at all,
+on a launch with nothing stored, keeps the stand-in and runs entirely offline.
 
 ### Running the live smoke test
 

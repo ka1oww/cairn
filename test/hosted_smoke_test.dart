@@ -51,7 +51,7 @@ void main() {
       late SharedFactsSession auth;
       late AppDatabase first;
       AppDatabase? second;
-      late String tripId;
+      String? tripId;
 
       setUpAll(() async {
         // Two phones is the whole point of this test, and drift's warning
@@ -79,9 +79,13 @@ void main() {
 
       tearDownAll(() async {
         // The trip's starter may delete it (`trips_delete_starter`), and the
-        // itinerary hangs off it with `on delete cascade`.
+        // itinerary hangs off it with `on delete cascade`. Nothing to clean up
+        // if the test failed before it ever created one, and asking anyway
+        // would bury the real failure under a LateInitializationError.
+        final created = tripId;
+        if (created == null) return;
         await http.delete(
-          Uri.parse('${config.url}/rest/v1/trips?id=eq.$tripId'),
+          Uri.parse('${config.url}/rest/v1/trips?id=eq.$created'),
           headers: {
             'apikey': config.anonKey,
             'Authorization': 'Bearer ${auth.accessToken}',

@@ -150,7 +150,11 @@ import what is written there, not here.
   and the signed-in id becomes `localMemberIdProvider` — one change and not
   two, because the roster is replaced wholesale with the server's and a phone
   still calling itself `me` would ask the gate and the ping schedule about a
-  stranger. `flutter test` never reaches out: every widget test binds
+  stranger. That id is resolved on the boot path but **not over the network**:
+  the vault keeps the account's id beside its refresh token, so `main()` reads
+  it off a local file and only a first-ever launch waits (three seconds, then
+  the stand-in). The identity is fixed for the launch — a session that lands
+  late is stored for the next one, never adopted mid-session. `flutter test` never reaches out: every widget test binds
   `NoSession`, and the live check is
   `flutter test test/hosted_smoke_test.dart --dart-define=CAIRN_HOSTED_SMOKE=true`.
   **A green suite is still no evidence the hosted project behaves** — that is
@@ -340,14 +344,17 @@ Sharp edges worth knowing before touching this directory again:
   defers its own RLS policies to `0004_trip_members.sql`, because `trips` must
   exist before `trip_members` can reference it but the policies are written in
   terms of membership. Read that comment before reordering anything.
-- The schema has been run, but only locally: `supabase/tests/` applies it to a
-  throwaway Postgres 17 and drives it as PostgREST does. Run
+- **A hosted project exists and all ten migrations are applied to it**, and an
+  ordinary build points at it (`supabase/README.md` is the authority on the
+  defines and on what the hosted project has and has not actually done). The
+  adversarial checks still run somewhere else and must: `supabase/tests/`
+  applies the schema to a throwaway Postgres 17 and drives it as PostgREST
+  does, because only one account has ever touched the hosted project, so no RLS
+  *refusal* has ever been observed there -- only the permitted paths. Run
   `python3 supabase/tests/rls_probe.py` (see that directory's README) after any
   change to a policy -- RLS refuses by filtering to zero rows rather than
   raising, so a change that silently opens or closes access looks identical to
-  one that works until something actually queries it. **No Supabase project
-  exists yet and nothing has been applied to a hosted one**; `supabase db push`
-  against a throwaway project is still the gate before anything real.
+  one that works until something actually queries it.
 
 ## Packages
 
