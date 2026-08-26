@@ -43,6 +43,20 @@ import what is written there, not here.
   (`paste_flow.dart`, `day_view.dart`, `trail_view.dart`, `pool_view.dart`,
   `capture_flow.dart`, `ping_schedule.dart`); screens render their view models
   and never import the parser or `cairn_model`.
+- **`lib/logic/` holds pure decision cores the app-state band calls** — no
+  Flutter, no Riverpod, no IO. Its first resident is the re-paste merge
+  (`repaste_merge.dart`, tested in `test/repaste_merge_test.dart`), whose
+  rules are settled: match repasted days to saved days by date first (a
+  full-year title candidate counts for matching but is never bound), then
+  undated days by position; a matched day takes the repasted place and stops
+  wholesale, and every current stop whose text no longer appears
+  (case/whitespace-insensitive, counted) goes to the set-aside; unclaimed
+  current days come back as the very same `ConfirmedDay` instance, unclaimed
+  repasted days append numbered past the current maximum. A day's identity is
+  its number — photos key on it — so the merge never renumbers and never
+  re-dates an existing day. It speaks `ConfirmedDay`, not
+  `cairn_model.TripDay`: saved plans carry open dates and have no clock yet
+  (the repository says why).
 - **The read-back is an editor, and it never demolishes.** The confirm screen
   edits a *draft* inside `paste_flow.dart`, and `accept()` builds the
   `ConfirmedItinerary` from that draft rather than from the parse. Every stop

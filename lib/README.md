@@ -8,6 +8,7 @@ imports are the arrows:
 | --- | --- | --- |
 | `screens/` | SCREENS | `app_state/`, Flutter |
 | `app_state/` | APP STATE | `repositories/`, the domain packages, Riverpod, and the platform edges it drives |
+| `logic/` | LOGIC — pure decision cores inside app state's reach | `repositories/` value types, the domain packages; no Flutter, no Riverpod, no IO. Called by `app_state/` (and tests), never by `screens/` |
 | `repositories/` | THE SEAM | `storage/`, `package:cairn_model` |
 | `storage/drift/` | STORAGE (Drift store) | Drift, `package:cairn_model`, the device disk |
 
