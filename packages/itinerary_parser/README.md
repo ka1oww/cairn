@@ -180,6 +180,15 @@ building UI on top of this package.
   of the setting — but deciding which dialect a genuinely ambiguous paste
   speaks is the user's call, made once for the whole paste.
 
+- **It cannot read a line that names two dates as a day.** A range like
+  `Sat, Jun 14th — Wed, Jun 18th` names no single day, so the weekday-comma
+  and weekday-then-month-day shapes refuse it rather than bind its first
+  date and keep the second as a place name; the line falls through as a
+  stop or an unplaced line the person still sees. The test is the shape of
+  the trailing text, so a real place whose name opens with a month-day run
+  (`… — May 1 Museum`) is refused the same way — mis-binding a spurious
+  day is the worse failure of the two.
+
 - **It cannot distinguish a genuine stop from chat banter that happens to
   contain a link.** In a WhatsApp-style paste, `check this out
   https://...` has its URL stripped and the remaining text kept as a
