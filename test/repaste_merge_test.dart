@@ -65,13 +65,18 @@ void main() {
         day(2, date: jun15, place: 'Kyoto', stops: [mStop('Fushimi Inari')]),
       ];
       final repasted = [
-        pDay(1, date: DateTime(2027, 6, 14), place: 'Tokyo', stops: [
-          pStop('Senso-ji'),
-          pStop('Ueno park'),
-        ]),
-        pDay(2, date: DateTime(2027, 6, 15), place: 'Kyoto', stops: [
-          pStop('Fushimi Inari'),
-        ]),
+        pDay(
+          1,
+          date: DateTime(2027, 6, 14),
+          place: 'Tokyo',
+          stops: [pStop('Senso-ji'), pStop('Ueno park')],
+        ),
+        pDay(
+          2,
+          date: DateTime(2027, 6, 15),
+          place: 'Kyoto',
+          stops: [pStop('Fushimi Inari')],
+        ),
       ];
 
       final result = mergeRepaste(current: current, repasted: repasted);
@@ -99,12 +104,18 @@ void main() {
         day(3, date: jun16, place: 'Osaka'),
       ];
       final repasted = [
-        pDay(1, date: DateTime(2027, 6, 15), place: 'Kyoto v2', stops: [
-          pStop('Kinkaku-ji'),
-        ]),
-        pDay(2, date: DateTime(2027, 6, 14), place: 'Tokyo v2', stops: [
-          pStop('Tsukiji'),
-        ]),
+        pDay(
+          1,
+          date: DateTime(2027, 6, 15),
+          place: 'Kyoto v2',
+          stops: [pStop('Kinkaku-ji')],
+        ),
+        pDay(
+          2,
+          date: DateTime(2027, 6, 14),
+          place: 'Tokyo v2',
+          stops: [pStop('Tsukiji')],
+        ),
       ];
 
       final result = mergeRepaste(current: current, repasted: repasted);
@@ -128,9 +139,12 @@ void main() {
         day(2, date: jun15, place: 'Kyoto', stops: [mStop('Gion')]),
       ];
       final repasted = [
-        pDay(1, date: DateTime(2027, 6, 14), place: 'Tokyo', stops: [
-          pStop('Senso-ji'),
-        ]),
+        pDay(
+          1,
+          date: DateTime(2027, 6, 14),
+          place: 'Tokyo',
+          stops: [pStop('Senso-ji')],
+        ),
         pDay(
           2,
           place: 'Kyoto',
@@ -176,9 +190,58 @@ void main() {
       expect(result.days[1].stops.single.text, 'B');
     });
 
+    test('an ambiguous numeric candidate does not claim a day by date: it '
+        'pairs by position and the question stays the screen\'s', () {
+      // "Day 2 - Osaka, 5/6/2027": a full year, but is that 5 June or 5 May?
+      // The merge refuses to read it, so it matches like any undated day.
+      final current = [
+        day(
+          1,
+          date: CalendarDate(2027, 6, 5),
+          place: 'Tokyo',
+          stops: [mStop('A')],
+        ),
+        day(
+          2,
+          date: CalendarDate(2027, 5, 5),
+          place: 'Osaka',
+          stops: [mStop('B')],
+        ),
+      ];
+      final ambiguous = ip.DateCandidate(
+        day: 5,
+        month: 6,
+        year: 2027,
+        text: '5/6/2027',
+        headerText: 'Osaka, 5/6/2027',
+        ambiguousNumericOrder: true,
+      );
+      final repasted = [
+        pDay(
+          1,
+          place: 'Osaka',
+          stops: [pStop('Revised')],
+          candidate: ambiguous,
+        ),
+      ];
+
+      final result = mergeRepaste(current: current, repasted: repasted);
+
+      // Day 1 wears 5 June — the reading the candidate would have taken — and
+      // is not claimed by date; the position pass pairs it instead.
+      expect(result.days[0].origin, MergedDayOrigin.mergedByPosition);
+      expect(result.days[0].stops.single.text, 'Revised');
+      expect(result.days[0].date, CalendarDate(2027, 6, 5));
+      // The candidate still travels, so the date sheet can offer it.
+      expect(result.days[0].dateCandidate, ambiguous);
+      expect(result.days[1].origin, MergedDayOrigin.keptUnmatched);
+    });
+
     test('two repasted days naming one date: the first claims it, the second '
         'is appended', () {
-      final current = [day(1, date: jun14, stops: [mStop('A')])];
+      final current = [
+        day(1, date: jun14, stops: [mStop('A')]),
+      ];
       final repasted = [
         pDay(1, date: DateTime(2027, 6, 14), stops: [pStop('First')]),
         pDay(2, date: DateTime(2027, 6, 14), stops: [pStop('Second')]),
@@ -194,8 +257,7 @@ void main() {
   });
 
   group('matching by position (undated)', () {
-    test('undated repasted days pair with unclaimed current days in order',
-        () {
+    test('undated repasted days pair with unclaimed current days in order', () {
       final current = [
         day(1, place: 'Tokyo', stops: [mStop('Fish market')]),
         day(2, place: 'Kyoto', stops: [mStop('Temple')]),
@@ -247,8 +309,12 @@ void main() {
       // One current day, dated. One undated repasted day. The date pass has
       // nothing to do; the position pass pairs them — an undated revision of
       // the trip's only day is that day's revision.
-      final current = [day(1, date: jun14, stops: [mStop('A')])];
-      final repasted = [pDay(1, stops: [pStop('Revised A')])];
+      final current = [
+        day(1, date: jun14, stops: [mStop('A')]),
+      ];
+      final repasted = [
+        pDay(1, stops: [pStop('Revised A')]),
+      ];
 
       final result = mergeRepaste(current: current, repasted: repasted);
 
@@ -263,15 +329,23 @@ void main() {
     test('a stop the revised plan leaves out is filed with its day, text and '
         'time intact', () {
       final current = [
-        day(2, date: jun15, place: 'Kyoto', stops: [
-          mStop('Fushimi Inari'),
-          mStop('Tea ceremony', time: ClockTime(15, 30)),
-        ]),
+        day(
+          2,
+          date: jun15,
+          place: 'Kyoto',
+          stops: [
+            mStop('Fushimi Inari'),
+            mStop('Tea ceremony', time: ClockTime(15, 30)),
+          ],
+        ),
       ];
       final repasted = [
-        pDay(1, date: DateTime(2027, 6, 15), place: 'Kyoto', stops: [
-          pStop('Fushimi Inari'),
-        ]),
+        pDay(
+          1,
+          date: DateTime(2027, 6, 15),
+          place: 'Kyoto',
+          stops: [pStop('Fushimi Inari')],
+        ),
       ];
 
       final result = mergeRepaste(current: current, repasted: repasted);
@@ -299,22 +373,53 @@ void main() {
       expect(result.days.single.unchanged, isFalse);
     });
 
-    test('duplicate lines are counted: a line survives once per mention in '
-        'the revised plan', () {
+    test(
+      'a stop the re-paste moved to another day is moved, not displaced',
+      () {
+        final current = [
+          day(1, place: 'Kyoto', stops: [mStop('Gion'), mStop('Nishiki')]),
+          day(2, place: 'Nara', stops: [mStop('Deer park')]),
+        ];
+        final repasted = [
+          pDay(1, place: 'Kyoto', stops: [pStop('Nishiki')]),
+          pDay(2, place: 'Nara', stops: [pStop('Deer park'), pStop('Gion')]),
+        ];
+
+        final result = mergeRepaste(current: current, repasted: repasted);
+
+        // 'Gion' left day 1 but the revised plan still says it, on day 2.
+        expect(result.setAside, isEmpty);
+        expect(result.days[1].stops.map((s) => s.text), ['Deer park', 'Gion']);
+      },
+    );
+
+    test('a stop absent from the whole revised plan is filed, however many '
+        'times it was said', () {
       final current = [
         day(1, stops: [mStop('Lunch'), mStop('Lunch'), mStop('Lunch')]),
+        day(2, stops: [mStop('Dinner')]),
       ];
-      final repasted = [pDay(1, stops: [pStop('Lunch')])];
+      final repasted = [
+        pDay(1, stops: [pStop('Lunch')]),
+        pDay(2, stops: [pStop('Lunch')]),
+      ];
 
       final result = mergeRepaste(current: current, repasted: repasted);
 
-      expect(result.setAside, hasLength(2));
-      expect(result.days.single.stops, hasLength(1));
+      // 'Lunch' still appears in the revised plan, so no copy of it is
+      // displaced; 'Dinner' has vanished from it entirely, so it is filed.
+      expect(result.setAside.map((s) => s.stop.text), ['Dinner']);
+      expect(result.setAside.single.fromDayNumber, 2);
+      expect(result.days[0].stops, hasLength(1));
     });
 
     test('spelling up to case and whitespace is still the same stop', () {
-      final current = [day(1, stops: [mStop('  Fushimi   Inari ')])];
-      final repasted = [pDay(1, stops: [pStop('fushimi inari')])];
+      final current = [
+        day(1, stops: [mStop('  Fushimi   Inari ')]),
+      ];
+      final repasted = [
+        pDay(1, stops: [pStop('fushimi inari')]),
+      ];
 
       final result = mergeRepaste(current: current, repasted: repasted);
 
@@ -325,22 +430,35 @@ void main() {
   group('identity stability (rule 5)', () {
     test('unchanged days come back as the identical instance with their '
         'number untouched', () {
-      final untouched = day(1, date: jun14, place: 'Tokyo', stops: [
-        mStop('A'),
-        mStop('B', time: ClockTime(10, 0)),
-      ]);
+      final untouched = day(
+        1,
+        date: jun14,
+        place: 'Tokyo',
+        stops: [
+          mStop('A'),
+          mStop('B', time: ClockTime(10, 0)),
+        ],
+      );
       final changed = day(2, date: jun15, place: 'Kyoto', stops: [mStop('C')]);
       final kept = day(3, place: 'Osaka', stops: [mStop('D')]);
 
-      final result = mergeRepaste(current: [untouched, changed, kept], repasted: [
-        pDay(1, date: DateTime(2027, 6, 14), place: 'Tokyo', stops: [
-          pStop('A'),
-          pStop('B', hour: 10),
-        ]),
-        pDay(2, date: DateTime(2027, 6, 15), place: 'Kyoto', stops: [
-          pStop('C2'),
-        ]),
-      ]);
+      final result = mergeRepaste(
+        current: [untouched, changed, kept],
+        repasted: [
+          pDay(
+            1,
+            date: DateTime(2027, 6, 14),
+            place: 'Tokyo',
+            stops: [pStop('A'), pStop('B', hour: 10)],
+          ),
+          pDay(
+            2,
+            date: DateTime(2027, 6, 15),
+            place: 'Kyoto',
+            stops: [pStop('C2')],
+          ),
+        ],
+      );
 
       expect(identical(result.days[0].day, untouched), isTrue);
       expect(result.days[0].number, 1);
@@ -362,7 +480,9 @@ void main() {
 
       final result = mergeRepaste(
         current: current,
-        repasted: [pDay(1, date: DateTime(2027, 6, 14), stops: [pStop('New')])],
+        repasted: [
+          pDay(1, date: DateTime(2027, 6, 14), stops: [pStop('New')]),
+        ],
       );
 
       expect(result.days.map((d) => d.number), [2, 5]);
@@ -374,17 +494,22 @@ void main() {
       final result = mergeRepaste(
         current: const [],
         repasted: [
-          pDay(1, date: DateTime(2027, 6, 14), place: 'Tokyo', stops: [
-            pStop('A'),
-          ]),
+          pDay(
+            1,
+            date: DateTime(2027, 6, 14),
+            place: 'Tokyo',
+            stops: [pStop('A')],
+          ),
           pDay(2, place: 'Kyoto', stops: [pStop('B')]),
         ],
       );
 
       expect(result.days, hasLength(2));
       expect(result.days.map((d) => d.number), [1, 2]);
-      expect(result.days.every((d) => d.origin == MergedDayOrigin.appendedNew),
-          isTrue);
+      expect(
+        result.days.every((d) => d.origin == MergedDayOrigin.appendedNew),
+        isTrue,
+      );
       // The undated appended day keeps its date open — appending is not
       // dating.
       expect(result.days[1].date, isNull);
@@ -400,8 +525,10 @@ void main() {
       final result = mergeRepaste(current: current, repasted: const []);
 
       expect(result.days, hasLength(2));
-      expect(result.days.every((d) => identical(d.day, current[d.number - 1])),
-          isTrue);
+      expect(
+        result.days.every((d) => identical(d.day, current[d.number - 1])),
+        isTrue,
+      );
       expect(result.setAside, isEmpty);
     });
 
@@ -432,12 +559,17 @@ void main() {
 
     test('repaste longer than current: extras append after the highest '
         'existing number, dated only where the parser bound a date', () {
-      final current = [day(1, date: jun14, stops: [mStop('A')])];
+      final current = [
+        day(1, date: jun14, stops: [mStop('A')]),
+      ];
       final repasted = [
         pDay(1, date: DateTime(2027, 6, 14), stops: [pStop('A')]),
-        pDay(2, date: DateTime(2027, 6, 18), place: 'Nara', stops: [
-          pStop('Deer park'),
-        ]),
+        pDay(
+          2,
+          date: DateTime(2027, 6, 18),
+          place: 'Nara',
+          stops: [pStop('Deer park')],
+        ),
         pDay(
           3,
           place: 'Kobe',
@@ -473,9 +605,12 @@ void main() {
         day(2, place: 'Spare', stops: [mStop('B')]), // undated, unclaimed
       ];
       final repasted = [
-        pDay(1, date: DateTime(2027, 7, 1), place: 'Hokkaido', stops: [
-          pStop('New leg'),
-        ]),
+        pDay(
+          1,
+          date: DateTime(2027, 7, 1),
+          place: 'Hokkaido',
+          stops: [pStop('New leg')],
+        ),
       ];
 
       final result = mergeRepaste(current: current, repasted: repasted);
@@ -489,26 +624,31 @@ void main() {
   });
 
   group('content replacement on a matched day', () {
-    test('place and stops are replaced wholesale; the number and date stay',
-        () {
-      final current = [
-        day(4, date: jun15, place: 'Old name', stops: [mStop('Old stop')]),
-      ];
-      final repasted = [
-        pDay(1, date: DateTime(2027, 6, 15), place: 'New name', stops: [
-          pStop('New stop'),
-        ]),
-      ];
+    test(
+      'place and stops are replaced wholesale; the number and date stay',
+      () {
+        final current = [
+          day(4, date: jun15, place: 'Old name', stops: [mStop('Old stop')]),
+        ];
+        final repasted = [
+          pDay(
+            1,
+            date: DateTime(2027, 6, 15),
+            place: 'New name',
+            stops: [pStop('New stop')],
+          ),
+        ];
 
-      final result = mergeRepaste(current: current, repasted: repasted);
+        final result = mergeRepaste(current: current, repasted: repasted);
 
-      final merged = result.days.single;
-      expect(merged.number, 4);
-      expect(merged.date, jun15);
-      expect(merged.place, 'New name');
-      expect(merged.stops.single.text, 'New stop');
-      expect(result.setAside.single.stop.text, 'Old stop');
-    });
+        final merged = result.days.single;
+        expect(merged.number, 4);
+        expect(merged.date, jun15);
+        expect(merged.place, 'New name');
+        expect(merged.stops.single.text, 'New stop');
+        expect(result.setAside.single.stop.text, 'Old stop');
+      },
+    );
 
     test('an emptied repasted day empties its counterpart — and files what '
         'was there', () {
@@ -525,8 +665,12 @@ void main() {
 
     test('a repasted header with no place replaces a named place with none — '
         'the literal reading of "takes the repasted content"', () {
-      final current = [day(1, place: 'Tokyo', stops: [mStop('A')])];
-      final repasted = [pDay(1, stops: [pStop('A')])];
+      final current = [
+        day(1, place: 'Tokyo', stops: [mStop('A')]),
+      ];
+      final repasted = [
+        pDay(1, stops: [pStop('A')]),
+      ];
 
       final result = mergeRepaste(current: current, repasted: repasted);
 
@@ -543,9 +687,12 @@ void main() {
         day(2, place: 'Kyoto', stops: [mStop('B'), mStop('C')]),
       ];
       final repasted = [
-        pDay(1, date: DateTime(2027, 6, 14), place: 'Tokyo', stops: [
-          pStop('A2'),
-        ]),
+        pDay(
+          1,
+          date: DateTime(2027, 6, 14),
+          place: 'Tokyo',
+          stops: [pStop('A2')],
+        ),
         pDay(2, stops: [pStop('B')]),
       ];
 
@@ -566,7 +713,9 @@ void main() {
 
     test('the inputs are not mutated', () {
       final currentStops = [mStop('A')];
-      final current = [day(1, date: jun14, place: 'Tokyo', stops: currentStops)];
+      final current = [
+        day(1, date: jun14, place: 'Tokyo', stops: currentStops),
+      ];
       final parsedStops = [pStop('B')];
       final repasted = [
         pDay(1, date: DateTime(2027, 6, 14), stops: parsedStops),

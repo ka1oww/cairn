@@ -47,10 +47,14 @@ import what is written there, not here.
   Flutter, no Riverpod, no IO. Its first resident is the re-paste merge
   (`repaste_merge.dart`, tested in `test/repaste_merge_test.dart`), whose
   rules are settled: match repasted days to saved days by date first (a
-  full-year title candidate counts for matching but is never bound), then
+  full-year title candidate counts for matching but is never bound, and one
+  the parser flagged `ambiguousNumericOrder` counts for nothing — it matches
+  as undated and rides on the result for the date sheet to ask about), then
   undated days by position; a matched day takes the repasted place and stops
-  wholesale, and every current stop whose text no longer appears
-  (case/whitespace-insensitive, counted) goes to the set-aside; unclaimed
+  wholesale, and survival is plan-wide — a stop whose text still appears
+  anywhere in the revised plan was moved, not displaced, and only text the
+  re-paste no longer says at all (case/whitespace-insensitive) goes to the
+  set-aside; unclaimed
   current days come back as the very same `ConfirmedDay` instance, unclaimed
   repasted days append numbered past the current maximum. A day's identity is
   its number — photos key on it — so the merge never renumbers and never

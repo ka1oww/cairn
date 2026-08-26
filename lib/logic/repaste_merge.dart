@@ -9,8 +9,10 @@
 //
 //  1. Match repasted days to current days by DATE first (when both sides have
 //     dates), then by POSITION for undated days.
-//  2. A matched day takes the repasted content; anything in the current day
-//     that no longer appears goes to the set-aside, never silently dropped.
+//  2. A matched day takes the repasted content; anything the revised plan no
+//     longer contains *anywhere* goes to the set-aside, never silently
+//     dropped. Survival is plan-wide: a stop the re-paste moved to another day
+//     was moved, not displaced.
 //  3. Days in the current plan with no repasted counterpart are kept,
 //     untouched.
 //  4. Repasted days with no current counterpart are appended as new days.
@@ -136,18 +138,22 @@ class RepasteMergeResult {
 /// Matching runs in two passes. The **date pass** walks [repasted] in order;
 /// a day whose date is known — bound by the parser, or spelled out fully
 /// (with a year) in a title fragment the parser left as a
-/// [ip.ParsedDay.dateCandidate] — claims the earliest not-yet-claimed current
-/// day wearing that date. The **position pass** then pairs remaining
+/// [ip.ParsedDay.dateCandidate] whose reading is unambiguous — claims the
+/// earliest not-yet-claimed current day wearing that date. A candidate the
+/// parser flagged [ip.DateCandidate.ambiguousNumericOrder] (5/6/2027: is that
+/// May or June?) is undated for matching and falls through to the position
+/// pass; it still rides on the [MergedDay] for the screen to ask about. The **position pass** then pairs remaining
 /// *undated* repasted days, in order, with remaining unclaimed current days,
 /// in order. A dated repasted day whose date no current day wears is never
 /// position-matched: it names a day the current plan does not have, and is
 /// appended (rule 4).
 ///
 /// On a matched day the repasted content wins wholesale — place and stops.
-/// Every current stop whose text no longer appears in the repasted day (same
-/// spelling up to case and whitespace, counted, so two "Lunch" lines survive
-/// only if the revised plan still says it twice) becomes a [SetAsideItem].
-/// Times are not part of survival, because re-timing a stop is keeping it.
+/// Survival is decided over the *whole* revised plan, not the day alone: a
+/// current stop whose text still appears anywhere in the re-paste (same
+/// spelling up to case and whitespace) was moved and is kept; only a stop the
+/// revised plan no longer says at all becomes a [SetAsideItem]. Times are not
+/// part of survival, because re-timing a stop is keeping it.
 ///
 /// Appended days take their date only when the parser itself bound one; a
 /// title-carried candidate stays a candidate, carried on the [MergedDay] for
@@ -198,6 +204,12 @@ RepasteMergeResult mergeRepaste({
   }
   var appendedCount = 0;
 
+  // Survival is plan-wide: every stop the revised plan still says, anywhere.
+  final repastedTexts = <String>{
+    for (final day in repasted)
+      for (final stop in day.stops) _normalize(stop.text),
+  };
+
   final days = <MergedDay>[];
   final setAside = <SetAsideItem>[];
 
@@ -216,7 +228,7 @@ RepasteMergeResult mergeRepaste({
       );
       continue;
     }
-    days.add(_mergeMatched(current[c], repasted[r], setAside));
+    days.add(_mergeMatched(current[c], repasted[r], repastedTexts, setAside));
   }
 
   // Then whatever the revised plan brings that the current plan has no day
@@ -252,25 +264,16 @@ RepasteMergeResult mergeRepaste({
 MergedDay _mergeMatched(
   ConfirmedDay currentDay,
   ip.ParsedDay parsed,
+  Set<String> repastedTexts,
   List<SetAsideItem> setAside,
 ) {
   final newStops = _convertStops(parsed.stops);
 
-  // Which current stops survive? Counted on normalized text, so duplicates
-  // are honest: a line survives as many times as the revised plan says it.
-  final survivingCounts = <String, int>{};
-  for (final stop in parsed.stops) {
-    final key = _normalize(stop.text);
-    survivingCounts[key] = (survivingCounts[key] ?? 0) + 1;
-  }
+  // Which current stops survive? Anything the revised plan still says, on any
+  // of its days: a stop that moved to another day was moved, not displaced.
   for (final stop in currentDay.stops) {
-    final key = _normalize(stop.text);
-    final left = survivingCounts[key] ?? 0;
-    if (left > 0) {
-      survivingCounts[key] = left - 1;
-    } else {
-      setAside.add(SetAsideItem(fromDayNumber: currentDay.number, stop: stop));
-    }
+    if (repastedTexts.contains(_normalize(stop.text))) continue;
+    setAside.add(SetAsideItem(fromDayNumber: currentDay.number, stop: stop));
   }
 
   final placeChanged = currentDay.place != parsed.place;
@@ -317,9 +320,11 @@ List<Stop> _convertStops(List<ip.Stop> stops) => List.unmodifiable([
 ]);
 
 /// The date a repasted day effectively carries for matching: the parser-bound
-/// date, or a title-named candidate whose header spelled a full year out. A
-/// year-less candidate resolves against nothing here — working out years is
-/// the screen's ask, never the merge's guess.
+/// date, or a title-named candidate whose header spelled a full year out and
+/// read only one way. A year-less candidate resolves against nothing here, and
+/// neither does one whose numeric order is ambiguous — working out years, and
+/// choosing between 5 June and 5 May, is the screen's ask, never the merge's
+/// guess.
 CalendarDate? _effectiveDate(ip.ParsedDay day) {
   final bound = day.date;
   if (bound != null) return CalendarDate.fromDateTimeIgnoringZone(bound);
@@ -327,7 +332,9 @@ CalendarDate? _effectiveDate(ip.ParsedDay day) {
 }
 
 CalendarDate? _candidateDate(ip.ParsedDay day) {
-  final resolved = day.dateCandidate?.resolved;
+  final candidate = day.dateCandidate;
+  if (candidate == null || candidate.ambiguousNumericOrder) return null;
+  final resolved = candidate.resolved;
   return resolved == null
       ? null
       : CalendarDate.fromDateTimeIgnoringZone(resolved);
