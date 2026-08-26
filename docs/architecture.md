@@ -21,7 +21,10 @@ and the word — which drew the app's first photo write path all the way down
 the bands, lit up two platform edges that had been drawn as intentions, and
 put the store behind the Pool's seam. Updated again for the read-back editor
 (`fm/cairn-paste-editor`), which turned the confirmation screen from a read
-and an accept into design round 8's by-hand corrections in full.
+and an accept into design round 8's by-hand corrections in full. Updated 26
+August 2026 for the re-paste merge (`fm/cairn-repaste-merge`), which opened a
+band the map had not needed before: `lib/logic/`, pure decision cores the
+providers call.
 Sources: `docs/roadmap.md`, all seven files in `docs/decisions/`,
 `supabase/README.md`, `AGENTS.md`, and each package's `README.md`.
 
@@ -113,7 +116,7 @@ marked per node. A map of only what exists would omit most of the product.
      Trail · Day page & gate · Capture · Pool · Book · Join & confirm · Settings   SCREENS        partial
         │                          (know app state, and nothing below it)
         ▼
-     Riverpod providers · ping scheduler · import sweep · platform glue            APP STATE      partial
+     Riverpod providers · ping scheduler · import sweep · platform glue · logic    APP STATE      partial
         │                                     │ (services also know platform
         ▼                                     ▼  edges and domain packages)
      ╔══════════════════ REPOSITORIES — the seam ══════════════════╗               SEAM           partial
@@ -233,6 +236,7 @@ That is the layering rule paying rent.
 | --- | --- | --- | --- | --- |
 | **Riverpod providers** | partial — the paste-and-confirm flow's state (`paste_flow.dart`), the saved-plan stream and the photo seam's providers (`trip_providers.dart`), the day view (`day_view.dart`: which day a date *or* a plan-day number is, and whether it is behind us), the trail view (`trail_view.dart`: the whole trip as nodes, and where the flag goes), the pool view (`pool_view.dart`: the trip's photos grouped by the day already on them), the gate (`day_gate.dart`: one answer to "is this day mine to see", for every surface that draws a photograph), the capture flow (`capture_flow.dart`: where the moment stands, and the whole of the shutter-pause-word walk), the trip's own sheet (`trip_settings.dart`: the roster, the live code and when it dies, and what each of the trip's own acts is allowed to do) and the second door (`join_flow.dart`: what saying three words back can answer) | repositories, `cairn_model`, `itinerary_parser` (the parse use case), `trip_moments` (the schedule) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring — which is exactly how a kept photo reaches the Pool with no wire between the two features. The parser's dialect is translated to screen-facing view models here — screens never import it, and no `cairn_model` type reaches one either. |
 | **Ping scheduler** | built over the real roster (`ping_schedule.dart`) — the derivation, the day's ping and the register-the-remaining-days pass are real, and the party is now the trip's stored members rather than a stub: `tripPartyProvider` reads the roster, and no trip means no pings rather than an invented member. It still holds one person, because nothing propagates membership between phones; the trip clock is still the device's offset | repositories (roster, trip clock, itinerary arrival/departure), `trip_moments`, local-notifications edge | The one interruption per person per day | Feeds `trip_moments` its inputs and registers every remaining day's local notifications in one offline pass. Registration replaces the whole future deal rather than appending to it, because the deal is re-derived whenever the plan or the clock moves and a stale ping firing alongside a fresh one is indistinguishable from two pings a day. |
+| **Pure decision cores** (`lib/logic/`) | partial — one resident: the re-paste merge (`repaste_merge.dart`), the decision core of editing a plan after it was accepted; the slice that calls it is not built | `repositories/` value types, `cairn_model`, `itinerary_parser` — no Flutter, no Riverpod, no IO | The providers that call it | A decision worth unit-testing on its own belongs below the providers, not inside one: the merge is a pure function of (saved plan, repasted plan), so it is testable without a database, a widget or a clock. Its rules are written once, in the file and in `AGENTS.md`; screens never reach it. |
 | **Import sweep** | not built | camera-roll edge, `photo_day_assignment`, repositories | The completeness of the record | Runs when the app opens — the import promise commits to exactly that and no more (iOS offers no background trigger). Extracts metadata, asks the ladder, queues uploads. |
 | **Platform glue** | partial — the camera is behind `CameraSource` (`camera_source.dart`), with the real back camera on a device and a generated stand-in where there is none; location and Sign in with Apple not started | camera, location, Sign in with Apple edges | Capture and Join | The thin controllers that drive dual capture, tag a pinged photo with GPS so it rides rung 1, and run the sign-in flow. Kept out of widgets so screens stay platform-blind. |
 
