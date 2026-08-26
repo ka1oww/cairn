@@ -174,6 +174,21 @@ Phase 2 moves them, and that is also what the gate is waiting on to matter.
 Still not built: the day page's photo timeline, the Trail's filled node, and
 the gate's face on the day page — the rule is there, the page has no
 photographs to withhold yet.
+
+**The paste box now has a file door.** A plan can arrive as a file rather than
+as pasted text: the pill under the box opens the document picker, the picked
+bytes are routed to the one extractor that claims them (magic bytes first, the
+extension only as tiebreak), and the text lands *in the box* rather than
+parsing on its own — so every route out of the box, including the re-paste
+merge over a running trip, works exactly as it already did. Four formats read
+today: plain text, `.docx`, `.xlsx` and `.csv`. Spreadsheets and CSVs lift
+their typed cells into one shared row model and are said back in the parser's
+own dialect when a date column is there to drive it; when it is not, every
+cell becomes a faithful row-major line, which is never worse than pasting the
+same table as text. A file that is damaged, encrypted or not what its name
+claims is refused in a sentence rather than decoded into junk. OCR of a
+screenshotted plan is the slice after this one and is not built.
+
 Beneath it: five pure-Dart libraries, a backend schema, a
 dual-camera spike, the decision record, and the design handoffs, all
 tested.
@@ -185,11 +200,11 @@ tested.
 | `packages/photo_day_assignment` | Landed. Decides which day a photo belongs to. |
 | `packages/trip_moments` | Landed. Deals one ping per person across the party. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
-| `packages/plan_extraction` | Landed. The file-import contract — bytes in, honest lines of plan text out — plus the plain-text extractor. |
+| `packages/plan_extraction` | Landed. Bytes in, plan text out — the file-import contract and its `.txt`/`.docx`/`.xlsx`/`.csv` extractors. |
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** The paste-and-confirm flow persisting the itinerary locally — with a second door beside the box: importing a plain-text file fills it and never auto-parses, so one tap reads it through the same pipeline — the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them and the Pool obeys it (the day page's own gated half still waits on the photo timeline) — and now the trip as a stored fact: roster, starter, flat-but-gated powers, three-word codes that die with the trip, and the sheet off the Trail's title. Nothing registered with iOS yet; no code can reach another phone yet. |
+| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them and the Pool obeys it (the day page's own gated half still waits on the photo timeline) — and now the trip as a stored fact: roster, starter, flat-but-gated powers, three-word codes that die with the trip, and the sheet off the Trail's title, and the paste box's file door (`.txt`, `.docx`, `.xlsx`, `.csv` — extracted into the box, never auto-parsed). Nothing registered with iOS yet; no code can reach another phone yet. |
 
 ---
 

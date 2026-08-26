@@ -24,7 +24,15 @@ import 'file_picker_edge.dart';
 // new format lands.
 // ---------------------------------------------------------------------------
 
-const List<PlanTextExtractor> planExtractors = [PlainTextExtractor()];
+// Slice C's csv sits ahead of plain text: both read decodable text, and
+// only the extension can tell them apart, so csv must get the registry's
+// extension-gated claim first (see csv_extractor.dart).
+const List<PlanTextExtractor> planExtractors = [
+  CsvExtractor(),
+  PlainTextExtractor(),
+  DocxExtractor(),
+  XlsxExtractor(),
+];
 
 /// What the real document picker may offer: every extension some registered
 /// extractor claims. Sorted so the UTType list is stable.
@@ -174,6 +182,15 @@ class ImportFlow extends Notifier<ImportState> {
   }
 
   Future<ExtractionResult> _read(PickedBytes picked) async {
+    // Routing itself is real work — every `matches` decodes or unzips the
+    // whole file, on this isolate — so the size refusal has to come before
+    // it, not only inside the extraction the runner carries away.
+    if (picked.bytes.length > maxPlainBytes) {
+      return const ExtractionFailure(
+        ExtractionFailureKind.unreadable,
+        oversizedFileSentence,
+      );
+    }
     final extractor = routeToExtractor(picked);
     if (extractor == null) {
       return const ExtractionFailure(

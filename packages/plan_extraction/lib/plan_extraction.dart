@@ -27,8 +27,12 @@ export 'src/plain_text_extractor.dart'
     show
         PlainTextExtractor,
         maxPlainBytes,
+        oversizedFileSentence,
         unreadableFileSentence,
         emptyFileSentence;
+export 'src/docx_extractor.dart' show DocxExtractor;
+export 'src/xlsx_extractor.dart' show XlsxExtractor;
+export 'src/csv_extractor.dart' show CsvExtractor;
 
 /// One picked file, already read into memory by the app's picker edge.
 /// The package never does IO: bytes in, text out.
