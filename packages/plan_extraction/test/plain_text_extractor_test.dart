@@ -90,8 +90,7 @@ void main() {
       // over 8% CR and must still read as an ordinary plan.
       const text = 'Day 1 - Tokyo\r\n- Senso-ji\r\n- Ueno\r\n- Cafe\r\n';
       final file = named('windows.txt', utf8.encode(text));
-      final crRatio =
-          text.runes.where((r) => r == 0x0D).length / text.length;
+      final crRatio = text.runes.where((r) => r == 0x0D).length / text.length;
       expect(crRatio, greaterThan(0.05));
       expect(extractor.matches(file), isTrue);
       final result = extractor.extract(file);

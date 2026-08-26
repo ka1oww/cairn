@@ -42,9 +42,9 @@ const recognizedScreenshot = [
 /// Bytes whose leading signature says PNG, so the claim is made on content
 /// even though the payload is nonsense — the fake never decodes it.
 Uint8List pngBytes({int fill = 0xAB}) => Uint8List.fromList([
-      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
-      ...List<int>.filled(32, fill),
-    ]);
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+  ...List<int>.filled(32, fill),
+]);
 
 final _defaultToday = DateTime.utc(2027, 6, 15);
 
@@ -83,7 +83,8 @@ void main() {
         database: db,
         today: _defaultToday,
         picker: picker,
-        extraction: extraction ?? (extractor, file) async => extractor.extract(file),
+        extraction:
+            extraction ?? (extractor, file) async => extractor.extract(file),
         textRecognition: recognition,
       ),
     );
@@ -92,9 +93,10 @@ void main() {
     return (picker, recognition);
   }
 
-  String boxText(WidgetTester tester) => tester.widget<TextField>(
-        find.byKey(const Key('paste-input')),
-      ).controller!.text;
+  String boxText(WidgetTester tester) => tester
+      .widget<TextField>(find.byKey(const Key('paste-input')))
+      .controller!
+      .text;
 
   Future<void> openSheet(WidgetTester tester) async {
     await tester.tap(find.byKey(const Key('import-pill')));
@@ -109,8 +111,10 @@ void main() {
     expect(claim('shot.jpg', 'jpg', Uint8List(64)), isTrue);
     expect(claim('scan.heic', 'heic', Uint8List(64)), isTrue);
     expect(claim('plan.txt', 'txt', Uint8List(64)), isFalse);
-    expect(claim('plan.pdf', 'pdf', Uint8List.fromList(utf8.encode('%PDF-1.4'))),
-        isFalse);
+    expect(
+      claim('plan.pdf', 'pdf', Uint8List.fromList(utf8.encode('%PDF-1.4'))),
+      isFalse,
+    );
 
     // Content over name: a renamed screenshot still finds the OCR route…
     expect(claim('mystery.dat', null, pngBytes()), isTrue);
@@ -118,7 +122,13 @@ void main() {
       claim(
         'photo.jpg.renamed',
         'renamed',
-        Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0, ...List<int>.filled(32, 0)]),
+        Uint8List.fromList([
+          0xFF,
+          0xD8,
+          0xFF,
+          0xE0,
+          ...List<int>.filled(32, 0),
+        ]),
       ),
       isTrue,
     );
@@ -139,7 +149,11 @@ void main() {
     final (_, recognition) = await launch(
       tester,
       imagePicks: [
-        PickedBytes(fileName: 'chat-screenshot.png', extension: 'png', bytes: pngBytes()),
+        PickedBytes(
+          fileName: 'chat-screenshot.png',
+          extension: 'png',
+          bytes: pngBytes(),
+        ),
       ],
       recognitionAnswers: [
         RecognizedScan(lines: recognizedScreenshot, pageCount: 1),
@@ -167,15 +181,24 @@ void main() {
     await tester.pump();
     await tester.pump();
     final stops = await db.readItineraryStops();
-    expect(stops.map((s) => s.stopText), containsAll(['Senso-ji', 'Fushimi Inari']));
+    expect(
+      stops.map((s) => s.stopText),
+      containsAll(['Senso-ji', 'Fushimi Inari']),
+    );
   });
 
-  testWidgets('multi-page reads report their progress per page', (tester) async {
+  testWidgets('multi-page reads report their progress per page', (
+    tester,
+  ) async {
     final held = Completer<void>();
     await launch(
       tester,
       imagePicks: [
-        PickedBytes(fileName: 'scanned.pdf.png', extension: 'png', bytes: pngBytes()),
+        PickedBytes(
+          fileName: 'scanned.pdf.png',
+          extension: 'png',
+          bytes: pngBytes(),
+        ),
       ],
       recognitionAnswers: [
         RecognizedScan(lines: ['Mon 14 June 2027 - Tokyo'], pageCount: 3),
@@ -209,7 +232,11 @@ void main() {
     await launch(
       tester,
       imagePicks: [
-        PickedBytes(fileName: 'wall.jpg', extension: 'jpg', bytes: pngBytes(fill: 0x11)),
+        PickedBytes(
+          fileName: 'wall.jpg',
+          extension: 'jpg',
+          bytes: pngBytes(fill: 0x11),
+        ),
       ],
       recognitionAnswers: [
         const RecognitionRefused("That picture couldn't be read."),
@@ -239,9 +266,7 @@ void main() {
       imagePicks: [
         PickedBytes(fileName: 'dog.png', extension: 'png', bytes: pngBytes()),
       ],
-      recognitionAnswers: [
-        const RecognizedScan(lines: [], pageCount: 1),
-      ],
+      recognitionAnswers: [const RecognizedScan(lines: [], pageCount: 1)],
     );
 
     await openSheet(tester);
@@ -262,8 +287,9 @@ void main() {
     // back through recognition — not what format they claim to be, since
     // the only registered extractor on this branch is the plain-text one
     // (see the runner stand-in below).
-    final refusedBytes =
-        Uint8List.fromList(utf8.encode('a scanned plan with no text layer'));
+    final refusedBytes = Uint8List.fromList(
+      utf8.encode('a scanned plan with no text layer'),
+    );
     final (_, recognition) = await launch(
       tester,
       documentPicks: [
@@ -274,7 +300,10 @@ void main() {
         ),
       ],
       recognitionAnswers: [
-        RecognizedScan(lines: ['Sat, Jun 14th - Tokyo', '- Senso-ji'], pageCount: 1),
+        RecognizedScan(
+          lines: ['Sat, Jun 14th - Tokyo', '- Senso-ji'],
+          pageCount: 1,
+        ),
       ],
       // Slice B's PDF extractor standing in at its exact seam: the runner
       // this file sits behind answers noTextLayer for the picked file.
