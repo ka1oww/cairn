@@ -67,11 +67,22 @@ class ConfirmScreen extends ConsumerWidget {
               const SizedBox(height: 10),
             ],
             const SizedBox(height: 6),
-            FilledButton(
-              key: const Key('accept-button'),
-              onPressed: () => ref.read(pasteFlowProvider.notifier).accept(),
-              child: const Text('Looks right'),
-            ),
+            // The read is drawn in full either way; only the accept goes.
+            // A closed trip's plan is half the record it closed with, so
+            // there is nothing to accept into — said in words rather than by
+            // a button that does nothing.
+            if (review.canAccept)
+              FilledButton(
+                key: const Key('accept-button'),
+                onPressed: () => ref.read(pasteFlowProvider.notifier).accept(),
+                child: const Text('Looks right'),
+              )
+            else
+              Text(
+                review.refusal!,
+                key: const Key('accept-refused'),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             const SizedBox(height: 8),
             Center(
               child: TextButton(
@@ -384,9 +395,7 @@ class _DayHeaderRow extends ConsumerWidget {
           children: [
             _DayNumber(day.number),
             const SizedBox(width: 8),
-            Expanded(
-              child: Text(day.title, style: theme.textTheme.titleSmall),
-            ),
+            Expanded(child: Text(day.title, style: theme.textTheme.titleSmall)),
             if (day.dateSuggestion != null) ...[
               _DatePromptChip(day: day),
               const SizedBox(width: 6),
@@ -474,7 +483,11 @@ void _dropInto(WidgetRef ref, _Dragged item, int dayNumber, int? index) {
   if (stopId != null) {
     notifier.moveStop(stopId, toDayNumber: dayNumber, toIndex: index);
   } else {
-    notifier.restoreAside(item.asideId!, toDayNumber: dayNumber, toIndex: index);
+    notifier.restoreAside(
+      item.asideId!,
+      toDayNumber: dayNumber,
+      toIndex: index,
+    );
   }
 }
 
@@ -828,9 +841,7 @@ Future<void> _showStopMenu(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
             child: Text(
               stop.text,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontFamily: 'serif',
-              ),
+              style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'serif'),
             ),
           ),
           ListTile(
@@ -933,9 +944,7 @@ Future<int?> _askWhichDay(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
             child: Text(
               'Which day?',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontFamily: 'serif',
-              ),
+              style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'serif'),
             ),
           ),
           for (final day in days)
@@ -1019,7 +1028,9 @@ class _DayEditorSheetState extends State<_DayEditorSheet> {
     final theme = Theme.of(context);
     final day = widget.day;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,

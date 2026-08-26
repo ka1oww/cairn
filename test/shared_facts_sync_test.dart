@@ -33,6 +33,15 @@ import 'package:cairn/repositories/trip_repository.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 import 'package:cairn/storage/remote/shared_facts.dart';
 
+/// A reading of now that sits inside every plan these tests paste.
+///
+/// Pinned rather than left to the device clock, because the reconcile asks
+/// where the trip *stands* before it reaches for the network — an archived
+/// trip syncs nothing at all (`SyncStanding.archived`) — and a plan dated
+/// June 2027 read against the real wall clock would quietly stop being
+/// synced the moment that month passed.
+DateTime duringTheTrip() => DateTime.utc(2027, 6, 15, 12);
+
 AppDatabase inMemory() => AppDatabase(
   DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true),
 );
@@ -220,7 +229,11 @@ void main() {
         );
         final server = FakeServer()..auth = null;
 
-        final outcome = await TripSync(database: db, facts: server).syncNow();
+        final outcome = await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
 
         expect(outcome.standing, SyncStanding.dormant);
         expect(server.pushes, isEmpty);
@@ -239,7 +252,11 @@ void main() {
         addTearDown(db.close);
         final server = FakeServer();
 
-        final outcome = await TripSync(database: db, facts: server).syncNow();
+        final outcome = await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
 
         expect(outcome.standing, SyncStanding.noTrip);
         expect(server.readTrips, 0);
@@ -257,7 +274,11 @@ void main() {
       await startTrip(db);
       final server = FakeServer(trip: null);
 
-      final outcome = await TripSync(database: db, facts: server).syncNow();
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+      ).syncNow();
 
       expect(outcome.standing, SyncStanding.awaitingTripRow);
       expect(server.created, isEmpty);
@@ -279,6 +300,7 @@ void main() {
 
       final outcome = await TripSync(
         database: db,
+        now: duringTheTrip,
         facts: server,
         tripRow: (pending) async => RemoteTripDraft(
           id: pending.tripId,
@@ -297,6 +319,50 @@ void main() {
         ('2027-06-14', '2027-06-16'),
         reason: 'the plan\'s own resolved dates, not a guess',
       );
+    });
+
+    test('and it claims no ending the phone does not know', () async {
+      // Days 1 and 2 are dated, day 3 is not. `tripEndsAtFrom` says the trip
+      // has no known end, so the row must not publish day 2 as one: the
+      // server would shut the pool and refuse every reconcile seventy-two
+      // hours later, on a trip the app is still offering codes on.
+      final db = inMemory();
+      addTearDown(db.close);
+      await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([
+          confirmed(1, 'Oslo', date: CalendarDate(2027, 6, 14)),
+          confirmed(2, 'Bergen', date: CalendarDate(2027, 6, 16)),
+          confirmed(3, 'Tromso'),
+        ]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: null);
+      PendingTripRow? asked;
+
+      final outcome = await TripSync(
+        database: db,
+        now: duringTheTrip,
+        facts: server,
+        tripRow: (pending) async {
+          asked = pending;
+          final ends = pending.lastDateIso;
+          if (ends == null) return null;
+          return RemoteTripDraft(
+            id: pending.tripId,
+            name: pending.name ?? 'Norway',
+            createdBy: pending.startedBy,
+            timeZone: 'Europe/Oslo',
+            startDateIso: pending.firstDateIso!,
+            endDateIso: ends,
+          );
+        },
+      ).syncNow();
+
+      expect(asked?.lastDateIso, isNull);
+      expect(asked?.firstDateIso, '2027-06-14');
+      expect(outcome.standing, SyncStanding.awaitingTripRow);
+      expect(server.created, isEmpty);
     });
   });
 
@@ -319,7 +385,7 @@ void main() {
         at: DateTime.utc(2027, 6, 1, 9),
       );
 
-      await TripSync(database: db, facts: server).syncNow();
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
 
       final push = server.pushes.single;
       expect(push.days.map((d) => d.number), [1, 2]);
@@ -362,7 +428,7 @@ void main() {
         at: DateTime.utc(2027, 6, 2, 9),
       );
 
-      await TripSync(database: db, facts: server).syncNow();
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
 
       final days = {for (final d in server.pushes.single.days) d.number: d};
       expect(days[1]!.revisedAt, DateTime.utc(2027, 6, 1, 9));
@@ -392,7 +458,11 @@ void main() {
           at: DateTime.utc(2027, 6, 3, 9),
         );
 
-        await TripSync(database: db, facts: server).syncNow();
+        await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
 
         expect(server.pushes.single.planRevisedAt, DateTime.utc(2027, 6, 3, 9));
         expect(server.pushes.single.days.map((d) => d.number), [1]);
@@ -421,7 +491,11 @@ void main() {
           ),
           at: DateTime.utc(2027, 6, 1, 9),
         );
-        await TripSync(database: db, facts: server).syncNow();
+        await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
         expect(server.pushes.last.setAside.single.text, 'book the cabin');
         expect(server.pushes.last.pocketRevisedAt, DateTime.utc(2027, 6, 1, 9));
 
@@ -429,7 +503,11 @@ void main() {
           plan([confirmed(1, 'Oslo')]),
           at: DateTime.utc(2027, 6, 4, 9),
         );
-        await TripSync(database: db, facts: server).syncNow();
+        await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
         expect(server.pushes.last.setAside, isEmpty);
         expect(
           server.pushes.last.pocketRevisedAt,
@@ -446,7 +524,7 @@ void main() {
       addTearDown(db.close);
       final id = await startTrip(db);
       final server = FakeServer(trip: sharedTrip(id, const []));
-      final sync = TripSync(database: db, facts: server);
+      final sync = TripSync(database: db, facts: server, now: duringTheTrip);
       addTearDown(sync.stop);
       sync.start();
 
@@ -470,7 +548,7 @@ void main() {
       addTearDown(db.close);
       final id = await startTrip(db);
       final server = FakeServer(trip: sharedTrip(id, const []));
-      final sync = TripSync(database: db, facts: server);
+      final sync = TripSync(database: db, facts: server, now: duringTheTrip);
       addTearDown(sync.stop);
       sync.start();
 
@@ -507,7 +585,7 @@ void main() {
         final id = await startTrip(db);
         final at = DateTime.utc(2027, 6, 1, 9);
         final server = FakeServer(trip: sharedTrip(id, const []));
-        final sync = TripSync(database: db, facts: server);
+        final sync = TripSync(database: db, facts: server, now: duringTheTrip);
         addTearDown(sync.stop);
 
         await TripRepository(db).saveItinerary(
@@ -599,7 +677,11 @@ void main() {
           ),
         ]);
 
-      final outcome = await TripSync(database: db, facts: server).syncNow();
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+      ).syncNow();
 
       expect(outcome.standing, SyncStanding.synced);
       expect(outcome.days, 2);
@@ -632,7 +714,7 @@ void main() {
             serverDay(2, 'Tromsø', DateTime.utc(2027, 6, 5, 12)),
           ], planAt: DateTime.utc(2027, 6, 5, 12));
 
-        final sync = TripSync(database: db, facts: server);
+        final sync = TripSync(database: db, facts: server, now: duringTheTrip);
         await sync.syncNow();
         await sync.syncNow();
 
@@ -660,7 +742,7 @@ void main() {
           serverDay(1, 'Oslo', DateTime.utc(2027, 6, 1, 9)),
         ], planAt: DateTime.utc(2027, 6, 7));
 
-      await TripSync(database: db, facts: server).syncNow();
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
 
       expect(await db.readItineraryDays(), hasLength(1));
       expect(
@@ -686,7 +768,7 @@ void main() {
           serverDay(2, 'Bergen', DateTime.utc(2027, 6, 2, 9)),
         ]);
 
-      await TripSync(database: db, facts: server).syncNow();
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
 
       expect(server.pushes.single.days, isEmpty);
       expect(
@@ -725,7 +807,11 @@ void main() {
         ], name: 'Norway'),
       );
 
-      final outcome = await TripSync(database: db, facts: server).syncNow();
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+      ).syncNow();
 
       expect(outcome.members, 2);
       final members = await db.readTripMembers();
@@ -748,7 +834,7 @@ void main() {
         joinedAt: DateTime.utc(2027, 6, 14),
       );
       final server = FakeServer(trip: sharedTrip(id, [one]));
-      final sync = TripSync(database: db, facts: server);
+      final sync = TripSync(database: db, facts: server, now: duringTheTrip);
 
       await sync.syncNow();
       expect(await db.readTripMembers(), hasLength(1));
@@ -796,7 +882,7 @@ void main() {
           ),
         ]),
       );
-      final sync = TripSync(database: db, facts: server);
+      final sync = TripSync(database: db, facts: server, now: duringTheTrip);
       await sync.syncNow();
       expect(await db.readTripMembers(), hasLength(3));
 
@@ -941,7 +1027,11 @@ void main() {
       final server = FakeServer(trip: sharedTrip(id, const []))
         ..unreachable = 'no route to the server';
 
-      final outcome = await TripSync(database: db, facts: server).syncNow();
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+      ).syncNow();
 
       expect(outcome.standing, SyncStanding.offline);
       final saved = await TripRepository(db).watchItinerary().first;
@@ -960,7 +1050,7 @@ void main() {
         at: DateTime.utc(2027, 6, 1, 9),
       );
       final server = FakeServer(trip: sharedTrip(id, const []));
-      final sync = TripSync(database: db, facts: server);
+      final sync = TripSync(database: db, facts: server, now: duringTheTrip);
       await sync.syncNow();
 
       server.unreachable = 'no route to the server';
@@ -1001,7 +1091,11 @@ void main() {
       final server = FakeServer(trip: sharedTrip(id, const []))
         ..refuses = '403: not a member of this trip';
 
-      final outcome = await TripSync(database: db, facts: server).syncNow();
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+      ).syncNow();
 
       expect(outcome.standing, SyncStanding.refused);
       expect(await db.readItineraryDays(), hasLength(1));
@@ -1012,7 +1106,7 @@ void main() {
       addTearDown(db.close);
       final id = await startTrip(db);
       final server = FakeServer(trip: sharedTrip(id, const []));
-      final sync = TripSync(database: db, facts: server);
+      final sync = TripSync(database: db, facts: server, now: duringTheTrip);
 
       await Future.wait([sync.syncNow(), sync.syncNow(), sync.syncNow()]);
 
@@ -1021,6 +1115,185 @@ void main() {
         hasLength(lessThanOrEqualTo(2)),
         reason: 'a burst collapses; it does not race itself',
       );
+    });
+  });
+
+  group('a trip that has closed is not synced at all', () {
+    // The plan runs 14–16 June 2027. On a clock at UTC the last day seals at
+    // midnight ending the 16th — 17 June, 00:00 UTC — and the trip closes
+    // seventy-two hours after that: 20 June, 00:00 UTC.
+    Future<TripId> aTwoDayTrip(AppDatabase db) async {
+      final id = await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([
+          confirmed(1, 'Oslo', date: CalendarDate(2027, 6, 14)),
+          confirmed(2, 'Bergen', date: CalendarDate(2027, 6, 16)),
+        ]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      return id;
+    }
+
+    test(
+      'the grace window still syncs: the trip is over, not closed',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await aTwoDayTrip(db);
+        final server = FakeServer(trip: sharedTrip(id, const []));
+
+        final outcome = await TripSync(
+          database: db,
+          facts: server,
+          now: () => DateTime.utc(2027, 6, 19),
+          utcOffset: () => Duration.zero,
+        ).syncNow();
+
+        expect(outcome.standing, SyncStanding.synced);
+        expect(server.pushes, hasLength(1));
+      },
+    );
+
+    test('past the close it pushes nothing and pulls nothing', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await aTwoDayTrip(db);
+      // The server holds a *different* plan. A pull would apply it over the
+      // archive, which is the half of this that a push-only guard would miss.
+      final server = FakeServer(trip: sharedTrip(id, const []))
+        ..holds = serverHolds([
+          serverDay(
+            1,
+            'Somewhere else',
+            DateTime.utc(2030),
+            dateIso: '2027-06-14',
+          ),
+        ]);
+
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: () => DateTime.utc(2027, 6, 21),
+        utcOffset: () => Duration.zero,
+      ).syncNow();
+
+      expect(outcome.standing, SyncStanding.archived);
+      expect(server.readTrips, 0, reason: 'not one round trip');
+      expect(server.pushes, isEmpty);
+      final days = await db.readItineraryDays();
+      expect(days.map((d) => d.place), ['Oslo', 'Bergen']);
+    });
+
+    test('the boundary is the close itself, to the microsecond', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await aTwoDayTrip(db);
+      final closes = DateTime.utc(2027, 6, 20);
+
+      final open = FakeServer(trip: sharedTrip(id, const []));
+      expect(
+        (await TripSync(
+          database: db,
+          facts: open,
+          now: () => closes.subtract(const Duration(microseconds: 1)),
+          utcOffset: () => Duration.zero,
+        ).syncNow()).standing,
+        SyncStanding.synced,
+      );
+
+      final shut = FakeServer(trip: sharedTrip(id, const []));
+      expect(
+        (await TripSync(
+          database: db,
+          facts: shut,
+          now: () => closes,
+          utcOffset: () => Duration.zero,
+        ).syncNow()).standing,
+        SyncStanding.archived,
+      );
+    });
+
+    test('the close follows the trip\'s clock, not UTC midnight', () async {
+      // Read in Tokyo the same plan ends nine hours earlier in UTC, so the
+      // instant that is still the grace at UTC is already the archive there.
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await aTwoDayTrip(db);
+      final instant = DateTime.utc(2027, 6, 19, 20);
+
+      final utc = FakeServer(trip: sharedTrip(id, const []));
+      expect(
+        (await TripSync(
+          database: db,
+          facts: utc,
+          now: () => instant,
+          utcOffset: () => Duration.zero,
+        ).syncNow()).standing,
+        SyncStanding.synced,
+      );
+
+      final tokyo = FakeServer(trip: sharedTrip(id, const []));
+      expect(
+        (await TripSync(
+          database: db,
+          facts: tokyo,
+          now: () => instant,
+          utcOffset: () => const Duration(hours: 9),
+        ).syncNow()).standing,
+        SyncStanding.archived,
+      );
+    });
+
+    test('a plan with no dates has not ended, so it still syncs', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([confirmed(1, 'Oslo'), confirmed(2, 'Bergen')]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: sharedTrip(id, const []));
+
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        // Years later. Nothing has ended, because nothing said when it would.
+        now: () => DateTime.utc(2040),
+        utcOffset: () => Duration.zero,
+      ).syncNow();
+
+      expect(outcome.standing, SyncStanding.synced);
+    });
+
+    test('a plan whose last day is undated has not ended either, on this side '
+        'of the seam as much as on the screen', () async {
+      // Days 1 and 2 are dated a fortnight ago and day 3 was accepted with
+      // its date still open. Read as "ends on the last dated day" this
+      // trip would be archived and the sync silent while its travellers
+      // were still on it -- which is exactly what `tripEndsAtFrom`, the
+      // one copy of the rule that `tripEndsAtFor` also calls, refuses.
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([
+          confirmed(1, 'Oslo', date: CalendarDate(2027, 6, 14)),
+          confirmed(2, 'Bergen', date: CalendarDate(2027, 6, 16)),
+          confirmed(3, 'Tromso'),
+        ]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: sharedTrip(id, const []));
+
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: () => DateTime.utc(2027, 6, 21),
+        utcOffset: () => Duration.zero,
+      ).syncNow();
+
+      expect(outcome.standing, SyncStanding.synced);
+      expect(server.pushes, hasLength(1));
     });
   });
 }

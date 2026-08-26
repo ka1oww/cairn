@@ -101,6 +101,20 @@ class _Sheet extends ConsumerWidget {
                   ),
               ],
             ),
+            // Where the trip's ending stands, said once and said plainly.
+            // It sits under the name because it is a fact about the trip
+            // rather than about any control below it.
+            if (view.ending != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                view.ending!,
+                key: const Key('trip-ending'),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+
             const SizedBox(height: 16),
 
             // Faces first. There are no faces yet — no photo of anybody is
@@ -162,7 +176,10 @@ class _Sheet extends ConsumerWidget {
             const Divider(height: 32),
             // **Temporary**, and the last of what the overflow menu held: the
             // one route back to the paste box. It goes when a trip can be
-            // re-read without being thrown away.
+            // re-read without being thrown away. It stays on a closed trip
+            // because the paste box is also the join door; what the closed
+            // trip refuses is the accept at the end of it, and the read-back
+            // says so — see `PasteFlow.pasteAnother`.
             TextButton(
               key: const Key('start-over'),
               onPressed: () {
@@ -268,14 +285,17 @@ class _Code extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (code == null)
+        // Absent on a closed trip: it tells you to make new words, and on
+        // an archive there are none to make. What is left to say there is
+        // `codeNote`, below, which says it.
+        if (code == null && view.canMintCode)
           Text(
             'No code to say. Make new words and anyone you tell them to can '
             'join.',
             key: const Key('trip-code-none'),
             style: theme.textTheme.bodyMedium,
           )
-        else ...[
+        else if (code != null) ...[
           // Stacked, as the design draws them: three lines read like
           // something you say, one line reads like a serial number.
           Text(
@@ -300,14 +320,16 @@ class _Code extends ConsumerWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(
-            key: const Key('trip-code-new'),
-            onPressed: () => ref.read(tripActionsProvider).newCode(),
-            child: Text(code == null ? 'Make new words' : 'New words'),
+        // Absent on a closed trip, where new words would open nothing.
+        if (view.canMintCode)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: const Key('trip-code-new'),
+              onPressed: () => ref.read(tripActionsProvider).newCode(),
+              child: Text(code == null ? 'Make new words' : 'New words'),
+            ),
           ),
-        ),
       ],
     );
   }

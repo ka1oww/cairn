@@ -24,7 +24,11 @@ capture that fills it are built, and four pure-Dart domain packages sit under
 them. Nothing buzzes yet: the daily ping's schedule is real but nothing is
 registered with iOS. The one server path that exists — the itinerary and the
 roster syncing to every phone — is built and tested but dormant: it waits on a
-hosted project to point at and a session to speak as.
+hosted project to point at and a session to speak as. A trip now *ends* as
+well as starting: when its last day passes it spends seventy-two hours taking
+late photographs and nothing else, and after that it is a read-only record —
+uploads shut, invite codes die, and the plan cannot be replaced. The book made
+from that record is still ahead.
 
 `docs/roadmap.md` is the authority on what is built, what is not, and the order
 the rest arrives in; `docs/architecture.md` maps every node and is honest about

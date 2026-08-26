@@ -34,14 +34,22 @@ def dart_invite_words():
     return re.findall(r"'([a-z]+)'", body)
 
 
-def dart_grace_days():
-    """`graceAfterATrip`, in days, as `cairn_model` states it."""
+def dart_grace_hours():
+    """`graceAfterATrip`, in hours, as `cairn_model` states it.
+
+    Written as hours on both sides since the window became seventy-two of
+    them (`docs/decisions/2026-08-26-the-ending.md`). Read rather than
+    hard-coded for the same reason the word list is: the number lives in the
+    Dart and in `trip_grace_after_end()`, and the only thing that can notice
+    the two drifting apart is something that reads both.
+    """
     src = open(os.path.join(MODEL, "trip_close.dart")).read()
-    return int(re.search(r"graceAfterATrip = Duration\(days: (\d+)\)", src).group(1))
+    return int(re.search(r"graceAfterATrip = Duration\(hours: (\d+)\)", src).group(1))
 
 PHOTO_A = "aaaaaaaa-0000-0000-0000-000000000001"
 PHOTO_B = "bbbbbbbb-0000-0000-0000-000000000001"
 PHOTO_C = "cccccccc-0000-0000-0000-000000000001"
+PHOTO_D = "dddddddd-0000-0000-0000-000000000001"
 
 
 def main():
@@ -326,14 +334,14 @@ def main():
 
     # ------------------------------------------------ a code dies with its trip
     print("\n== a code that outlived its trip opens nothing ==")
-    grace = dart_grace_days()
+    grace = dart_grace_hours()
     check(db.run("select extract(epoch from public.trip_grace_after_end())")[0][0]
-          == grace * 86400,
-          f"the grace after a trip is the phone's {grace} days, not a second number",
+          == grace * 3600,
+          f"the grace after a trip is the phone's {grace} hours, not a second number",
           repr(db.run("select public.trip_grace_after_end()")[0][0]))
     check(db.run("""select public.trip_closes_at(t.id)
                            = ((t.end_date + 1)::timestamp at time zone t.timezone)
-                             + make_interval(days => :g)
+                             + make_interval(hours => :g)
                     from public.trips t where t.id = :t""", t=japan, g=grace)[0][0] is True,
           "and a trip closes a grace after its last day ends, in its own clock, not UTC")
 
@@ -352,9 +360,11 @@ def main():
     status, rows = d.try_run("select count(*) from public.photos where trip_id = :t", t=stale)
     check(rows[0][0] == 0, "so last year's archive stays shut to whoever still remembers three words")
 
+    # Ended yesterday, so it is inside the seventy-two hours whatever hour of
+    # the day this probe is run at.
     fresh = str(b.run(
         """insert into public.trips (name, created_by, timezone, start_date, end_date)
-           values ('Just back', :u, 'Atlantic/Reykjavik', current_date - 9, current_date - 5)
+           values ('Just back', :u, 'Atlantic/Reykjavik', current_date - 5, current_date - 1)
            returning id""", u=bob)[0][0])
     b.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, 'puffin quartz 62', :u)",
           t=fresh, u=bob)
@@ -363,6 +373,39 @@ def main():
     check(db.run("select count(*) from public.trip_members where trip_id = :t and user_id = :u",
                  t=fresh, u=dave)[0][0] == 1,
           "which is what the grace is for: the photos are still coming")
+
+    # ------------------------------------------ and the close shuts the pool
+    print("\n== the grace takes photographs; the close takes none ==")
+    status, rows = d.try_run(
+        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type, byte_size)
+           values (:t, :u, 'k/late', 'image/jpeg', 10)""", t=fresh, u=dave)
+    check(status == "ok",
+          "a photo taken on the way home still lands, days after the trip ended",
+          repr(rows)[:90])
+
+    # Bob is on last year's trip: he started it. So this refusal is the close
+    # and nothing else -- not membership, and not a trip he cannot see.
+    status, rows = b.try_run(
+        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type, byte_size)
+           values (:t, :u, 'k/too-late', 'image/jpeg', 10)""", t=stale, u=bob)
+    check(status == "err" and "row-level security" in str(rows),
+          "and a member of a closed trip cannot add to it -- the record is fixed",
+          repr(rows)[:90])
+    check(db.run("select count(*) from public.photos where trip_id = :t", t=stale)[0][0] == 0,
+          "so nothing landed in last year's archive")
+
+    # What the close does not take: your own photograph stays yours.
+    late = str(db.run("select id from public.photos where trip_id = :t", t=fresh)[0][0])
+    db.run("update public.trips set end_date = current_date - 40, start_date = current_date - 44 "
+           "where id = :t", t=fresh)
+    status, _ = d.try_run("update public.photos set trip_day = current_date - 42 where id = :id", id=late)
+    check(status == "ok",
+          "a person can still correct which day their own photo landed on, after the close")
+    status, _ = d.try_run("delete from public.photos where id = :id", id=late)
+    check(status == "ok" and db.run("select count(*) from public.photos where id = :id",
+                                    id=late)[0][0] == 0,
+          "and can still take it out -- the close shuts the door on new photographs, "
+          "not on your hold over your own")
 
     # ------------------------------------------------------------------ clock
     print("\n== the shared trip clock ==")
@@ -429,6 +472,22 @@ def main():
     after_trip = db.run("select trip_id from public.trip_invites where code = 'cedar willow 27'")[0][0]
     check(str(after_trip) == str(before_trip), "and the row's trip_id is unchanged",
           f"{before_trip} -> {after_trip}")
+
+    # The same lock, for the same reason, on the row the close actually
+    # freezes. `photos_insert_trip_member` shuts a closed trip's pool, and a
+    # photo that could be repointed afterwards would walk straight round it.
+    print("\n== nor can a photo be repointed to another trip ==")
+    c.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                       content_type, byte_size)
+             values (:id, :t, :u, 'k/c-iceland', 'image/jpeg', 10)""",
+          id=PHOTO_D, t=iceland, u=carol)
+    status, rows = c.try_run(
+        "update public.photos set trip_id = :t where id = :id", t=japan, id=PHOTO_D)
+    check(status == "err" and "cannot be changed" in str(rows),
+          "even by the person who took it, into a trip she is also on", repr(rows)[:80])
+    check(str(db.run("select trip_id from public.photos where id = :id", id=PHOTO_D)[0][0])
+          == str(iceland),
+          "and it is still in the trip it was taken on")
 
     # ------------------------------------------------- the itinerary as a fact
     #
@@ -579,6 +638,36 @@ def main():
         "values (:t, 9, now())", t=norway)
     check(status == "err", "nor write one round the function, straight into the table",
           repr(rows)[:80])
+
+    # ---------------------------------------- and a closed trip's plan is fixed
+    #
+    # The phone refuses first (`TripSync._reconcile` -> `SyncStanding.archived`),
+    # and this is the other half of it, for the reason the pool's close has two:
+    # eight phones means one wrong clock. Judged on the table afterwards and not
+    # only on the raise, per invariant 6 -- the refusal has to happen before the
+    # first insert, not after a half-written merge.
+    print("\n== a closed trip's plan is the record, and takes no more pushes ==")
+    before_days = db.run("select day_number, place, day_date from public.trip_itinerary_days "
+                         "where trip_id = :t order by day_number", t=norway)
+    db.run("update public.trips set start_date = current_date - 44, "
+           "end_date = current_date - 40 where id = :t", t=norway)
+    status, rows = sync(b, norway, T3, [day(1, T3, "Rewritten"), day(9, T3, "Invented")])
+    check(status == "err" and "closed" in str(rows),
+          "pushing a plan into a closed trip is refused", repr(rows)[:90])
+    after_days = db.run("select day_number, place, day_date from public.trip_itinerary_days "
+                        "where trip_id = :t order by day_number", t=norway)
+    check(after_days == before_days,
+          "and nothing was written -- no day rewritten and no day invented",
+          f"{before_days} -> {after_days}")
+    status, rows = sync(c, norway, "-infinity", [])
+    check(status == "err" and "closed" in str(rows),
+          "and the pull is refused with it: after the close there is nothing to reconcile",
+          repr(rows)[:90])
+    db.run("update public.trips set start_date = current_date, "
+           "end_date = current_date + 4 where id = :t", t=norway)
+    status, rows = sync(c, norway, "-infinity", [])
+    check(status == "ok", "while the same call on the same trip, still open, goes through",
+          repr(rows)[:90])
 
     print("\n== the roster reads as one statement, and only for the party ==")
     status, rows = b.try_run(

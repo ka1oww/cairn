@@ -102,8 +102,27 @@ create policy "photos_select_trip_member"
   to authenticated
   using ( public.is_trip_member(photos.trip_id, auth.uid()) );
 
--- A photo must be tagged with whoever is uploading it, and that person
--- must be a member of the trip they're uploading into.
+-- A photo must be tagged with whoever is uploading it, that person must be a
+-- member of the trip they're uploading into, and **the trip must still be
+-- open**.
+--
+-- The third condition is the server's half of the ending
+-- (`docs/decisions/2026-08-26-the-ending.md`): a trip takes photographs until
+-- a grace after its last day ends, and then its record is fixed. The phone
+-- refuses the same write at `CaptureFlow.turnTheDayOver`, which is where a
+-- person meets it; this is what makes it true of the trip rather than true of
+-- one phone, because there are seven others and one of them has a wrong
+-- clock.
+--
+-- `trip_closes_at` is null only for a trip this caller cannot see, and a null
+-- fails the comparison -- which is the right answer twice over, since a
+-- caller who cannot see the trip is not a member of it either.
+--
+-- Deliberately *not* added to the update and delete policies below. Those are
+-- a person's own photograph: removing one of yourself you hate, or correcting
+-- which day it landed on, stays yours after the close for the same reason the
+-- phone still lets a starter discard a whole archived trip. What the close
+-- shuts is the door for new contributions, not a person's hold on their own.
 drop policy if exists "photos_insert_trip_member" on public.photos;
 create policy "photos_insert_trip_member"
   on public.photos for insert
@@ -111,6 +130,7 @@ create policy "photos_insert_trip_member"
   with check (
     contributor_id = auth.uid()
     and public.is_trip_member(photos.trip_id, auth.uid())
+    and now() < public.trip_closes_at(photos.trip_id)
   );
 
 -- Your own photo, and only your own -- in practice, correcting trip_day by
@@ -142,3 +162,28 @@ create policy "photos_delete_contributor"
   on public.photos for delete
   to authenticated
   using ( photos.contributor_id = auth.uid() );
+
+-- A photo belongs to the trip it was taken on. Correcting which *day* it
+-- landed on is a person's own business and stays theirs after the close
+-- (above); moving it to another trip is not the same act and no part of the
+-- app asks for it -- it is only the shape of a hole. The insert policy shuts
+-- the pool of a closed trip, and without this a member of two trips could
+-- land a photograph in one and then repoint the row at the archive the close
+-- exists to freeze. WITH CHECK cannot see the old row, so the lock is a
+-- trigger, exactly as `trip_invites.trip_id`'s is in 0005_trip_invites.sql.
+create or replace function public.photos_lock_trip_id()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.trip_id is distinct from old.trip_id then
+    raise exception 'photos.trip_id cannot be changed once set';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists photos_lock_trip_id on public.photos;
+create trigger photos_lock_trip_id
+  before update on public.photos
+  for each row execute function public.photos_lock_trip_id();

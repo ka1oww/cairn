@@ -68,8 +68,9 @@ void main() {
     ReviewDay dayNumbered(int n) =>
         read().days.firstWhere((d) => d.number == n);
 
-    List<String> textsOfDay(int n) =>
-        [for (final stop in dayNumbered(n).stops) stop.text];
+    List<String> textsOfDay(int n) => [
+      for (final stop in dayNumbered(n).stops) stop.text,
+    ];
 
     void paste([String text = fiveDaySample]) => flow().parse(text);
 
@@ -105,8 +106,11 @@ void main() {
       flow().moveStop(golden.id, toDayNumber: 3, toIndex: 1);
 
       expect(textsOfDay(2), ['TeamLab Planets 11:00']);
-      expect(textsOfDay(3), ['Fushimi Inari', 'Golden Gai at night',
-        'Kinkaku-ji']);
+      expect(textsOfDay(3), [
+        'Fushimi Inari',
+        'Golden Gai at night',
+        'Kinkaku-ji',
+      ]);
     });
 
     test('a moved stop keeps its time, and so keeps its star', () {
@@ -222,22 +226,19 @@ void main() {
       expect(dayNumbered(2).doubt, isNull);
     });
 
-    test(
-      'a day answered "leave it empty" asks again once emptied again',
-      () {
-        paste('Day 1 - Tokyo\n- Senso-ji\n\nDay 2 - Hakone\n');
-        expect(dayNumbered(2).doubt?.cause, DayDoubtCause.noStops);
+    test('a day answered "leave it empty" asks again once emptied again', () {
+      paste('Day 1 - Tokyo\n- Senso-ji\n\nDay 2 - Hakone\n');
+      expect(dayNumbered(2).doubt?.cause, DayDoubtCause.noStops);
 
-        flow().confirmDay(2);
-        expect(dayNumbered(2).doubt, isNull);
+      flow().confirmDay(2);
+      expect(dayNumbered(2).doubt, isNull);
 
-        flow().addStop(2, 'Onsen');
-        expect(dayNumbered(2).doubt, isNull);
+      flow().addStop(2, 'Onsen');
+      expect(dayNumbered(2).doubt, isNull);
 
-        flow().removeStop(dayNumbered(2).stops.single.id);
-        expect(dayNumbered(2).doubt?.cause, DayDoubtCause.noStops);
-      },
-    );
+      flow().removeStop(dayNumbered(2).stops.single.id);
+      expect(dayNumbered(2).doubt?.cause, DayDoubtCause.noStops);
+    });
 
     group('the date a title named', () {
       test('is offered, not bound', () {
@@ -296,11 +297,13 @@ void main() {
       test('a year-less date takes the year the plan is already in', () {
         // Day 1 is dated by its own header, in a year that is not this one;
         // day 2's title-date follows the plan rather than the device.
-        paste('Mon 14 June 2029 - Tokyo\n'
-            '- Senso-ji\n'
-            '\n'
-            'Day 2 - Kyoto, 15 June\n'
-            '- Fushimi Inari\n');
+        paste(
+          'Mon 14 June 2029 - Tokyo\n'
+          '- Senso-ji\n'
+          '\n'
+          'Day 2 - Kyoto, 15 June\n'
+          '- Fushimi Inari\n',
+        );
 
         expect(dayNumbered(2).dateSuggestion!.date, DateTime(2029, 6, 15));
       });
@@ -364,10 +367,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // The captain-approved sheet.
-        expect(
-          find.text('This day has a date in its title.'),
-          findsOneWidget,
-        );
+        expect(find.text('This day has a date in its title.'), findsOneWidget);
         expect(find.textContaining('want me to use it?'), findsOneWidget);
         expect(find.text('14 June'), findsOneWidget);
         expect(find.text('Monday · day 1'), findsOneWidget);

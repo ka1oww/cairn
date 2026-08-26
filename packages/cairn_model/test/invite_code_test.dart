@@ -157,14 +157,22 @@ void main() {
     );
     final closes = DateTime.utc(2026, 6, 21, 15).add(graceAfterATrip);
 
-    test('the close is the trip end plus the fourteen-day grace', () {
+    test('the close is the trip end plus the seventy-two-hour grace', () {
       expect(tripClosesAt(DateTime.utc(2026, 6, 21, 15)), closes);
-      expect(graceAfterATrip, const Duration(days: 14));
+      expect(graceAfterATrip, const Duration(hours: 72));
+      expect(closes, DateTime.utc(2026, 6, 24, 15));
     });
 
     test('it admits people up to the close', () {
       expect(
-        minted.standingAt(DateTime.utc(2026, 6, 30), tripClosesAt: closes),
+        minted.standingAt(DateTime.utc(2026, 6, 23), tripClosesAt: closes),
+        InviteStanding.live,
+      );
+      expect(
+        minted.standingAt(
+          closes.subtract(const Duration(microseconds: 1)),
+          tripClosesAt: closes,
+        ),
         InviteStanding.live,
       );
       expect(

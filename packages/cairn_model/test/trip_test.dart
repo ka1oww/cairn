@@ -104,21 +104,33 @@ void main() {
     final trip = build();
 
     test('the person who started the trip can remove someone', () {
-      expect(trip.canRemove(remover: mum, target: ava), isTrue);
+      expect(
+          trip.canRemove(
+              remover: mum, target: ava, now: DateTime.utc(2026, 6, 16)),
+          isTrue);
     });
 
     test('nobody else can', () {
-      expect(trip.canRemove(remover: ava, target: mum), isFalse);
+      expect(
+          trip.canRemove(
+              remover: ava, target: mum, now: DateTime.utc(2026, 6, 16)),
+          isFalse);
     });
 
     test('and not themselves', () {
       // Leaving is a different thing and available to everyone. What happens
       // when the starter takes it is the group below.
-      expect(trip.canRemove(remover: mum, target: mum), isFalse);
+      expect(
+          trip.canRemove(
+              remover: mum, target: mum, now: DateTime.utc(2026, 6, 16)),
+          isFalse);
     });
 
     test('and not somebody who is not on the trip', () {
-      expect(trip.canRemove(remover: mum, target: stranger), isFalse);
+      expect(
+          trip.canRemove(
+              remover: mum, target: stranger, now: DateTime.utc(2026, 6, 16)),
+          isFalse);
     });
   });
 
@@ -141,8 +153,14 @@ void main() {
 
     test('the holder is whoever has been here longest', () {
       expect(withoutMum.removalPowerHolder, jonas);
-      expect(withoutMum.canRemove(remover: jonas, target: ava), isTrue);
-      expect(withoutMum.canRemove(remover: ava, target: jonas), isFalse);
+      expect(
+          withoutMum.canRemove(
+              remover: jonas, target: ava, now: DateTime.utc(2026, 6, 16)),
+          isTrue);
+      expect(
+          withoutMum.canRemove(
+              remover: ava, target: jonas, now: DateTime.utc(2026, 6, 16)),
+          isFalse);
     });
 
     test('and it is the starter for as long as she is here', () {
