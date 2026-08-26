@@ -21,8 +21,11 @@ abstract interface class FilePickerEdge {
 
   /// Opens the photo library limited to still images — the screenshots
   /// door (the import plan §2.6's second row). Same contract as [pick]:
-  /// null is a dismissal. iOS presents PHPicker, which asks for no
-  /// permission; picks are copied into the sandbox like document picks.
+  /// null is a dismissal. iOS presents PHPicker, and `file_picker_darwin`
+  /// builds it with `PHPickerConfiguration(photoLibrary: .shared())` —
+  /// Apple's authorization-requiring initializer — so
+  /// `NSPhotoLibraryUsageDescription` must stay in `Info.plist` or this door
+  /// crashes; picks are copied into the sandbox like document picks.
   Future<PickedBytes?> pickImage();
 }
 

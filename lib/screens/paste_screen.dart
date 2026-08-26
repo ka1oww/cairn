@@ -335,6 +335,7 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
                 key: const Key('paste-subhead'),
                 style: _serif.copyWith(fontSize: 15, color: _muted),
               ),
+              const SizedBox(height: 16),
               ..._importFeedback(importState),
               Expanded(
                 child: LayoutBuilder(

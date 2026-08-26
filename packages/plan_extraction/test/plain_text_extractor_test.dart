@@ -84,6 +84,24 @@ void main() {
       );
     });
 
+    test('short CRLF lines are text, not binary garbage', () {
+      // Windows line endings on short lines push the CR count well past the
+      // control-character ratio the binary refusal watches: this file is
+      // over 8% CR and must still read as an ordinary plan.
+      const text = 'Day 1 - Tokyo\r\n- Senso-ji\r\n- Ueno\r\n- Cafe\r\n';
+      final file = named('windows.txt', utf8.encode(text));
+      final crRatio =
+          text.runes.where((r) => r == 0x0D).length / text.length;
+      expect(crRatio, greaterThan(0.05));
+      expect(extractor.matches(file), isTrue);
+      final result = extractor.extract(file);
+      expect(result, isA<ExtractedText>());
+      expect(
+        (result as ExtractedText).text,
+        'Day 1 - Tokyo\n- Senso-ji\n- Ueno\n- Cafe\n',
+      );
+    });
+
     test('Latin-1 fallback: é decodes from one byte', () {
       // "Café" with é as 0xE9.
       final bytes = [0x43, 0x61, 0x66, 0xE9, 0x0A];

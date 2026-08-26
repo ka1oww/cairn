@@ -122,14 +122,21 @@ enum TextRecognition {
         report(pageNumber, of: pageCount)
         guard let page = pdf.page(at: pageNumber) else { continue }
         let mediaBox = page.getBoxRect(.mediaBox)
+        // The page's own /Rotate decides the shape of the canvas: scanners
+        // routinely emit /Rotate 90, and Vision straightens nothing, so a
+        // page drawn into an unrotated box lands sideways and clipped.
+        let quarterTurned = abs(page.rotationAngle % 180) == 90
+        let uprightSize = quarterTurned
+          ? CGSize(width: mediaBox.height, height: mediaBox.width)
+          : CGSize(width: mediaBox.width, height: mediaBox.height)
         // Long-edge target keeps photographed text inside what accurate
         // mode wants while bounding memory: a hair over retina for a
         // letter-size scan.
         let longEdge: CGFloat = 2400
-        let longest = max(mediaBox.width, mediaBox.height)
+        let longest = max(uprightSize.width, uprightSize.height)
         let scale = min(longEdge / max(longest, 1), 4)
-        let width = max(1, Int(mediaBox.width * scale))
-        let height = max(1, Int(mediaBox.height * scale))
+        let width = max(1, Int(uprightSize.width * scale))
+        let height = max(1, Int(uprightSize.height * scale))
 
         guard
           let context = CGContext(
@@ -147,7 +154,16 @@ enum TextRecognition {
         }
         context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        context.scaleBy(x: scale, y: scale)
+        // CoreGraphics' own fit: it carries the page rotation and a non-zero
+        // mediaBox origin (a cropped page) into the canvas for us.
+        context.concatenate(
+          page.getDrawingTransform(
+            .mediaBox,
+            rect: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)),
+            rotate: 0,
+            preserveAspectRatio: true
+          )
+        )
         context.drawPDFPage(page)
         guard let rendered = context.makeImage() else {
           refuse(result, "This device couldn't render that scan.")
@@ -192,15 +208,21 @@ enum TextRecognition {
       request.usesLanguageCorrection = true
       if #available(iOS 16.0, *) {
         // Revision 3's language auto-detection: chat screenshots arrive in
-        // whatever language the family writes in.
+        // whatever language the family writes in. `recognitionLanguages` is
+        // deliberately left alone on this path — a non-empty list takes
+        // precedence over auto-detection and would make it inert, and a
+        // whole supported-language list handed over as an ordered priority
+        // costs accuracy against a language Vision would have detected.
         request.automaticallyDetectsLanguage = true
-      }
-      do {
-        // What this device can actually recognize, asked at runtime rather
-        // than hardcoded (the import plan §3).
-        request.recognitionLanguages = try request.supportedRecognitionLanguages()
-      } catch {
-        throw ReadError.refused("This device cannot read text from pictures.")
+      } else {
+        do {
+          // Older systems detect nothing, so the fallback is what this
+          // device says it can read — asked at runtime rather than
+          // hardcoded (the import plan §3).
+          request.recognitionLanguages = try request.supportedRecognitionLanguages()
+        } catch {
+          throw ReadError.refused("This device cannot read text from pictures.")
+        }
       }
 
       try handler.perform([request])

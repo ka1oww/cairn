@@ -233,8 +233,10 @@ import what is written there, not here.
   simulator run are no evidence OCR works**, exactly as for the camera; real
   recognition quality is judged on a device against a manual corpus. Three
   things worth knowing. Pictures never enter `planExtractors` — `claimsImage`
-  in `import_flow.dart` claims them by magic bytes first and extension second,
-  so a renamed screenshot still finds the route. The **scanned-PDF door** is
+  in `import_flow.dart` claims them by extension first and magic bytes second,
+  so a renamed screenshot still finds the route — and it runs *before*
+  `routeToExtractor`, so an extension-based image claim pre-empts an
+  extractor's magic-byte match (a text file named `.png` goes to OCR). The **scanned-PDF door** is
   the one-tap offer off a `noTextLayer` refusal, and it must read with
   recognition *unconditionally* (`_runRead(viaOcrRoute: true)` bypasses the
   registry): routing it back through `_read` sends the bytes to the very

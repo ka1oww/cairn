@@ -64,8 +64,9 @@ PlanTextExtractor? routeToExtractor(PickedBytes file) {
 // The image route (slice D)
 //
 // Recognition is not an extractor — it is a platform call — so pictures
-// never enter [planExtractors]. They are claimed here, by extension or by
-// magic bytes (a renamed screenshot still routes by its content), and read
+// never enter [planExtractors]. They are claimed here, by extension first
+// and magic bytes second (a renamed screenshot still routes by its content),
+// and read
 // through [textRecognitionEdgeProvider] into the same [ExtractedText] shape
 // every other format produces.
 // ---------------------------------------------------------------------------
@@ -75,9 +76,12 @@ const Set<String> imageImportExtensions = {
   'png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'gif', 'bmp', 'tif', 'tiff',
 };
 
-/// True when [file]'s content says *picture* — its claimed extension is one
-/// of [imageImportExtensions], or its leading bytes carry a known image
-/// signature (so a `.dat`-renamed screenshot still finds the OCR route).
+/// True when [file] says *picture* — its claimed extension is one of
+/// [imageImportExtensions], or, failing that, its leading bytes carry a known
+/// image signature (so a `.dat`-renamed screenshot still finds the OCR
+/// route). Note the precedence this creates: [ImportFlow._read] asks this
+/// before [routeToExtractor], so an extension-based image claim pre-empts an
+/// extractor's magic-byte match — a text file named `.png` goes to OCR.
 bool claimsImage(PickedBytes file) {
   final ext = file.extension;
   if (ext != null && imageImportExtensions.contains(ext)) return true;
@@ -220,6 +224,7 @@ class ImportFlow extends Notifier<ImportState> {
   Future<ImportSucceeded?> readScanWithRecognition() async {
     final candidate = _scanCandidate;
     if (candidate == null || state is! ImportFailed) return null;
+    _scanCandidate = null;
     return _runRead(candidate, viaOcrRoute: true);
   }
 
