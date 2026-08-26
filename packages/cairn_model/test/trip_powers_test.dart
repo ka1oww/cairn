@@ -26,6 +26,7 @@ void main() {
           target: ava,
           startedBy: mum,
           members: party,
+          standing: TripStanding.underway,
         ),
         isTrue,
       );
@@ -39,6 +40,7 @@ void main() {
             target: mum,
             startedBy: mum,
             members: party,
+            standing: TripStanding.underway,
           ),
           isFalse,
         );
@@ -57,6 +59,7 @@ void main() {
           target: ava,
           startedBy: mum,
           members: without,
+          standing: TripStanding.underway,
         ),
         isTrue,
       );
@@ -85,6 +88,7 @@ void main() {
           target: stranger,
           startedBy: mum,
           members: party,
+          standing: TripStanding.underway,
         ),
         isFalse,
       );
@@ -94,6 +98,7 @@ void main() {
           target: ava,
           startedBy: stranger,
           members: party,
+          standing: TripStanding.underway,
         ),
         isFalse,
       );
@@ -103,29 +108,72 @@ void main() {
   group('everything else is flat', () {
     test('anyone on the trip renames it', () {
       for (final member in party) {
-        expect(canRenameTrip(member: member.id, members: party), isTrue);
+        expect(
+          canRenameTrip(
+            member: member.id,
+            members: party,
+            standing: TripStanding.underway,
+          ),
+          isTrue,
+        );
       }
-      expect(canRenameTrip(member: stranger, members: party), isFalse);
+      expect(
+        canRenameTrip(
+          member: stranger,
+          members: party,
+          standing: TripStanding.underway,
+        ),
+        isFalse,
+      );
     });
 
     test('anyone on the trip mints an invite code', () {
       for (final member in party) {
-        expect(canMintInvite(member: member.id, members: party), isTrue);
+        expect(
+          canMintInvite(
+            member: member.id,
+            members: party,
+            standing: TripStanding.underway,
+          ),
+          isTrue,
+        );
       }
-      expect(canMintInvite(member: stranger, members: party), isFalse);
+      expect(
+        canMintInvite(
+          member: stranger,
+          members: party,
+          standing: TripStanding.underway,
+        ),
+        isFalse,
+      );
     });
 
     test('a code is revoked by whoever minted it, or by the starter', () {
       expect(
-        canRevokeInvite(member: ava, startedBy: mum, mintedBy: ava),
+        canRevokeInvite(
+          member: ava,
+          startedBy: mum,
+          mintedBy: ava,
+          standing: TripStanding.underway,
+        ),
         isTrue,
       );
       expect(
-        canRevokeInvite(member: mum, startedBy: mum, mintedBy: ava),
+        canRevokeInvite(
+          member: mum,
+          startedBy: mum,
+          mintedBy: ava,
+          standing: TripStanding.underway,
+        ),
         isTrue,
       );
       expect(
-        canRevokeInvite(member: jonas, startedBy: mum, mintedBy: ava),
+        canRevokeInvite(
+          member: jonas,
+          startedBy: mum,
+          mintedBy: ava,
+          standing: TripStanding.underway,
+        ),
         isFalse,
       );
     });
@@ -198,11 +246,13 @@ void main() {
       mintedAt: DateTime.utc(2026, 6, 1),
     );
 
+    final duringTheTrip = DateTime.utc(2026, 6, 16);
+
     expect(trip.removalPowerHolder, mum);
-    expect(trip.canRename(ava), isTrue);
-    expect(trip.canMintInvite(ava), isTrue);
-    expect(trip.canRevoke(jonas, invite), isFalse);
-    expect(trip.canRevoke(mum, invite), isTrue);
+    expect(trip.canRename(ava, now: duringTheTrip), isTrue);
+    expect(trip.canMintInvite(ava, now: duringTheTrip), isTrue);
+    expect(trip.canRevoke(jonas, invite, now: duringTheTrip), isFalse);
+    expect(trip.canRevoke(mum, invite, now: duringTheTrip), isTrue);
     expect(trip.canDelete(mum, holdsOtherMembersPhotos: false), isTrue);
     expect(trip.canDelete(mum, holdsOtherMembersPhotos: true), isFalse);
     // The trip's own close, and with it the death of that code.

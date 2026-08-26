@@ -9,6 +9,7 @@ import 'trip_close.dart';
 import 'trip_day.dart';
 import 'trip_invite.dart';
 import 'trip_powers.dart' as powers;
+import 'trip_standing.dart';
 
 /// The whole journey: who is on it, how long it runs, what the plan says, and
 /// what time it is.
@@ -163,17 +164,30 @@ final class Trip {
   ///
   /// Removing yourself is not this: leaving a trip is something anyone can
   /// do and is not a power, so this stays false for `remover == target`.
-  bool canRemove({required MemberId remover, required MemberId target}) =>
+  ///
+  /// [now] is required for the reason it is on every power here: an archived
+  /// trip refuses every one of them, and whether this trip is archived is a
+  /// question about an instant nothing in this package can read.
+  bool canRemove({
+    required MemberId remover,
+    required MemberId target,
+    required DateTime now,
+  }) =>
       powers.canRemoveMember(
         remover: remover,
         target: target,
         startedBy: startedBy,
         members: members,
+        standing: standingAt(now),
       );
 
-  /// Whether [member] may rename this trip. Any member may.
-  bool canRename(MemberId member) =>
-      powers.canRenameTrip(member: member, members: members);
+  /// Whether [member] may rename this trip. Any member may, until it closes.
+  bool canRename(MemberId member, {required DateTime now}) =>
+      powers.canRenameTrip(
+        member: member,
+        members: members,
+        standing: standingAt(now),
+      );
 
   /// Whether [member] may delete this trip.
   ///
@@ -191,22 +205,44 @@ final class Trip {
         holdsOtherMembersPhotos: holdsOtherMembersPhotos,
       );
 
-  /// Whether [member] may mint an invite code for this trip. Any member may.
-  bool canMintInvite(MemberId member) =>
-      powers.canMintInvite(member: member, members: members);
+  /// Whether [member] may mint an invite code for this trip. Any member may,
+  /// until it closes.
+  bool canMintInvite(MemberId member, {required DateTime now}) =>
+      powers.canMintInvite(
+        member: member,
+        members: members,
+        standing: standingAt(now),
+      );
 
   /// Whether [member] may revoke [invite]: whoever minted it, or the
   /// starter.
-  bool canRevoke(MemberId member, TripInvite invite) => powers.canRevokeInvite(
+  bool canRevoke(
+    MemberId member,
+    TripInvite invite, {
+    required DateTime now,
+  }) =>
+      powers.canRevokeInvite(
         member: member,
         startedBy: startedBy,
         mintedBy: invite.mintedBy,
+        standing: standingAt(now),
       );
 
   /// The instant this trip closes to new photos, and with it the instant its
-  /// invite codes die: fourteen days after the last day seals
+  /// invite codes die: [graceAfterATrip] after the last day seals
   /// (`trip_close.dart`). The book is not this and never expires.
   DateTime get closesAt => tripClosesAt(endsAt);
+
+  /// Where the trip stands at [now]: underway, inside its grace, or
+  /// archived.
+  ///
+  /// Read off [endsAt], which is the last day sealing **on that day's own
+  /// clock** — so a trip whose last leg crossed a border closes on the
+  /// evening its travellers actually lived, not on a UTC midnight none of
+  /// them were awake for. The rule itself is `trip_standing.dart` and is not
+  /// restated here.
+  TripStanding standingAt(DateTime now) =>
+      tripStandingAt(now: now, endsAt: endsAt);
 
   /// Whether the day [pool] holds is open to [viewer] at [now], and why.
   ///

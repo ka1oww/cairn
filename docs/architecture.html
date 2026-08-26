@@ -510,6 +510,14 @@
       whether a statement threw.</li>
       <li><b>Membership checks only via</b> <code>is_trip_member</code>/<code>is_trip_starter</code>;
       never <code>force row level security</code> — either revives infinite recursion.</li>
+      <li><b>Where a trip stands is decided once</b> &mdash; <code>tripStandingAt</code> in
+      <code>cairn_model</code>, reached through <code>tripStandingProvider</code>; nothing above it
+      compares dates itself. <b>The close is enforced on both sides:</b> seventy-two hours after the
+      last day seals, written as <code>graceAfterATrip</code> and as
+      <code>trip_grace_after_end()</code>, with the probe comparing the two, and shutting the pool
+      in <code>CaptureFlow.turnTheDayOver</code> and in <code>photos_insert_trip_member</code>.
+      Eight phones means one wrong clock. What it never takes is a person's hold on their own
+      photograph.</li>
     </ol>
   </div>
 

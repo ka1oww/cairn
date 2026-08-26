@@ -22,8 +22,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../repositories/membership_repository.dart';
 import 'ping_schedule.dart';
+import 'trip_lifecycle.dart';
 import 'trip_providers.dart';
-import 'trip_settings.dart';
 
 /// What happened when the words were said back to the app.
 enum JoinOutcome {
@@ -37,6 +37,11 @@ enum JoinOutcome {
   retired,
 
   /// A code of this trip's, said after the trip closed.
+  ///
+  /// Not after it *ended*: a code goes on admitting people through the grace
+  /// window, deliberately, because the photographs are still coming and
+  /// whoever is holding them has to be able to get in
+  /// (`cairn_model`'s `TripStanding.admitsJoiners`).
   tripClosed,
 
   /// A code that reads properly and belongs to a trip that is not on this
@@ -79,10 +84,7 @@ class JoinFlow extends Notifier<JoinState> {
       answer: joinAnswerFor(
         typed: state.typed,
         trip: ref.read(tripMembershipProvider).value,
-        closesAt: tripCloseFor(
-          ref.read(savedItineraryProvider).value,
-          ref.read(tripUtcOffsetProvider),
-        ),
+        closesAt: ref.read(tripClosesAtProvider),
         now: ref.read(nowProvider),
         you: model.MemberId(localMemberId),
       ),

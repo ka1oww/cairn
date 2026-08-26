@@ -23,6 +23,22 @@
 //    the hour it will print beside, skippable by construction. Blank is the
 //    usual. Nothing is corrected into tidiness — no autocapitalise, no full
 //    stop added, no second line, because the book never prints one.
+//  - **And the pool shuts when the trip closes.** Every write below asks
+//    `tripStandingProvider` first, because "the archive takes nothing more"
+//    is a property of the pool and not of a screen
+//    (docs/decisions/2026-08-26-the-ending.md). The rule itself is
+//    `cairn_model`'s `TripStanding.takesPhotos`; this file only obeys it.
+//
+// **What the grace window opens, and what still cannot reach it.** A trip
+// that has ended goes on taking photographs for seventy-two hours, and the
+// guards below let them through. Nothing in the app can *offer* one yet: the
+// ping only ever fires on a day of the plan, and capture only ever writes to
+// today, so once the last day seals there is no built door into the pool.
+// The door the grace exists for is the import sweep
+// (docs/decisions/2026-08-22-auto-import-honesty.md), which is later work.
+// That is why the rule is written at the write path rather than at a button:
+// when the sweep lands it inherits the correct answer instead of needing its
+// own.
 //
 // Deliberately absent: any surface that shows *when* your minute is. A ping
 // you can see coming is a ping you can pose for, and the entire value of the
@@ -35,6 +51,7 @@ import '../repositories/photo_repository.dart';
 import 'camera_source.dart';
 import 'day_view.dart';
 import 'ping_schedule.dart';
+import 'trip_lifecycle.dart';
 import 'trip_providers.dart';
 
 /// How long the moment stays open after the ping (design-calls §7).
@@ -198,6 +215,7 @@ final captureCallProvider = Provider.family<CaptureCall, DateTime>((ref, date) {
     now: ref.watch(nowProvider),
     answeredAt: _myPhotoToday(ref, dayNumber)?.ref.takenAt,
     utcOffset: ref.watch(tripUtcOffsetProvider),
+    standing: ref.watch(tripStandingProvider),
   );
 });
 
@@ -222,12 +240,17 @@ CaptureCall captureCallFor({
   required DateTime now,
   required DateTime? answeredAt,
   required Duration utcOffset,
+  required model.TripStanding standing,
 }) {
   // Answered outranks everything, including a window that is still open: one
   // ping is one photograph, and the day is now open to you.
   if (answeredAt != null) {
     return MomentAnswered(clockLabel(answeredAt, utcOffset));
   }
+  // A closed trip asks nothing of anybody. Not a refusal drawn on the page —
+  // there is simply no moment here any more, which is the same shape as a
+  // day that was never one of the plan's.
+  if (!standing.takesPhotos) return const NoMomentHere();
   if (ping == null) return const NoMomentHere();
   if (now.isBefore(ping.at)) return const MomentAhead();
   final closes = ping.at.add(captureWindow);
@@ -271,6 +294,15 @@ class CaptureFlow extends Notifier<CaptureState> {
   /// screen that opens whenever it is tapped is a second interruption
   /// wearing a button.
   void open() {
+    // The pool's own door, asked before the moment's. `captureCallProvider`
+    // answers `NoMomentHere` on a closed trip too, so this is belt and
+    // braces on purpose: `open()` is the one method a new screen would call,
+    // and the write it leads to must never depend on which of the two
+    // remembered.
+    if (!ref.read(tripStandingProvider).takesPhotos) {
+      state = const CaptureClosed();
+      return;
+    }
     final call = ref.read(captureCallProvider(ref.read(todayProvider)));
     state = switch (call) {
       MomentOpen(:final isLastStretch) => Framing(
@@ -341,6 +373,16 @@ class CaptureFlow extends Notifier<CaptureState> {
   Future<void> turnTheDayOver() async {
     final breath = state;
     if (breath is! TheBreath || breath.isKeeping) return;
+    // **The last gate before the pool, and the one that matters.** A frame
+    // taken while the trip was still open cannot be kept into a trip that
+    // has closed since — the archive is fixed, and a photograph landing in
+    // it afterwards would change the record the book was made from. The
+    // frame is discarded with it, because an unkept photograph is not a
+    // photograph.
+    if (!ref.read(tripStandingProvider).takesPhotos) {
+      await abandon();
+      return;
+    }
     final dayNumber = ref.read(todaysPlanDayProvider);
     if (dayNumber == null) return;
     state = breath._with(isKeeping: true);

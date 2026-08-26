@@ -293,17 +293,21 @@ alter table public.trip_invites
 -- How long after a trip ends it still takes photographs, and therefore how
 -- long its codes still open it.
 --
--- Fourteen rather than thirty because people empty their camera roll within
--- days of getting home or they never do. This is the same number as
--- `graceAfterATrip` in `packages/cairn_model/lib/src/trip_close.dart`, and
--- the probe compares the two: one rule, written twice, is two chances to
--- disagree about when a trip is over.
+-- Seventy-two hours, confirmed on 26 August 2026
+-- (`docs/decisions/2026-08-26-the-ending.md`). People empty their camera roll
+-- within days of getting home or they never do, so the length of the window
+-- buys silence rather than photographs: three days covers the flight home and
+-- the first evening back, and then the trip becomes a keepsake instead of
+-- trailing off. This is the same number as `graceAfterATrip` in
+-- `packages/cairn_model/lib/src/trip_close.dart`, and the probe compares the
+-- two: one rule, written twice, is two chances to disagree about when a trip
+-- is over.
 create or replace function public.trip_grace_after_end()
 returns interval
 language sql
 immutable
 parallel safe
-as $$ select interval '14 days'; $$;
+as $$ select interval '72 hours'; $$;
 
 -- The instant a trip stops accepting new contributions, and with it the
 -- instant its invite codes stop opening anything.

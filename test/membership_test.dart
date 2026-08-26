@@ -204,11 +204,12 @@ void main() {
   testWidgets('the code dies with the trip, grace and all', (tester) async {
     await openSheet(tester, today: day(15));
 
-    // 17 June is the last day; it seals at midnight, and the fourteen-day
-    // grace runs from there (cairn_model's tripClosesAt).
+    // 17 June is the last day; it seals at midnight, and the seventy-two
+    // hour grace runs from there (cairn_model's tripClosesAt). So the code
+    // works through the 20th and is dead when the 21st begins.
     expect(
       textOf(const Key('trip-code-expiry')),
-      'Dies with the trip, after 1 July.',
+      'Dies with the trip, after 20 June.',
     );
   });
 

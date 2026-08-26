@@ -24,7 +24,9 @@
 // instead), and await real file I/O inside the fake camera.
 import 'dart:io';
 
-import 'package:cairn_model/cairn_model.dart' show TripId;
+import 'package:cairn_model/cairn_model.dart'
+    as model
+    show TripId, TripStanding;
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -72,7 +74,7 @@ DateTime day(int dayOfJune) => DateTime.utc(2027, 6, dayOfJune);
 /// choose has to pin the mint, exactly as it pins the clock. Pinning it is
 /// also the assertion that the id reaches the derivation at all: deal the app
 /// a different id and every expectation below moves.
-final testTripId = TripId.mint(List.filled(16, 0x5a));
+final testTripId = model.TripId.mint(List.filled(16, 0x5a));
 
 /// The ping this phone is dealt on [date], computed the way the app computes
 /// it. The instant is a hash of the trip, the party and the date, so a test
@@ -130,13 +132,18 @@ void main() {
       localTimeOfDay: const Duration(hours: 11, minutes: 40),
     );
 
-    CaptureCall callAt(DateTime now, {DateTime? answeredAt, tm.Ping? p}) =>
-        captureCallFor(
-          ping: p ?? ping,
-          now: now,
-          answeredAt: answeredAt,
-          utcOffset: Duration.zero,
-        );
+    CaptureCall callAt(
+      DateTime now, {
+      DateTime? answeredAt,
+      tm.Ping? p,
+      model.TripStanding standing = model.TripStanding.underway,
+    }) => captureCallFor(
+      ping: p ?? ping,
+      now: now,
+      answeredAt: answeredAt,
+      utcOffset: Duration.zero,
+      standing: standing,
+    );
 
     test('no ping today is nothing asked of you', () {
       expect(
@@ -145,6 +152,7 @@ void main() {
           now: DateTime.utc(2027, 6, 14, 11, 40),
           answeredAt: null,
           utcOffset: Duration.zero,
+          standing: model.TripStanding.underway,
         ),
         isA<NoMomentHere>(),
       );
@@ -195,6 +203,7 @@ void main() {
         now: DateTime.utc(2027, 6, 14, 12),
         answeredAt: DateTime.utc(2027, 6, 14, 2, 40),
         utcOffset: const Duration(hours: 9), // Tokyo
+        standing: model.TripStanding.underway,
       );
       expect((call as MomentAnswered).hourLabel, '11:40');
     });

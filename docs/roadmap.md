@@ -278,8 +278,9 @@ the cover's face, the cairn signs the foot
 after the trip, from photos already in the pool — and
 [the book never expires](decisions/2026-08-22-grace-window.md), so it can land
 as a pull request while the first trip's photos wait. The trip closing and the
-book's availability are **two separate rules** (trip end + 14 days; forever) —
-never one timestamp.
+book's availability are **two separate rules** (trip end + 72 hours; forever) —
+never one timestamp. See
+[the ending](decisions/2026-08-26-the-ending.md), which carries the number.
 
 The interior is designed (round 9); the **printed page is not**, needs no code,
 and should be drawn in parallel long before this phase so it never becomes the
@@ -346,11 +347,14 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
   `supabase/migrations/0010_trip_itinerary.sql`), and dormant: it has no hosted
   project to point at and no session to speak as, so every reconcile reports
   `dormant` and writes nothing.
-- The trip's close at trip end + 14 days as a *stored* rule. It is derived
-  correctly on the phone now (`cairn_model`'s `tripClosesAt`, which is what
-  kills an invite code), but it is derived from the plan each time rather than
-  being a fact of the trip everybody's phone agrees on — and the server knows
-  nothing of it.
+- The trip's close at trip end + 72 hours as a *stored* rule. Both halves
+  derive it correctly now — `cairn_model`'s `tripStandingAt` on the phone, and
+  `trip_closes_at()` on the server, which is what kills an invite code and
+  what shuts `photos_insert_trip_member` — but each derives it from what it
+  holds rather than from a fact of the trip everybody's phone agrees on. The
+  phone's half reads the *device's* offset, so two travellers in different
+  zones can disagree about the hour it shuts. The stored trip clock is what
+  closes that.
 - The trip's own clock. Nothing stores one, so the trip is read at the
   device's UTC offset in the two places that admit it, and the timezone power
   the starter-and-container decision settled has nothing to act on yet.
@@ -403,9 +407,10 @@ Each of these has already cost time, or is certain to.
   TestFlight build expires 90 days after upload.** Relevant to *when* you pay,
   not just whether.
 - **The trip's ending is two rules, not one.** Close to new photos at trip end
-  + 14 days; the book makeable forever. A single "expiry" timestamp silently
+  + 72 hours; the book makeable forever. A single "expiry" timestamp silently
   re-bundles what was deliberately split. See
-  `docs/decisions/2026-08-22-grace-window.md`.
+  `docs/decisions/2026-08-26-the-ending.md`, which carries the number, and
+  `docs/decisions/2026-08-22-grace-window.md`, which is why it is split.
 - **Supabase's free tier pauses a project after about a week of inactivity**, and
   after a year the dashboard restore path is gone. A trip that is months away
   means the project will sleep. That is what the dormancy work is for.

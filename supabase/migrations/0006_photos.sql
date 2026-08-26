@@ -102,8 +102,27 @@ create policy "photos_select_trip_member"
   to authenticated
   using ( public.is_trip_member(photos.trip_id, auth.uid()) );
 
--- A photo must be tagged with whoever is uploading it, and that person
--- must be a member of the trip they're uploading into.
+-- A photo must be tagged with whoever is uploading it, that person must be a
+-- member of the trip they're uploading into, and **the trip must still be
+-- open**.
+--
+-- The third condition is the server's half of the ending
+-- (`docs/decisions/2026-08-26-the-ending.md`): a trip takes photographs until
+-- a grace after its last day ends, and then its record is fixed. The phone
+-- refuses the same write at `CaptureFlow.turnTheDayOver`, which is where a
+-- person meets it; this is what makes it true of the trip rather than true of
+-- one phone, because there are seven others and one of them has a wrong
+-- clock.
+--
+-- `trip_closes_at` is null only for a trip this caller cannot see, and a null
+-- fails the comparison -- which is the right answer twice over, since a
+-- caller who cannot see the trip is not a member of it either.
+--
+-- Deliberately *not* added to the update and delete policies below. Those are
+-- a person's own photograph: removing one of yourself you hate, or correcting
+-- which day it landed on, stays yours after the close for the same reason the
+-- phone still lets a starter discard a whole archived trip. What the close
+-- shuts is the door for new contributions, not a person's hold on their own.
 drop policy if exists "photos_insert_trip_member" on public.photos;
 create policy "photos_insert_trip_member"
   on public.photos for insert
@@ -111,6 +130,7 @@ create policy "photos_insert_trip_member"
   with check (
     contributor_id = auth.uid()
     and public.is_trip_member(photos.trip_id, auth.uid())
+    and now() < public.trip_closes_at(photos.trip_id)
   );
 
 -- Your own photo, and only your own -- in practice, correcting trip_day by

@@ -104,7 +104,12 @@ day, over a first slice of the Supabase adapter that speaks PostgREST. That
 whole path is **dormant, not absent** — it needs a project URL, a publishable
 key and a session, and there is no hosted project and no sign-in, so every
 build so far reports itself dormant and touches nothing. The pool is still
-local: nobody else's bytes arrive until Phase 2. Everything else between the
+local: nobody else's bytes arrive until Phase 2. **A trip now ends** as well as
+starting (`fm/cairn-trip-end`): seventy-two hours of grace for late
+photographs, then it is a record — uploads shut on both sides of the seam,
+codes die, the sheet stops offering what it cannot do, the plan cannot be
+replaced and the sync goes quiet. No archive *presentation* was built; the
+book and the handover are still after the line. Everything else between the
 screens and the packages — photos on the day page and the Trail, the import
 sweep, the rest of the platform glue, the R2 half of the adapter — is still
 **not built**, and the right edge is unchanged: the backend schema is verified
@@ -376,6 +381,18 @@ a "change one, change all" edge:
    carries no clock of its own (it cannot win or lose apart from its day), and
    the *plan* carries a shape revision separate from every day's, because a
    deleted day leaves no row to carry an instant.
+10. **Where a trip stands is decided once, and the close is enforced on both
+    sides.** `cairn_model.tripStandingAt` is the only thing that turns
+    `(now, endsAt)` into underway / grace / archived; the app reaches it
+    through `tripStandingProvider` and nothing above that provider compares
+    dates itself, exactly as with the gate (#2). The *close* is then a
+    coupling like #2 and #9: seventy-two hours after the last day seals, on
+    the phone (`graceAfterATrip`) and in SQL (`trip_grace_after_end()`), with
+    `supabase/tests/rls_probe.py` reading the Dart constant to compare them.
+    Both halves shut the pool — `CaptureFlow.turnTheDayOver` and
+    `photos_insert_trip_member` — because eight phones means one wrong clock.
+    What the close does not take, on either side, is a person's hold on their
+    own photograph. See `docs/decisions/2026-08-26-the-ending.md`.
 
 ---
 

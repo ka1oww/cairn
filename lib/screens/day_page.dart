@@ -146,6 +146,14 @@ class _Day extends StatelessWidget {
       headline: view.headline,
       detail: view.detail,
     ),
+    // One sentence for where the ending stands — still open for what is
+    // still on somebody's camera, or closed. Not a second announcement and
+    // not a countdown: the trip is over either way, and the difference is
+    // only what may still land in it.
+    if (view.closing != null) ...[
+      const SizedBox(height: 10),
+      _Closing(view.closing!),
+    ],
     const SizedBox(height: 26),
     const _Label('THE LAST DAY'),
     const SizedBox(height: 8),
@@ -220,6 +228,25 @@ class _CaptureCall extends ConsumerWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Where the trip's ending stands, under the post-trip announcement.
+class _Closing extends StatelessWidget {
+  const _Closing(this.line);
+
+  final String line;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      line,
+      key: const Key('post-trip-closing'),
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
       ),
     );
   }

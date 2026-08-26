@@ -191,8 +191,8 @@ void main() {
   testWidgets('a code said after the trip closed says the trip closed', (
     tester,
   ) async {
-    // The plan ends on 15 June; the trip shuts fourteen days after that
-    // (cairn_model's tripClosesAt), so by 6 July the words are dead.
+    // The plan ends on 15 June; the trip shuts seventy-two hours after that
+    // (cairn_model's tripClosesAt), so by 6 July the words are long dead.
     await launch(tester, now: DateTime.utc(2027, 7, 6));
     await accept(tester);
 

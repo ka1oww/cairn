@@ -20,6 +20,14 @@
 //    beside a name, not a rank — which is why it is a note on a row here and
 //    not a role anywhere in the model.
 //
+// **And once the trip closes, the sheet is a record.** Renaming, minting and
+// rotating are all refused on an archived trip — by `cairn_model`'s
+// `trip_powers.dart`, which is where that rule lives, and not by a second
+// check written here. What the sheet does then is say so: [TripSettingsView]
+// carries the ending's own sentence, and the controls that would change the
+// trip are absent rather than disabled, which is this project's rule for
+// anything that cannot fire.
+//
 // Deliberately absent: removing someone (there is nobody else on this phone's
 // roster to remove, and a control that can never fire is chrome), leaving
 // (the same, and a party of one leaving would leave the trip with nobody),
@@ -34,6 +42,7 @@ import '../repositories/photo_repository.dart';
 import 'date_labels.dart';
 import 'paste_flow.dart';
 import 'ping_schedule.dart';
+import 'trip_lifecycle.dart';
 import 'trip_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -112,6 +121,17 @@ class TripSettingsView {
   final String codeNote;
 
   final bool canRename;
+
+  /// Whether new words can be made. False on an archived trip, where a code
+  /// minted now would be born dead — it takes its close from the trip, and
+  /// the trip has already closed.
+  final bool canMintCode;
+
+  /// Where the trip's ending stands, in one sentence — or null while the
+  /// trip is still underway and has no ending to report.
+  /// See `trip_lifecycle.dart`, which writes it.
+  final String? ending;
+
   final TripDeletion deletion;
 
   const TripSettingsView({
@@ -123,6 +143,8 @@ class TripSettingsView {
     this.code,
     required this.codeNote,
     required this.canRename,
+    required this.canMintCode,
+    this.ending,
     required this.deletion,
   });
 }
@@ -157,6 +179,7 @@ final tripSettingsProvider = Provider<AsyncValue<TripSettingsView?>>((ref) {
             you: model.MemberId(localMemberId),
             now: ref.watch(nowProvider),
             utcOffset: ref.watch(tripUtcOffsetProvider),
+            standing: ref.watch(tripStandingProvider),
           ),
         );
       }
@@ -187,7 +210,13 @@ class TripActions {
   Future<void> rename(String name) async {
     final trip = _trip;
     if (trip == null) return;
-    if (!model.canRenameTrip(member: _you, members: trip.members)) return;
+    if (!model.canRenameTrip(
+      member: _you,
+      members: trip.members,
+      standing: _ref.read(tripStandingProvider),
+    )) {
+      return;
+    }
     await _ref.read(membershipStoreProvider).rename(name);
   }
 
@@ -199,13 +228,17 @@ class TripActions {
   Future<void> newCode() async {
     final trip = _trip;
     if (trip == null) return;
-    if (!model.canMintInvite(member: _you, members: trip.members)) return;
+    final standing = _ref.read(tripStandingProvider);
+    if (!model.canMintInvite(
+      member: _you,
+      members: trip.members,
+      standing: standing,
+    )) {
+      return;
+    }
     final store = _ref.read(membershipStoreProvider);
     final now = _ref.read(nowProvider);
-    final closesAt = tripCloseFor(
-      _ref.read(savedItineraryProvider).value,
-      _ref.read(tripUtcOffsetProvider),
-    );
+    final closesAt = _ref.read(tripClosesAtProvider);
     await store.mintInvite(by: _you, now: now);
     for (final invite in trip.invites) {
       if (invite.standingAt(now, tripClosesAt: closesAt) !=
@@ -216,6 +249,7 @@ class TripActions {
         member: _you,
         startedBy: trip.startedBy,
         mintedBy: invite.mintedBy,
+        standing: standing,
       )) {
         continue;
       }
@@ -252,27 +286,6 @@ class TripActions {
 // The derivation, kept pure so it can be read in one sitting.
 // ---------------------------------------------------------------------------
 
-/// The instant [plan] closes to new photos — and with it the instant its
-/// codes die — or null while the plan has no dates to end on.
-///
-/// The rule is the domain's (`cairn_model`'s `tripClosesAt`: trip end plus
-/// the fourteen-day grace) and is deliberately not spelled out again here.
-/// The book's rule is not this one and never will be: it does not expire.
-DateTime? tripCloseFor(TripPlan? plan, Duration utcOffset) {
-  if (plan == null) return null;
-  DateTime? last;
-  for (final day in plan.days) {
-    final date = day.date;
-    if (date == null) continue;
-    if (last == null || date.isAfter(last)) last = date;
-  }
-  if (last == null) return null;
-  // A day's date is a bare calendar date carried at UTC midnight; the day
-  // itself ends at the next midnight on the trip's clock.
-  final endsAt = last.add(const Duration(days: 1)).subtract(utcOffset);
-  return model.tripClosesAt(endsAt);
-}
-
 /// The sheet for [trip], or null when no trip has been started.
 TripSettingsView? tripSettingsFor({
   required TripMembership? trip,
@@ -281,6 +294,7 @@ TripSettingsView? tripSettingsFor({
   required model.MemberId you,
   required DateTime now,
   required Duration utcOffset,
+  required model.TripStanding standing,
 }) {
   if (trip == null) return null;
   final closesAt = tripCloseFor(plan, utcOffset);
@@ -309,11 +323,30 @@ TripSettingsView? tripSettingsFor({
         // about anyone else. Not a spinner, and not an empty list either.
         : 'Just you so far. Nobody else\'s phone can reach this trip yet.',
     code: live.isEmpty ? null : _codeLine(live.last, closesAt, utcOffset),
-    codeNote:
-        'Say it out loud — that is the whole trick. Cairn cannot carry '
-        'anyone here from their phone yet, so for now the words are the '
-        'invitation and nothing arrives.',
-    canRename: model.canRenameTrip(member: you, members: trip.members),
+    codeNote: standing.admitsJoiners
+        ? 'Say it out loud — that is the whole trick. Cairn cannot carry '
+              'anyone here from their phone yet, so for now the words are the '
+              'invitation and nothing arrives.'
+        // Not "expired", which sounds like a mistake somebody made. The
+        // words did their job for as long as the trip was a thing you could
+        // be let into.
+        : 'The words are done. They died with the trip, and there are no '
+              'new ones to make — nobody joins an archive.',
+    canRename: model.canRenameTrip(
+      member: you,
+      members: trip.members,
+      standing: standing,
+    ),
+    canMintCode: model.canMintInvite(
+      member: you,
+      members: trip.members,
+      standing: standing,
+    ),
+    ending: tripEndingLine(
+      standing: standing,
+      closesAt: closesAt,
+      utcOffset: utcOffset,
+    ),
     deletion: _deletion(trip, you, holdsOthers),
   );
 }

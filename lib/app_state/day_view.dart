@@ -21,6 +21,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'date_labels.dart';
+import 'trip_lifecycle.dart';
 import 'trip_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -134,17 +135,29 @@ class BeforeTheTrip extends DayView {
 /// this is the plainest honest treatment — say the trip is over, and show
 /// the last day, which by the gate decision belongs to everyone who was
 /// there (grill round one §1).
+///
+/// **One state, whether the trip is in its grace or archived.** A trip in its
+/// grace window is over and reads as over
+/// (`docs/decisions/2026-08-26-the-ending.md`); the only difference is what
+/// may still be written into it, and that difference is [closing]'s one
+/// sentence rather than a second post-trip surface.
 class AfterTheTrip extends DayView {
   final String headline;
 
   /// `8 days, ending 21 June. Every one of them is still here.`
   final String detail;
 
+  /// Where the ending stands: still open for late photographs, or closed.
+  /// Written once, in `trip_lifecycle.dart`, and said here and on the trip's
+  /// own sheet. Null only when the trip somehow has no ending to report.
+  final String? closing;
+
   final PlannedDay lastDay;
 
   const AfterTheTrip({
     required this.headline,
     required this.detail,
+    this.closing,
     required this.lastDay,
   });
 }
@@ -181,9 +194,10 @@ final dayViewProvider = Provider.family<AsyncValue<DayView?>, DateTime>((
   date,
 ) {
   final today = ref.watch(todayProvider);
+  final closing = ref.watch(tripEndingLineProvider);
   return ref
       .watch(savedItineraryProvider)
-      .whenData((plan) => dayViewFor(plan, date, today));
+      .whenData((plan) => dayViewFor(plan, date, today, closing: closing));
 });
 
 /// The same day page's view model, asked for by **position in the plan**
@@ -215,7 +229,12 @@ final planDayViewProvider = Provider.family<AsyncValue<DayView?>, int>((
 /// does not guess dates and neither does this layer. A day the person
 /// accepted with its date still open is therefore not reachable *by date*,
 /// which is why a plan with no dates at all is handled separately below.
-DayView? dayViewFor(TripPlan? plan, DateTime date, DateTime today) {
+DayView? dayViewFor(
+  TripPlan? plan,
+  DateTime date,
+  DateTime today, {
+  String? closing,
+}) {
   if (plan == null || plan.days.isEmpty) return null;
 
   final dated = [
@@ -249,6 +268,7 @@ DayView? dayViewFor(TripPlan? plan, DateTime date, DateTime today) {
       detail:
           '$dayCount $daysWord, ending ${dayMonthLabel(latest.date!)}. '
           'Every one of them is still here.',
+      closing: closing,
       lastDay: _planned(plan, latest, isOver: true),
     );
   }

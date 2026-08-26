@@ -134,7 +134,10 @@ import what is written there, not here.
   awaiting the trip row, offline, refused, synced — and offline means the local
   copy is untouched and authoritative. Two rules to keep: applying a merge must
   never re-stamp a day's clock (that is what makes two phones push at each
-  other forever), and **a reconcile that changed nothing must write nothing**,
+  other forever), **an archived trip is not reconciled at all** (it returns
+  `SyncStanding.archived` before the first round trip, so a pull cannot apply
+  somebody's plan over a closed record), and **a reconcile that changed nothing
+  must write nothing**,
   because the plan's own Drift stream is what asks for the next sync. The whole
   path is dormant today: it needs a `--dart-define`d project and a session, and
   there is neither, so a green test suite is no evidence a hosted project
@@ -203,6 +206,24 @@ import what is written there, not here.
   a day's photos are ordered by `cairn_model.DayPool`, not by the screen. A
   tile whose bytes are not on this phone is a permanent state of a pool eight
   people share, not a loading spinner.
+- **A trip ends, and where it stands is one rule written once.**
+  `cairn_model`'s `tripStandingAt` turns `(now, endsAt)` into underway / grace
+  / archived, and every surface and write path asks it through
+  `tripStandingProvider` (`lib/app_state/trip_lifecycle.dart`, which also owns
+  the one thing the domain cannot work out: when a saved plan of bare calendar
+  dates *ends*). A second comparison of dates above that provider is the thing
+  to refuse in review. The shape is
+  `docs/decisions/2026-08-26-the-ending.md`: seventy-two hours of grace taking
+  nothing but late photographs, then the record is fixed. Three things worth
+  knowing before touching it. **The read-only half is a permission**, in
+  `trip_powers.dart`, so a new caller inherits it — with `canDeleteTrip` the
+  one deliberate exception (discarding a record is not editing it). **A plan
+  with no dates has not ended**, and is `underway` rather than closed or
+  unknown. And **the grace's real intake is not built**: capture only writes to
+  today, so the window's door is the import sweep, and until that exists the
+  rule sits at the write path (`CaptureFlow.turnTheDayOver`) rather than on a
+  button. The number itself is written twice and never three times — here and
+  as `trip_grace_after_end()` in SQL, compared by `supabase/tests/rls_probe.py`.
 - **The gate is one rule, written once.** `cairn_model`'s `GateState.decide`
   is it: the gate applies to the day being lived, and every day that has sealed
   is open to everyone on the trip whether they answered it or not
@@ -229,7 +250,14 @@ import what is written there, not here.
   silent hangs, both at 0% CPU with no error: awaiting a drift *stream*
   (`watch().first`) inside `testWidgets` never completes under the faked
   clock -- read once instead (`AppDatabase.readPhotos`) -- and so does real
-  file I/O, so a fake camera must write its frame synchronously.
+  file I/O, so a fake camera must write its frame synchronously. A test
+  that drives providers through a bare `ProviderContainer` instead has the
+  opposite trap: **every provider is auto-dispose under Riverpod 3**, so an
+  unlistened `StreamProvider` is disposed the moment `read` returns and its
+  future never completes (a silent 30-second timeout), and an unlistened
+  notifier forgets its state between two awaits. `container.listen(p, (_, _)
+  {})` is what a widget does for free — `test/trip_ending_test.dart` shows the
+  shape.
 - Fixture-writing trap: a `Day 1 - Tokyo, 14 June 2027` header does *not*
   give the day a date (the whole tail becomes the place); only a date-shaped
   header (`Mon 14 June 2027 - Tokyo`, `3/11/2027 - Tokyo`) resolves

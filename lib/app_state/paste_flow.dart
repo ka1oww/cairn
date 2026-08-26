@@ -31,6 +31,7 @@ import '../repositories/trip_repository.dart';
 import 'date_labels.dart';
 import 'day_view.dart';
 import 'ping_schedule.dart';
+import 'trip_lifecycle.dart';
 import 'trip_providers.dart';
 
 /// The reason a set-aside line carries when the person took it out of a day
@@ -261,6 +262,16 @@ class ItineraryReview {
   final bool nothingRead;
   final List<String> keptLines;
 
+  /// Why this read cannot be accepted, or null — the usual — when it can.
+  ///
+  /// One reason exists: the trip has closed, and its plan is half of the
+  /// record it closed with (`docs/decisions/2026-08-26-the-ending.md`). The
+  /// read itself is still shown in full, because there is nothing wrong with
+  /// it and hiding what somebody just pasted would be the app arguing with
+  /// them; what is absent is the accept, which is this project's treatment
+  /// for anything that cannot fire.
+  final String? refusal;
+
   const ItineraryReview({
     required this.days,
     required this.keptAside,
@@ -268,7 +279,11 @@ class ItineraryReview {
     required this.readMonthFirst,
     required this.nothingRead,
     required this.keptLines,
+    this.refusal,
   });
+
+  /// Whether "Looks right" is offered at all.
+  bool get canAccept => refusal == null;
 
   int get totalStops => days.fold(0, (sum, day) => sum + day.stops.length);
 
@@ -629,6 +644,15 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// **Temporary**, until a trip can be re-read without being thrown away:
   /// the one way back to the paste box. Hands the person an empty paste box;
   /// accepting there replaces the saved plan.
+  ///
+  /// **Still offered on a closed trip, and that is deliberate.** This route
+  /// is doing two jobs at once: it is how a plan gets replaced, and it is
+  /// the only way to the join door (`join_flow.dart`) — the paste box holds
+  /// both. Shutting it on an archived trip would lock somebody out of ever
+  /// joining another trip because their last one ended, which is not what a
+  /// read-only archive is protecting. So the *route* stays and the *write*
+  /// is refused: [accept] returns without saving, and the read-back says so
+  /// in words rather than failing silently.
   void pasteAnother() {
     _forgetThePaste();
     ref.read(repasteRequestedProvider.notifier).request();
@@ -659,6 +683,11 @@ class PasteFlow extends Notifier<PasteFlowState> {
   Future<void> accept() async {
     final draft = _draft;
     if (draft == null) return;
+    // An archived trip's plan is fixed. Accepting here would call
+    // `saveItinerary`, which replaces the saved plan wholesale, so this is
+    // the write the read-only archive is actually protecting — the paste box
+    // being unreachable is how it usually never comes up.
+    if (ref.read(tripStandingProvider).isReadOnly) return;
     final itinerary = ConfirmedItinerary(
       days: [
         for (final day in draft.days)
@@ -798,6 +827,11 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   if (line.trim().isNotEmpty) line.trim(),
               ]
             : const [],
+        refusal: ref.read(tripStandingProvider).isReadOnly
+            ? 'This trip has closed, so its plan cannot be replaced — what '
+                  'it holds is the record it closed with. The paste is here '
+                  'if you want to read it back.'
+            : null,
       ),
     );
   }
@@ -813,11 +847,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
       dateSuggestion: _suggestionFor(day),
       stops: [
         for (final stop in day.stops)
-          ReviewStop(
-            id: stop.id,
-            text: stop.text,
-            timeLabel: stop.time?.iso,
-          ),
+          ReviewStop(id: stop.id, text: stop.text, timeLabel: stop.time?.iso),
       ],
       confidence: doubt == null
           ? DayConfidence.high

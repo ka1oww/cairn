@@ -31,6 +31,11 @@
 // last-write-wins and the captain accepted it for this slice — no CRDTs, no
 // conflict UI.
 //
+// **A closed trip is not synced at all.** The reconcile below reports
+// `SyncStanding.archived` and returns before any round trip, in both
+// directions: the archive is the record the trip closed with, and neither a
+// push nor a pull may move it (`docs/decisions/2026-08-26-the-ending.md`).
+//
 // **Deletion is why the plan carries a shape revision.** A day that was
 // removed leaves no row to carry an instant, so "I dropped day 4" and "I have
 // never heard of day 4" look identical in a push. `SyncStates.planRevisedAt`
@@ -76,6 +81,18 @@ enum SyncStanding {
   /// exists. Retrying changes nothing, so nothing here does.
   refused,
 
+  /// The trip has closed. Its shared facts are the record it closed with, and
+  /// this class stops touching them
+  /// (`docs/decisions/2026-08-26-the-ending.md`).
+  ///
+  /// **It pulls as well as pushes, and stopping both is the point.** A pull
+  /// would let a phone whose clock disagrees, or one still running an older
+  /// build, write a day over the archive; a push would send this phone's copy
+  /// somewhere it is no longer wanted. Reported before any round trip, so an
+  /// archived trip costs no network at all — which is also what makes an
+  /// old trip on a phone in a foreign country free.
+  archived,
+
   /// The plan and the roster now agree with the server's.
   synced,
 }
@@ -103,6 +120,8 @@ class SyncOutcome {
 
   bool get didReach => standing == SyncStanding.synced;
 }
+
+Duration _deviceOffset() => DateTime.now().timeZoneOffset;
 
 /// What the shared `trips` row needs and this phone does not have.
 ///
@@ -144,6 +163,7 @@ class TripSync {
     required this.database,
     required this.facts,
     this.now = DateTime.now,
+    this.utcOffset = _deviceOffset,
     this.tripRow,
   });
 
@@ -154,6 +174,16 @@ class TripSync {
   /// stamped with. Never the merge clock: a *day's* clock is stamped where
   /// the day is written ([AppDatabase.replaceItinerary]).
   final DateTime Function() now;
+
+  /// The trip's clock, as an offset from UTC — what turns the plan's last
+  /// bare date into the instant the trip ends.
+  ///
+  /// The same acknowledged approximation the app makes above this seam
+  /// (`lib/app_state/trip_lifecycle.dart`, and `tripUtcOffsetProvider`): one
+  /// offset for the whole trip, read off the device, because no trip clock is
+  /// stored yet. It is deliberately a function rather than a value, so it is
+  /// read at reconcile time and pinned by a test the way [now] is.
+  final Duration Function() utcOffset;
 
   /// Who can say what the trip's clock is, or null while nothing can.
   final TripRowSource? tripRow;
@@ -243,6 +273,23 @@ class TripSync {
       return const SyncOutcome(SyncStanding.noTrip);
     }
     final tripId = TripId(trip.tripId);
+
+    // Checked here, after the trip is known and before anything is sent.
+    // The rule is `cairn_model`'s and is not restated: this only works out
+    // the one input it needs, the instant the plan's last day seals on the
+    // trip's clock — the same arithmetic `trip_lifecycle.dart` does above
+    // the seam, which is why a day whose date is still open plays no part
+    // and a plan with no dates at all has not ended.
+    final standing = tripStandingAt(
+      now: now().toUtc(),
+      endsAt: await _endsAt(),
+    );
+    if (standing.isReadOnly) {
+      return const SyncOutcome(
+        SyncStanding.archived,
+        detail: 'the trip has closed',
+      );
+    }
 
     try {
       final shared = await facts.readTrip(tripId);
@@ -578,6 +625,22 @@ class TripSync {
   }
 
   String _stamp() => now().toUtc().toIso8601String();
+
+  /// The instant this phone's plan ends, on the trip's clock, or null while
+  /// every day's date is still open.
+  ///
+  /// Read off the stored itinerary rather than taken from above, because
+  /// nothing above this seam knows this class exists — that is the whole
+  /// arrangement, and a trip's ending handed in from a provider would break
+  /// it. Undated days play no part: they cannot be the end of anything.
+  Future<DateTime?> _endsAt() async {
+    final dates = [
+      for (final day in await database.readItineraryDays()) ?day.dateIso,
+    ]..sort();
+    if (dates.isEmpty) return null;
+    final last = DateTime.parse('${dates.last}T00:00:00Z').toUtc();
+    return last.add(const Duration(days: 1)).subtract(utcOffset());
+  }
 
   /// Which day of the trip somebody joined on, worked out from the plan.
   ///

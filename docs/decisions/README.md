@@ -24,7 +24,7 @@ Read in order:
 | [2026-08-22 — the screen after the paste](2026-08-22-paste-confirmation.md) | The parse-confirmation gap, closed by design round eight, and the parser API extension it exposed |
 | [2026-08-22 — book round nine](2026-08-22-book-round-nine.md) | The photograph is the cover's face with the cairn signing the foot, and people may write their own words |
 | [2026-08-22 — no book editor](2026-08-22-book-no-editor.md) | The book generates itself; authored words are captions at capture time, not an editing surface |
-| [2026-08-22 — the grace window](2026-08-22-grace-window.md) | The trip closes to new photos fourteen days after it ends; the book stays makeable forever. Two rules, never one timestamp. |
+| [2026-08-22 — the grace window](2026-08-22-grace-window.md) | The trip closes to new photos after it ends; the book stays makeable forever. Two rules, never one timestamp. The number is superseded by 2026-08-26. |
 | [2026-08-22 — the first release](2026-08-22-first-release.md) | The line: whatever makes one real trip work for eight people is in; everything else is deliberately after |
 | [2026-08-22 — the cat](2026-08-22-cat-deferred.md) | The cat is parked as a future feature, with the feasibility findings preserved |
 | [2026-08-22 — paying later](2026-08-22-paying-later.md) | The Apple $99 waits until the weekend test with friends — the first moment the app must reach someone else's phone |
@@ -33,5 +33,6 @@ Read in order:
 | [2026-08-25 — Riverpod and Drift](2026-08-25-riverpod-and-drift.md) | The stack the app is already built on, written down: what `setState`, `provider`, `bloc`, `sqflite`, Hive and Isar were weighed against, and the evidence the demo and the scaffold produced |
 | [2026-08-25 — the line register](2026-08-25-book-line-register.md) | How a written line dresses in the book: typeset and set apart is the rule, the writer's own strokes an optional flourish, a script face refused |
 | [2026-08-25 — the trip's own id](2026-08-25-the-trip-mints-its-own-id.md) | The phone mints the trip id offline and the server keeps it; there is no id that arrives late and no schedule that re-deals |
+| [2026-08-26 — the ending](2026-08-26-the-ending.md) | Seventy-two hours of grace, then the trip is a record: uploads shut, codes die, the sheet stops offering what it cannot do, and the sync goes quiet |
 
 Design handoffs that implement these live in [`../design/`](../design/).

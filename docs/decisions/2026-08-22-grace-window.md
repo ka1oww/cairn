@@ -1,5 +1,12 @@
 # The grace window is fourteen days, and the book never expires — 22 August 2026
 
+> **Superseded in part, 26 August 2026.** The captain shortened the window to
+> **seventy-two hours**: see [the ending](2026-08-26-the-ending.md), which also
+> records what the close actually does and where the rule lives. Everything
+> below still stands except the number — and the half of this decision that
+> mattered most, the split between the trip's close and the book's
+> availability, is unchanged and must stay unchanged.
+
 Decided by the captain, on the answer board, agreeing to the recommendation:
 *"Sure. That's a good idea actually."* This answers the question
 [grill round one](2026-08-22-grill-round-one.md) §4 left open.
@@ -37,7 +44,7 @@ expires — is not a keepsake.
 
 Two separate rules, not one:
 
-- **Trip closes to new contributions:** trip end + 14 days.
+- **Trip closes to new contributions:** trip end + 14 days. *(Now 72 hours; see the note at the top.)*
 - **Book generation:** available forever, from photos already in the pool.
 
 **Do not implement these as one timestamp.** They protect different things,
