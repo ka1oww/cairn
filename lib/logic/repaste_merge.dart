@@ -106,6 +106,16 @@ class MergedDay {
   /// silently open. So an appended day keeps [confidence], [uncertainty] and
   /// [headerWeekday]; a matched or kept one reports none.
   ///
+  /// The rule is keyed on [origin], not on whether the day's content is new,
+  /// and that is the limit of it. Because the position pass pairs an undated
+  /// repasted day with an undated current day by *position*, a genuinely new
+  /// undated block inserted above an existing undated day arrives as
+  /// [MergedDayOrigin.mergedByPosition] and so carries no doubt: it saves with
+  /// its date open and is never asked about. That is the same position-pairing
+  /// gap this module already documents — the one that lets a day keep its
+  /// number and its photographs while its content becomes another day's — and
+  /// not a second one. It is deferred with it rather than closed here.
+  ///
   /// The merge itself never invents any of the three and never resolves them:
   /// working out which Saturday, like working out a year, is the screen's ask.
   final ip.Confidence confidence;

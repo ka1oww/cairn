@@ -142,7 +142,12 @@ import what is written there, not here.
   as it would be on a first paste instead of rendering clean and saving with
   its date silently open, while a day the person already answered for is not
   nagged again. That asymmetry is the rule, not an oversight; making it
-  uniform in either direction is the thing to refuse in review. Two known
+  uniform in either direction is the thing to refuse in review. It is keyed on
+  origin, though, and not on whether the content is new, so the position-pairing
+  gap just named is also the path where genuinely new content still arrives
+  without doubt: insert an undated `Sat - Nara` block above an existing undated
+  day and it pairs by position, rides in clean, and saves with its date open
+  unasked. Two known
   gaps remain, both deferred. A displaced line's time — `itinerary_set_asides` has no time column, so a
   set-aside stop's star survives only until Save, and dragging it back after a
   reopen restores it unstarred; closing that needs a schema change. And a
