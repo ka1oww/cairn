@@ -87,7 +87,7 @@ const Map<String, int> _weekdays = {
 };
 
 final RegExp _weekdayDayMonth = RegExp(
-  r'^([A-Za-z]+)\.?,?\s+(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?(?:\s+(\d{4}))?\s*(?:[-:–—]\s*(.+))?$',
+  r'^([A-Za-z]+)\.?(,)?\s+(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?(?:\s+(\d{4}))?\s*(?:[-:–—]\s*(.+))?$',
   caseSensitive: false,
 );
 
@@ -137,20 +137,29 @@ int _fullYear(int y) {
   return y >= 70 ? 1900 + y : 2000 + y;
 }
 
-/// True when [text] is itself a whole date header naming a day and a month,
-/// i.e. the far end of a range like `Sat, Jun 14th - Wed, Jun 18th` rather
-/// than a place name. Such a line names no single day, so the weekday-then-
-/// month-day shape declines it and the line stays an ordinary one.
-bool _isDateHeaderItself(
-  String? text, {
-  required bool monthFirstNumericDates,
-}) {
+// The far end of a range: an optional weekday word followed by a day and a
+// named month in either order. Anchored at the start of the trailing text
+// and deliberately a shape test rather than a second pass of the whole
+// matcher, so a chain of three dates is refused exactly as a pair is.
+final RegExp _dateRunPrefix = RegExp(
+  r'^(?:([A-Za-z]+)\.?,?\s+)?'
+  r'(?:(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)'
+  r'|([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?)\b',
+  caseSensitive: false,
+);
+
+/// True when [text] opens with a date run rather than a place name, i.e. it
+/// is the far end of a range like `Sat, Jun 14th - Wed, Jun 18th`. A line
+/// naming two dates names no single day, so the shapes this slice widened
+/// decline it and it stays an ordinary line.
+bool _beginsWithDateRun(String? text) {
   if (text == null) return false;
-  final inner = tryParseDateHeader(
-    text,
-    monthFirstNumericDates: monthFirstNumericDates,
-  );
-  return inner != null && inner.hasFullDate;
+  final m = _dateRunPrefix.firstMatch(text);
+  if (m == null) return false;
+  final lead = m.group(1);
+  if (lead != null && _weekday(lead) == null) return false;
+  if (m.group(2) != null) return _month(m.group(3)!) != null;
+  return _month(m.group(4)!) != null;
 }
 
 /// Tries each recognized date-header shape against [line] (already
@@ -169,14 +178,18 @@ DateHeaderMatch? tryParseDateHeader(
   var m = _weekdayDayMonth.firstMatch(line);
   if (m != null) {
     final weekday = _weekday(m.group(1)!);
-    final month = _month(m.group(3)!);
-    if (weekday != null && month != null) {
+    final month = _month(m.group(4)!);
+    final trailing = _cleanTrailing(m.group(6));
+    final afterAComma = m.group(2) != null;
+    if (weekday != null &&
+        month != null &&
+        !(afterAComma && _beginsWithDateRun(trailing))) {
       return DateHeaderMatch(
         weekday: weekday,
-        day: int.parse(m.group(2)!),
+        day: int.parse(m.group(3)!),
         month: month,
-        year: m.group(4) != null ? int.parse(m.group(4)!) : null,
-        trailingText: _cleanTrailing(m.group(5)),
+        year: m.group(5) != null ? int.parse(m.group(5)!) : null,
+        trailingText: trailing,
       );
     }
   }
@@ -186,12 +199,7 @@ DateHeaderMatch? tryParseDateHeader(
     final weekday = _weekday(m.group(1)!);
     final month = _month(m.group(2)!);
     final trailing = _cleanTrailing(m.group(5));
-    if (weekday != null &&
-        month != null &&
-        !_isDateHeaderItself(
-          trailing,
-          monthFirstNumericDates: monthFirstNumericDates,
-        )) {
+    if (weekday != null && month != null && !_beginsWithDateRun(trailing)) {
       return DateHeaderMatch(
         weekday: weekday,
         month: month,
