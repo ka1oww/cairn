@@ -51,12 +51,21 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: ${{ env.DART_SDK_VERSION }}
+      # pubspec.lock is gitignored (root .gitignore), so it never exists at
+      # checkout: hashFiles() over a path that matches nothing returns the
+      # empty string, which collapsed every key here to a bare prefix. Key on
+      # the committed pubspec.yaml instead, and scope each key to the thing it
+      # caches -- the five matrix legs all wrote the one key `pub-Linux-` and
+      # overwrote each other, and the learning demo saved the exact prefix
+      # app-tests restored from. Every run then re-downloaded its dependencies,
+      # which is runner minutes spent against a spending limit that is already
+      # the reason this workflow's jobs are failing before they start.
       - name: Cache pub cache
         uses: actions/cache@v4
         with:
           path: ~/.pub-cache
-          key: pub-${{ runner.os }}-${{ hashFiles(format('{0}/pubspec.lock', matrix.package)) }}
-          restore-keys: pub-${{ runner.os }}-
+          key: pub-${{ runner.os }}-${{ matrix.package }}-${{ hashFiles(format('{0}/pubspec.yaml', matrix.package)) }}
+          restore-keys: pub-${{ runner.os }}-${{ matrix.package }}-
       - run: dart pub get
         working-directory: ${{ matrix.package }}
       - run: dart analyze
@@ -154,7 +163,7 @@ jobs:
         with:
           path: ~/.pub-cache
           key: pub-flutter-app-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
-          restore-keys: pub-flutter-${{ runner.os }}-
+          restore-keys: pub-flutter-app-${{ runner.os }}-
       # drift's NativeDatabase in the widget tests opens the host SQLite;
       # the -dev package puts the unversioned libsqlite3.so on the loader
       # path. Usually preinstalled on the runner image -- this is insurance,
@@ -243,8 +252,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.pub-cache
-          key: pub-flutter-${{ runner.os }}-${{ hashFiles('learning/riverpod-drift-demo/pubspec.lock') }}
-          restore-keys: pub-flutter-${{ runner.os }}-
+          key: pub-flutter-learning-${{ runner.os }}-${{ hashFiles('learning/riverpod-drift-demo/pubspec.yaml') }}
+          restore-keys: pub-flutter-learning-${{ runner.os }}-
       - run: flutter pub get
         working-directory: learning/riverpod-drift-demo
       - name: Generate Drift code (database.g.dart etc. are not checked in)
