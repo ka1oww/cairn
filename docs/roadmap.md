@@ -220,6 +220,14 @@ propagated to every phone, so the ping schedule is never dealt from a stale
 roster or a stale plan
 ([grill round one](decisions/2026-08-22-grill-round-one.md) §2).
 
+**The last of those has landed early, and dormant.** The itinerary and the
+roster are stored, merged last-write-wins per day, and reconciled by
+`lib/repositories/itinerary_sync.dart` over a first slice of the Supabase
+adapter. It is built and tested end to end against a fake backend, and it does
+nothing at all until this phase gives it the two things it is missing: a hosted
+project to point at, and a session to speak as. Accounts, the pool and the
+bytes are still the whole of the work here.
+
 The pool stores **originals**; resizing is for display only (§3 of the same
 decision). The bill has now been measured rather than guessed at:
 [what the pool costs](storage-and-cost.md). At the ping's own volume a

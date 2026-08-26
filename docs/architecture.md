@@ -93,16 +93,20 @@ and a sheet off the Trail's title over it. It also has a **real id from the
 instant it is started** (`fm/cairn-tripid-before-sync`): the phone mints the
 uuid rather than waiting for Postgres to, so a trip can be created in flight
 mode and the id it is born with is the id it keeps after it first syncs. The party the pings are dealt
-across is that roster, so the stub member is gone; it holds one person,
-because nothing carries a membership to another phone yet. The itinerary is
-**local-only**, and so is the pool — nobody else's bytes arrive until Phase 2;
-syncing the itinerary as a shared fact (grill round one §2) is still not
-built. Everything else between the screens and the packages — photos on the
-day page and the Trail, the import sweep, the rest of the platform
-glue, the Supabase/R2 client adapter — is still **not built**, and the right
-edge is unchanged: the backend schema is verified only against a local
-Postgres, no hosted Supabase project exists, no R2 bucket has been created,
-nothing is deployed.
+across is that roster, so the stub member is gone; it holds one person on a
+phone nobody has signed into. The **itinerary and the roster are now shared
+facts** (grill round one §2): the schema holds them, and `TripSync`
+(`lib/repositories/itinerary_sync.dart`) reconciles them last-write-wins per
+day, over a first slice of the Supabase adapter that speaks PostgREST. That
+whole path is **dormant, not absent** — it needs a project URL, a publishable
+key and a session, and there is no hosted project and no sign-in, so every
+build so far reports itself dormant and touches nothing. The pool is still
+local: nobody else's bytes arrive until Phase 2. Everything else between the
+screens and the packages — photos on the day page and the Trail, the import
+sweep, the rest of the platform glue, the R2 half of the adapter — is still
+**not built**, and the right edge is unchanged: the backend schema is verified
+only against a local Postgres, no hosted Supabase project exists, no R2 bucket
+has been created, nothing is deployed.
 `lib/README.md` spells this map's bands as directories — read it alongside
 this file.
 
@@ -163,8 +167,21 @@ lives nowhere else:
   `cairn_model` (see below). Their dialects (`ParsedDay`, `PhotoDayAssignmentResult`,
   `trip_moments`' assignments) are converted into the vocabulary here — at one seam,
   not scattered through widgets.
+- **The shared facts' reconcile.** `itinerary_sync.dart` is the first of the
+  above to be built. It is the one file that holds both backends at once: it
+  reads the plan and the roster out of Drift, pushes them through the adapter,
+  applies what comes back, and reports a standing rather than an error —
+  dormant, no trip, awaiting the trip row, offline, refused, synced. **Offline
+  means the local copy is untouched and authoritative**, which is the whole
+  reason this lives here and not in a provider.
 
-None of this is built, and the conflict/sync policy beyond the notes above is
+  Two rules it exists to keep. *Last write wins, per day*, and the day is the
+  atom — the same rule `sync_trip_itinerary` applies server-side, written
+  twice on purpose and never three times. And *a reconcile that changed
+  nothing writes nothing*: the plan's own Drift stream is what asks for a
+  sync, so an unconditional write would ask for the next one, forever.
+
+The rest is not built, and the conflict policy beyond the itinerary's is
 **undecided** — drawn on the map as open, not settled.
 
 ---
@@ -240,14 +257,14 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Repositories** | partial — one repository over the local itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store. The membership seam (`membership_repository.dart`) has the same two halves for the same reason — `MembershipRepository`, the read interface the trip's surfaces and the ping's party are written against and the only way a test can stand a party of eight up, and `MembershipStore`, the Drift implementation that also owns starting the trip, renaming it, minting and revoking codes and deleting it. The remote side, and everything listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
+| **Repositories** | partial — one repository over the itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store. The membership seam (`membership_repository.dart`) has the same two halves for the same reason — `MembershipRepository`, the read interface the trip's surfaces and the ping's party are written against and the only way a test can stand a party of eight up, and `MembershipStore`, the Drift implementation that also owns starting the trip, renaming it, minting and revoking codes and deleting it. The remote side has begun: `TripSync` (`itinerary_sync.dart`) reconciles the two shared facts — the itinerary and the roster — against Supabase, and nothing above it knows it exists, because it makes the store every screen already reads agree with the other phones. The rest of what is listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
 
 ### Storage
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`), `photos`, and the trip itself: `trip_facts` (one row: which trip, what it is called, who started it), `trip_members` (the roster, with no role column and never one) and `trip_invite_codes` (minted and revoked, with no expiry column — a code dies with its trip and that rule is not stored twice). Schema v5: v2 dropped the scaffold's disposable `trip_drafts` demo, v3 added photos, v4 added the trip's three, v5 gave a pre-mint trip a real uuid | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) and recorded in [`docs/decisions/2026-08-25-riverpod-and-drift.md`](decisions/2026-08-25-riverpod-and-drift.md). |
-| **Supabase/R2 client adapter** | not built | Supabase Auth, Postgres (PostgREST under RLS), both edge functions, R2 (presigned PUT/GET) | Repositories — nothing else in the app may import a Supabase or HTTP symbol | Wraps the session JWT, the RLS-filtered queries, the edge-function calls, and the direct-to-R2 byte transfers behind one interface the repositories consume. |
+| **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`), `photos`, and the trip itself: `trip_facts` (one row: which trip, what it is called, who started it), `trip_members` (the roster, with no role column and never one) and `trip_invite_codes` (minted and revoked, with no expiry column — a code dies with its trip and that rule is not stored twice). Schema v6: v2 dropped the scaffold's disposable `trip_drafts` demo, v3 added photos, v4 added the trip's three, v5 gave a pre-mint trip a real uuid, v6 gave every day the merge clock the shared copy is reconciled on and added `sync_states` — the cursor, not the cargo, and the one table here holding no shared fact at all | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) and recorded in [`docs/decisions/2026-08-25-riverpod-and-drift.md`](decisions/2026-08-25-riverpod-and-drift.md). |
+| **Supabase/R2 client adapter** | partial — the shared facts' half is built (`lib/storage/remote/`): `SharedFacts` is the interface, `PostgrestSharedFacts` speaks it over plain HTTP (no `supabase_flutter`; PostgREST is an ordinary REST API and the package would bring GoTrue, Realtime, Storage and a Podfile's worth of native dependencies). Auth, the edge functions and R2 not built | Supabase Auth, Postgres (PostgREST under RLS), both edge functions, R2 (presigned PUT/GET) | Repositories — nothing else in the app may import a Supabase or HTTP symbol | Wraps the session JWT, the RLS-filtered queries, the edge-function calls, and the direct-to-R2 byte transfers behind one interface the repositories consume. Where the project lives is a `--dart-define` and never a checked-in file; unset, the adapter refuses before it sends anything. |
 
 ### Backend (`supabase/` + Cloudflare)
 
@@ -261,7 +278,7 @@ nothing about pings fired or who has answered today.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (55-probe RLS suite); **no hosted project exists**; starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos`, `day_unlocks`, `day_pages`, `day_page_photos`; `is_trip_member`/`is_trip_starter`, `day_page_is_open`, `redeem_trip_invite`. Membership is the root of every access check. |
+| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (96-probe RLS suite); **no hosted project exists**; starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos`, `day_unlocks`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check. |
 | **Supabase Auth (GoTrue)** | not built — no project; Apple provider is a dashboard step; Google queued | (platform service) | Postgres (`auth.uid()` in every policy), client adapter, edge functions | Accounts. Sign in with Apple first; display name editable at join because providers supply legal names. |
 | **`r2-upload-url` edge fn** | partial — code exists (membership check fixed in #9), never deployed | Postgres (re-checks membership as the caller), R2 (mints a 5-minute presigned PUT) | The only write path for photo bytes | Exists solely because the R2 secret cannot live in the app binary. |
 | **`r2-download-url` edge fn** | **not built** — requirements settled in `supabase/README.md` | Postgres (**must call `day_page_is_open` before signing**), R2 (presigned GET) | The gate itself: a version that skips the check is the single worst potential leak in the app | The bucket is private; every read needs a signature; gating the signature is what makes the shut gate real rather than a curtain. |
@@ -344,6 +361,17 @@ a "change one, change all" edge:
    the row and the file sits beside it on disk. The local shape mirrors the
    remote one on purpose, so the sync path is a copy rather than a
    translation — and it means deleting a row is never deleting a photograph.
+9. **The itinerary merge rule exists twice on purpose, and only twice.** Last
+   write wins, per day; the day is the atom. On the server it is
+   `sync_trip_itinerary` (`0010_trip_itinerary.sql`), which must refuse a
+   stale push it is told about; on the phone it is
+   `lib/repositories/itinerary_sync.dart`, which must know which of its own
+   days survived the push it just made. Both are needed and a third is the
+   thing to refuse in review — the same bar the gate and the invite grammar
+   are held to. Two consequences that look like details and are not: a stop
+   carries no clock of its own (it cannot win or lose apart from its day), and
+   the *plan* carries a shape revision separate from every day's, because a
+   deleted day leaves no row to carry an instant.
 
 ---
 
@@ -376,9 +404,28 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
 - **The download path does not exist.** Only uploads are built. The
   requirements (sign nothing without `day_page_is_open`) are written down,
   which is exactly why the blank is the map's most dangerous one.
-- **Sync and conflict policy is undecided** beyond three written notes
-  (outbox ordering, `day_pages` insert→update fallback, deletion refetch).
-  No reconciliation of rows against R2 objects exists in any direction.
+- **Sync and conflict policy is settled for the itinerary and the roster, and
+  undecided for everything else.** The two shared facts reconcile
+  last-write-wins per day with no conflict UI and no CRDT — a deliberate
+  choice, and it costs what last-write-wins always costs: a phone with a fast
+  clock wins edits it should lose. Photos still have only three written notes
+  (outbox ordering, `day_pages` insert→update fallback, deletion refetch), and
+  no reconciliation of rows against R2 objects exists in any direction.
+- **The shared facts' sync is built and dormant.** It needs a project URL, a
+  publishable key and a session; there is no hosted project and no sign-in, so
+  it reports itself dormant and touches nothing. That is not a stub — the
+  whole path is exercised by tests through a fake backend and a mocked HTTP
+  client — but a green test suite is *not* evidence that a hosted project
+  answers the way the local Postgres does. The gate before anything real is
+  still `supabase db push` against a throwaway project.
+- **The shared roster replaces this phone's, and `localMemberId` is still the
+  string `'me'`.** Once a session exists, `TripSync` writes the account ids the
+  server named over the local roster — which is right, and which means
+  `lib/app_state/ping_schedule.dart`'s `localMemberId` must become the signed-in
+  user's id in the same change that lands sign-in, or this phone's own person
+  vanishes from a party it is standing in. Nothing can hit this today (no
+  session, so no roster ever lands), and it is written here because the next
+  person to build auth is the one who will.
 - **The ping is dealt over a real roster that holds one person.** The
   derivation and the schedule were always real; the party is now read from the
   trip's own members rather than stubbed, and the collision-free promise is

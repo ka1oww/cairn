@@ -102,9 +102,14 @@ class TripRepository {
       });
 
   /// Persists the confirmed itinerary, replacing whatever was saved before.
-  Future<void> saveItinerary(ConfirmedItinerary itinerary) {
+  ///
+  /// [at] is the instant a *changed* day is stamped with — the merge clock
+  /// the shared copy is reconciled on. The store decides which days that is;
+  /// this layer only supplies the reading of now, so a test can pin it.
+  Future<void> saveItinerary(ConfirmedItinerary itinerary, {DateTime? at}) {
     var asidePosition = 0;
     return _db.replaceItinerary(
+      nowUtcIso: (at ?? DateTime.now()).toUtc().toIso8601String(),
       days: [
         for (final day in itinerary.days)
           (number: day.number, dateIso: day.date?.iso, place: day.place),

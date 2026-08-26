@@ -12,10 +12,13 @@ import 'app_state/camera_source.dart';
 import 'app_state/day_view.dart';
 import 'app_state/ping_schedule.dart';
 import 'app_state/trip_providers.dart';
+import 'repositories/itinerary_sync.dart';
 import 'repositories/membership_repository.dart';
 import 'repositories/photo_repository.dart';
 import 'repositories/trip_repository.dart';
 import 'storage/drift/app_database.dart';
+import 'storage/remote/postgrest_shared_facts.dart';
+import 'storage/remote/shared_facts.dart';
 
 /// Builds the whole app: storage → seam → providers → shell.
 ///
@@ -53,6 +56,7 @@ Widget bootstrapApp({
   final db = database ?? openAppDatabase();
   final store = PhotoStore(db);
   final roster = MembershipStore(db);
+  _startSharedFactsSync(db);
   return ProviderScope(
     overrides: [
       tripRepositoryProvider.overrideWithValue(TripRepository(db)),
@@ -67,4 +71,30 @@ Widget bootstrapApp({
     ],
     child: const CairnApp(),
   );
+}
+
+/// Starts keeping the trip's shared facts in step with the server's, if there
+/// is a server.
+///
+/// **Nothing happens by default, and that is the honest state of things.**
+/// The URL and the publishable key arrive from `--dart-define`s that no
+/// checked-in file sets, so an ordinary build has no backend and behaves
+/// exactly as it did before the sync existed. Every test therefore takes this
+/// branch too, which is deliberate: a sync started under `testWidgets` would
+/// leave a timer pending and hang the test at teardown.
+///
+/// It is started here rather than exposed as a provider because no surface
+/// consumes it. The sync's whole job is to make the Drift store agree with
+/// seven other phones; every screen already reads that store, and a provider
+/// nobody watched would only invite one to.
+void _startSharedFactsSync(AppDatabase db) {
+  const config = SharedFactsConfig.fromEnvironment;
+  if (!config.isConfigured) return;
+  TripSync(
+    database: db,
+    // [NoSession] until Sign in with Apple lands: the sync will report
+    // itself dormant rather than pretend, which is the same shape the
+    // notification edge has.
+    facts: PostgrestSharedFacts(config: config, sessions: const NoSession()),
+  ).start(pollEvery: const Duration(minutes: 2));
 }

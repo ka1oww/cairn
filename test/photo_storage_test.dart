@@ -177,9 +177,16 @@ void main() {
       days: [(number: 1, dateIso: '2027-06-14', place: 'Tokyo')],
       stops: [(dayNumber: 1, position: 0, text: 'Senso-ji', timeIso: null)],
       setAsides: [],
+      nowUtcIso: '2027-06-14T09:00:00.000Z',
     );
-    // Wind the phone back to the itinerary slice's schema.
+    // Wind the phone back to the itinerary slice's schema: everything a
+    // later version added has to go, not only the version number, or the
+    // upgrade re-adds what is already there.
     await before.customStatement('DROP TABLE photos');
+    await before.customStatement('DROP TABLE sync_states');
+    await before.customStatement(
+      'ALTER TABLE itinerary_days DROP COLUMN revised_at_utc_iso',
+    );
     await before.customStatement('PRAGMA user_version = 2');
     await before.close();
 

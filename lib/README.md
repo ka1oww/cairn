@@ -10,6 +10,16 @@ imports are the arrows:
 | `app_state/` | APP STATE | `repositories/`, the domain packages, Riverpod, and the platform edges it drives |
 | `repositories/` | THE SEAM | `storage/`, `package:cairn_model` |
 | `storage/drift/` | STORAGE (Drift store) | Drift, `package:cairn_model`, the device disk |
+| `storage/remote/` | STORAGE (Supabase/R2 adapter) | `package:http`, `package:cairn_model`, the network |
+
+`storage/`'s two directories are peers and neither imports the other. The
+seam above is the only layer that knows both exist — that is what
+`repositories/itinerary_sync.dart` is, and why it lives there rather than in
+either store. **Nothing outside `storage/remote/` may import an HTTP or
+Supabase symbol**, and nothing anywhere may hold a key: the project URL and
+the publishable anon key arrive from `--dart-define`s
+(`SharedFactsConfig.fromEnvironment`), and both are absent by default, so an
+ordinary build has no backend at all.
 
 The DOMAIN band is not in `lib/` at all: it is the four pure-Dart packages
 under `packages/`, consumed as path dependencies and never modified.

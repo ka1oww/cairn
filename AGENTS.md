@@ -28,6 +28,11 @@ import what is written there, not here.
 - Drift's generated code (`lib/**/*.g.dart`) is not checked in (root
   `.gitignore`): run `dart run build_runner build` after checkout, before
   analyzing or testing the app.
+- Schema is at v6. A test that stands up an *old* schema by winding
+  `user_version` back must also drop everything later versions added
+  (`test/trip_id_test.dart`'s `windBackToV4` is the pattern) -- an upgrade that
+  finds its own column already there fails outright, and the failure reads like
+  a bug in the migration rather than in the fixture.
 - Analyze with `flutter analyze lib test tool` from the root. A bare
   `flutter analyze` also walks `learning/` and `packages/` -- separate
   projects with their own dependency contexts -- and reports their
@@ -101,6 +106,21 @@ import what is written there, not here.
   *told* the close. Everything about joining is local — nothing carries a
   membership to another phone, and the join door says so rather than
   spinning.
+- **The itinerary and the roster are shared facts, and the seam is what makes
+  them shared.** `lib/repositories/itinerary_sync.dart` is the one file holding
+  both backends at once: it pushes this phone's plan, applies what the merge
+  hands back, and replaces the roster wholesale (RLS means the server only
+  answers a member, so the roster it returns necessarily contains the caller;
+  a merge that kept a local row would resurrect somebody who left and deal
+  them a ping). It reports a *standing*, never an error — dormant, no trip,
+  awaiting the trip row, offline, refused, synced — and offline means the local
+  copy is untouched and authoritative. Two rules to keep: applying a merge must
+  never re-stamp a day's clock (that is what makes two phones push at each
+  other forever), and **a reconcile that changed nothing must write nothing**,
+  because the plan's own Drift stream is what asks for the next sync. The whole
+  path is dormant today: it needs a `--dart-define`d project and a session, and
+  there is neither, so a green test suite is no evidence a hosted project
+  behaves. Nothing above the seam knows any of this exists, deliberately.
 - **The trip's three Drift tables do not re-emit for free.** `trip_facts`,
   `trip_members` and `trip_invite_codes` are read through one stream, and it
   is a `customSelect` over all three with `readsFrom` — minting a code
@@ -207,13 +227,24 @@ truth, not this file.
 Sharp edges worth knowing before touching this directory again:
 
 - The backend is intentionally minimal: it holds the shared photo pool, trip
-  membership and the shared trip clock. The trail/stars/ping schedule are
-  computed on the phone and must never move server-side without a deliberate
-  decision to change that. One such decision exists: the itinerary becomes a
-  *stored* shared fact that syncs to every phone
-  (`docs/decisions/2026-08-22-grill-round-one.md` §2 — storing a shared fact
-  is not computing on the server); nothing implements it yet, and
-  `supabase/README.md` still describes the pre-decision state.
+  membership, the shared trip clock, and the itinerary. The trail/stars/ping
+  schedule are computed on the phone and must never move server-side without a
+  deliberate decision to change that; storing a shared fact is not computing on
+  the server (`docs/decisions/2026-08-22-grill-round-one.md` §2), which is what
+  makes the itinerary's four tables in `0010_trip_itinerary.sql` legitimate and
+  a server-side trail not.
+- **The itinerary merge rule is written twice and never three times.** Last
+  write wins, *per day*; the day is the atom, so a stop carries no clock of its
+  own. Server half: `sync_trip_itinerary` in `0010_trip_itinerary.sql`, one
+  call that is both push and pull because PostgREST has no client transaction.
+  Phone half: `lib/repositories/itinerary_sync.dart`. Two things that look like
+  details and are not -- `trip_itineraries.plan_revised_at` is a *shape*
+  revision separate from any day's, because a deleted day leaves no row to
+  carry an instant and "I dropped day 4" must be distinguishable from "I have
+  never heard of day 4"; and the set-aside pocket has its own clock so that
+  *emptying* it still carries a revision. `trip_roster` hands over `joined_at`
+  and never a day number: turning an instant into a trip day needs the
+  itinerary and the clock, and that arithmetic is the phone's.
 - **Never inline a membership subquery in an RLS policy.** Every
   membership/ownership check goes through the `SECURITY DEFINER` helpers
   `is_trip_member` / `is_trip_starter` in `0004_trip_members.sql`, because a
