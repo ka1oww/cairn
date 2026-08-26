@@ -13,6 +13,7 @@ import 'app_state/day_view.dart';
 import 'app_state/file_picker_edge.dart';
 import 'app_state/import_flow.dart';
 import 'app_state/ping_schedule.dart';
+import 'app_state/text_recognition_edge.dart';
 import 'app_state/trip_providers.dart';
 import 'repositories/itinerary_sync.dart';
 import 'repositories/membership_repository.dart';
@@ -53,7 +54,9 @@ import 'storage/remote/shared_facts.dart';
 /// and the test extraction runner calls the pure extractor directly — a real
 /// isolate under the widget tests' fake clock hangs silently (see
 /// import_flow.dart). The app passes neither and gets the native document
-/// picker plus `Isolate.run`.
+/// picker plus `Isolate.run`. [textRecognition] is the third: Apple Vision
+/// behind `text_recognition_edge.dart`, whose real channel is judged on a
+/// device only, so every automated test binds a fake here.
 ///
 /// [sessions] and [memberId] arrive together and must never disagree: the
 /// first is what the sync speaks to the server with, the second is who the
@@ -70,6 +73,7 @@ Widget bootstrapApp({
   MembershipRepository? membership,
   FilePickerEdge? picker,
   ExtractionRunner? extraction,
+  TextRecognitionEdge? textRecognition,
   SessionSource? sessions,
   String? memberId,
 }) {
@@ -91,6 +95,8 @@ Widget bootstrapApp({
       if (picker != null) filePickerEdgeProvider.overrideWithValue(picker),
       if (extraction != null)
         extractionRunnerProvider.overrideWithValue(extraction),
+      if (textRecognition != null)
+        textRecognitionEdgeProvider.overrideWithValue(textRecognition),
       if (memberId != null) localMemberIdProvider.overrideWithValue(memberId),
     ],
     child: const CairnApp(),

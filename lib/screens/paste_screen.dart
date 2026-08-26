@@ -89,6 +89,9 @@ class PasteScreen extends ConsumerStatefulWidget {
   ConsumerState<PasteScreen> createState() => _PasteScreenState();
 }
 
+/// Which door the import sheet sent the person through.
+enum _ImportDoor { file, photo }
+
 class _PasteScreenState extends ConsumerState<PasteScreen> {
   late final TextEditingController _controller;
 
@@ -118,14 +121,89 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
   /// buys the person a look at exactly what came out of their file before
   /// the parser sees it. Refusals never reach here; they live in the flow's
   /// state and show as the error card.
-  Future<void> _importFile() async {
+  Future<void> _importFile() => _applyImport(
+        ref.read(importFlowProvider.notifier).pickAndExtract(),
+      );
+
+  /// The screenshots door (the import plan §2.6's second row): the photo
+  /// library, recognized into lines by the same pipeline.
+  Future<void> _importPhoto() => _applyImport(
+        ref.read(importFlowProvider.notifier).pickAndReadPhoto(),
+      );
+
+  /// The scanned-PDF door's one tap, off the noTextLayer card.
+  Future<void> _readScanWithRecognition() => _applyImport(
+        ref.read(importFlowProvider.notifier).readScanWithRecognition(),
+      );
+
+  /// Whatever an import attempt resolves to, this is what happens next:
+  /// success fills the box (and shows the provenance note); every refusal
+  /// stays in the flow's state as the error card.
+  Future<void> _applyImport(Future<ImportSucceeded?> done) async {
     setState(() => _importNote = null);
-    final done = await ref.read(importFlowProvider.notifier).pickAndExtract();
-    if (!mounted || done == null) return;
+    final result = await done;
+    if (!mounted || result == null) return;
     setState(() {
-      _controller.text = done.text;
-      _importNote = done.notes.isEmpty ? null : done.notes.join(' ');
+      _controller.text = result.text;
+      _importNote = result.notes.isEmpty ? null : result.notes.join(' ');
     });
+  }
+
+  /// The two doors of slice D's import sheet (the import plan §2.6):
+  /// documents from Files, pictures from the photo library.
+  Future<void> _chooseImportDoor() async {
+    final door = await showModalBottomSheet<_ImportDoor>(
+      context: context,
+      backgroundColor: _paper,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Import from…',
+                style: _serif.copyWith(fontSize: 17, color: _ink),
+              ),
+              const SizedBox(height: 14),
+              _SoftPill(
+                key: const Key('import-door-file'),
+                label: 'A file',
+                sublabel: supportedFormatsLabel,
+                onPressed: () => Navigator.of(context).pop(_ImportDoor.file),
+              ),
+              const SizedBox(height: 8),
+              _SoftPill(
+                key: const Key('import-door-photo'),
+                label: 'A photo or screenshot',
+                sublabel: 'We read the text in it',
+                onPressed: () => Navigator.of(context).pop(_ImportDoor.photo),
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                key: const Key('import-door-cancel'),
+                onPressed: () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(foregroundColor: _muted),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (door) {
+      case _ImportDoor.file:
+        await _importFile();
+      case _ImportDoor.photo:
+        await _importPhoto();
+      case null:
+        break; // dismissed; nothing happened
+    }
   }
 
   void _fillExample() {
@@ -158,24 +236,53 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Text(
-                    importState.explanation,
-                    style: const TextStyle(fontSize: 13.5, color: _coralInk),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        importState.explanation,
+                        style:
+                            const TextStyle(fontSize: 13.5, color: _coralInk),
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('import-error-dismiss'),
+                      icon: const Icon(Icons.close, size: 18),
+                      color: _coralInk,
+                      tooltip: 'Dismiss',
+                      onPressed: () {
+                        setState(() => _importNote = null);
+                        ref.read(importFlowProvider.notifier).dismiss();
+                      },
+                    ),
+                  ],
+                ),
+                // The scanned-PDF door: the file read fine but holds only
+                // pictures, so recognition gets one tap to try.
+                if (importState.canTryTextRecognition)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.tonal(
+                        key: const Key('import-ocr-offer'),
+                        onPressed: _readScanWithRecognition,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.6),
+                          foregroundColor: _coralInk,
+                          minimumSize: const Size(0, 36),
+                          textStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        child: const Text('Read the scan'),
+                      ),
+                    ),
                   ),
-                ),
-                IconButton(
-                  key: const Key('import-error-dismiss'),
-                  icon: const Icon(Icons.close, size: 18),
-                  color: _coralInk,
-                  tooltip: 'Dismiss',
-                  onPressed: () {
-                    setState(() => _importNote = null);
-                    ref.read(importFlowProvider.notifier).dismiss();
-                  },
-                ),
               ],
             ),
           ),
@@ -304,16 +411,21 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
               const SizedBox(height: 8),
               // The file door, in both modes (the import plan §2.6): on a
               // first paste it fills an empty box; on a re-paste it replaces
-              // the pre-filled plan text and "Read it again" merges. Progress
-              // takes the pill's place inline — no modal, no blocked box.
+              // the pre-filled plan text and "Read it again" merges. Tapping
+              // it opens the two-door sheet — documents, or the photo
+              // library for screenshots. Progress takes the pill's place
+              // inline — no modal, no blocked box.
               if (importState is ImportReading)
-                _ImportProgress(name: importState.fileName)
+                _ImportProgress(
+                  name: importState.fileName,
+                  detail: importState.detail,
+                )
               else
                 _SoftPill(
                   key: const Key('import-pill'),
                   label: 'Import a file',
                   sublabel: supportedFormatsLabel,
-                  onPressed: _importFile,
+                  onPressed: _chooseImportDoor,
                 ),
               const SizedBox(height: 8),
               if (repasting)
@@ -419,11 +531,13 @@ class _SoftPill extends StatelessWidget {
 }
 
 /// Import progress, drawn inline in the pill's place: what is being read,
-/// and that something is happening — no modal over the screen.
+/// and that something is happening — no modal over the screen. A multi-page
+/// read (OCR) reports per page, and the page replaces the file name.
 class _ImportProgress extends StatelessWidget {
-  const _ImportProgress({required this.name});
+  const _ImportProgress({required this.name, this.detail});
 
   final String name;
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -440,7 +554,7 @@ class _ImportProgress extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Text(
-            'Reading $name…',
+            'Reading ${detail ?? name}…',
             style: const TextStyle(
               fontSize: 13,
               color: _muted,

@@ -11,11 +11,13 @@
 // radius. Over a running trip an import composes with them for free: the box
 // fills, "Read it again" merges, displaced stops land in the set-aside.
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:plan_extraction/plan_extraction.dart';
 
 import 'file_picker_edge.dart';
+import 'text_recognition_edge.dart';
 
 // ---------------------------------------------------------------------------
 // The registry — one line per format this build can read. Slices B/C/D add
@@ -59,6 +61,58 @@ PlanTextExtractor? routeToExtractor(PickedBytes file) {
 }
 
 // ---------------------------------------------------------------------------
+// The image route (slice D)
+//
+// Recognition is not an extractor — it is a platform call — so pictures
+// never enter [planExtractors]. They are claimed here, by extension or by
+// magic bytes (a renamed screenshot still routes by its content), and read
+// through [textRecognitionEdgeProvider] into the same [ExtractedText] shape
+// every other format produces.
+// ---------------------------------------------------------------------------
+
+/// Extensions this build reads as pictures rather than as documents.
+const Set<String> imageImportExtensions = {
+  'png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'gif', 'bmp', 'tif', 'tiff',
+};
+
+/// True when [file]'s content says *picture* — its claimed extension is one
+/// of [imageImportExtensions], or its leading bytes carry a known image
+/// signature (so a `.dat`-renamed screenshot still finds the OCR route).
+bool claimsImage(PickedBytes file) {
+  final ext = file.extension;
+  if (ext != null && imageImportExtensions.contains(ext)) return true;
+  return _imageMagic(file.bytes);
+}
+
+bool _imageMagic(Uint8List b) {
+  if (b.length < 12) return false;
+  bool startsWith(List<int> sig, [int at = 0]) {
+    if (b.length < at + sig.length) return false;
+    for (var i = 0; i < sig.length; i++) {
+      if (b[at + i] != sig[i]) return false;
+    }
+    return true;
+  }
+
+  if (startsWith([0x89, 0x50, 0x4E, 0x47])) return true; // PNG
+  if (startsWith([0xFF, 0xD8, 0xFF])) return true; // JPEG
+  if (startsWith('GIF8'.codeUnits)) return true; // GIF87a/89a
+  if (startsWith('BM'.codeUnits)) return true; // BMP
+  if (startsWith('II'.codeUnits) && b[2] == 42) return true; // TIFF LE
+  if (startsWith('MM'.codeUnits) && b[3] == 42) return true; // TIFF BE
+  if (startsWith('RIFF'.codeUnits) && startsWith('WEBP'.codeUnits, 8)) {
+    return true; // WebP
+  }
+  // HEIC/HEIF: an ISO-BMFF box — 'ftyp' at offset 4 with a known brand.
+  if (startsWith('ftyp'.codeUnits, 4)) {
+    const brands = ['heic', 'heix', 'heim', 'heis', 'mif1', 'msf1'];
+    final brand = String.fromCharCodes(b.sublist(8, 12)).toLowerCase();
+    return brands.contains(brand);
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
@@ -72,19 +126,30 @@ class ImportIdle extends ImportState {
 }
 
 /// Progress, drawn inline in place of the pill. No modal, no blocked box.
+/// [detail] replaces the file name while a multi-page read is under way
+/// ("page 2 of 8" — OCR reports per page).
 class ImportReading extends ImportState {
   final String fileName;
+  final String? detail;
 
-  const ImportReading(this.fileName);
+  const ImportReading(this.fileName, {this.detail});
 }
 
 /// The error card above the paste box. Stays until dismissed; the box and
-/// every other door stay usable underneath.
+/// every other door stay usable underneath. When [canTryTextRecognition]
+/// is set the card carries the one-tap OCR route (the scanned-PDF door:
+/// the file read fine but its pages are pictures, and recognition can read
+/// those).
 class ImportFailed extends ImportState {
   final ExtractionFailureKind kind;
   final String explanation;
+  final bool canTryTextRecognition;
 
-  const ImportFailed(this.kind, this.explanation);
+  const ImportFailed(
+    this.kind,
+    this.explanation, {
+    this.canTryTextRecognition = false,
+  });
 }
 
 /// A success returned to the screen, which fills the paste box with [text]
@@ -122,18 +187,49 @@ class ImportFlow extends Notifier<ImportState> {
   @override
   ImportState build() => const ImportIdle();
 
-  /// One import: pick, read, extract. Returns the extracted text on success
-  /// — the screen fills the box with it — and null otherwise, leaving the
-  /// reason in [state]: a dismissal changes nothing, a refusal shows the
-  /// error card.
-  Future<ImportSucceeded?> pickAndExtract() async {
+  /// The bytes of the last pick refused as `noTextLayer`, kept so the
+  /// card's one-tap OCR route can re-read them through the recognition
+  /// edge. Cleared once the route is taken (or a new import begins).
+  PickedBytes? _scanCandidate;
+
+  /// One import from the document picker: pick, read, extract. Returns the
+  /// extracted text on success — the screen fills the box with it — and
+  /// null otherwise, leaving the reason in [state]: a dismissal changes
+  /// nothing, a refusal shows the error card.
+  Future<ImportSucceeded?> pickAndExtract() => _import(
+        () => ref.read(filePickerEdgeProvider).pick(
+              allowedExtensions: supportedImportExtensions,
+            ),
+      );
+
+  /// One import from the photo library: the screenshots-and-photos door.
+  /// Same pipeline after the pick — an image routes to recognition exactly
+  /// as it would from anywhere else.
+  Future<ImportSucceeded?> pickAndReadPhoto() =>
+      _import(() => ref.read(filePickerEdgeProvider).pickImage());
+
+  /// Clears the error card.
+  void dismiss() {
+    _scanCandidate = null;
+    if (state is ImportFailed) state = const ImportIdle();
+  }
+
+  /// The scanned-PDF door's one tap: re-reads the refused file through the
+  /// recognition edge. Only offered while its card stands; any other state
+  /// means there is nothing to retry.
+  Future<ImportSucceeded?> readScanWithRecognition() async {
+    final candidate = _scanCandidate;
+    if (candidate == null || state is! ImportFailed) return null;
+    return _runRead(candidate, viaOcrRoute: true);
+  }
+
+  Future<ImportSucceeded?> _import(Future<PickedBytes?> Function() pick) async {
     if (state is ImportReading) return null;
+    _scanCandidate = null;
 
     final PickedBytes? picked;
     try {
-      picked = await ref
-          .read(filePickerEdgeProvider)
-          .pick(allowedExtensions: supportedImportExtensions);
+      picked = await pick();
     } catch (_) {
       // The picker itself declined — a platform quirk, not the person's
       // file. Same honest card, picker-specific words.
@@ -145,26 +241,55 @@ class ImportFlow extends Notifier<ImportState> {
     }
     if (picked == null) return null; // dismissed; nothing happened
 
+    return _runRead(picked);
+  }
+
+  /// Reads [picked] and settles on the outcome. Never leaves the flow
+  /// mid-read: the outcome replaces the progress state before the caller
+  /// sees it.
+  Future<ImportSucceeded?> _runRead(
+    PickedBytes picked, {
+    bool viaOcrRoute = false,
+  }) async {
     state = ImportReading(picked.fileName);
     try {
-      final result = await _read(picked);
+      // The one-tap route reads the bytes with recognition whatever they
+      // claim to be: it is offered precisely because the extractor that
+      // owns that format already said the pages are pictures.
+      final result =
+          viaOcrRoute ? await _recognize(picked) : await _read(picked);
       return switch (result) {
         ExtractedText(:final text, :final notes) => _deliver(text, notes),
-        ExtractionFailure(:final kind, :final explanation) => _refuse(
-          kind,
-          explanation,
-        ),
+        ExtractionFailure(:final kind, :final explanation) when viaOcrRoute =>
+          _refuse(kind, explanation),
+        ExtractionFailure(kind: ExtractionFailureKind.noTextLayer) =>
+          _offerTheOcrRoute(picked),
+        ExtractionFailure(:final kind, :final explanation) =>
+          _refuse(kind, explanation),
       };
+    } on RecognitionRefused catch (e) {
+      // The recognition edge's own refusals carry their person-showable
+      // sentences; they reach the card verbatim.
+      return _refuse(ExtractionFailureKind.unreadable, e.reason);
     } catch (_) {
-      // Extractors promise never to throw; this catches the ways the world
-      // around one can still fail (a killed isolate, memory pressure).
+      // Extractors promise never to throw, and other recognition failures
+      // are typed; this catches the ways the world around them can still
+      // fail (a killed isolate, memory pressure).
       return _refuse(ExtractionFailureKind.unreadable, unreadableFileSentence);
     }
   }
 
-  /// Clears the error card.
-  void dismiss() {
-    if (state is ImportFailed) state = const ImportIdle();
+  /// A PDF whose pages are pictures: refuse with the honest sentence *and*
+  /// keep the bytes, so the same card can offer reading them with text
+  /// recognition instead.
+  ImportSucceeded? _offerTheOcrRoute(PickedBytes scanned) {
+    _scanCandidate = scanned;
+    state = const ImportFailed(
+      ExtractionFailureKind.noTextLayer,
+      noReadableTextLayerSentence,
+      canTryTextRecognition: true,
+    );
+    return null;
   }
 
   /// The pill comes back the moment the read lands; the box-filling is the
@@ -191,6 +316,11 @@ class ImportFlow extends Notifier<ImportState> {
         oversizedFileSentence,
       );
     }
+    // Pictures next: they are claimed by content, not by the extractor
+    // registry, because recognition is a platform call and cannot be a pure
+    // extractor (the import plan §2.4).
+    if (claimsImage(picked)) return _recognize(picked);
+
     final extractor = routeToExtractor(picked);
     if (extractor == null) {
       return const ExtractionFailure(
@@ -200,4 +330,40 @@ class ImportFlow extends Notifier<ImportState> {
     }
     return ref.read(extractionRunnerProvider)(extractor, picked);
   }
+
+  /// One picture (or scanned PDF), recognized into the shape every other
+  /// format produces. An empty answer is honest — a photograph of a wall
+  /// contains no text — but still a dead end for this flow, so it refuses
+  /// with the empty-kind words rather than filling the box with nothing.
+  Future<ExtractionResult> _recognize(PickedBytes picked) async {
+    final scan = await ref.read(textRecognitionEdgeProvider).recognize(
+          picked.bytes,
+          onPage: (page, of) {
+            if (state is ImportReading) {
+              state = ImportReading(picked.fileName, detail: 'page $page of $of');
+            }
+          },
+        );
+    final text = scan.lines.join('\n').trim();
+    if (text.isEmpty) {
+      return const ExtractionFailure(
+        ExtractionFailureKind.empty,
+        noReadableTextInPictureSentence,
+      );
+    }
+    return ExtractedText(
+      text: text,
+      notes: ['Read ${scan.pageCount} page${scan.pageCount == 1 ? '' : 's'}'],
+    );
+  }
 }
+
+/// The sentences this flow authors itself (the rest come from extractors or
+/// the recognition edge).
+const unreadableFileSentence =
+    "Couldn't read that file — it may be damaged or password-protected.";
+const noReadableTextInPictureSentence =
+    "Couldn't find any readable text in that picture.";
+const noReadableTextLayerSentence =
+    "This PDF has no readable text — it looks like a scan or photos. Read it "
+    "with text recognition instead?";

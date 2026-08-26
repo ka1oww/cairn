@@ -87,6 +87,16 @@ void main() {
       .controller!
       .text;
 
+  /// The pill opens the two-door import sheet (slice D: documents, or the
+  /// photo library). Every test in this file goes through the file door.
+  Future<void> importAFile(WidgetTester tester) async {
+    await tester.tap(find.byKey(const Key('import-pill')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('import-door-file')));
+    await tester.pump();
+    await tester.pump();
+  }
+
   testWidgets('an imported txt fills the box, parses, accepts into Drift', (
     tester,
   ) async {
@@ -102,8 +112,7 @@ void main() {
     );
 
     // One tap on the pill; the box now holds what the file said.
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
     expect(boxText(tester), tidyImport);
     // The pill came back for another import once the read landed.
     expect(find.byKey(const Key('import-pill')), findsOneWidget);
@@ -161,8 +170,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     // Inline, in place of the pill — no modal anywhere.
     expect(find.byKey(const Key('import-progress')), findsOneWidget);
@@ -178,8 +186,7 @@ void main() {
   testWidgets('dismissing the picker changes nothing', (tester) async {
     final picker = await launch(tester, picks: [null]);
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     expect(boxText(tester), '');
     expect(find.byKey(const Key('import-error')), findsNothing);
@@ -205,8 +212,7 @@ void main() {
       ],
     );
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     expect(find.byKey(const Key('import-error')), findsOneWidget);
     expect(find.textContaining("Couldn't read that file"), findsOneWidget);
@@ -234,8 +240,7 @@ void main() {
       ],
     );
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     expect(find.text("That file didn't contain any text."), findsOneWidget);
     expect(boxText(tester), '');
