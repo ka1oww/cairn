@@ -52,7 +52,7 @@ class XlsxExtractor implements PlanTextExtractor {
     if (file.bytes.length > maxPlainBytes) {
       return const ExtractionFailure(
         ExtractionFailureKind.unreadable,
-        'That file is larger than 25 MB — too big to read.',
+        oversizedFileSentence,
       );
     }
 

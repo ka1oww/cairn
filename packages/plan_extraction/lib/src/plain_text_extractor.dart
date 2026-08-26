@@ -40,6 +40,11 @@ const int maxPlainBytes = 25 * 1024 * 1024;
 /// or not at all.
 const int _sniffBytes = 64 * 1024;
 
+/// The sentence a file above [maxPlainBytes] is refused with. One copy, so
+/// the routing gate and every extractor's own gate say the same thing.
+const String oversizedFileSentence =
+    'That file is larger than 25 MB — too big to read.';
+
 class PlainTextExtractor implements PlanTextExtractor {
   const PlainTextExtractor();
 
@@ -59,7 +64,7 @@ class PlainTextExtractor implements PlanTextExtractor {
     if (file.bytes.length > maxPlainBytes) {
       return const ExtractionFailure(
         ExtractionFailureKind.unreadable,
-        'That file is larger than 25 MB — too big to read.',
+        oversizedFileSentence,
       );
     }
     if (file.bytes.isEmpty || _hasBinaryMagic(file.bytes)) {

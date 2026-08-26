@@ -182,6 +182,15 @@ class ImportFlow extends Notifier<ImportState> {
   }
 
   Future<ExtractionResult> _read(PickedBytes picked) async {
+    // Routing itself is real work — every `matches` decodes or unzips the
+    // whole file, on this isolate — so the size refusal has to come before
+    // it, not only inside the extraction the runner carries away.
+    if (picked.bytes.length > maxPlainBytes) {
+      return const ExtractionFailure(
+        ExtractionFailureKind.unreadable,
+        oversizedFileSentence,
+      );
+    }
     final extractor = routeToExtractor(picked);
     if (extractor == null) {
       return const ExtractionFailure(

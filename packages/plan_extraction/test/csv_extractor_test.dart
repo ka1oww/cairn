@@ -48,6 +48,21 @@ void main() {
       expect(extractor.matches(pdf), isFalse);
     });
 
+    test('still claims a csv whose first field only looks like a magic — '
+        'the ASCII prefixes of RIFF, Rar!, GIF8, %PDF- and 7z', () {
+      for (final first in const [
+        'Raffles Hotel,2027-06-14,check in',
+        'RIVERSIDE,2027-06-14,walk',
+        'GIles Street,2027-06-14,dinner',
+        '%Portion of the day,2027-06-14,rest',
+        '7zone bar,2027-06-14,drinks',
+      ]) {
+        final file = named('plan.csv', utf8.encode(first));
+        expect(extractor.matches(file), isTrue, reason: first);
+        expect(extractor.extract(file), isA<ExtractedText>(), reason: first);
+      }
+    });
+
     test('never throws, whatever the bytes', () {
       final shapes = <List<int>>[
         [],

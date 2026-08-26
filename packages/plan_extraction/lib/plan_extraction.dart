@@ -27,6 +27,7 @@ export 'src/plain_text_extractor.dart'
     show
         PlainTextExtractor,
         maxPlainBytes,
+        oversizedFileSentence,
         unreadableFileSentence,
         emptyFileSentence;
 export 'src/docx_extractor.dart' show DocxExtractor;

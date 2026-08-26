@@ -224,8 +224,9 @@ List<PlanRow> _rowsFromDatedGrid(List<List<_Filled>> rows, int dateColumn) {
   return out;
 }
 
-/// One line per cell; a time-typed cell stars the first text line of its
-/// own row rather than standing alone (it annotates that row's plan).
+/// One line per cell; a time-typed cell stars the first untimed text line of
+/// its own row rather than standing alone (it annotates that row's plan),
+/// whichever side of the description its column sits on.
 List<StopRow> _stopsFor(List<SourceCell> cells) {
   final stops = <StopRow>[];
   TimeCell? pendingTime;
@@ -242,10 +243,17 @@ List<StopRow> _stopsFor(List<SourceCell> cells) {
         stops.add(StopRow(iso));
     }
   }
-  // A row whose only cell was a time keeps the time visible rather than
-  // dropping it.
-  if (pendingTime != null && stops.isEmpty) {
-    stops.add(StopRow(pendingTime.iso, time: pendingTime));
+  if (pendingTime != null) {
+    // The time column sits to the right of the description: star the first
+    // still-untimed line of this row rather than dropping the certain time.
+    final untimed = stops.indexWhere((stop) => stop.time == null);
+    if (untimed >= 0) {
+      stops[untimed] = StopRow(stops[untimed].text, time: pendingTime);
+    } else {
+      // A row whose only cell was a time keeps the time visible rather than
+      // dropping it.
+      stops.add(StopRow(pendingTime.iso, time: pendingTime));
+    }
   }
   return stops;
 }

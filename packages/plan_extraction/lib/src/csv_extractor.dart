@@ -43,7 +43,7 @@ class CsvExtractor implements PlanTextExtractor {
     if (file.bytes.length > maxPlainBytes) {
       return const ExtractionFailure(
         ExtractionFailureKind.unreadable,
-        'That file is larger than 25 MB — too big to read.',
+        oversizedFileSentence,
       );
     }
     // The self-guard: whatever the name said, real container bytes are not
@@ -108,19 +108,23 @@ class CsvExtractor implements PlanTextExtractor {
 }
 
 /// The container magics a mis-named file might carry. Narrow by design:
-/// this gates a *claim*, it is not a format detector.
+/// this gates a *claim*, it is not a format detector. Every signature is
+/// written out in full — a two-byte prefix of an ASCII magic (`RI`, `Ra`,
+/// `GI`, `%P`, `7z`) is also how an ordinary CSV's first field can begin,
+/// and refusing `Raffles Hotel,2027-06-14` would drop the file through to
+/// plain text and lose its date column.
 bool startsWithBinaryMagic(List<int> bytes) => [
-      // zip (docx/xlsx), PDF, PNG, GIF, JPEG, RIFF, legacy Office CFB,
-      // 7z, rar
-      [0x50, 0x4B],
-      [0x25, 0x50], // %P
-      [0x89, 0x50],
-      [0x47, 0x49],
-      [0xFF, 0xD8],
-      [0x52, 0x49],
-      [0xD0, 0xCF],
-      [0x37, 0x7A],
-      [0x52, 0x61],
+      [0x50, 0x4B, 0x03, 0x04], // zip (docx/xlsx)
+      [0x50, 0x4B, 0x05, 0x06], // empty zip
+      [0x50, 0x4B, 0x07, 0x08], // spanned zip
+      [0x25, 0x50, 0x44, 0x46, 0x2D], // %PDF-
+      [0x89, 0x50, 0x4E, 0x47], // PNG
+      [0x47, 0x49, 0x46, 0x38], // GIF8
+      [0xFF, 0xD8, 0xFF], // JPEG
+      [0x52, 0x49, 0x46, 0x46], // RIFF
+      [0xD0, 0xCF, 0x11, 0xE0], // legacy Office CFB
+      [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C], // 7z
+      [0x52, 0x61, 0x72, 0x21], // Rar!
     ].any((magic) => _hasPrefix(bytes, magic));
 
 bool _hasPrefix(List<int> bytes, List<int> magic) {

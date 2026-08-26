@@ -165,6 +165,31 @@ void main() {
       expect(() => parseItinerary(text), returnsNormally);
     });
 
+    test('a time column to the right of the description still stars it', () {
+      final grid = <List<SourceCell?>>[
+        [
+          DateCell(DateTime(2027, 6, 14)),
+          const TextCell('Ramen in Asakusa'),
+          const TimeCell(12, 30),
+        ],
+        [
+          DateCell(DateTime(2027, 6, 15)),
+          const TextCell('Fushimi Inari'),
+          const TimeCell(6, 0),
+        ],
+      ];
+      final result = parseItinerary(renderPlanRows(planRowsFromGrid(grid)));
+
+      expect(result.days, hasLength(2));
+      final first = result.days[0].stops.single;
+      expect(first.text, '12:30 Ramen in Asakusa');
+      expect(first.isStarred, isTrue);
+      expect(first.time, const ParsedTime(12, 30));
+      final second = result.days[1].stops.single;
+      expect(second.text, '06:00 Fushimi Inari');
+      expect(second.time, const ParsedTime(6, 0));
+    });
+
     test('an empty grid renders to nothing', () {
       expect(planRowsFromGrid(const []), isEmpty);
       expect(planRowsFromGrid([[], []]), isEmpty);
