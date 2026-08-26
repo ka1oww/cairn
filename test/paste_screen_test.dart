@@ -47,11 +47,11 @@ void main() {
     expect(find.text('Drop your itinerary here.'), findsOneWidget);
     expect(find.text("We'll split it into days for you."), findsOneWidget);
 
-    // The ghost sample is the box's hint, so it shows before any typing.
-    final field = tester.widget<TextField>(
-      find.byKey(const Key('paste-input')),
-    );
-    expect(field.decoration?.hintText, sampleItinerary);
+    // The ghost sample is the box's hint, so it shows before any typing. It
+    // is handed over as a widget rather than as `hintText`, so that it can be
+    // bounded to the box's own inside (see paste_screen.dart).
+    expect(find.byKey(const Key('paste-input')), findsOneWidget);
+    expect(find.text(sampleItinerary), findsOneWidget);
 
     // One primary action, two soft pills under it.
     expect(find.byKey(const Key('read-button')), findsOneWidget);
