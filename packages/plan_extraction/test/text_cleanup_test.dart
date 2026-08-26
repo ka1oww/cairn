@@ -94,6 +94,24 @@ void main() {
       expect(clean(pages).where((l) => l.startsWith('Page')), isEmpty);
     });
 
+    test("a browser's `n of total` footer goes", () {
+      final pages = [
+        for (var i = 1; i <= 4; i++) ['Day $i', 'lunch', '$i/4'],
+      ];
+      expect(clean(pages).where((l) => l.endsWith('/4')), isEmpty);
+    });
+
+    test('a bare numeric date at a page edge stays', () {
+      // `14/6` and `3-11` are date headers, and a numeric date header is the
+      // one line the parser most needs. No page of a four-page print is 14.
+      final pages = [
+        for (var i = 1; i <= 4; i++) ['14/6', 'lunch', '3-11'],
+      ];
+      final out = clean(pages);
+      expect(out.where((l) => l == '14/6'), hasLength(4));
+      expect(out.where((l) => l == '3-11'), hasLength(4));
+    });
+
     test('a page number in the middle of a page is not touched', () {
       final pages = [
         for (var i = 1; i <= 4; i++)
@@ -128,6 +146,19 @@ void main() {
         ['Asahiyama Zoo', '★★★★½ 4.5 (28336)', 'View on map', 'penguins at 11'],
       ]);
       expect(out, ['Asahiyama Zoo', 'penguins at 11']);
+    });
+
+    test('a short starred stop somebody wrote stays', () {
+      // The sentence guard is 60 characters, so it saves none of these: what
+      // makes the chip a chip is the rating number after the stars.
+      final out = clean([
+        ['★ Fushimi Inari at dawn', '⭐ Asahiyama Zoo', '½ day in Otaru'],
+      ]);
+      expect(out, [
+        '★ Fushimi Inari at dawn',
+        '⭐ Asahiyama Zoo',
+        '½ day in Otaru',
+      ]);
     });
 
     test('a sentence somebody wrote survives a stray star', () {

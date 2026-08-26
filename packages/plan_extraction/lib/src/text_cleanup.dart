@@ -20,10 +20,13 @@
 //     one day to a page would lose every day header.
 //   - Only the edge occurrences go. The same words in the middle of a page
 //     are somebody's stop, and stay.
-//   - A bare page number goes only when it is a number a page could actually
-//     be — no greater than the page count. That single guard is what keeps
-//     the garbled fixture's standalone `1900` (a year, and the parser's job
-//     to argue about) out of the furniture pile.
+//   - A page number goes only when it is a number a page could actually be.
+//     A bare `1900` is a year, a price or a room number, and the guard is
+//     what keeps the garbled fixture's standalone `1900` out of the
+//     furniture pile; a bare `14/6` or `3-11` is a date, and a date header
+//     is the single line the parser most needs, so the numerator has to be a
+//     page and the denominator has to be the page count before the pair form
+//     counts. Only the forms that literally *say* `page` need no guard.
 //   - The Wanderlog print furniture named in the plan's §4 — travel-time
 //     dividers, star ratings, `View on map` — is matched by shape, not by
 //     position, because those lines sit between stops rather than at a page
@@ -157,19 +160,36 @@ Set<String> _repeatedFurniture(List<List<String>> pages) {
 // ---------------------------------------------------------------------------
 
 final RegExp _bareNumber = RegExp(r'^[-–—\s]*(\d{1,4})[-–—\s.]*$');
-final RegExp _numberOfNumber = RegExp(
-  r'^(?:page\s*)?(\d{1,4})\s*(?:/|of|—|–|-)\s*(\d{1,4})$',
+final RegExp _pagedNumberOfNumber = RegExp(
+  r'^page\s*(\d{1,4})\s*(?:/|of|—|–|-)\s*(\d{1,4})$',
+  caseSensitive: false,
+);
+final RegExp _bareNumberOfNumber = RegExp(
+  r'^(\d{1,4})\s*(?:/|of|—|–|-)\s*(\d{1,4})$',
   caseSensitive: false,
 );
 final RegExp _pageWord = RegExp(r'^page\s*(\d{1,4})$', caseSensitive: false);
 
-/// A page number, and only a page number. The bare-digits form carries the
-/// `<= pageCount` guard because a standalone number in an itinerary is far
-/// more likely to be a year, a price or a room number than a folio — the
-/// forms that *say* they are page numbers need no such guard.
+/// A page number, and only a page number. Every form that does not say the
+/// word `page` carries a `<= pageCount` guard, because the shapes a folio
+/// wears are also the shapes a year, a price and — the one that matters most
+/// — a numeric date header wear. `14/6` and `3-11` are dates on any print
+/// shorter than fourteen pages; Chrome's real footer is `n/9` on a nine-page
+/// export, so demanding the second number *be* the page count strips the
+/// footer and leaves the date alone.
 bool _isPageNumber(String line, int pageCount) {
-  if (_numberOfNumber.hasMatch(line)) return true;
+  if (_pagedNumberOfNumber.hasMatch(line)) return true;
   if (_pageWord.hasMatch(line)) return true;
+  final pair = _bareNumberOfNumber.firstMatch(line);
+  if (pair != null) {
+    final folio = int.tryParse(pair.group(1)!);
+    final total = int.tryParse(pair.group(2)!);
+    return folio != null &&
+        total != null &&
+        total == pageCount &&
+        folio >= 1 &&
+        folio <= pageCount;
+  }
   final bare = _bareNumber.firstMatch(line);
   if (bare == null) return false;
   final value = int.tryParse(bare.group(1)!);
@@ -190,9 +210,12 @@ final RegExp _travelDivider = RegExp(
 );
 
 /// A ratings line off a public Wanderlog guide page: `★★★★½ 4.5 (28336)`,
-/// `4.5 · 1,204 Google reviews`.
+/// `4.5 · 1,204 Google reviews`. The chip always carries the rating as a
+/// number, and demanding that number is what keeps a starred stop somebody
+/// wrote — `★ Fushimi Inari at dawn`, `⭐ Asahiyama Zoo` — out of the rule:
+/// those are short, so the sentence guard below never sees them.
 final RegExp _ratingLine = RegExp(
-  r'^(?:[★☆✩⭐½]+.*|.*\bgoogle reviews?\b.*)$',
+  r'^(?:[★☆✩⭐½]+\s*[\d.,]+.*|.*\bgoogle reviews?\b.*)$',
   caseSensitive: false,
 );
 

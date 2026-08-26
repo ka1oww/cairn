@@ -8,7 +8,9 @@ import slice codes against and one extractor per format.
 
 - The contract (`lib/plan_extraction.dart`): `PickedBytes`, the sealed
   `ExtractionResult` (`ExtractedText` / `ExtractionFailure`), and the
-  `PlanTextExtractor` interface — synchronous, pure, never throws.
+  `PlanTextExtractor` interface — pure, never throws, and returning a
+  `FutureOr<ExtractionResult>` so that a synchronous format still answers
+  directly while PDF, which cannot, still fits the one contract (see below).
 - The registry is a `const` list in `lib/app_state/import_flow.dart`, not
   here; each slice adds exactly one line to it.
 - The extractors, one per format: `PlainTextExtractor` (slice A) and
