@@ -620,7 +620,7 @@ independently built clusters — 17.10 and a Homebrew 17.11 — so the results a
 not an artefact of one machine's setup.
 
 - All ten migrations apply cleanly, and apply again cleanly on a second run.
-- 96 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 98 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
@@ -635,7 +635,8 @@ not an artefact of one machine's setup.
   set-aside pocket staying empty against a stale phone that still holds the
   line, a non-member reading zero days and unable to push or write round the
   function, and the roster view answering a member with every co-member's name
-  and a non-member with nobody.
+  and a non-member with nobody, and the merged plan coming back ordered by the
+  day *number* rather than by the text of it.
 - The recursion fix is checked at the mechanism level
   (`tests/recursion_mechanism.py`): the whole schema is applied by an ordinary
   role that is neither superuser nor `BYPASSRLS`, the policies resolve, and
