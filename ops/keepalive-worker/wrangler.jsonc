@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cairn-keepalive",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-26",
+  "triggers": {
+    // Monday, Wednesday and Friday, 01:00 UTC -- three times a week is
+    // well inside Supabase's roughly one-week inactivity-pause window (see
+    // supabase/README.md's Free-tier limits section). The gaps are two and
+    // three days, so a single missed run still leaves at most a four-day
+    // silence: real margin for one failure, which a twice-weekly cadence
+    // did not have.
+    "crons": ["0 1 * * 1,3,5"]
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Both values are public-safe: SUPABASE_URL is a hostname and
+  // SUPABASE_ANON_KEY is the *publishable* anon key, designed to ship
+  // inside a client (see lib/storage/remote/shared_facts.dart's header).
+  // Never add SUPABASE_SERVICE_ROLE_KEY or a database password here or
+  // anywhere else in this repo.
+  //
+  // A Worker has no checkout of the app repo to extract these from at
+  // request time, unlike a CI job, so they are copied here instead --
+  // this file must match lib/storage/remote/shared_facts.dart's
+  // `hostedUrl` / `hostedAnonKey` constants exactly. If they ever
+  // diverge, that file is the source of truth.
+  "vars": {
+    "SUPABASE_URL": "https://nswcgzhynclrrunekskh.supabase.co",
+    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zd2Nnemh5bmNscnJ1bmVrc2toIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2OTQyMzMsImV4cCI6MjEwMzI3MDIzM30.VdEogHbh-HNzjcAwXXHuE0FBPh_f3fHJDNHHC-w_sS4"
+  }
+}

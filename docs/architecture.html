@@ -575,8 +575,9 @@
       plus manual placement is the current answer.</li>
       <li><b>Derived variants, keepalive, CI:</b> no server-side variant pipeline, and none
       is needed to draw a photo small — the phone decodes the stored original down to its
-      box (lib/screens/photo_frame.dart); the between-trips dormancy keepalive is planned
-      only; no CI runs any test on any PR.</li>
+      box (lib/screens/photo_frame.dart); the between-trips dormancy keepalive is built and
+      deployed as a Cloudflare Worker (<code>ops/keepalive-worker/</code>, documented in
+      <code>supabase/README.md</code>’s Free-tier limits section); no CI runs any test on any PR.</li>
       <li><b>Nothing has touched a hosted Supabase project or a real R2 bucket.</b>
       <code>supabase db push</code> against a throwaway project is still the gate.</li>
     </ul>

@@ -571,7 +571,9 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   box it is drawn in, so a stored variant would only ever save bandwidth
   fetching somebody else's photo. When one is built it is written *beside* the
   original and never over it. The dormancy keepalive that protects the free
-  tier between trips is planned, not built. (CI exists since #13 and covers the
+  tier between trips is built and deployed — `ops/keepalive-worker/`, a
+  Cloudflare Worker outside the app's bands entirely; `supabase/README.md`'s
+  Free-tier limits section is the authority on it. (CI exists since #13 and covers the
   packages, the JS-safety golden, the RLS probe, the learning demo and the app.)
 - **Nothing has ever touched a hosted Supabase project or a real R2 bucket.**
   The schema's verification is real but local; `supabase db push` against a

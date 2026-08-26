@@ -597,6 +597,30 @@ person signing in with both providers on the same address gets one
   Cron Triggers are the right host, with a dead-man's switch so a keep-alive
   that dies is noticed before the project pauses. Source:
   [supabase.com/pricing](https://supabase.com/pricing).
+
+  **Built (2026-08-26):** `ops/keepalive-worker/` is that Worker. It runs
+  three times a week (`0 1 * * 1,3,5`, Monday, Wednesday and Friday 01:00
+  UTC — `wrangler.jsonc`'s `triggers.crons`, a cadence chosen so a single
+  missed run still leaves at most a four-day silence) and makes one
+  authenticated `GET .../rest/v1/trips?select=id&limit=1` call against the
+  hosted project, throwing out of the `scheduled` handler (so Cloudflare
+  records a failed invocation) on any non-2xx response. The cron trigger is
+  the only way in — there is deliberately no `fetch` handler, because a
+  public URL proxying into the hosted project could be driven by anyone and
+  burning the free-tier request quota that way would take the scheduled run
+  down with it. Deploy with `wrangler deploy` from that directory; a
+  failed scheduled run means the project may be paused — check the
+  Worker's dashboard/logs, and resume the project from the Supabase
+  dashboard if so. `SUPABASE_URL` and `SUPABASE_ANON_KEY` are copied into
+  `wrangler.jsonc` as plain `vars` (both public-safe — see that file's
+  comment) rather than read from `lib/storage/remote/shared_facts.dart` at
+  request time, because a Worker has no checkout of this repo to read from;
+  keep the two in sync by hand if the hosted project ever changes.
+  **Not built yet:** the dead-man's switch mentioned above — that would need
+  signing up for a new external alerting service, which this pass
+  deliberately did not do. Cloudflare's own Worker failure notifications
+  (dashboard-configurable, no new sign-up) are the natural first step if
+  this is worth doing later.
 - **Cloudflare R2 Free tier**: 10 GB-month of Standard storage, 1,000,000
   Class A operations/month (writes/lists), 10,000,000 Class B
   operations/month (reads), and **zero egress fees regardless of tier** —
