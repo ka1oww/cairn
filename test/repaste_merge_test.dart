@@ -44,13 +44,37 @@ ip.ParsedDay pDay(
   String? place,
   List<ip.Stop> stops = const [],
   ip.DateCandidate? candidate,
+  ip.Confidence confidence = ip.Confidence.high,
+  ip.DayUncertainty? uncertainty,
+  int? headerWeekday,
 }) => ip.ParsedDay(
   index: index,
   date: date,
   place: place,
   stops: stops,
-  confidence: ip.Confidence.high,
+  confidence: confidence,
+  uncertainty: uncertainty,
+  headerWeekday: headerWeekday,
   dateCandidate: candidate,
+);
+
+/// `Sat - Nara` as the parser actually reads it: no date, the named weekday
+/// on record, and medium confidence with [ip.DayUncertainty.weekdayWithoutDate]
+/// behind it. Spelled here once so the tests below read as their scenario and
+/// not as parser trivia. (Verified against `parseItinerary` rather than
+/// guessed — a fixture that disagrees with the parser proves nothing.)
+ip.ParsedDay pWeekdayDay(
+  int index, {
+  String? place,
+  int headerWeekday = DateTime.saturday,
+  List<ip.Stop> stops = const [],
+}) => pDay(
+  index,
+  place: place,
+  stops: stops,
+  confidence: ip.Confidence.medium,
+  uncertainty: ip.DayUncertainty.weekdayWithoutDate,
+  headerWeekday: headerWeekday,
 );
 
 final jun14 = CalendarDate(2027, 6, 14);
@@ -680,6 +704,193 @@ void main() {
     });
   });
 
+  // The defect this group pins: an appended day used to arrive at the confirm
+  // screen stripped of the parser's doubt, so a re-paste that appends
+  // `Sat - Nara` drew a clean day and saved it with its date silently open,
+  // and the person was never asked. The parse verdict now rides across —
+  // for appended days, and deliberately for those alone.
+  group("an appended day keeps the parser's doubt", () {
+    test('a weekday-only header appends with its weekday and its uncertainty '
+        'intact, and is still undated', () {
+      final current = [
+        day(1, date: jun14, place: 'Tokyo', stops: [mStop('Senso-ji')]),
+      ];
+      final repasted = [
+        pDay(
+          1,
+          date: DateTime(2027, 6, 14),
+          place: 'Tokyo',
+          stops: [pStop('Senso-ji')],
+        ),
+        pWeekdayDay(2, place: 'Nara', stops: [pStop('Todai-ji')]),
+      ];
+
+      final result = mergeRepaste(current: current, repasted: repasted);
+
+      final nara = result.days[1];
+      expect(nara.origin, MergedDayOrigin.appendedNew);
+      expect(nara.number, 2);
+      // The merge does not work out which Saturday — that is the screen's ask.
+      expect(nara.date, isNull);
+      expect(nara.headerWeekday, DateTime.saturday);
+      expect(nara.uncertainty, ip.DayUncertainty.weekdayWithoutDate);
+      expect(nara.confidence, ip.Confidence.medium);
+    });
+
+    test('an appended day with an ambiguous numeric candidate carries the '
+        'candidate and the parse verdict that came with it', () {
+      // "Day 2 - Nara, 5/6/2027": a full year, but is that 5 June or 5 May?
+      // The parser leaves it a candidate and stays confident about the day
+      // itself; the merge reports exactly that rather than inventing either
+      // half — the ambiguity is answered on screen, by the date sheet and by
+      // the whole-paste month-first re-read.
+      final ambiguous = ip.DateCandidate(
+        day: 5,
+        month: 6,
+        year: 2027,
+        text: '5/6/2027',
+        headerText: 'Nara, 5/6/2027',
+        ambiguousNumericOrder: true,
+      );
+      final current = [
+        day(1, date: jun14, place: 'Tokyo', stops: [mStop('Senso-ji')]),
+      ];
+      final repasted = [
+        pDay(
+          1,
+          date: DateTime(2027, 6, 14),
+          place: 'Tokyo',
+          stops: [pStop('Senso-ji')],
+        ),
+        pDay(2, place: 'Nara', stops: [pStop('Todai-ji')], candidate: ambiguous),
+      ];
+
+      final result = mergeRepaste(current: current, repasted: repasted);
+
+      final nara = result.days[1];
+      expect(nara.origin, MergedDayOrigin.appendedNew);
+      // Never bound: an ambiguous candidate is a question, not a date.
+      expect(nara.date, isNull);
+      expect(nara.dateCandidate, ambiguous);
+      expect(nara.uncertainty, isNull);
+      expect(nara.confidence, ip.Confidence.high);
+    });
+
+    test('an appended day with a year-less title candidate stays undated and '
+        'carries both the candidate and its uncertainty', () {
+      final candidate = ip.DateCandidate(
+        day: 20,
+        month: 6,
+        year: null,
+        text: '20 June',
+        headerText: 'Kobe, 20 June',
+      );
+      final current = [
+        day(1, date: jun14, stops: [mStop('A')]),
+      ];
+      final repasted = [
+        pDay(1, date: DateTime(2027, 6, 14), stops: [pStop('A')]),
+        pDay(
+          2,
+          place: 'Kobe',
+          stops: [pStop('Harbour')],
+          candidate: candidate,
+          confidence: ip.Confidence.medium,
+          uncertainty: ip.DayUncertainty.dateWithoutYear,
+        ),
+      ];
+
+      final result = mergeRepaste(current: current, repasted: repasted);
+
+      final kobe = result.days[1];
+      expect(kobe.origin, MergedDayOrigin.appendedNew);
+      expect(kobe.date, isNull);
+      expect(kobe.dateCandidate, candidate);
+      expect(kobe.uncertainty, ip.DayUncertainty.dateWithoutYear);
+      expect(kobe.confidence, ip.Confidence.medium);
+    });
+
+    test('every other kind of doubt rides across too — the merge carries the '
+        "parser's verdict rather than a chosen subset of it", () {
+      final current = [
+        day(1, date: jun14, stops: [mStop('A')]),
+      ];
+      final repasted = [
+        pDay(1, date: DateTime(2027, 6, 14), stops: [pStop('A')]),
+        pDay(
+          2,
+          place: 'Nara',
+          stops: [pStop('Todai-ji')],
+          confidence: ip.Confidence.medium,
+          uncertainty: ip.DayUncertainty.barePlaceName,
+        ),
+        pDay(
+          3,
+          place: 'Kobe',
+          confidence: ip.Confidence.low,
+          uncertainty: ip.DayUncertainty.noStops,
+        ),
+      ];
+
+      final result = mergeRepaste(current: current, repasted: repasted);
+
+      expect(result.days[1].uncertainty, ip.DayUncertainty.barePlaceName);
+      expect(result.days[1].confidence, ip.Confidence.medium);
+      expect(result.days[2].uncertainty, ip.DayUncertainty.noStops);
+      expect(result.days[2].confidence, ip.Confidence.low);
+    });
+
+    test('a matched day reports no parse doubt, however unsure the re-paste '
+        'was about it: the person answered for that day before it was saved', () {
+      final current = [
+        day(1, date: jun14, place: 'Tokyo', stops: [mStop('Senso-ji')]),
+        day(2, place: 'Kyoto', stops: [mStop('Fushimi Inari')]),
+      ];
+      final repasted = [
+        pDay(
+          1,
+          date: DateTime(2027, 6, 14),
+          place: 'Tokyo',
+          stops: [pStop('Senso-ji'), pStop('Ueno park')],
+        ),
+        // Position-matched onto day 2, which is undated and stays undated.
+        pWeekdayDay(2, place: 'Kyoto', stops: [pStop('Fushimi Inari')]),
+      ];
+
+      final result = mergeRepaste(current: current, repasted: repasted);
+
+      expect(result.days[0].origin, MergedDayOrigin.mergedByDate);
+      expect(result.days[0].uncertainty, isNull);
+      expect(result.days[0].confidence, ip.Confidence.high);
+      expect(result.days[1].origin, MergedDayOrigin.mergedByPosition);
+      expect(result.days[1].headerWeekday, isNull);
+      expect(result.days[1].uncertainty, isNull);
+      expect(result.days[1].confidence, ip.Confidence.high);
+    });
+
+    test('a kept day reports no parse doubt either', () {
+      final current = [
+        day(1, date: jun14, place: 'Tokyo', stops: [mStop('Senso-ji')]),
+        day(2, date: jun15, place: 'Kyoto', stops: [mStop('Fushimi Inari')]),
+      ];
+      final repasted = [
+        pDay(
+          1,
+          date: DateTime(2027, 6, 14),
+          place: 'Tokyo',
+          stops: [pStop('Senso-ji')],
+        ),
+      ];
+
+      final result = mergeRepaste(current: current, repasted: repasted);
+
+      expect(result.days[1].origin, MergedDayOrigin.keptUnmatched);
+      expect(result.days[1].uncertainty, isNull);
+      expect(result.days[1].headerWeekday, isNull);
+      expect(result.days[1].confidence, ip.Confidence.high);
+    });
+  });
+
   group('purity and determinism (rule 6)', () {
     test('same inputs, same outputs — twice in a row', () {
       final current = [
@@ -700,6 +911,8 @@ void main() {
         for (final d in r.days)
           'day ${d.number} [${d.origin.name}] date=${d.date?.iso} '
               'place=${d.place} unchanged=${d.unchanged} '
+              'conf=${d.confidence.name} unc=${d.uncertainty?.slug} '
+              'wd=${d.headerWeekday} '
               'stops=[${d.stops.map((s) => '${s.text}@${s.time?.iso}').join('|')}]',
         for (final s in r.setAside)
           'aside from ${s.fromDayNumber}: ${s.stop.text}',
