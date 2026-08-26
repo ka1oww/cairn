@@ -18,9 +18,10 @@ This is a passion project, not a business. There is no monetisation goal.
 ## Status
 
 Under construction, and running. The app builds and opens on a phone: paste a
-rough itinerary, confirm what the parser read, and land on **Today** — the day
-screen the Trail opens for every other day too. The Trail, the Pool and the
-capture that fills it are built, and four pure-Dart domain packages sit under
+rough itinerary — or import a plain-text file, which fills the paste box for
+you to read in one tap — confirm what the parser read, and land on **Today**,
+the day screen the Trail opens for every other day too. The Trail, the Pool
+and the capture that fills it are built, and five pure-Dart packages sit under
 them. Nothing buzzes yet: the daily ping's schedule is real but nothing is
 registered with iOS. The one server path that exists — the itinerary and the
 roster syncing to every phone — is live against a hosted Supabase project: an

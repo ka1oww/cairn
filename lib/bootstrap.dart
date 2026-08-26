@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
 import 'app_state/camera_source.dart';
 import 'app_state/day_view.dart';
+import 'app_state/file_picker_edge.dart';
+import 'app_state/import_flow.dart';
 import 'app_state/ping_schedule.dart';
 import 'app_state/trip_providers.dart';
 import 'repositories/itinerary_sync.dart';
@@ -46,6 +48,13 @@ import 'storage/remote/shared_facts.dart';
 /// bound to the store. Bind them to two different objects in the app and the
 /// trip's own surface would go blank the moment somebody renamed it.
 ///
+/// [picker] and [extraction] are the import feature's two seams, on the
+/// camera's pattern: the fake picker hands over fixture bytes from memory,
+/// and the test extraction runner calls the pure extractor directly — a real
+/// isolate under the widget tests' fake clock hangs silently (see
+/// import_flow.dart). The app passes neither and gets the native document
+/// picker plus `Isolate.run`.
+///
 /// [sessions] and [memberId] arrive together and must never disagree: the
 /// first is what the sync speaks to the server with, the second is who the
 /// app thinks it is, and they are the same account. `main` acquires the
@@ -59,6 +68,8 @@ Widget bootstrapApp({
   CameraSource? camera,
   PhotoRepository? photos,
   MembershipRepository? membership,
+  FilePickerEdge? picker,
+  ExtractionRunner? extraction,
   SessionSource? sessions,
   String? memberId,
 }) {
@@ -77,6 +88,9 @@ Widget bootstrapApp({
       if (now != null) nowProvider.overrideWithValue(now),
       if (utcOffset != null) tripUtcOffsetProvider.overrideWithValue(utcOffset),
       if (camera != null) cameraSourceProvider.overrideWithValue(camera),
+      if (picker != null) filePickerEdgeProvider.overrideWithValue(picker),
+      if (extraction != null)
+        extractionRunnerProvider.overrideWithValue(extraction),
       if (memberId != null) localMemberIdProvider.overrideWithValue(memberId),
     ],
     child: const CairnApp(),

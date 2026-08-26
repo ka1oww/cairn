@@ -24,8 +24,11 @@ reaches it and a build told `CAIRN_SUPABASE_URL=` has no backend at all. The
 anon key is publishable by design and belongs in the repository; the
 service-role key and the database password never do.
 
-The DOMAIN band is not in `lib/` at all: it is the four pure-Dart packages
-under `packages/`, consumed as path dependencies and never modified.
+The DOMAIN band is not in `lib/` at all: it is the five pure-Dart packages
+under `packages/`, consumed as path dependencies and never modified. Four are
+the domain proper; the fifth, `plan_extraction`, is the file-import band's
+contract — bytes in, honest lines of plan text out — and the one place a new
+importable format is implemented.
 
 `logic/` is the youngest band and the narrowest: pure functions over plain
 values, for a rule that is the app's rather than the domain's but has no
@@ -67,6 +70,7 @@ Two files sit outside the bands, deliberately:
   from the seam is a design smell; today none does.
 - **The platform edges are reached from `app_state/`, not from screens.**
   `camera_source.dart` imports `package:camera` and `package:path_provider`;
+  `file_picker_edge.dart` imports `package:file_picker` for the import door;
   `ping_schedule.dart` owns the notification edge. That is the map's own
   shape — the edges are drawn beside the app-state band, and "platform glue"
   is an app-state node — so the rule to check in review is the one above it:

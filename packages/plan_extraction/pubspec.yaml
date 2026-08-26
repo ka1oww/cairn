@@ -1,0 +1,16 @@
+name: plan_extraction
+description: >-
+  The Cairn file-import extraction band: one contract, bytes in and honest
+  lines of plan text out. Pure Dart, no Flutter, no network, no I/O — the
+  package never touches a file system; the app's picker edge reads the bytes.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^4.0.0

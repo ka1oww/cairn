@@ -174,7 +174,7 @@ Phase 2 moves them, and that is also what the gate is waiting on to matter.
 Still not built: the day page's photo timeline, the Trail's filled node, and
 the gate's face on the day page — the rule is there, the page has no
 photographs to withhold yet.
-Beneath it: four pure-Dart libraries, a backend schema, a
+Beneath it: five pure-Dart libraries, a backend schema, a
 dual-camera spike, the decision record, and the design handoffs, all
 tested.
 
@@ -185,10 +185,11 @@ tested.
 | `packages/photo_day_assignment` | Landed. Decides which day a photo belongs to. |
 | `packages/trip_moments` | Landed. Deals one ping per person across the party. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
+| `packages/plan_extraction` | Landed. The file-import contract — bytes in, honest lines of plan text out — plus the plain-text extractor. |
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** The paste-and-confirm flow persisting the itinerary locally, the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them and the Pool obeys it (the day page's own gated half still waits on the photo timeline) — and now the trip as a stored fact: roster, starter, flat-but-gated powers, three-word codes that die with the trip, and the sheet off the Trail's title. Nothing registered with iOS yet; no code can reach another phone yet. |
+| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** The paste-and-confirm flow persisting the itinerary locally — with a second door beside the box: importing a plain-text file fills it and never auto-parses, so one tap reads it through the same pipeline — the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them and the Pool obeys it (the day page's own gated half still waits on the photo timeline) — and now the trip as a stored fact: roster, starter, flat-but-gated powers, three-word codes that die with the trip, and the sheet off the Trail's title. Nothing registered with iOS yet; no code can reach another phone yet. |
 
 ---
 

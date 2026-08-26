@@ -35,12 +35,24 @@ dependencies:
   trip_moments:
     path: packages/trip_moments
 
+  # The file-import extraction band (the DOMAIN-band sibling of the four
+  # packages above): bytes in, honest lines of plan text out.
+  plan_extraction:
+    path: packages/plan_extraction
+
   # Platform edges the capture flow drives (docs/architecture.md draws these
   # beside the APP STATE band: services know them, they know nothing of Cairn).
   # The camera is back-only for the first release — the front inset is
   # explicitly after the line (docs/decisions/2026-08-22-camera-like-bereal.md).
   camera: ^0.12.0
   path_provider: ^2.1.6
+
+  # The import feature's document picker (docs/architecture.md: a platform
+  # edge beside the APP STATE band, reached only through lib/app_state/
+  # file_picker_edge.dart). FileType.custom + allowedExtensions maps to
+  # UTTypes, so Files, iCloud Drive and third-party providers all work; the
+  # plugin copies picks into the sandbox and the edge reads their bytes.
+  file_picker: ^12.1.0
 
   # The shared facts' transport (docs/architecture.md: the STORAGE band's
   # Supabase adapter). Plain HTTP rather than `supabase_flutter`: PostgREST is

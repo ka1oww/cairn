@@ -1,7 +1,10 @@
 // SCREENS band (docs/architecture.md): knows app state and nothing below it.
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app_state/import_flow.dart';
 import '../app_state/paste_flow.dart';
 import 'join_screen.dart';
 
@@ -15,6 +18,14 @@ const _muted = Color(0xFF6E6E5E);
 const _olive = Color(0xFF5A6B2F);
 const _oliveSoft = Color(0xFFE4E9D2);
 const _boxFill = Color(0xFFFBFAF0);
+const _coralSoft = Color(0xFFF7E3DC);
+const _coralInk = Color(0xFF8F3B2D);
+
+/// What the paste box spends on its own frame, vertically: the 14 px content
+/// padding top and bottom plus the widest border (2 px, focused) on each
+/// edge. The ghost sample is bounded to what is left, so it can never paint
+/// outside the box.
+const _boxInsideInset = 14 * 2 + 2 * 2;
 
 const _serif = TextStyle(
   fontFamily: 'Georgia',
@@ -81,6 +92,11 @@ class PasteScreen extends ConsumerStatefulWidget {
 class _PasteScreenState extends ConsumerState<PasteScreen> {
   late final TextEditingController _controller;
 
+  /// Provenance from the last import ("Read 3 of 8 pages") — shown above the
+  /// box until the next import, because a partial read is a success the
+  /// person may want to know about while they fix it in the editor.
+  String? _importNote;
+
   @override
   void initState() {
     super.initState();
@@ -97,6 +113,21 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
     ref.read(pasteFlowProvider.notifier).parse(_controller.text);
   }
 
+  /// The import door (the import plan §2.5): the file's text lands in the
+  /// box, visibly, and the same green button reads it — one extra tap that
+  /// buys the person a look at exactly what came out of their file before
+  /// the parser sees it. Refusals never reach here; they live in the flow's
+  /// state and show as the error card.
+  Future<void> _importFile() async {
+    setState(() => _importNote = null);
+    final done = await ref.read(importFlowProvider.notifier).pickAndExtract();
+    if (!mounted || done == null) return;
+    setState(() {
+      _controller.text = done.text;
+      _importNote = done.notes.isEmpty ? null : done.notes.join(' ');
+    });
+  }
+
   void _fillExample() {
     _controller.text = sampleItinerary;
   }
@@ -110,9 +141,66 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
     ref.read(pasteFlowProvider.notifier).parse('Day 1');
   }
 
+  /// The import's two soft surfaces above the box (the import plan §2.6):
+  /// the refusal card — dismissible, never a dead end, the box and every
+  /// other door staying usable underneath — and the partial-read note.
+  /// Empty when there is nothing to say.
+  List<Widget> _importFeedback(ImportState importState) {
+    if (importState is ImportFailed) {
+      return [
+        const SizedBox(height: 12),
+        Card(
+          key: const Key('import-error'),
+          color: _coralSoft,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    importState.explanation,
+                    style: const TextStyle(fontSize: 13.5, color: _coralInk),
+                  ),
+                ),
+                IconButton(
+                  key: const Key('import-error-dismiss'),
+                  icon: const Icon(Icons.close, size: 18),
+                  color: _coralInk,
+                  tooltip: 'Dismiss',
+                  onPressed: () {
+                    setState(() => _importNote = null);
+                    ref.read(importFlowProvider.notifier).dismiss();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+    if (_importNote != null) {
+      return [
+        const SizedBox(height: 8),
+        Text(
+          _importNote!,
+          key: const Key('import-note'),
+          style: const TextStyle(fontSize: 13, color: _muted),
+        ),
+      ];
+    }
+    // Nothing to say: still hold the screen's original 16 px gap between the
+    // subhead and the box, which the feedback branches take the place of.
+    return const [SizedBox(height: 16)];
+  }
+
   @override
   Widget build(BuildContext context) {
     final repasting = widget.repastingLivePlan;
+    final importState = ref.watch(importFlowProvider);
     return Scaffold(
       backgroundColor: _paper,
       body: SafeArea(
@@ -140,34 +228,57 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
                 key: const Key('paste-subhead'),
                 style: _serif.copyWith(fontSize: 15, color: _muted),
               ),
-              const SizedBox(height: 16),
+              ..._importFeedback(importState),
               Expanded(
-                child: TextField(
-                  key: const Key('paste-input'),
-                  controller: _controller,
-                  maxLines: null,
-                  minLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: const TextStyle(fontSize: 14, color: _ink),
-                  decoration: InputDecoration(
-                    // The ghost sample: a real full plan, fading as you type.
-                    hintText: sampleItinerary,
-                    hintStyle: TextStyle(
-                      fontSize: 13,
-                      height: 1.5,
-                      color: _muted.withValues(alpha: 0.55),
-                    ),
-                    filled: true,
-                    fillColor: _boxFill,
-                    contentPadding: const EdgeInsets.all(14),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: _olive, width: 1.5),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: _olive, width: 2),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => TextField(
+                    key: const Key('paste-input'),
+                    controller: _controller,
+                    maxLines: null,
+                    minLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: const TextStyle(fontSize: 14, color: _ink),
+                    decoration: InputDecoration(
+                      // The ghost sample: a real full plan, fading as you type.
+                      // It is handed over as a *widget* rather than as
+                      // `hintText`, and bounded to the box's own inside: a hint
+                      // taller than the field is vertically centred by
+                      // InputDecorator, so the 25-line sample used to paint its
+                      // first lines ABOVE the green border and onto whatever
+                      // sat there (the subhead, an error card). Bounded and
+                      // top-aligned, any excess clips inside the border instead,
+                      // in every state that shortens the box.
+                      hint: SizedBox(
+                        height: math.max(
+                          0,
+                          constraints.maxHeight - _boxInsideInset,
+                        ),
+                        child: ClipRect(
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: Text(
+                              sampleItinerary,
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.5,
+                                color: _muted.withValues(alpha: 0.55),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: _boxFill,
+                      contentPadding: const EdgeInsets.all(14),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: _olive, width: 1.5),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: _olive, width: 2),
+                      ),
                     ),
                   ),
                 ),
@@ -190,6 +301,20 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
                 ),
                 child: Text(repasting ? 'Read it again' : 'Read my plan'),
               ),
+              const SizedBox(height: 8),
+              // The file door, in both modes (the import plan §2.6): on a
+              // first paste it fills an empty box; on a re-paste it replaces
+              // the pre-filled plan text and "Read it again" merges. Progress
+              // takes the pill's place inline — no modal, no blocked box.
+              if (importState is ImportReading)
+                _ImportProgress(name: importState.fileName)
+              else
+                _SoftPill(
+                  key: const Key('import-pill'),
+                  label: 'Import a file',
+                  sublabel: supportedFormatsLabel,
+                  onPressed: _importFile,
+                ),
               const SizedBox(height: 8),
               if (repasting)
                 TextButton(
@@ -247,11 +372,18 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
 }
 
 /// A soft secondary pill: olive-tinted, full finger height (min 44pt), never
-/// competing with the one green button above it.
+/// competing with the one green button above it. An optional [sublabel]
+/// renders a second, quieter line — the import pill names its formats there.
 class _SoftPill extends StatelessWidget {
-  const _SoftPill({super.key, required this.label, required this.onPressed});
+  const _SoftPill({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.sublabel,
+  });
 
   final String label;
+  final String? sublabel;
   final VoidCallback onPressed;
 
   @override
@@ -266,7 +398,57 @@ class _SoftPill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       ),
-      child: Text(label),
+      child: sublabel == null
+          ? Text(label)
+          : Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label),
+                Text(
+                  sublabel!,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+/// Import progress, drawn inline in the pill's place: what is being read,
+/// and that something is happening — no modal over the screen.
+class _ImportProgress extends StatelessWidget {
+  const _ImportProgress({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      key: const Key('import-progress'),
+      height: 44,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Reading $name…',
+            style: const TextStyle(
+              fontSize: 13,
+              color: _muted,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
