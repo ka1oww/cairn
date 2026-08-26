@@ -87,6 +87,16 @@ void main() {
       .controller!
       .text;
 
+  /// The pill opens the two-door import sheet (slice D: documents, or the
+  /// photo library). Every test in this file goes through the file door.
+  Future<void> importAFile(WidgetTester tester) async {
+    await tester.tap(find.byKey(const Key('import-pill')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('import-door-file')));
+    await tester.pump();
+    await tester.pump();
+  }
+
   testWidgets('an imported txt fills the box, parses, accepts into Drift', (
     tester,
   ) async {
@@ -102,8 +112,7 @@ void main() {
     );
 
     // One tap on the pill; the box now holds what the file said.
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
     expect(boxText(tester), tidyImport);
     // The pill came back for another import once the read landed.
     expect(find.byKey(const Key('import-pill')), findsOneWidget);
@@ -161,8 +170,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     // Inline, in place of the pill — no modal anywhere.
     expect(find.byKey(const Key('import-progress')), findsOneWidget);
@@ -178,8 +186,7 @@ void main() {
   testWidgets('dismissing the picker changes nothing', (tester) async {
     final picker = await launch(tester, picks: [null]);
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     expect(boxText(tester), '');
     expect(find.byKey(const Key('import-error')), findsNothing);
@@ -205,8 +212,7 @@ void main() {
       ],
     );
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     expect(find.byKey(const Key('import-error')), findsOneWidget);
     expect(find.textContaining("Couldn't read that file"), findsOneWidget);
@@ -234,8 +240,7 @@ void main() {
       ],
     );
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     expect(find.text("That file didn't contain any text."), findsOneWidget);
     expect(boxText(tester), '');
@@ -293,8 +298,7 @@ void main() {
     expectHintInsideBox();
 
     // And again with the refusal card taking another band off the box.
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
     expect(find.byKey(const Key('import-error')), findsOneWidget);
     expectHintInsideBox();
   });
@@ -320,21 +324,19 @@ void main() {
   // person-visible half of slice C, so it is asserted literally.
 
   PickedBytes fixture(String name) => PickedBytes(
-        fileName: name,
-        extension: name.split('.').last,
-        bytes: Uint8List.fromList(
-          File('packages/plan_extraction/test/fixtures/$name')
-              .readAsBytesSync(),
-        ),
-      );
+    fileName: name,
+    extension: name.split('.').last,
+    bytes: Uint8List.fromList(
+      File('packages/plan_extraction/test/fixtures/$name').readAsBytesSync(),
+    ),
+  );
 
   testWidgets('an imported docx fills the box, parses, accepts into Drift', (
     tester,
   ) async {
     await launch(tester, picks: [fixture('tables.docx')]);
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     // One line per WordprocessingML paragraph; the table's cells row-major.
     expect(
@@ -369,8 +371,7 @@ void main() {
   ) async {
     await launch(tester, picks: [fixture('dated-sheet.xlsx')]);
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     // The date-typed column drove the heuristic: dated headers, dash stops.
     expect(boxText(tester), contains('Mon 14 June 2027'));
@@ -387,8 +388,7 @@ void main() {
   ) async {
     await launch(tester, picks: [fixture('text-sheet.xlsx')]);
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     // The floor: never worse than pasting the same table as text.
     expect(boxText(tester), contains('Senso-ji at 9:00'));
@@ -401,8 +401,7 @@ void main() {
   ) async {
     await launch(tester, picks: [fixture('dated.csv')]);
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     expect(boxText(tester), contains('Mon 14 June 2027'));
     expect(boxText(tester), contains('- Senso-ji at 9:00, then Ueno'));
@@ -417,8 +416,7 @@ void main() {
   ) async {
     await launch(tester, picks: [fixture('encrypted.docx')]);
 
-    await tester.tap(find.byKey(const Key('import-pill')));
-    await tester.pump();
+    await importAFile(tester);
 
     expect(find.byKey(const Key('import-error')), findsOneWidget);
     expect(

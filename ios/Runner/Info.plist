@@ -26,12 +26,17 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<!-- The one permission the capture flow asks for. Audio is off on the
-	     controller (enableAudio: false), so no microphone string is needed,
-	     and the frame is written into the app's own documents directory
-	     rather than the camera roll, so no photo-library string is either. -->
+	<!-- The permission the capture flow asks for. Audio is off on the
+	     controller (enableAudio: false), so no microphone string is needed.
+	     The photo-library string below is a separate requirement: the import
+	     flow's photo door goes through file_picker_darwin, which builds
+	     PHPickerConfiguration(photoLibrary: .shared()) — Apple's
+	     authorization-requiring initializer — so removing that key crashes
+	     the door. Capture itself never touches the camera roll. -->
 	<key>NSCameraUsageDescription</key>
 	<string>Cairn asks for one photo a day, at your own minute. The camera is only opened when you take that photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Cairn only reads the text in a screenshot or photo of your plan, when you pick one to import. Nothing else in your library is read.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -12,5 +12,8 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // The file-import feature's OCR edge (slice D): one hand-written
+    // channel beside the generated plugins.
+    TextRecognition.register(with: engineBridge.applicationRegistrar.messenger())
   }
 }

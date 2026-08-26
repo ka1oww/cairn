@@ -18,6 +18,15 @@ abstract interface class FilePickerEdge {
   /// (lowercased, no dots). Returns null when the person dismissed it —
   /// an ordinary answer, never an error.
   Future<PickedBytes?> pick({required Set<String> allowedExtensions});
+
+  /// Opens the photo library limited to still images — the screenshots
+  /// door (the import plan §2.6's second row). Same contract as [pick]:
+  /// null is a dismissal. iOS presents PHPicker, and `file_picker_darwin`
+  /// builds it with `PHPickerConfiguration(photoLibrary: .shared())` —
+  /// Apple's authorization-requiring initializer — so
+  /// `NSPhotoLibraryUsageDescription` must stay in `Info.plist` or this door
+  /// crashes; picks are copied into the sandbox like document picks.
+  Future<PickedBytes?> pickImage();
 }
 
 /// The real one: the native document picker over `file_picker`.
@@ -30,6 +39,16 @@ class DeviceFilePicker implements FilePickerEdge {
       type: FileType.custom,
       allowedExtensions: allowedExtensions.toList(),
     );
+    return _toPicked(file);
+  }
+
+  @override
+  Future<PickedBytes?> pickImage() async {
+    final file = await FilePicker.pickFile(type: FileType.image);
+    return _toPicked(file);
+  }
+
+  Future<PickedBytes?> _toPicked(PlatformFile? file) async {
     if (file == null) return null;
     final bytes = await file.readAsBytes();
     return PickedBytes(
@@ -40,23 +59,43 @@ class DeviceFilePicker implements FilePickerEdge {
   }
 }
 
-/// The test double: answers from a scripted list, in order, remembering what
-/// it was asked for so a test can pin the picker filter too. A null entry is
-/// a dismissal.
+/// The test double: answers from scripted lists, in order, remembering what
+/// it was asked for so a test can pin the picker filter too. A null entry
+/// is a dismissal. The two doors script separately — a test pins *which*
+/// door opened as well as what came through it.
 class FakeFilePicker implements FilePickerEdge {
-  FakeFilePicker(this._answers);
+  /// The positional answers reply to [pick] in order; [imageAnswers] reply
+  /// to [pickImage]. Either list may be empty.
+  FakeFilePicker(this._answers, {this.imageAnswers = const []});
 
   final List<PickedBytes?> _answers;
+
+  /// Answers for [pickImage], in order.
+  final List<PickedBytes?> imageAnswers;
+
   var _next = 0;
+  var _nextImage = 0;
 
   /// The extensions of the last [pick] call.
   Set<String>? lastAllowedExtensions;
 
+  /// How many times each door was opened.
+  int documentPicks = 0;
+  int imagePicks = 0;
+
   @override
   Future<PickedBytes?> pick({required Set<String> allowedExtensions}) async {
     lastAllowedExtensions = allowedExtensions;
+    documentPicks++;
     if (_next >= _answers.length) return null;
     return _answers[_next++];
+  }
+
+  @override
+  Future<PickedBytes?> pickImage() async {
+    imagePicks++;
+    if (_nextImage >= imageAnswers.length) return null;
+    return imageAnswers[_nextImage++];
   }
 }
 
