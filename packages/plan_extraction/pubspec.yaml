@@ -7,19 +7,39 @@ version: 0.1.0
 publish_to: 'none'
 
 environment:
-  sdk: ^3.0.0
+  # Raised from ^3.0.0 by the PDF extractor: pdfrx_engine and its pdfium_dart
+  # bindings both require ^3.10.0 (they are built on native assets and build
+  # hooks, which are not in older SDKs). Leaving the old constraint would have
+  # been a claim this package no longer meets.
+  sdk: ^3.10.0
 
 dependencies:
   archive: ^3.6.1
   csv: ^8.0.0
   excel: ^4.0.6
   xml: ^6.6.1
+  # PDFium behind a pure-Dart FFI wrapper. On iOS the app also depends on
+  # `pdfium_flutter`, which is what actually links PDFium into the binary --
+  # see the note in the root pubspec.yaml and lib/src/pdf_extractor.dart.
+  pdfrx_engine: ^0.4.6
 
 dev_dependencies:
   test: ^1.25.0
   lints: ^4.0.0
-  # Dev-only: the round-trip test feeds the dialect renderer's output back
-  # through the real parser (plan_rows.dart's honesty guard) — never a
-  # runtime dependency of the package itself.
+  # A dev dependency and never a real one: the extraction-equivalence tests
+  # feed extracted text (and the dialect renderer's output) back through the
+  # real parser — never a runtime dependency of the package itself.
   itinerary_parser:
     path: ../itinerary_parser
+
+dependency_overrides:
+  # The one place slice B and slice C collide. `pdfrx_engine` asks for
+  # `archive` ^4 (through `image`), while `excel` — the only maintained xlsx
+  # reader — is pinned to `archive` ^3 and does not compile against ^4
+  # (`ZipDecoder.decodeBuffer` and `ArchiveFile.compress` are both gone).
+  # Holding `archive` at ^3 is what makes both readable in one program:
+  # nothing on the PDF path touches the archive API, which is why it
+  # compiles and why the PDF fixtures still read. The app's root
+  # pubspec.yaml carries the same override, because an override in a path
+  # dependency is ignored.
+  archive: ^3.6.1

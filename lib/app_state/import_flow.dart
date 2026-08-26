@@ -32,6 +32,7 @@ import 'text_recognition_edge.dart';
 const List<PlanTextExtractor> planExtractors = [
   CsvExtractor(),
   PlainTextExtractor(),
+  PdfExtractor(),
   DocxExtractor(),
   XlsxExtractor(),
 ];

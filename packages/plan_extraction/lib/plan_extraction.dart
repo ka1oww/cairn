@@ -16,13 +16,33 @@
 //   D  OCR via Apple Vision (a platform edge beside app state, not an
 //      extractor — recognition is a platform call, not a pure function)
 //
-// Every extractor is synchronous, pure, and never throws; the app wraps the
-// call in `Isolate.run` in production and calls it directly in tests (real
-// isolates hang silently under the project's fake-clock widget tests).
+// Every extractor is pure and never throws; the app wraps the call in
+// `Isolate.run` in production and calls it directly in tests (real isolates
+// hang silently under the project's fake-clock widget tests).
+//
+// `extract` returns `FutureOr<ExtractionResult>` rather than a bare
+// `ExtractionResult`. That is a measured widening, not a taste: PDFium is not
+// re-entrant, so `pdfrx_engine` — the plan's PDF engine, and the only pure-Dart
+// route to a text layer — serializes every call through a background worker
+// isolate and exposes no synchronous API at all (`PdfDocument.openData` and
+// `PdfPage.loadText` are both futures, `lib/src/native/worker.dart`). A
+// synchronous extractor for PDF is therefore not implementable, and the
+// alternative — a second, async-only interface beside this one — would split
+// the registry the whole feature meets at. `FutureOr` costs the synchronous
+// extractors nothing: `PlainTextExtractor.extract` still returns its result
+// directly and still declares `ExtractionResult`.
 library;
 
+import 'dart:async';
 import 'dart:typed_data';
 
+export 'src/pdf_extractor.dart'
+    show
+        PdfExtractor,
+        maxPdfBytes,
+        maxPdfPages,
+        noTextLayerSentence,
+        passwordProtectedSentence;
 export 'src/plain_text_extractor.dart'
     show
         PlainTextExtractor,
@@ -104,6 +124,8 @@ abstract interface class PlanTextExtractor {
   /// isolate, so this must never do [extract]'s work over a whole file.
   bool matches(PickedBytes file);
 
-  /// Synchronous, pure, never throws.
-  ExtractionResult extract(PickedBytes file);
+  /// Pure, and never throws — every refusal comes back as an
+  /// [ExtractionFailure]. Synchronous where the format allows it (see the
+  /// library comment on why the return type is a [FutureOr]).
+  FutureOr<ExtractionResult> extract(PickedBytes file);
 }

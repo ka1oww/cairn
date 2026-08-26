@@ -40,6 +40,16 @@ dependencies:
   plan_extraction:
     path: packages/plan_extraction
 
+  # The iOS half of PDF reading. `plan_extraction` extracts with the pure-Dart
+  # `pdfrx_engine`, but PDFium itself is a native library and `pdfium_dart`'s
+  # build hook deliberately emits nothing for iOS
+  # (`if (targetOS == OS.iOS) return;`) -- on Flutter/iOS the engine resolves
+  # PDFium through `DynamicLibrary.process()`, so the symbols have to be linked
+  # into the app. This plugin is what links them (an XCFramework via
+  # CocoaPods); nothing in `lib/` imports it, and removing it builds fine and
+  # then fails to read a single PDF on a device.
+  pdfium_flutter: ^0.2.3
+
   # Platform edges the capture flow drives (docs/architecture.md draws these
   # beside the APP STATE band: services know them, they know nothing of Cairn).
   # The camera is back-only for the first release — the front inset is
@@ -70,6 +80,16 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.16.0
   drift_dev: ^2.34.5
+
+dependency_overrides:
+  # Slice B and slice C's readers disagree about one transitive package:
+  # `pdfrx_engine` asks for `archive` ^4 (through `image`), while `excel` --
+  # the only maintained xlsx reader -- is pinned to `archive` ^3 and does not
+  # compile against ^4. Holding `archive` at ^3 is what lets one app read both
+  # a spreadsheet and a PDF; nothing on the PDF path touches the archive API.
+  # `packages/plan_extraction/pubspec.yaml` carries the same override for
+  # `dart test`, because an override inside a path dependency is ignored.
+  archive: ^3.6.1
 
 flutter:
   uses-material-design: true

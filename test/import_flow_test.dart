@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:cairn/app_state/file_picker_edge.dart';
+import 'package:cairn/app_state/import_flow.dart';
 import 'package:cairn/bootstrap.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 import 'package:plan_extraction/plan_extraction.dart';
@@ -191,9 +192,17 @@ void main() {
     expect(boxText(tester), '');
     expect(find.byKey(const Key('import-error')), findsNothing);
     expect(find.byKey(const Key('import-pill')), findsOneWidget);
-    // Every extension some registered extractor claims — slice C added
-    // docx/xlsx/csv to the registry alongside slice A's txt.
-    expect(picker.lastAllowedExtensions, {'csv', 'txt', 'docx', 'xlsx'});
+    // Every extension some registered extractor claims — the picker is
+    // offered exactly what the registry claims, so this stays true as each
+    // format slice lands rather than needing an edit per slice.
+    expect(picker.lastAllowedExtensions, supportedImportExtensions);
+    expect(picker.lastAllowedExtensions, {
+      'csv',
+      'txt',
+      'pdf',
+      'docx',
+      'xlsx',
+    });
   });
 
   testWidgets('unreadable bytes refuse into the error card, box untouched', (
