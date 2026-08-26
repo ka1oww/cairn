@@ -1,8 +1,8 @@
 # cairn-keepalive
 
 A Cloudflare Worker that pings the hosted Supabase project's PostgREST
-endpoint twice a week so the free-tier project is never idle long enough to
-auto-pause. See `supabase/README.md`'s Free-tier limits section for why this
+endpoint three times a week so the free-tier project is never idle long
+enough to auto-pause. See `supabase/README.md`'s Free-tier limits section for why this
 exists and why it lives here rather than in GitHub Actions or `pg_cron`.
 
 ## Deploy
@@ -17,13 +17,23 @@ own the Worker (`wrangler whoami` to check).
 
 ## Verify
 
+The Worker has no HTTP endpoint on purpose — a public URL that proxies into
+the hosted project can be driven by anyone, and exhausting the free-tier
+request quota that way would stop the scheduled run too. Trigger a run one
+of these two ways instead:
+
 ```sh
-curl https://cairn-keepalive.embereducation.workers.dev/
+cd ops/keepalive-worker
+wrangler dev --test-scheduled
+# then, in another shell:
+curl 'http://localhost:8787/__scheduled?cron=0+1+*+*+1'
 ```
 
-Triggers the same code path as the cron (`fetch` and `scheduled` both call
-the same `ping`). A `keepalive ok: HTTP 200` response means the hosted
-project answered.
+or, against the deployed Worker, use the **Trigger** button on its
+Cloudflare dashboard page (Workers → `cairn-keepalive` → Settings → Trigger
+Events → Cron Triggers). Either way, a run that logs no error means the
+hosted project answered; a thrown `keepalive ping failed: HTTP …` is
+recorded as a failed invocation in the Worker's logs.
 
 ## Config
 

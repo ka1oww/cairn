@@ -17,7 +17,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
     will actually work, on Simulator or a real device.
 - `supabase/` — the backend (see below).
 - `packages/` — standalone Dart packages (own `pubspec.yaml`, tested with `dart test`) that back the Flutter app but must stay Flutter-free. Keep new packages under this pattern rather than pulling their logic into the Flutter app directly.
-- `ops/` — small operational Cloudflare Workers that support the backend but aren't part of the app or the Supabase schema. `ops/keepalive-worker/` pings the hosted Supabase project twice a week so the free tier never auto-pauses from inactivity; see its `README.md` and `supabase/README.md`'s Free-tier limits section for why it's a Worker and not a GitHub Actions cron or `pg_cron` job. Deploy with `wrangler deploy` from inside the worker's directory.
+- `ops/` — small operational Cloudflare Workers that support the backend but aren't part of the app or the Supabase schema. `ops/keepalive-worker/` pings the hosted Supabase project three times a week (Mon/Wed/Fri) so the free tier never auto-pauses from inactivity; it is cron-only and deliberately has no `fetch` handler, so verify it through `wrangler dev --test-scheduled` or the dashboard's Trigger button rather than a URL; see its `README.md` and `supabase/README.md`'s Free-tier limits section for why it's a Worker and not a GitHub Actions cron or `pg_cron` job. Deploy with `wrangler deploy` from inside the worker's directory.
 
 ## The app (root `pubspec.yaml`, `lib/`, `ios/`)
 

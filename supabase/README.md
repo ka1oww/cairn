@@ -599,11 +599,16 @@ person signing in with both providers on the same address gets one
   [supabase.com/pricing](https://supabase.com/pricing).
 
   **Built (2026-08-26):** `ops/keepalive-worker/` is that Worker. It runs
-  twice a week (`0 1 * * 1,4`, Monday and Thursday 01:00 UTC —
-  `wrangler.jsonc`'s `triggers.crons`) and makes one authenticated
-  `GET .../rest/v1/trips?select=id&limit=1` call against the hosted
-  project, throwing (so Cloudflare records a failed invocation) on any
-  non-2xx response. Deploy with `wrangler deploy` from that directory; a
+  three times a week (`0 1 * * 1,3,5`, Monday, Wednesday and Friday 01:00
+  UTC — `wrangler.jsonc`'s `triggers.crons`, a cadence chosen so a single
+  missed run still leaves at most a four-day silence) and makes one
+  authenticated `GET .../rest/v1/trips?select=id&limit=1` call against the
+  hosted project, throwing out of the `scheduled` handler (so Cloudflare
+  records a failed invocation) on any non-2xx response. The cron trigger is
+  the only way in — there is deliberately no `fetch` handler, because a
+  public URL proxying into the hosted project could be driven by anyone and
+  burning the free-tier request quota that way would take the scheduled run
+  down with it. Deploy with `wrangler deploy` from that directory; a
   failed scheduled run means the project may be paused — check the
   Worker's dashboard/logs, and resume the project from the Supabase
   dashboard if so. `SUPABASE_URL` and `SUPABASE_ANON_KEY` are copied into

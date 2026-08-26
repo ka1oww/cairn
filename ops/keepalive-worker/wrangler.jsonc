@@ -4,11 +4,13 @@
   "main": "src/index.js",
   "compatibility_date": "2026-08-26",
   "triggers": {
-    // Monday and Thursday, 01:00 UTC -- twice a week is well inside
-    // Supabase's roughly one-week inactivity-pause window (see
-    // supabase/README.md's Free-tier limits section), with margin for a
-    // missed run.
-    "crons": ["0 1 * * 1,4"]
+    // Monday, Wednesday and Friday, 01:00 UTC -- three times a week is
+    // well inside Supabase's roughly one-week inactivity-pause window (see
+    // supabase/README.md's Free-tier limits section). The gaps are two and
+    // three days, so a single missed run still leaves at most a four-day
+    // silence: real margin for one failure, which a twice-weekly cadence
+    // did not have.
+    "crons": ["0 1 * * 1,3,5"]
   },
   "observability": {
     "enabled": true
