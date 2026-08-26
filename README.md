@@ -18,16 +18,20 @@ This is a passion project, not a business. There is no monetisation goal.
 ## Status
 
 Under construction, and running. The app builds and opens on a phone: paste a
-rough itinerary (or import one from a `.txt`, `.csv`, `.docx` or `.xlsx` file,
-which fills the same paste box rather than parsing on its own), confirm what
-the parser read, and land on **Today** — the day
-screen the Trail opens for every other day too. The Trail, the Pool and the
-capture that fills it are built, and five pure-Dart packages sit under
-them. Nothing buzzes yet: the daily ping's schedule is real but nothing is
-registered with iOS. The one server path that exists — the itinerary and the
-roster syncing to every phone — is live against a hosted Supabase project: an
-ordinary build points at it and signs in as an anonymous account, which stands
-in until Sign in with Apple lands. A trip now *ends* as
+rough itinerary, confirm what the parser read, and land on **Today** — the day
+screen the Trail opens for every other day too. A plan can also be **read out
+of a file** rather than typed: a document (`.txt`, `.csv`, `.docx` or `.xlsx`,
+and the app says which formats this build actually reads) or a photo or
+screenshot put through on-device text recognition. Either way the text lands
+in the paste box for the person to see and fix before the parser reads it, and
+recognition quality is still to be judged on a real device rather than by the
+test suite. The Trail,
+the Pool and the capture that fills it are built, and five pure-Dart packages
+sit under them. Nothing buzzes yet: the daily ping's schedule is real but
+nothing is registered with iOS. The one server path that exists — the
+itinerary and the roster syncing to every phone — is live against a hosted
+Supabase project: an ordinary build points at it and signs in as an anonymous
+account, which stands in until Sign in with Apple lands. A trip now *ends* as
 well as starting: when its last day passes it spends seventy-two hours taking
 late photographs and nothing else, and after that it is a read-only record —
 uploads shut, invite codes die, and the plan cannot be replaced. The book made

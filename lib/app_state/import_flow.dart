@@ -73,7 +73,16 @@ PlanTextExtractor? routeToExtractor(PickedBytes file) {
 
 /// Extensions this build reads as pictures rather than as documents.
 const Set<String> imageImportExtensions = {
-  'png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'gif', 'bmp', 'tif', 'tiff',
+  'png',
+  'jpg',
+  'jpeg',
+  'heic',
+  'heif',
+  'webp',
+  'gif',
+  'bmp',
+  'tif',
+  'tiff',
 };
 
 /// True when [file] says *picture* — its claimed extension is one of
@@ -201,10 +210,10 @@ class ImportFlow extends Notifier<ImportState> {
   /// null otherwise, leaving the reason in [state]: a dismissal changes
   /// nothing, a refusal shows the error card.
   Future<ImportSucceeded?> pickAndExtract() => _import(
-        () => ref.read(filePickerEdgeProvider).pick(
-              allowedExtensions: supportedImportExtensions,
-            ),
-      );
+    () => ref
+        .read(filePickerEdgeProvider)
+        .pick(allowedExtensions: supportedImportExtensions),
+  );
 
   /// One import from the photo library: the screenshots-and-photos door.
   /// Same pipeline after the pick — an image routes to recognition exactly
@@ -261,16 +270,19 @@ class ImportFlow extends Notifier<ImportState> {
       // The one-tap route reads the bytes with recognition whatever they
       // claim to be: it is offered precisely because the extractor that
       // owns that format already said the pages are pictures.
-      final result =
-          viaOcrRoute ? await _recognize(picked) : await _read(picked);
+      final result = viaOcrRoute
+          ? await _recognize(picked)
+          : await _read(picked);
       return switch (result) {
         ExtractedText(:final text, :final notes) => _deliver(text, notes),
         ExtractionFailure(:final kind, :final explanation) when viaOcrRoute =>
           _refuse(kind, explanation),
         ExtractionFailure(kind: ExtractionFailureKind.noTextLayer) =>
           _offerTheOcrRoute(picked),
-        ExtractionFailure(:final kind, :final explanation) =>
-          _refuse(kind, explanation),
+        ExtractionFailure(:final kind, :final explanation) => _refuse(
+          kind,
+          explanation,
+        ),
       };
     } on RecognitionRefused catch (e) {
       // The recognition edge's own refusals carry their person-showable
@@ -341,11 +353,16 @@ class ImportFlow extends Notifier<ImportState> {
   /// contains no text — but still a dead end for this flow, so it refuses
   /// with the empty-kind words rather than filling the box with nothing.
   Future<ExtractionResult> _recognize(PickedBytes picked) async {
-    final scan = await ref.read(textRecognitionEdgeProvider).recognize(
+    final scan = await ref
+        .read(textRecognitionEdgeProvider)
+        .recognize(
           picked.bytes,
           onPage: (page, of) {
             if (state is ImportReading) {
-              state = ImportReading(picked.fileName, detail: 'page $page of $of');
+              state = ImportReading(
+                picked.fileName,
+                detail: 'page $page of $of',
+              );
             }
           },
         );

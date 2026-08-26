@@ -46,7 +46,10 @@ abstract interface class TextRecognitionEdge {
   /// screenshot, or a scanned PDF — ordered top-to-bottom. Reports
   /// multi-page progress through [onPage]. Throws [RecognitionRefused]
   /// when the bytes cannot be read at all.
-  Future<RecognizedScan> recognize(Uint8List bytes, {RecognitionProgress? onPage});
+  Future<RecognizedScan> recognize(
+    Uint8List bytes, {
+    RecognitionProgress? onPage,
+  });
 }
 
 /// The real one: a `VNRecognizeTextRequest` over the hand-written

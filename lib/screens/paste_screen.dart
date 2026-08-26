@@ -121,20 +121,18 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
   /// buys the person a look at exactly what came out of their file before
   /// the parser sees it. Refusals never reach here; they live in the flow's
   /// state and show as the error card.
-  Future<void> _importFile() => _applyImport(
-        ref.read(importFlowProvider.notifier).pickAndExtract(),
-      );
+  Future<void> _importFile() =>
+      _applyImport(ref.read(importFlowProvider.notifier).pickAndExtract());
 
   /// The screenshots door (the import plan §2.6's second row): the photo
   /// library, recognized into lines by the same pipeline.
-  Future<void> _importPhoto() => _applyImport(
-        ref.read(importFlowProvider.notifier).pickAndReadPhoto(),
-      );
+  Future<void> _importPhoto() =>
+      _applyImport(ref.read(importFlowProvider.notifier).pickAndReadPhoto());
 
   /// The scanned-PDF door's one tap, off the noTextLayer card.
   Future<void> _readScanWithRecognition() => _applyImport(
-        ref.read(importFlowProvider.notifier).readScanWithRecognition(),
-      );
+    ref.read(importFlowProvider.notifier).readScanWithRecognition(),
+  );
 
   /// Whatever an import attempt resolves to, this is what happens next:
   /// success fills the box (and shows the provenance note); every refusal
@@ -244,8 +242,10 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
                     Expanded(
                       child: Text(
                         importState.explanation,
-                        style:
-                            const TextStyle(fontSize: 13.5, color: _coralInk),
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          color: _coralInk,
+                        ),
                       ),
                     ),
                     IconButton(

@@ -66,10 +66,7 @@ class DeviceFilePicker implements FilePickerEdge {
 class FakeFilePicker implements FilePickerEdge {
   /// The positional answers reply to [pick] in order; [imageAnswers] reply
   /// to [pickImage]. Either list may be empty.
-  FakeFilePicker(
-    this._answers, {
-    this.imageAnswers = const [],
-  });
+  FakeFilePicker(this._answers, {this.imageAnswers = const []});
 
   final List<PickedBytes?> _answers;
 
