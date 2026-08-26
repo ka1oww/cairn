@@ -177,7 +177,7 @@ final tripSettingsProvider = Provider<AsyncValue<TripSettingsView?>>((ref) {
             trip: membership,
             plan: savedPlan,
             photos: pooled,
-            you: model.MemberId(localMemberId),
+            you: model.MemberId(ref.watch(localMemberIdProvider)),
             now: ref.watch(nowProvider),
             utcOffset: ref.watch(tripUtcOffsetProvider),
             standing: ref.watch(tripStandingProvider),
@@ -202,7 +202,7 @@ class TripActions {
 
   final Ref _ref;
 
-  model.MemberId get _you => model.MemberId(localMemberId);
+  model.MemberId get _you => model.MemberId(_ref.read(localMemberIdProvider));
 
   TripMembership? get _trip => _ref.read(tripMembershipProvider).value;
 

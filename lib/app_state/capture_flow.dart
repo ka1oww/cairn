@@ -226,7 +226,7 @@ PooledPhoto? _myPhotoToday(Ref ref, int dayNumber) {
   final pool = ref.watch(tripPhotosProvider).value ?? const <PooledPhoto>[];
   for (final photo in pool) {
     if (photo.ref.dayNumber == dayNumber &&
-        photo.ref.contributor.value == localMemberId) {
+        photo.ref.contributor.value == ref.watch(localMemberIdProvider)) {
       return photo;
     }
   }
@@ -390,7 +390,7 @@ class CaptureFlow extends Notifier<CaptureState> {
         .read(photoStoreProvider)
         .keep(
           dayNumber: dayNumber,
-          contributor: model.MemberId(localMemberId),
+          contributor: model.MemberId(ref.read(localMemberIdProvider)),
           takenAt: breath.takenAtUtc,
           origin: model.PhotoOrigin.pinged,
           filePath: breath.framePath,

@@ -101,9 +101,10 @@ phone nobody has signed into. The **itinerary and the roster are now shared
 facts** (grill round one §2): the schema holds them, and `TripSync`
 (`lib/repositories/itinerary_sync.dart`) reconciles them last-write-wins per
 day, over a first slice of the Supabase adapter that speaks PostgREST. That
-whole path is **dormant, not absent** — it needs a project URL, a publishable
-key and a session, and there is no hosted project and no sign-in, so every
-build so far reports itself dormant and touches nothing. The pool is still
+whole path is now **live**: a hosted project exists with every migration
+applied, an ordinary build points at it by default, and the phone signs in as a
+GoTrue anonymous account — the stand-in until Sign in with Apple lands
+(`supabase/README.md`). The pool is still
 local: nobody else's bytes arrive until Phase 2. **A trip now ends** as well as
 starting (`fm/cairn-trip-end`): seventy-two hours of grace for late
 photographs, then it is a record — uploads shut on both sides of the seam,
@@ -276,7 +277,7 @@ That is the layering rule paying rent.
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
 | **Drift store** | partial — the itinerary tables (`itinerary_days`, `itinerary_stops`, `itinerary_set_asides`), `photos`, and the trip itself: `trip_facts` (one row: which trip, what it is called, who started it), `trip_members` (the roster, with no role column and never one) and `trip_invite_codes` (minted and revoked, with no expiry column — a code dies with its trip and that rule is not stored twice). Schema v6: v2 dropped the scaffold's disposable `trip_drafts` demo, v3 added photos, v4 added the trip's three, v5 gave a pre-mint trip a real uuid, v6 gave every day the merge clock the shared copy is reconciled on and added `sync_states` — the cursor, not the cargo, and the one table here holding no shared fact at all | `cairn_model` (rows typed against the vocabulary), device disk | Repositories; transitively every reactive read in the app | Typed SQLite with real joins and watchable queries — "photos per day" is one query, and its stream is what makes the UI reactive. Choice validated in `learning/riverpod-drift-demo/` (native backend on iOS, not the demo's wasm detour) and recorded in [`docs/decisions/2026-08-25-riverpod-and-drift.md`](decisions/2026-08-25-riverpod-and-drift.md). |
-| **Supabase/R2 client adapter** | partial — the shared facts' half is built (`lib/storage/remote/`): `SharedFacts` is the interface, `PostgrestSharedFacts` speaks it over plain HTTP (no `supabase_flutter`; PostgREST is an ordinary REST API and the package would bring GoTrue, Realtime, Storage and a Podfile's worth of native dependencies). Auth, the edge functions and R2 not built | Supabase Auth, Postgres (PostgREST under RLS), both edge functions, R2 (presigned PUT/GET) | Repositories — nothing else in the app may import a Supabase or HTTP symbol | Wraps the session JWT, the RLS-filtered queries, the edge-function calls, and the direct-to-R2 byte transfers behind one interface the repositories consume. Where the project lives is a `--dart-define` and never a checked-in file; unset, the adapter refuses before it sends anything. |
+| **Supabase/R2 client adapter** | partial — the shared facts' half is built (`lib/storage/remote/`): `SharedFacts` is the interface, `PostgrestSharedFacts` speaks it over plain HTTP (no `supabase_flutter`; PostgREST is an ordinary REST API and the package would bring GoTrue, Realtime, Storage and a Podfile's worth of native dependencies). Auth is built too and lives beside it: `SessionSource` is the interface, `GotrueSessions` mints and keeps a GoTrue **anonymous** account over the same plain HTTP, which is what every RLS policy's `auth.uid()` reads. Sign in with Apple — the real identity route — is the unbuilt part, and the edge functions and R2 are not built | Supabase Auth, Postgres (PostgREST under RLS), both edge functions, R2 (presigned PUT/GET) | Repositories — nothing else in the app may import a Supabase or HTTP symbol | Wraps the session JWT, the RLS-filtered queries, the edge-function calls, and the direct-to-R2 byte transfers behind one interface the repositories consume. Where the project lives is still a `--dart-define` (`CAIRN_SUPABASE_URL` / `CAIRN_SUPABASE_ANON_KEY`), but as an *override*: both default to the hosted project's URL and its **publishable** anon key, which are checked in (`lib/storage/remote/shared_facts.dart`), so an ordinary build reaches the backend with nothing passed. The invariant that survived is the narrower one — **no secret is ever checked in**: never a `service_role` key, never the database password. Refusing before it sends anything is still the behaviour, but only for a build that overrides the defines to empty (`--dart-define=CAIRN_SUPABASE_URL=`). |
 
 ### Backend (`supabase/` + Cloudflare)
 
@@ -290,8 +291,8 @@ nothing about pings fired or who has answered today.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (96-probe RLS suite); **no hosted project exists**; starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos`, `day_unlocks`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check. |
-| **Supabase Auth (GoTrue)** | not built — no project; Apple provider is a dashboard step; Google queued | (platform service) | Postgres (`auth.uid()` in every policy), client adapter, edge functions | Accounts. Sign in with Apple first; display name editable at join because providers supply legal names. |
+| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (96-probe RLS suite); **applied to the hosted project 2026-08-26**, where only the permitted paths have been walked (one account, so no refusal observed there); starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos`, `day_unlocks`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check. |
+| **Supabase Auth (GoTrue)** | partial — **anonymous accounts are live** on the hosted project and are how the phone signs in (`gotrue_sessions.dart`); Apple and Google are dashboard steps and are not enabled | (platform service) | Postgres (`auth.uid()` in every policy), client adapter, edge functions | Accounts. Sign in with Apple first; display name editable at join because providers supply legal names. |
 | **`r2-upload-url` edge fn** | partial — code exists (membership check fixed in #9), never deployed | Postgres (re-checks membership as the caller), R2 (mints a 5-minute presigned PUT) | The only write path for photo bytes | Exists solely because the R2 secret cannot live in the app binary. |
 | **`r2-download-url` edge fn** | **not built** — requirements settled in `supabase/README.md` | Postgres (**must call `day_page_is_open` before signing**), R2 (presigned GET) | The gate itself: a version that skips the check is the single worst potential leak in the app | The bucket is private; every read needs a signature; gating the signature is what makes the shut gate real rather than a curtain. |
 | **Cloudflare R2** | not built — bucket not created; plan settled | nothing | Both edge functions; the app's byte transfers; the 10 GB free tier is a real ceiling, and the only line in the backend that ever bills — measured in [docs/storage-and-cost.md](storage-and-cost.md) | Photo bytes and day-page composites at zero egress. Holds **originals**, untouched; a derived variant may sit beside one but never replaces it. Postgres is the index; R2 is never listed — the `photos` row *is* the pointer. |
@@ -306,7 +307,7 @@ Services know the edges; the edges know nothing of Cairn.
 | **Camera (dual capture)** | partial — the back camera is driven for real behind `CameraSource`; the front inset is not built, and deliberately so | Capture | Back primary + front inset, taken as a back-then-front sequence — the spike (`learning/dual-camera-spike/`) established that is what "like BeReal" actually means, and true simultaneous capture is explicitly not being built. Back-only ships first; the inset lands after the first release. |
 | **Local notifications** | not built — the schedule is derived and handed to a `NotificationEdge`, but the only implementation records what it was given rather than registering it with iOS; this is the one genuinely unbuilt piece of the ping | The ping reaching anyone | Registered in one offline pass from the schedule. Ordinary alert level — **never** time-sensitive, never pierces Do Not Disturb (notification-alert-level decision). Delivery is the OS's to refuse. |
 | **Location** | not built | Rung-1 day assignment for pinged photos | A GPS tag at capture time is what lets the app's own photos take the best rung of the ladder. |
-| **Sign in with Apple** | not built | The whole account path | First auth route. Web/PWA were ruled out (iOS evicts PWA storage); native + Apple sign-in is the way in. |
+| **Sign in with Apple** | not built — an anonymous GoTrue account stands in, and links to a provider in place when this lands, keeping the uuid | The whole account path | First auth route. Web/PWA were ruled out (iOS evicts PWA storage); native + Apple sign-in is the way in. |
 
 ### Domain — the bottom of the map
 
@@ -448,21 +449,36 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   clock wins edits it should lose. Photos still have only three written notes
   (outbox ordering, `day_pages` insert→update fallback, deletion refetch), and
   no reconciliation of rows against R2 objects exists in any direction.
-- **The shared facts' sync is built and dormant.** It needs a project URL, a
-  publishable key and a session; there is no hosted project and no sign-in, so
-  it reports itself dormant and touches nothing. That is not a stub — the
-  whole path is exercised by tests through a fake backend and a mocked HTTP
-  client — but a green test suite is *not* evidence that a hosted project
-  answers the way the local Postgres does. The gate before anything real is
-  still `supabase db push` against a throwaway project.
-- **The shared roster replaces this phone's, and `localMemberId` is still the
-  string `'me'`.** Once a session exists, `TripSync` writes the account ids the
-  server named over the local roster — which is right, and which means
-  `lib/app_state/ping_schedule.dart`'s `localMemberId` must become the signed-in
-  user's id in the same change that lands sign-in, or this phone's own person
-  vanishes from a party it is standing in. Nothing can hit this today (no
-  session, so no roster ever lands), and it is written here because the next
-  person to build auth is the one who will.
+- **The shared facts' sync is live, and one test is the only thing that says
+  so.** A green `flutter test` still proves nothing about the hosted project:
+  every widget test binds `NoSession` and an in-memory database, deliberately,
+  because a sync started under `testWidgets` hangs the test. The live check is
+  `test/hosted_smoke_test.dart`, skipped unless asked for
+  (`--dart-define=CAIRN_HOSTED_SMOKE=true`). What it does *not* cover: more
+  than one account at a time, so no RLS refusal has ever been observed on the
+  hosted project — only the permitted paths. The 55 adversarial checks still
+  run against a throwaway local Postgres, and must.
+- **The shared roster replaces this phone's, and this phone is now whoever
+  signed in.** `localMemberIdProvider` (`lib/app_state/ping_schedule.dart`) is
+  the account id when there is a session and the string `'me'` when there is
+  not; `main()` resolves it before it builds the app — out of the session
+  vault, with no network round trip on the boot path — so nothing is ever
+  credited to the stand-in and then re-credited. The identity is fixed for the
+  life of the launch: an account minted too slowly on a first launch is stored
+  and picked up on the next one rather than adopted mid-session. Two things this leaves open. A trip
+  *started* under `'me'` can never become a `trips` row —
+  `created_by` references `profiles.id`, a uuid, `_createSharedTrip` is refused
+  for the life of that trip — and nothing migrates it; it is simply a local
+  trip for good. That is the plane, and it is **also a first launch on a merely
+  slow network**: a phone with nothing in its vault waits three seconds for an
+  account (`resolveMemberId`) and then runs as the stand-in, so slow and absent
+  land in the same place, and the person is given no signal that it happened.
+  The budget is deliberate — it is what keeps a bad network off the launch
+  screen — so this is a gap recorded rather than solved, and real sign-in is
+  what closes it. And the roster the server hands back names
+  people by their profile's `display_name`, which nothing on the phone writes,
+  so an anonymous account reads as `New traveller` rather than `You`. Both
+  close when sign-in asks for a name.
 - **The ping is dealt over a real roster that holds one person.** The
   derivation and the schedule were always real; the party is now read from the
   trip's own members rather than stubbed, and the collision-free promise is

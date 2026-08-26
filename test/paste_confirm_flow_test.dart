@@ -17,6 +17,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:cairn/app_state/ping_schedule.dart';
 import 'package:cairn/bootstrap.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 
@@ -101,14 +102,22 @@ void main() {
   /// `today` is pinned so the surface an accepted plan lands on does not
   /// depend on when the suite is run. Every fixture here is dated June 2027;
   /// 15 June sits on day 2, so accepting lands on that day's page.
-  Future<void> launch(WidgetTester tester, {DateTime? today}) async {
+  Future<void> launch(
+    WidgetTester tester, {
+    DateTime? today,
+    String? memberId,
+  }) async {
     // Tall viewport so the whole confirmation ListView builds without
     // scroll choreography in every test.
     tester.view.physicalSize = const Size(800, 2600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      bootstrapApp(database: db, today: today ?? _defaultToday),
+      bootstrapApp(
+        database: db,
+        today: today ?? _defaultToday,
+        memberId: memberId,
+      ),
     );
     await tester.pump();
     await tester.pump();
@@ -300,5 +309,34 @@ void main() {
     expect(find.text('Tuesday, Kyoto'), findsOneWidget);
     expect(find.text('15 June'), findsOneWidget);
     expect(find.text('DAY 2 OF 2'), findsOneWidget);
+  });
+
+  // The half of sign-in this repository can test without a server. The other
+  // half — that the id handed in really is the signed-in account's — is
+  // `hosted_smoke_test.dart`.
+  testWidgets('the trip is started under whoever signed in', (tester) async {
+    const signedIn = '5f067177-2435-47aa-af00-72ad9ea22569';
+    await launch(tester, memberId: signedIn);
+    await paste(tester, cleanPaste);
+    await tester.tap(find.byKey(const Key('accept-button')));
+    await tester.pump();
+    await tester.pump();
+
+    // Not the local stand-in. A trip started under `me` cannot become a
+    // `trips` row at all: `created_by` references `profiles.id`, which is a
+    // uuid, so the push would be refused for the life of the trip.
+    final trip = await db.readTripFacts();
+    expect(trip!.startedByMemberId, signedIn);
+    expect((await db.readTripMembers()).single.id, signedIn);
+  });
+
+  testWidgets('and under the local stand-in when nothing has', (tester) async {
+    await launch(tester);
+    await paste(tester, cleanPaste);
+    await tester.tap(find.byKey(const Key('accept-button')));
+    await tester.pump();
+    await tester.pump();
+
+    expect((await db.readTripFacts())!.startedByMemberId, localMemberId);
   });
 }

@@ -73,8 +73,12 @@ statement threw.
 
 ## What this does not cover
 
-No Supabase project exists yet, so nothing here has run against a hosted one.
-These tests exercise core Postgres behaviour — the RLS engine, `auth.uid()`,
+Nothing here runs against the hosted project, and that is deliberate rather
+than pending. All ten migrations are applied there, but a single anonymous
+account cannot pose as the eight adversaries these checks need, so no RLS
+*refusal* has ever been observed on the hosted project — only the permitted
+paths (`../README.md`, "What the hosted project has actually done"). These
+tests exercise core Postgres behaviour — the RLS engine, `auth.uid()`,
 `SECURITY DEFINER` ownership, `RETURNING` against the SELECT policy — all of
 which reproduce identically on a real project. They do **not** cover GoTrue
 (identity linking across Apple and Google, Apple's private-relay addresses,

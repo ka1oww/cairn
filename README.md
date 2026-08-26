@@ -23,8 +23,9 @@ screen the Trail opens for every other day too. The Trail, the Pool and the
 capture that fills it are built, and four pure-Dart domain packages sit under
 them. Nothing buzzes yet: the daily ping's schedule is real but nothing is
 registered with iOS. The one server path that exists — the itinerary and the
-roster syncing to every phone — is built and tested but dormant: it waits on a
-hosted project to point at and a session to speak as. A trip now *ends* as
+roster syncing to every phone — is live against a hosted Supabase project: an
+ordinary build points at it and signs in as an anonymous account, which stands
+in until Sign in with Apple lands. A trip now *ends* as
 well as starting: when its last day passes it spends seventy-two hours taking
 late photographs and nothing else, and after that it is a read-only record —
 uploads shut, invite codes die, and the plan cannot be replaced. The book made
@@ -48,8 +49,10 @@ keep, measured against a real camera roll rather than estimated.
   holds only the shared facts: the photo pool, trip membership, the itinerary
   and the shared trip clock. The trail, the stars and the daily ping are
   computed on the phone, so the app works fully offline. The schema is written
-  and exercised against a local Postgres; no hosted project exists yet.
-- **Sign in with Apple** as the first auth route. Not built.
+  and exercised against a local Postgres, and applied to a hosted project the
+  app now points at by default (`supabase/README.md`). R2 is not started.
+- **Sign in with Apple** as the first auth route. Not built — a GoTrue
+  anonymous account stands in, and links to a provider in place when it lands.
 
 ## Layout
 

@@ -15,10 +15,13 @@ and what is on them ([the decision](../docs/decisions/2026-08-22-grill-round-one
 of those is worked out on each phone from the plan it holds, and moving any of
 them server-side would need its own decision.
 
-No Supabase project has been created and nothing here has been applied to a
-hosted project. It has, however, been run: see
-[Verification](#verification-what-was-actually-run) at the bottom, which is not
-the same claim the previous version of this file made.
+**A hosted project now exists and every migration here is applied to it**
+(`https://nswcgzhynclrrunekskh.supabase.co`, region `ap-southeast-1`). The app
+points at it by default — see
+[Pointing the app at it](#pointing-the-app-at-it) — and
+[Verification](#verification-what-was-actually-run) at the bottom says what has
+actually been exercised against it and what has not. R2, the edge function and
+the real sign-in providers are still untouched.
 
 ## The model
 
@@ -438,20 +441,89 @@ is the credit.
    supabase secrets set R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... \
      R2_SECRET_ACCESS_KEY=... R2_BUCKET_NAME=...
    ```
-7. **Tell the app where the project is, at build time.** Nothing in this
-   repository names a project or holds a key, and nothing should:
-   ```sh
-   flutter run --dart-define=CAIRN_SUPABASE_URL=https://<ref>.supabase.co \
-               --dart-define=CAIRN_SUPABASE_ANON_KEY=<publishable anon key>
-   ```
-   Both are read by `SharedFactsConfig.fromEnvironment`
-   (`lib/storage/remote/shared_facts.dart`), and both are absent by default —
-   an ordinary build has no backend at all and behaves exactly as it did
-   before any of this existed. The anon key is the *publishable* one: it is
-   designed to ship inside a client and grants nothing on its own, because
-   every table here is behind RLS keyed on `auth.uid()`. **The service-role
-   key belongs in neither a define nor this repository**; it bypasses every
-   policy on this page.
+7. **Tell the app where the project is, at build time** — see the next
+   section. The defaults already point at the hosted project, so this step is
+   only for a *different* one.
+
+## Pointing the app at it
+
+An ordinary `flutter run` reaches the hosted project with nothing passed.
+Three defines steer it, all read at compile time:
+
+| Define | Default | What it does |
+| --- | --- | --- |
+| `CAIRN_SUPABASE_URL` | the hosted project | Where the backend is. **Pass it empty to turn the backend off entirely** — the sync goes dormant and the phone is purely local. Note that this is *not* what keeps `flutter test` off the network: the suite passes no defines, so `SharedFactsConfig.fromEnvironment` inside it is this project. What stops it reaching out is that `bootstrapApp` defaults its `sessions` to `NoSession` and `_startSharedFactsSync` returns early on one, so nothing ever signs in and nothing is sent. |
+| `CAIRN_SUPABASE_ANON_KEY` | the hosted project's publishable key | Identifies the project. Grants nothing on its own: every table here is behind RLS keyed on `auth.uid()`, so a request with no session reaches zero rows. |
+| `CAIRN_TRIP_TIMEZONE` | *absent* | The trip's IANA clock. Without it the sync reports `awaitingTripRow` and never creates the shared `trips` row — see below. |
+
+```sh
+flutter run --dart-define=CAIRN_TRIP_TIMEZONE=Asia/Tokyo
+```
+
+**The service-role key and the database password belong in neither a define
+nor this repository.** The anon key does: it is the *publishable* one, designed
+to ship inside a client. That distinction is the only one that matters here —
+the service-role key bypasses every policy on this page.
+
+### Why `CAIRN_TRIP_TIMEZONE` has no default
+
+`trips.timezone` is the one clock eight phones agree on, and the app is meant
+to ask for country and city at sign-in and derive the IANA name from them.
+Sign-in does not ask yet, so nothing on the phone knows it. Deriving `Etc/GMT-9`
+from the device's UTC offset would be a lie the first time somebody crossed a
+border, so the build may *tell* the app the zone and nothing guesses it.
+`SyncStanding.awaitingTripRow` names this exact gap. Two smaller things also
+have to be true before the shared row can be created, for the same reason:
+the plan must have at least one *resolved* date (`start_date`/`end_date` are
+`not null`), and the trip must have been named (`trips.name` is `not null`,
+and the phone's name is nullable — pushing a placeholder would come back
+through the roster apply and rename the trip).
+
+### How the phone signs in today
+
+Sign in with Apple is the first real route and is not built. Until it is, the
+app uses a **GoTrue anonymous account**: `GotrueSessions`
+(`lib/storage/remote/gotrue_sessions.dart`) mints one on first launch and keeps
+its refresh token — and the account's id beside it — in the app's support
+directory, so the same account comes back on every launch, and a phone with no
+signal still knows which account it is without asking. It is a real `auth.users` row, so `handle_new_user` mints
+the profile every policy on this page compares against.
+
+Anonymous sign-ins therefore have to be **on** for the project:
+Authentication -> Providers -> Anonymous sign-ins (or
+`PATCH /v1/projects/<ref>/config/auth` with
+`{"external_anonymous_users_enabled": true}`). It is on for the hosted project
+as of 2026-08-26.
+
+The signed-in account's id *is* this phone's member id: `main()` resolves it
+before it builds the app and hands it to `bootstrapApp`, which overrides
+`localMemberIdProvider`. That is one change and not two on purpose — the sync
+replaces the local roster with the server's wholesale, and a phone still
+calling itself `me` would then be asking the gate, the ping schedule and every
+"may I" about somebody the trip does not hold.
+
+Resolving it does **not** mean waiting for the network. `resolveMemberId`
+(`lib/bootstrap.dart`) reads the id out of the vault, which is a local file, so
+an ordinary launch reaches its first frame with no round trip at all and the
+token refresh happens behind it, on the sync's first reconcile. Only a
+first-ever launch has an account to mint, and that one waits at most three
+seconds — a separate budget from `GotrueSessions`'s ten-second request
+timeout — before running as the local stand-in. The identity is then **fixed
+for the life of the launch**: a session that lands after the budget is written
+to the vault and picked up next launch, never adopted mid-session, because a
+surface that drew itself as `me` and then became a uuid would credit a photo to
+somebody the roster does not hold. A phone that cannot reach the server at all,
+on a launch with nothing stored, keeps the stand-in and runs entirely offline.
+
+### Running the live smoke test
+
+```sh
+flutter test test/hosted_smoke_test.dart --dart-define=CAIRN_HOSTED_SMOKE=true
+```
+
+Skipped without that define, so CI never reaches out. It signs in, creates a
+trip, pushes a plan, pulls it back onto a second `AppDatabase` and deletes the
+trip again — no doubles anywhere in it.
 
 ### Two traps in offering Apple and Google together
 
@@ -653,14 +725,24 @@ not an artefact of one machine's setup.
   back — confirming that table ownership, not test-harness privilege, is what
   makes the helper functions safe.
 
-**What this does not prove.** No hosted Supabase project has been touched, and
-the environment in `tests/supabase_env.sql` is a reconstruction of the parts a
-migration sees, not a Supabase clone. The RLS engine, `auth.uid()`,
-`SECURITY DEFINER` ownership and `RETURNING`'s interaction with the SELECT
-policy are all core Postgres and reproduce identically on a real project. GoTrue
-(identity linking, Apple's private relay), the edge functions, R2 and `pg_cron`
-were not exercised at all. Run `supabase db push` against a throwaway project
-before pointing anything real at this.
+**What the hosted project has actually done** (2026-08-26). All ten migrations
+are applied to it, and the following ran against it for real, from the app's
+own code: an anonymous sign-in through GoTrue; `handle_new_user` minting the
+profile; a `trips` insert with the phone-minted id; `handle_new_trip` seeding
+`trip_members`; the `trip_roster` view; and `sync_trip_itinerary` in both
+directions, including a day edited by one caller and pulled down by another.
+`test/hosted_smoke_test.dart` is that path as a test. The same walk was made by
+the built iOS app on a simulator, which pushed its Drift plan up and pulled a
+remote edit back down.
+
+**What it still does not prove.** The environment in `tests/supabase_env.sql`
+is a reconstruction of the parts a migration sees, not a Supabase clone; it is
+still what the adversarial checks above run against, because a single anonymous
+account cannot pose as the eight adversaries they need. Nothing has exercised
+**more than one account at once** on the hosted project, so no RLS *refusal*
+has been observed there — only the permitted paths. GoTrue's real providers
+(identity linking, Apple's private relay), the edge functions, R2 and
+`pg_cron` were not exercised at all, and no photo has ever moved.
 
 ### A trap worth knowing before adding a test
 

@@ -18,11 +18,11 @@
 //
 // Two seams here are deliberately narrow, and both close in Phase 2:
 //
-//  - **The viewer is `localMemberId`.** No roster exists — no member table, no
-//    accounts — so "you" is the one id this phone credits its own photos to
-//    (`ping_schedule.dart`). Every gate answer in the app flows through
-//    [viewerProvider], so a real roster arrives by binding that to the signed-in
-//    member and nothing else in this file moves.
+//  - **The viewer is [localMemberIdProvider].** Every gate answer in the app
+//    flows through [viewerProvider], which reads it, so the signed-in account
+//    arrives by overriding that one provider in `bootstrap.dart` and nothing
+//    in this file moves. Until something signs in it is still the local
+//    stand-in this phone credits its own photos to (`ping_schedule.dart`).
 //  - **"Have I contributed" is read off the photos that are still there.** The
 //    server keeps the answer as its own fact, in `day_unlocks`, precisely
 //    because deleting your photo must not shut a day you had already opened
@@ -42,7 +42,9 @@ import 'trip_providers.dart';
 ///
 /// The roster's slot. See the file header — today this is the one id this
 /// phone credits its own photos to.
-final viewerProvider = Provider<MemberId>((ref) => MemberId(localMemberId));
+final viewerProvider = Provider<MemberId>(
+  (ref) => MemberId(ref.watch(localMemberIdProvider)),
+);
 
 /// Whether day [number] of the plan is open to the person holding this phone,
 /// and why.

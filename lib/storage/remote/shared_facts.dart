@@ -14,38 +14,63 @@
 // storing a shared fact is not computing on the server
 // (docs/decisions/2026-08-22-grill-round-one.md §2).
 //
-// **Nothing here holds a key.** [SharedFactsConfig] reads the project URL and
-// the publishable anon key out of `--dart-define`s, so neither is ever in the
-// repository, and both are absent by default — an app built without them has
-// no backend at all and behaves exactly as it did before this file existed.
+// **Nothing here holds a secret.** [SharedFactsConfig] still reads the project
+// URL and the publishable anon key out of `--dart-define`s; what changed on
+// 2026-08-26 is that the defines now *default* to the hosted project, so an
+// ordinary `flutter run` reaches it. The anon key is publishable by design —
+// it identifies the project and grants nothing on its own, because every
+// table in `supabase/migrations/` is behind row-level security keyed on
+// `auth.uid()` and a request without a session reaches zero rows. The
+// service-role key and the database password are a different kind of thing
+// and must never appear here, in a define, or anywhere else in this
+// repository.
 import 'package:cairn_model/cairn_model.dart';
 
 /// Where the backend is, if there is one.
 ///
-/// Supplied at build time:
+/// The defaults below are the hosted project, so an ordinary build reaches it
+/// with nothing passed. Point a build somewhere else — a branch project, a
+/// `supabase start` stack — by overriding either define:
 ///
 /// ```sh
 /// flutter run --dart-define=CAIRN_SUPABASE_URL=https://<ref>.supabase.co \
 ///             --dart-define=CAIRN_SUPABASE_ANON_KEY=<publishable key>
 /// ```
 ///
-/// The anon key is the *publishable* one — it is designed to ship inside a
-/// client and grants nothing on its own, because every table in
-/// `supabase/migrations/` is behind row-level security keyed on `auth.uid()`.
-/// The service-role key must never appear here, in a define, or anywhere else
-/// in this repository.
+/// Passing an empty URL is how a build asks for *no* backend at all, which is
+/// what the app did before the project existed: the sync reports itself
+/// dormant and the phone is entirely local. It is not how the test suite stays
+/// offline — `flutter test` passes no defines, so this is the hosted project
+/// there too, and what keeps it from reaching out is that every test binds
+/// [NoSession] (`bootstrap.dart`).
 class SharedFactsConfig {
   final String url;
   final String anonKey;
 
   const SharedFactsConfig({required this.url, required this.anonKey});
 
-  /// What the build was told. Both blank is the ordinary case today: no
-  /// Supabase project has been created (`supabase/README.md`).
+  /// The hosted project, unless the build said otherwise.
+  ///
+  /// Both values are public: the URL is a hostname and the key is the
+  /// *publishable* anon key, which is designed to ship inside a client. See
+  /// this file's header for why that is safe and what is not.
   static const fromEnvironment = SharedFactsConfig(
-    url: String.fromEnvironment('CAIRN_SUPABASE_URL'),
-    anonKey: String.fromEnvironment('CAIRN_SUPABASE_ANON_KEY'),
+    url: String.fromEnvironment('CAIRN_SUPABASE_URL', defaultValue: hostedUrl),
+    anonKey: String.fromEnvironment(
+      'CAIRN_SUPABASE_ANON_KEY',
+      defaultValue: hostedAnonKey,
+    ),
   );
+
+  /// The project `supabase/migrations/` has actually been applied to.
+  static const hostedUrl = 'https://nswcgzhynclrrunekskh.supabase.co';
+
+  /// Its publishable anon key. Not a secret; see the header.
+  static const hostedAnonKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
+      'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zd2Nnemh5bmNscnJ1bmVrc2toIiwicm9sZS'
+      'I6ImFub24iLCJpYXQiOjE3ODc2OTQyMzMsImV4cCI6MjEwMzI3MDIzM30.'
+      'VdEogHbh-HNzjcAwXXHuE0FBPh_f3fHJDNHHC-w_sS4';
 
   bool get isConfigured => url.isNotEmpty && anonKey.isNotEmpty;
 }
@@ -68,17 +93,22 @@ class SharedFactsSession {
 
 /// Where a session comes from.
 ///
-/// Deliberately an interface with no real implementation in this slice.
-/// Sign in with Apple is the first auth route and is not built
-/// (docs/architecture.md, "Platform edges"), so the app binds [NoSession] and
-/// every sync is dormant rather than pretending. This is the same shape the
-/// notification edge has: the machine above it is real and tested, and the
-/// last inch is honestly absent.
+/// Two implementations, and the difference between them is the whole of the
+/// app's auth story today. [NoSession] is what a test and a backend-less
+/// build get. `GotrueSessions` (`gotrue_sessions.dart`) is what a real build
+/// gets: an *anonymous* account, which is the dev and test stand-in for Sign
+/// in with Apple until Apple lands (docs/architecture.md, "Platform edges").
+///
+/// A source must answer null rather than throw when the phone simply cannot
+/// reach the server. The sync reads that as dormant and leaves the local copy
+/// alone, which is the offline story; an exception here would surface a
+/// network blip as a fault.
 abstract interface class SessionSource {
   Future<SharedFactsSession?> current();
 }
 
-/// Nobody is signed in, and nothing is pending. What the app binds today.
+/// Nobody is signed in, and nothing is pending. What a test binds, and what a
+/// build told `CAIRN_SUPABASE_URL=` (empty) gets.
 class NoSession implements SessionSource {
   const NoSession();
 

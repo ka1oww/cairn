@@ -52,10 +52,12 @@ import '../storage/remote/shared_facts.dart';
 /// Where a reconcile got to. Every value is an ordinary answer; none is an
 /// error a person should ever be shown.
 enum SyncStanding {
-  /// No backend is configured, or nobody is signed in. The app's whole life
-  /// so far (`supabase/README.md`: no project exists yet, and Sign in with
-  /// Apple is not built), and the reason this class is inert by default
-  /// rather than noisy.
+  /// No backend is configured, or nobody is signed in. An ordinary build is
+  /// neither — it points at the hosted project and signs in anonymously
+  /// (`supabase/README.md`) — so this is now the answer for a build told
+  /// `CAIRN_SUPABASE_URL=` and for every test, which binds `NoSession`. It is
+  /// still an ordinary answer rather than a fault: the local copy is
+  /// authoritative and nothing is shown.
   dormant,
 
   /// This phone has not started a trip, so there is nothing shared to be.
@@ -371,22 +373,21 @@ class TripSync {
   /// the whole of the second half of this task: a phone that joined a party
   /// of three must learn about the fourth without being handed anything.
   ///
-  /// **The gap sign-in must close, named where it is caused.** The party this
-  /// writes is the server's, and the server names people by their account id.
-  /// The app above does not: it still calls the person holding the phone
-  /// `localMemberId` — the literal string `me` — and asks the roster about
-  /// that id when it decides who may remove whom, who the ping schedule deals
-  /// to, and who the gate is answering for. Today nothing collides, because
-  /// [SessionSource] is bound to `NoSession` and this method never runs. The
-  /// first reconcile under a real session replaces the roster wholesale (see
-  /// the reason below), the `me` row goes with it, and every one of those
-  /// questions is then asked about somebody who is no longer a member.
+  /// **Why sign-in had to change who this phone is, in the same change.** The
+  /// party this writes is the server's, and the server names people by their
+  /// account id. The app above asks the roster about *its* id when it decides
+  /// who may remove whom, who the ping schedule deals to, and who the gate is
+  /// answering for — so a phone still calling itself `localMemberId` (the
+  /// literal string `me`) would have its row replaced wholesale by the first
+  /// reconcile (see the reason below) and would then be asking every one of
+  /// those questions about somebody who is no longer a member.
   ///
-  /// So it is one change and not two: whoever builds sign-in must make the
-  /// local member id the signed-in user's id *in the same change*, the way
-  /// `awaitingTripRow` is a gap this class names rather than papers over. A
-  /// mapping bolted on afterwards would be a second answer to "who am I",
-  /// which is the thing to refuse.
+  /// It was therefore one change and not two: `localMemberIdProvider`
+  /// (`lib/app_state/ping_schedule.dart`) is the signed-in account's id, bound
+  /// before the app is built. A mapping bolted on afterwards would be a second
+  /// answer to "who am I", which is still the thing to refuse. `me` survives
+  /// only as the offline stand-in, and a trip started under it can never
+  /// become a `trips` row.
   Future<void> _applyRoster(RemoteTrip shared, TripFact local) async {
     final dayDates = [
       for (final day in await database.readItineraryDays())
