@@ -125,6 +125,12 @@ weekday-without-date day this is the only structured record of what the
 plan called the day, and it lets the UI check the named weekday against
 whatever date the day would land on.
 
+A leading weekday may be followed by a comma, and the day and the month
+may come in either order after it: `Mon 3 Nov`, `Sat, Jun 14th`,
+`Sat Jun 14` and `Saturday, June 14 2027` all read as dated headers,
+with or without a `- Kyoto` place trailing a separator. That is
+the `ddd, MMM Do` family printed itineraries (Wanderlog among them) use.
+
 ### A date in a day's own title
 
 `Day 1 - Tokyo, 14 June` is a `Day N` header, and a `Day N` header takes
@@ -179,6 +185,15 @@ building UI on top of this package.
   that is only valid one way round (`25/12`) is read that way regardless
   of the setting — but deciding which dialect a genuinely ambiguous paste
   speaks is the user's call, made once for the whole paste.
+
+- **It cannot read a line that names two dates as a day.** A range like
+  `Sat, Jun 14th — Wed, Jun 18th` names no single day, so the weekday-comma
+  and weekday-then-month-day shapes refuse it rather than bind its first
+  date and keep the second as a place name; the line falls through as a
+  stop or an unplaced line the person still sees. The test is the shape of
+  the trailing text, so a real place whose name opens with a month-day run
+  (`… — May 1 Museum`) is refused the same way — mis-binding a spurious
+  day is the worse failure of the two.
 
 - **It cannot distinguish a genuine stop from chat banter that happens to
   contain a link.** In a WhatsApp-style paste, `check this out

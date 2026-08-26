@@ -66,6 +66,122 @@ void main() {
       expect(m.hasFullDate, isFalse);
     });
 
+    test('weekday + comma + day + month', () {
+      final m = tryParseDateHeader('Sat, 14 June')!;
+      expect(m.weekday, 6);
+      expect(m.day, 14);
+      expect(m.month, 6);
+    });
+
+    test('weekday + comma + day + month + year + trailing place', () {
+      final m = tryParseDateHeader('Sat, 14 June 2027 - Kyoto')!;
+      expect(m.weekday, 6);
+      expect(m.day, 14);
+      expect(m.month, 6);
+      expect(m.year, 2027);
+      expect(m.trailingText, 'Kyoto');
+    });
+
+    test('weekday + month + day, no comma', () {
+      final m = tryParseDateHeader('Sat Jun 14')!;
+      expect(m.weekday, 6);
+      expect(m.month, 6);
+      expect(m.day, 14);
+      expect(m.year, isNull);
+    });
+
+    test('full weekday + comma + full month + day', () {
+      final m = tryParseDateHeader('Saturday, June 14')!;
+      expect(m.weekday, 6);
+      expect(m.month, 6);
+      expect(m.day, 14);
+    });
+
+    test('Wanderlog ddd, MMM Do with ordinal suffix', () {
+      final m = tryParseDateHeader('Sat, Jun 14th')!;
+      expect(m.weekday, 6);
+      expect(m.month, 6);
+      expect(m.day, 14);
+    });
+
+    test('weekday + month + day + year + trailing place', () {
+      final m = tryParseDateHeader('Sat, Jun 14, 2027 — Tokyo')!;
+      expect(m.weekday, 6);
+      expect(m.month, 6);
+      expect(m.day, 14);
+      expect(m.year, 2027);
+      expect(m.trailingText, 'Tokyo');
+    });
+
+    test('a date range is refused rather than read as one dated day', () {
+      expect(tryParseDateHeader('Sat, Jun 14th — Wed, Jun 18th'), isNull);
+      expect(tryParseDateHeader('Sat, Jun 14th - Sun, Jun 15th'), isNull);
+    });
+
+    test('a day-first date range after a comma is refused too', () {
+      expect(tryParseDateHeader('Sat, 14 June — Wed, 18 June'), isNull);
+      expect(tryParseDateHeader('Sat, 14th Jun — Wed, 18th Jun'), isNull);
+    });
+
+    test('a range end reads the same in either date order', () {
+      expect(tryParseDateHeader('Sat, Jun 14th — Jun 18 Osaka'), isNull);
+      expect(tryParseDateHeader('Sat, Jun 14th — 18 June Osaka'), isNull);
+      expect(tryParseDateHeader('Sat, Jun 14th — May 1 Museum'), isNull);
+      expect(tryParseDateHeader('Sat, Jun 14th — 1 May Museum'), isNull);
+    });
+
+    test('a chain of three dates is refused as well', () {
+      expect(
+        tryParseDateHeader('Sat, Jun 14th — Wed, Jun 18th — Fri, Jun 20th'),
+        isNull,
+      );
+    });
+
+    test('a comma-less range still reads as it did before the widening', () {
+      final m = tryParseDateHeader('Sat 14 June - Wed 18 June')!;
+      expect(m.weekday, 6);
+      expect(m.day, 14);
+      expect(m.month, 6);
+      expect(m.trailingText, 'Wed 18 June');
+
+      final n = tryParseDateHeader('Mon 3 Nov - Fri 7 Nov')!;
+      expect(n.weekday, 1);
+      expect(n.day, 3);
+      expect(n.month, 11);
+      expect(n.trailingText, 'Fri 7 Nov');
+    });
+
+    test('a place after a comma-ed date is still a place', () {
+      final m = tryParseDateHeader('Sat, 14 June 2027 - Kyoto')!;
+      expect(m.weekday, 6);
+      expect(m.day, 14);
+      expect(m.month, 6);
+      expect(m.year, 2027);
+      expect(m.trailingText, 'Kyoto');
+    });
+
+    test('an ordinary trailing place is unaffected by the range refusal', () {
+      final m = tryParseDateHeader('Sat, Jun 14th — Tokyo')!;
+      expect(m.weekday, 6);
+      expect(m.month, 6);
+      expect(m.day, 14);
+      expect(m.trailingText, 'Tokyo');
+    });
+
+    test('month + day without a weekday still reads month-first', () {
+      final m = tryParseDateHeader('June 14, 2027')!;
+      expect(m.weekday, isNull);
+      expect(m.month, 6);
+      expect(m.day, 14);
+      expect(m.year, 2027);
+    });
+
+    test('a leading word that is neither weekday nor month does not match',
+        () {
+      expect(tryParseDateHeader('Foo Jun 14'), isNull);
+      expect(tryParseDateHeader('Foo, 14 June'), isNull);
+    });
+
     test('a plain stop line is not mistaken for a date header', () {
       expect(tryParseDateHeader('Lunch at Nishiki Market'), isNull);
       expect(tryParseDateHeader('10 Downing Street'), isNull);

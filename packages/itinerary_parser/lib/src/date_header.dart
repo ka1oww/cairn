@@ -87,7 +87,16 @@ const Map<String, int> _weekdays = {
 };
 
 final RegExp _weekdayDayMonth = RegExp(
-  r'^([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?(?:\s+(\d{4}))?\s*(?:[-:–—]\s*(.+))?$',
+  r'^([A-Za-z]+)\.?(,)?\s+(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?(?:\s+(\d{4}))?\s*(?:[-:–—]\s*(.+))?$',
+  caseSensitive: false,
+);
+
+// Weekday-then-month-day order (`Sat Jun 14`, `Saturday, June 14th`), the
+// `ddd, MMM Do` family US-style plans and Wanderlog prints use. Kept apart
+// from [_weekdayDayMonth] rather than folded into one alternation so each
+// shape's groups stay named by position.
+final RegExp _weekdayMonthDay = RegExp(
+  r'^([A-Za-z]+)\.?,?\s+([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\s*(?:[-:–—]\s*(.+))?$',
   caseSensitive: false,
 );
 
@@ -128,6 +137,46 @@ int _fullYear(int y) {
   return y >= 70 ? 1900 + y : 2000 + y;
 }
 
+// The far end of a range: a day and a named month in either order, with an
+// optional weekday word ahead of them. Anchored at the start of the trailing
+// text and deliberately a shape test rather than a second pass of the whole
+// matcher, so a chain of three dates is refused exactly as a pair is. Both
+// alignments are tried on their own, never through one greedy leading group,
+// so `Jun 18 Osaka` and `18 June Osaka` get the same answer.
+final RegExp _monthDayRun = RegExp(
+  r'^([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b',
+  caseSensitive: false,
+);
+
+final RegExp _dayMonthRun = RegExp(
+  r'^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?\b',
+  caseSensitive: false,
+);
+
+final RegExp _weekdayLead = RegExp(
+  r'^([A-Za-z]+)\.?,?\s+',
+  caseSensitive: false,
+);
+
+bool _opensWithDayAndMonth(String text) {
+  final monthFirst = _monthDayRun.firstMatch(text);
+  if (monthFirst != null && _month(monthFirst.group(1)!) != null) return true;
+  final dayFirst = _dayMonthRun.firstMatch(text);
+  return dayFirst != null && _month(dayFirst.group(2)!) != null;
+}
+
+/// True when [text] opens with a date run rather than a place name, i.e. it
+/// is the far end of a range like `Sat, Jun 14th - Wed, Jun 18th`. A line
+/// naming two dates names no single day, so the weekday-comma and
+/// weekday-then-month-day shapes decline it and it stays an ordinary line.
+bool _beginsWithDateRun(String? text) {
+  if (text == null) return false;
+  if (_opensWithDayAndMonth(text)) return true;
+  final lead = _weekdayLead.firstMatch(text);
+  if (lead == null || _weekday(lead.group(1)!) == null) return false;
+  return _opensWithDayAndMonth(text.substring(lead.end));
+}
+
 /// Tries each recognized date-header shape against [line] (already
 /// trimmed, and already known not to be a `Day N` header or a bulleted
 /// stop). Returns null if none match.
@@ -144,14 +193,34 @@ DateHeaderMatch? tryParseDateHeader(
   var m = _weekdayDayMonth.firstMatch(line);
   if (m != null) {
     final weekday = _weekday(m.group(1)!);
-    final month = _month(m.group(3)!);
-    if (weekday != null && month != null) {
+    final month = _month(m.group(4)!);
+    final trailing = _cleanTrailing(m.group(6));
+    final afterAComma = m.group(2) != null;
+    if (weekday != null &&
+        month != null &&
+        !(afterAComma && _beginsWithDateRun(trailing))) {
       return DateHeaderMatch(
         weekday: weekday,
-        day: int.parse(m.group(2)!),
+        day: int.parse(m.group(3)!),
         month: month,
+        year: m.group(5) != null ? int.parse(m.group(5)!) : null,
+        trailingText: trailing,
+      );
+    }
+  }
+
+  m = _weekdayMonthDay.firstMatch(line);
+  if (m != null) {
+    final weekday = _weekday(m.group(1)!);
+    final month = _month(m.group(2)!);
+    final trailing = _cleanTrailing(m.group(5));
+    if (weekday != null && month != null && !_beginsWithDateRun(trailing)) {
+      return DateHeaderMatch(
+        weekday: weekday,
+        month: month,
+        day: int.parse(m.group(3)!),
         year: m.group(4) != null ? int.parse(m.group(4)!) : null,
-        trailingText: _cleanTrailing(m.group(5)),
+        trailingText: trailing,
       );
     }
   }

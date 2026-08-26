@@ -1,0 +1,248 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Arrive at Haneda Airport",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "Arrive at Haneda Airport"
+          }
+        },
+        {
+          "text": "9:30 AM Pick up Suica cards at the airport counter",
+          "time": {
+            "hour": 9,
+            "minute": 30
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "9:30 AM Pick up Suica cards at the airport counter"
+          }
+        },
+        {
+          "text": "TeamLab Planets",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "TeamLab Planets"
+          }
+        },
+        {
+          "text": "Dinner at Uobei Shibuya Dogenzaka",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 5,
+            "text": "Dinner at Uobei Shibuya Dogenzaka"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "date-without-year",
+      "headerWeekday": 6,
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "Sat, Jun 14th"
+      },
+      "dateCandidate": null
+    },
+    {
+      "index": 2,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Morning walk around the Imperial Palace",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 8,
+            "text": "Morning walk around the Imperial Palace"
+          }
+        },
+        {
+          "text": "11:00 AM Senso-ji Temple",
+          "time": {
+            "hour": 11,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 9,
+            "text": "11:00 AM Senso-ji Temple"
+          }
+        },
+        {
+          "text": "Lunch at Asakusa Imahan",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 10,
+            "text": "Lunch at Asakusa Imahan"
+          }
+        },
+        {
+          "text": "10 min · 3.7 mi",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 11,
+            "text": "10 min · 3.7 mi"
+          }
+        },
+        {
+          "text": "Ueno Park and the National Museum",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 12,
+            "text": "Ueno Park and the National Museum"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "date-without-year",
+      "headerWeekday": 7,
+      "headerSourceLine": {
+        "lineNumber": 7,
+        "text": "Sunday, Jun 15th"
+      },
+      "dateCandidate": null
+    },
+    {
+      "index": 3,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Day trip to Kamakura",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 15,
+            "text": "Day trip to Kamakura"
+          }
+        },
+        {
+          "text": "Tsurugaoka Hachimangu and Komachi-dori",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 16,
+            "text": "Tsurugaoka Hachimangu and Komachi-dori"
+          }
+        },
+        {
+          "text": "1:30 PM Great Buddha of Kamakura",
+          "time": {
+            "hour": 13,
+            "minute": 30
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 17,
+            "text": "1:30 PM Great Buddha of Kamakura"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "date-without-year",
+      "headerWeekday": 1,
+      "headerSourceLine": {
+        "lineNumber": 14,
+        "text": "Mon, June 16th"
+      },
+      "dateCandidate": null
+    },
+    {
+      "index": 4,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Fujiko F. Fujio Museum with the kids",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 20,
+            "text": "Fujiko F. Fujio Museum with the kids"
+          }
+        },
+        {
+          "text": "Dinner at Omoide Yokocho",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 21,
+            "text": "Dinner at Omoide Yokocho"
+          }
+        },
+        {
+          "text": "4:00 PM Shinjuku Gyoen",
+          "time": {
+            "hour": 16,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 22,
+            "text": "4:00 PM Shinjuku Gyoen"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "date-without-year",
+      "headerWeekday": 2,
+      "headerSourceLine": {
+        "lineNumber": 19,
+        "text": "Tuesday, June 17"
+      },
+      "dateCandidate": null
+    },
+    {
+      "index": 5,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Last-minute shopping at Tokyo Station Character Street",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 25,
+            "text": "Last-minute shopping at Tokyo Station Character Street"
+          }
+        },
+        {
+          "text": "Head home from Haneda",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 26,
+            "text": "Head home from Haneda"
+          }
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "date-without-year",
+      "headerWeekday": 3,
+      "headerSourceLine": {
+        "lineNumber": 24,
+        "text": "Wed Jun 18"
+      },
+      "dateCandidate": null
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "medium",
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
+}
