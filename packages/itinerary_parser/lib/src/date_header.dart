@@ -167,8 +167,8 @@ bool _opensWithDayAndMonth(String text) {
 
 /// True when [text] opens with a date run rather than a place name, i.e. it
 /// is the far end of a range like `Sat, Jun 14th - Wed, Jun 18th`. A line
-/// naming two dates names no single day, so the shapes this slice widened
-/// decline it and it stays an ordinary line.
+/// naming two dates names no single day, so the weekday-comma and
+/// weekday-then-month-day shapes decline it and it stays an ordinary line.
 bool _beginsWithDateRun(String? text) {
   if (text == null) return false;
   if (_opensWithDayAndMonth(text)) return true;

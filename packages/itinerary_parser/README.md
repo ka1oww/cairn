@@ -125,6 +125,12 @@ weekday-without-date day this is the only structured record of what the
 plan called the day, and it lets the UI check the named weekday against
 whatever date the day would land on.
 
+A leading weekday may be followed by a comma, and the day and the month
+may come in either order after it: `Mon 3 Nov`, `Sat, Jun 14th`,
+`Sat Jun 14` and `Saturday, June 14 2027` all read as dated headers,
+with or without a `- Kyoto` place trailing a separator. That is
+the `ddd, MMM Do` family printed itineraries (Wanderlog among them) use.
+
 ### A date in a day's own title
 
 `Day 1 - Tokyo, 14 June` is a `Day N` header, and a `Day N` header takes
