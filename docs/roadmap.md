@@ -262,8 +262,8 @@ multi-person. They cannot be honestly built or judged with one device. This is
 also the first phase that costs anything to keep alive, so it should not start
 before Phase 1 proves the thing is worth keeping alive.
 
-*Needs from you: a Supabase account and a Cloudflare account. Keys live in a
-local file that is never committed.*
+*Needs from you: a Cloudflare account — the Supabase one exists and its
+project is live. No secret is ever committed (`supabase/README.md`).*
 
 ### Phase 3 — the trip surfaces
 
@@ -326,8 +326,10 @@ to fill.
 Nothing here can be delegated, and several of these block a whole phase.
 
 - **Xcode**, and accepting its licence. Blocks Phase 1.
-- **The Supabase and Cloudflare accounts.** Blocks Phase 2. Keys never enter this
-  repository, a pull request, or an agent's hands.
+- **The Cloudflare account.** Blocks Phase 2; the Supabase one is done and its
+  project is live. No secret — the service-role key, the database password —
+  ever enters this repository, a pull request, or an agent's hands
+  (`supabase/README.md` is the authority on which key is which).
 - **Paying Apple** at the weekend test, **and Google** at Android delivery.
 - **Sending design prompts to Claude Design**, and returning the handoffs.
 - **Showing the app to any of the eight.** Nothing has been shown yet, and a
