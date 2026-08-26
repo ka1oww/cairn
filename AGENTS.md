@@ -135,16 +135,23 @@ import what is written there, not here.
   repasted day with a **different** current day: drop the first of three
   undated days from the re-paste text and `repasted[0]` pairs with
   `current[0]`, so day 1 keeps its number and so its photographs while its
-  content becomes what was day 2's. Two more known gaps, both deferred. A
-  displaced line's time — `itinerary_set_asides` has no time column, so a
+  content becomes what was day 2's. **A day the re-paste *adds* keeps the
+  parser's doubt, and a day the plan already held keeps none** — `MergedDay`
+  carries `confidence`, `uncertainty` and `headerWeekday` off the parse for
+  `MergedDayOrigin.appendedNew` alone, so `Sat - Nara` is asked about exactly
+  as it would be on a first paste instead of rendering clean and saving with
+  its date silently open, while a day the person already answered for is not
+  nagged again. That asymmetry is the rule, not an oversight; making it
+  uniform in either direction is the thing to refuse in review. It is keyed on
+  origin, though, and not on whether the content is new, so the position-pairing
+  gap just named is also the path where genuinely new content still arrives
+  without doubt: insert an undated `Sat - Nara` block above an existing undated
+  day and it pairs by position, rides in clean, and saves with its date open
+  unasked. Two known
+  gaps remain, both deferred. A displaced line's time — `itinerary_set_asides` has no time column, so a
   set-aside stop's star survives only until Save, and dragging it back after a
   reopen restores it unstarred; closing that needs a schema change. And a
-  `MergedDayOrigin.appendedNew` day drops the parse's `uncertainty` and
-  `headerWeekday`, so a re-paste that appends `Sat - Nara` renders as a
-  confident read, saves with its date silently open and is never asked about;
-  closing that needs `MergedDay` to expose both for appended days, which is a
-  change to the shared merge module and is filed as a separate follow-up. A
-  third gap sits in `lib/logic/plan_text.dart`: a stop's time is written back
+  second sits in `lib/logic/plan_text.dart`: a stop's time is written back
   into the rendered line when the words contradict it, but a time the person
   *cleared* cannot be — `10:00 Coffee` with its time taken off still says
   10:00, so the re-read stars it again. Closing that needs the renderer to

@@ -1049,14 +1049,20 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// answer into the draft and carries the tray across, so swapping the
   /// module underneath is a file replacement.
   ///
-  /// One piece of the parse has to survive the merge: **the date a repasted
-  /// day's own title only named.** The merge hands it back on the merged day
-  /// itself ([merge.MergedDay.dateCandidate]) rather than binding it — a day
-  /// the re-paste added whose title says `Nara, 17 June` has a date to offer,
-  /// and dropping the candidate would draw the new day clean and save it with
-  /// its date silently open. It is read off the merged day and never off
-  /// `result.days` by index: the merge returns the current plan's days first
-  /// and the appended ones after, so the two lists do not line up.
+  /// The parse's doubt has to survive the merge, for the days that never had
+  /// it answered. A day the re-paste **adds** is an unconfirmed read: its
+  /// title-named date ([merge.MergedDay.dateCandidate]), and equally the
+  /// parser's [merge.MergedDay.confidence], [merge.MergedDay.uncertainty] and
+  /// [merge.MergedDay.headerWeekday], all ride across so the phone asks about
+  /// it exactly as it would on a first paste — dropping them draws `Nara, 17
+  /// June` or `Sat - Nara` as a clean day and saves it with its date silently
+  /// open. A day the plan already held carries none of it, because the person
+  /// answered for that day before it was accepted; the merge is what draws
+  /// that line.
+  ///
+  /// All four are read off the merged day and never off `result.days` by
+  /// index: the merge returns the current plan's days first and the appended
+  /// ones after, so the two lists do not line up.
   void _mergeReparse() {
     final baseline = _mergeBaseline;
     if (baseline == null) return;
@@ -1071,10 +1077,16 @@ class PasteFlow extends Notifier<PasteFlowState> {
             place: day.place,
             date: _asDateTime(day.date),
             candidate: day.dateCandidate,
-            // A merged day carries no other parser doubt: what the plan
-            // already held was answered before it was accepted, and the merge
-            // does not carry the rest of the parse's misgivings across.
-            confidence: ip.Confidence.high,
+            // The parser's verdict, as the merge reports it per day: real for
+            // a day the re-paste *added* (nobody has confirmed it, so `Sat -
+            // Nara` must be asked about rather than drawn clean and saved
+            // date-open), and high-with-no-doubt for a day the plan already
+            // held, which was answered before it was ever accepted. The merge
+            // decides which is which — `merge.MergedDay.confidence` carries
+            // the reasoning — and nothing here re-decides it.
+            confidence: day.confidence,
+            uncertainty: day.uncertainty,
+            headerWeekday: day.headerWeekday,
             stops: [
               for (final stop in day.stops)
                 _DraftStop(

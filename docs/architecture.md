@@ -252,7 +252,16 @@ repasted day with a different current day, so a day can keep its photographs
 while its content changes underneath them — drop the first of three undated
 days from the re-paste text and day 1 keeps its number and its photographs but
 takes what was day 2's content. That gap is known and deferred; `AGENTS.md`
-lists it beside the other two.
+lists it beside the other two. What a day the re-paste *adds* keeps is settled
+the other way: an appended day is an unconfirmed read, so it carries the
+parser's confidence, uncertainty and named weekday across the merge and the
+screen asks about it exactly as it would on a first paste — `Sat - Nara` is a
+question, not a clean day saved with its date silently open. A day the plan
+already held carries none of that, because the person answered for it before
+it was accepted. That is keyed on where a day came from and not on whether its
+content is new, so the position-pairing gap above is also the path where a
+genuinely new undated day still rides in clean: inserted above an existing
+undated day it pairs by position, and the screen asks nothing.
 
 **Capture is a route, not a destination** (`lib/screens/capture_screen.dart`).
 It is reached from the day's one call to action and nothing else: the day page

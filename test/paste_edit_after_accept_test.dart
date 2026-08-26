@@ -431,6 +431,65 @@ void main() {
     expect(after[3], '4|2027-06-17|Nara|Todai-ji');
   });
 
+  testWidgets('a day the re-paste adds on a weekday alone is asked about, not '
+      'drawn clean', (tester) async {
+    // The other half of the same promise as the test above, and the one the
+    // merge used to break: a day the re-paste adds carries the parser's
+    // *doubt*, not just its title-named date. `Sat - Nara` names a weekday and
+    // no date; a merge that dropped the uncertainty drew day 4 as a confident
+    // read with no ask on it, and Save wrote it with its date silently open.
+    await launch(tester);
+    await accept(tester);
+    await openEditor(tester);
+    await tester.tap(find.byKey(const Key('repaste-plan')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('paste-input')),
+      '${pasteBoxText(tester)}\nSat - Nara\n- Todai-ji',
+    );
+    await tester.tap(find.byKey(const Key('read-button')));
+    await tester.pumpAndSettle();
+
+    // The ask is the same one a first paste gets, cause and all: the title is
+    // quoted because it is only what the plan *called* the day, the date reads
+    // open, and where day 4 sits it would be the 17th — a Thursday, not the
+    // named Saturday.
+    expect(find.text('"Saturday" · Nara'), findsOneWidget);
+    expect(find.text('date open'), findsOneWidget);
+    expect(
+      find.textContaining('The plan calls this one Saturday'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining("it'd be the 17th — a Thursday"),
+      findsOneWidget,
+    );
+    // The three days the plan already held were answered before it was ever
+    // accepted; the merge does not re-open them.
+    expect(find.textContaining('The plan calls this one Monday'), findsNothing);
+
+    // Both answers are offered — where it sits, or the nearest real Saturday.
+    expect(find.text("It's the 17th"), findsOneWidget);
+    await tester.tap(find.text('Move it to Sat the 19th'));
+    await tester.pumpAndSettle();
+
+    // Answered: the doubt is gone and the day wears its real weekday.
+    expect(find.text('date open'), findsNothing);
+    expect(find.text('Saturday · Nara'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('accept-button')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    final after = await storedPlan();
+    expect(after.length, 4);
+    expect(after[3], '4|2027-06-19|Nara|Todai-ji');
+    // Nothing the trip already held moved.
+    expect(after[0], '1|2027-06-14|Tokyo|Senso-ji,Ueno Park');
+  });
+
   testWidgets('"Back to the text" gives the text back, and still merges', (
     tester,
   ) async {

@@ -60,14 +60,11 @@ enum MergedDayOrigin {
   /// A repasted day no current day claimed; appended after the existing ones
   /// (rule 4).
   ///
-  /// **A known, deferred gap lives here.** [MergedDay] carries no
-  /// `uncertainty` and no `headerWeekday`, so an appended day — content
-  /// nobody has confirmed — arrives at the confirm screen stripped of the
-  /// doubt the parser had about it: a re-paste that appends `Sat - Nara`
-  /// renders as a confident read, is saved with its date silently open and is
-  /// never asked about. Closing it needs [MergedDay] to expose both for
-  /// appended days, which is a change to this shared module and is filed as a
-  /// separate follow-up task rather than done here.
+  /// An appended day is content **nobody has confirmed**, so it arrives
+  /// carrying the parser's own verdict on it — [MergedDay.confidence],
+  /// [MergedDay.uncertainty] and [MergedDay.headerWeekday] — and the screen
+  /// asks about it exactly as it asks about a first paste. That asymmetry is
+  /// the rule, not an oversight: see [MergedDay.uncertainty].
   appendedNew,
 }
 
@@ -96,11 +93,52 @@ class MergedDay {
   /// not binding it.
   final ip.DateCandidate? dateCandidate;
 
+  /// How sure the parser was about this day, and why it was unsure — carried
+  /// straight off [ip.ParsedDay] for a [MergedDayOrigin.appendedNew] day, and
+  /// [ip.Confidence.high] with no [uncertainty] for every other day.
+  ///
+  /// **The asymmetry is the point.** A day the current plan already held was
+  /// read, asked about and accepted before it was ever saved — re-asking
+  /// would nag about a question the person has answered, and "leave the date
+  /// open" is one of the answers. A day the re-paste *adds* has been through
+  /// none of that: it is a fresh read, and the parser's doubt about it is the
+  /// only thing standing between `Sat - Nara` and a day saved with its date
+  /// silently open. So an appended day keeps [confidence], [uncertainty] and
+  /// [headerWeekday]; a matched or kept one reports none.
+  ///
+  /// The rule is keyed on [origin], not on whether the day's content is new,
+  /// and that is the limit of it. Because the position pass pairs an undated
+  /// repasted day with an undated current day by *position*, a genuinely new
+  /// undated block inserted above an existing undated day arrives as
+  /// [MergedDayOrigin.mergedByPosition] and so carries no doubt: it saves with
+  /// its date open and is never asked about. That is the same position-pairing
+  /// gap this module already documents — the one that lets a day keep its
+  /// number and its photographs while its content becomes another day's — and
+  /// not a second one. It is deferred with it rather than closed here.
+  ///
+  /// The merge itself never invents any of the three and never resolves them:
+  /// working out which Saturday, like working out a year, is the screen's ask.
+  final ip.Confidence confidence;
+
+  /// Why [confidence] is below [ip.Confidence.high] — null exactly when it
+  /// isn't. See [confidence] for which days carry it.
+  final ip.DayUncertainty? uncertainty;
+
+  /// The ISO weekday this day's header *named* without pinning a date
+  /// (`Sat - Nara` → 6), for a [MergedDayOrigin.appendedNew] day. Null
+  /// otherwise. It is what lets the screen check a named weekday against the
+  /// date the day would land on, and it is quoted in the day's title until
+  /// one is bound.
+  final int? headerWeekday;
+
   const MergedDay({
     required this.day,
     required this.origin,
     required this.unchanged,
     this.dateCandidate,
+    this.confidence = ip.Confidence.high,
+    this.uncertainty,
+    this.headerWeekday,
   });
 
   int get number => day.number;
@@ -174,7 +212,11 @@ class RepasteMergeResult {
 /// Appended days take their date only when the parser itself bound one; a
 /// title-carried candidate stays a candidate, carried on the [MergedDay] for
 /// the screen to ask about, because the app offers dates and never assumes
-/// them.
+/// them. An appended day also carries the rest of the parser's verdict on it
+/// — [MergedDay.confidence], [MergedDay.uncertainty] and
+/// [MergedDay.headerWeekday] — because nobody has confirmed it yet; a matched
+/// or kept day carries none, because the person answered for it before the
+/// plan was saved. [MergedDay.confidence] holds the whole reasoning.
 RepasteMergeResult mergeRepaste({
   required List<ConfirmedDay> current,
   required List<ip.ParsedDay> repasted,
@@ -266,6 +308,12 @@ RepasteMergeResult mergeRepaste({
         origin: MergedDayOrigin.appendedNew,
         unchanged: false,
         dateCandidate: parsed.dateCandidate,
+        // An appended day is an unconfirmed read: the parser's verdict rides
+        // with it so the screen can ask, exactly as it asks about a first
+        // paste. See [MergedDay.confidence] for why matched days do not.
+        confidence: parsed.confidence,
+        uncertainty: parsed.uncertainty,
+        headerWeekday: parsed.headerWeekday,
       ),
     );
   }
