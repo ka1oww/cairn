@@ -103,7 +103,26 @@ final savedItineraryProvider = StreamProvider<TripPlan?>(
 class TripPlan {
   final List<PlanDay> days;
 
-  const TripPlan({required this.days});
+  /// The lines the plan carries but no day does: what the parser could not
+  /// place, and what the person took out of a day themselves. Kept with the
+  /// plan because nothing pasted is ever deleted, and read back by the
+  /// whole-plan editor so re-opening it shows the tray as it was left.
+  final List<PlanKeptLine> keptAside;
+
+  const TripPlan({required this.days, this.keptAside = const []});
+}
+
+/// One line of the plan's set-aside tray, in screen terms.
+class PlanKeptLine {
+  final int sourceLineNumber;
+  final String text;
+  final String explanation;
+
+  const PlanKeptLine({
+    required this.sourceLineNumber,
+    required this.text,
+    required this.explanation,
+  });
 }
 
 class PlanDay {
@@ -140,6 +159,14 @@ class PlanStop {
 TripPlan? _toPlan(ConfirmedItinerary? itinerary) {
   if (itinerary == null) return null;
   return TripPlan(
+    keptAside: [
+      for (final line in itinerary.keptAside)
+        PlanKeptLine(
+          sourceLineNumber: line.sourceLineNumber,
+          text: line.text,
+          explanation: line.explanation,
+        ),
+    ],
     days: [
       for (final day in itinerary.days)
         PlanDay(

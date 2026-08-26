@@ -13,19 +13,21 @@ import 'trip_shell.dart';
 /// Because this watches a stream, accepting a confirmation lands here on its
 /// own — no navigation call carries the person across.
 ///
-/// `repasteRequestedProvider` is the temporary exception, and the only route
-/// back to the paste box once a plan is saved. It now hangs off the Trail's
-/// title (`trip_shell.dart`), where trip-level actions belong.
+/// `planEditorProvider` is the one exception: the whole-plan editor is the
+/// same flow drawn over a trip that is already running, reached from the trip
+/// sheet (`trip_sheet.dart`). It is not a route back to a blank paste box —
+/// there is no such route any more, deliberately — and closing it leaves the
+/// trip exactly as it was.
 class RootScreen extends ConsumerWidget {
   const RootScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final saved = ref.watch(savedItineraryProvider);
-    final repasting = ref.watch(repasteRequestedProvider);
+    final editingPlan = ref.watch(planEditorProvider);
     return switch (saved) {
       AsyncData(value: null) => const _PasteFlow(),
-      AsyncData() when repasting => const _PasteFlow(),
+      AsyncData() when editingPlan => const _PasteFlow(),
       AsyncData() => const TripShell(),
       AsyncError(:final error) => Scaffold(
         body: Center(child: Text('Failed to read: $error')),
@@ -44,7 +46,10 @@ class _PasteFlow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(pasteFlowProvider);
     return switch (state) {
-      PasteEditing(:final initialText) => PasteScreen(initialText: initialText),
+      PasteEditing(:final initialText, :final repastingLivePlan) => PasteScreen(
+        initialText: initialText,
+        repastingLivePlan: repastingLivePlan,
+      ),
       PasteReview(:final review) => ConfirmScreen(review: review),
     };
   }

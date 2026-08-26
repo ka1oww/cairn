@@ -59,6 +59,15 @@ enum MergedDayOrigin {
 
   /// A repasted day no current day claimed; appended after the existing ones
   /// (rule 4).
+  ///
+  /// **A known, deferred gap lives here.** [MergedDay] carries no
+  /// `uncertainty` and no `headerWeekday`, so an appended day — content
+  /// nobody has confirmed — arrives at the confirm screen stripped of the
+  /// doubt the parser had about it: a re-paste that appends `Sat - Nara`
+  /// renders as a confident read, is saved with its date silently open and is
+  /// never asked about. Closing it needs [MergedDay] to expose both for
+  /// appended days, which is a change to this shared module and is filed as a
+  /// separate follow-up task rather than done here.
   appendedNew,
 }
 
@@ -112,6 +121,13 @@ class SetAsideItem {
   final int fromDayNumber;
 
   /// The displaced stop, as it stood in the current plan.
+  ///
+  /// Its time rides along here, but only as far as the next save:
+  /// `itinerary_set_asides` has no time column, so `PasteFlow.accept` writes
+  /// the line's text and reason and drops its time, and dragging it back after
+  /// a reopen restores it unstarred. Pre-existing — a stop the person removed
+  /// by hand loses its time the same way — and closing it needs a schema
+  /// change.
   final Stop stop;
 
   /// The person-showable reason ([displacedByRepasteExplanation]).

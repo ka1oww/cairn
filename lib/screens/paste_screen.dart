@@ -56,11 +56,23 @@ Night bus to the airport''';
 /// soft pills under it. Everything interesting still happens on the screen
 /// after it.
 class PasteScreen extends ConsumerStatefulWidget {
-  const PasteScreen({super.key, this.initialText = ''});
+  const PasteScreen({
+    super.key,
+    this.initialText = '',
+    this.repastingLivePlan = false,
+  });
 
-  /// Refilled when the person comes back via "Paste something else" — the
-  /// paste is kept, never thrown away.
+  /// Refilled when the person comes back via "Back to the paste" — the paste
+  /// is kept, never thrown away — and pre-filled with a running trip's own
+  /// plan, said back as text, on a re-paste.
   final String initialText;
+
+  /// True when this box was opened over a running trip. Reading it merges
+  /// into that trip rather than replacing it, so the screen says so and
+  /// swaps the first-timer's doors for the way back to the editor: an
+  /// example plan or a blank hand-built day would both be answers to a
+  /// question nobody asked here.
+  final bool repastingLivePlan;
 
   @override
   ConsumerState<PasteScreen> createState() => _PasteScreenState();
@@ -100,6 +112,7 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final repasting = widget.repastingLivePlan;
     return Scaffold(
       backgroundColor: _paper,
       body: SafeArea(
@@ -109,7 +122,8 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Drop your itinerary here.',
+                repasting ? 'Your plan, as text.' : 'Drop your itinerary here.',
+                key: const Key('paste-headline'),
                 style: _serif.copyWith(
                   fontSize: 28,
                   height: 1.2,
@@ -119,7 +133,11 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                "We'll split it into days for you.",
+                repasting
+                    ? 'Edit it and read it again. What you change is merged '
+                          'into the trip — nothing is thrown away.'
+                    : "We'll split it into days for you.",
+                key: const Key('paste-subhead'),
                 style: _serif.copyWith(fontSize: 15, color: _muted),
               ),
               const SizedBox(height: 16),
@@ -170,32 +188,46 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                child: const Text('Read my plan'),
+                child: Text(repasting ? 'Read it again' : 'Read my plan'),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SoftPill(
-                      key: const Key('try-example'),
-                      label: 'Try an example',
-                      onPressed: _fillExample,
+              if (repasting)
+                TextButton(
+                  key: const Key('cancel-repaste'),
+                  onPressed: () =>
+                      ref.read(pasteFlowProvider.notifier).cancelRepaste(),
+                  style: TextButton.styleFrom(foregroundColor: _muted),
+                  child: const Text('Back to the editor'),
+                )
+              else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SoftPill(
+                        key: const Key('try-example'),
+                        label: 'Try an example',
+                        onPressed: _fillExample,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _SoftPill(
-                      key: const Key('build-by-hand'),
-                      label: 'Build it by hand',
-                      onPressed: _buildByHand,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _SoftPill(
+                        key: const Key('build-by-hand'),
+                        label: 'Build it by hand',
+                        onPressed: _buildByHand,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
               // The second of design surface 6a's two doors. Most people
               // arrive here holding a code somebody told them rather than a
               // plan to paste, so the other door is on this screen and not
               // buried — bare, until the first-launch screen itself exists.
+              // It stays on the re-paste too: unlike the two pills above, it
+              // neither clobbers the pre-filled plan nor reads it, it only
+              // opens a route, and it is the app's only way to the second
+              // door once a trip is running.
               TextButton(
                 key: const Key('join-door'),
                 onPressed: () => Navigator.of(context).push(

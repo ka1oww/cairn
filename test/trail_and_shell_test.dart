@@ -362,19 +362,26 @@ void main() {
     expect(find.byType(NavigationDestination), findsNWidgets(3));
   });
 
-  testWidgets('the temporary way back hangs off the trip, not off a day', (
+  testWidgets('the way back to the plan hangs off the trip, not off a day', (
     tester,
   ) async {
     await arriveOnTrail(tester, today: day(15));
 
     await tester.tap(find.byKey(const Key('trip-sheet-open')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('start-over')));
+
+    // The destructive hatch is gone: the sheet's plan entries edit the trip,
+    // they never offer to replace it. See paste_edit_after_accept_test.dart
+    // for what each of them does.
+    expect(find.byKey(const Key('start-over')), findsNothing);
+    expect(find.byKey(const Key('trip-edit-plan')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('trip-repaste')));
     await tester.pumpAndSettle();
 
     final input = tester.widget<TextField>(
       find.byKey(const Key('paste-input')),
     );
-    expect(input.controller!.text, '');
+    expect(input.controller!.text, isNot(''));
   });
 }

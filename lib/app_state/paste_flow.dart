@@ -27,6 +27,8 @@ import 'package:cairn_model/cairn_model.dart' as model;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
+import '../logic/plan_text.dart';
+import '../logic/repaste_merge.dart' as merge;
 import '../repositories/trip_repository.dart';
 import 'date_labels.dart';
 import 'day_view.dart';
@@ -40,6 +42,24 @@ import 'trip_providers.dart';
 const removedByYouExplanation =
     'Removed by you — kept here, not deleted. Drag it back into a day to '
     'put it back.';
+
+/// The set-aside reasons that came from the person rather than from the
+/// parser: they took the stop out of a day themselves, or their own re-paste
+/// displaced it. Written once, because both the accepted plan being read back
+/// ([PasteFlow.editLivePlan]) and the merge itself have to agree on it —
+/// string comparisons in two places drift apart the moment a third reason is
+/// written. Every reason the merge can file a line under belongs here.
+const _personOriginatedAsideExplanations = <String>{
+  removedByYouExplanation,
+  merge.displacedByRepasteExplanation,
+};
+
+/// Whether a set-aside line got there by the person's own hand. Drives the
+/// tray's title — "set aside" for these, "couldn't place" for the parser's
+/// own unplaced lines — and survives a save and a reopen because it is
+/// derived from the reason that was persisted with the line.
+bool setAsideCameFromThePerson(String explanation) =>
+    _personOriginatedAsideExplanations.contains(explanation);
 
 // ---------------------------------------------------------------------------
 // View models — everything a screen may see, spoken in screen terms.
@@ -272,6 +292,12 @@ class ItineraryReview {
   /// for anything that cannot fire.
   final String? refusal;
 
+  /// True when this editor is open over a trip that is already running,
+  /// rather than over a plan on its way in for the first time. The screen
+  /// says "Save changes" instead of "Looks right", offers a cancel that
+  /// leaves the live trip untouched, and offers the re-paste.
+  final bool editingLivePlan;
+
   const ItineraryReview({
     required this.days,
     required this.keptAside,
@@ -280,6 +306,7 @@ class ItineraryReview {
     required this.nothingRead,
     required this.keptLines,
     this.refusal,
+    this.editingLivePlan = false,
   });
 
   /// Whether "Looks right" is offered at all.
@@ -302,11 +329,18 @@ sealed class PasteFlowState {
 
 /// The paste screen: a text area and a parse action, nothing clever.
 class PasteEditing extends PasteFlowState {
-  /// Refilled when the person comes back via "Paste something else", so the
-  /// paste is visibly kept rather than thrown away.
+  /// Refilled when the person comes back via "Back to the paste", so the
+  /// paste is visibly kept rather than thrown away — and pre-filled with the
+  /// live plan said back as text on a re-paste.
   final String initialText;
 
-  const PasteEditing({this.initialText = ''});
+  /// True when this box was opened over a running trip, holding that trip's
+  /// own plan as text. Reading it merges rather than replaces, so the screen
+  /// says so and offers the way back to the editor instead of the doors a
+  /// first-time paste offers.
+  final bool repastingLivePlan;
+
+  const PasteEditing({this.initialText = '', this.repastingLivePlan = false});
 }
 
 /// The confirmation screen, showing what the parser understood.
@@ -422,22 +456,26 @@ final pasteFlowProvider = NotifierProvider<PasteFlow, PasteFlowState>(
   PasteFlow.new,
 );
 
-/// **Temporary.** True while the person has asked to paste a different plan
-/// from the day page, which is the only way back to the paste box once an
-/// itinerary is saved. The real container — the Trail, the Pool and the tab
-/// bar between them — arrives with those slices and takes this over; until
-/// then the root screen watches this alongside the saved itinerary.
-final repasteRequestedProvider = NotifierProvider<RepasteRequest, bool>(
-  RepasteRequest.new,
+/// True while the whole-plan editor is open over a trip that is already
+/// running. The root screen watches it alongside the saved itinerary: with a
+/// trip saved it draws the trip, unless this says the editor is over it.
+///
+/// This replaced the destructive hatch that used to live here. There is no
+/// "paste a different plan" any more: the way to change a running trip's plan
+/// is to edit it, and the way to re-read its text is to re-paste it, and
+/// neither throws the trip away
+/// (`data/cairn-ux/design-mock.html`, screen 3).
+final planEditorProvider = NotifierProvider<PlanEditorOpen, bool>(
+  PlanEditorOpen.new,
 );
 
-class RepasteRequest extends Notifier<bool> {
+class PlanEditorOpen extends Notifier<bool> {
   @override
   bool build() => false;
 
-  void request() => state = true;
+  void open() => state = true;
 
-  void clear() => state = false;
+  void close() => state = false;
 }
 
 class PasteFlow extends Notifier<PasteFlowState> {
@@ -448,13 +486,37 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// so one answer fixes the whole paste consistently.
   DateTime? _tripStartHint;
 
-  ip.ParseResult? _result;
+  /// The last read's two whole-paste verdicts, kept rather than the whole
+  /// [ip.ParseResult]: a draft can also come from a live plan, which never
+  /// had a parse result at all.
+  bool _nothingRead = false;
+  bool _offerMonthFirstFix = false;
 
   /// The read as it is being edited. Rebuilt from scratch by anything that
   /// re-reads the whole paste ([readMonthFirst], [useYear]): a re-read makes
   /// different stops, so the edits made to the old ones have nothing left to
   /// hold on to.
   _Draft? _draft;
+
+  /// True while this editor is open over a trip that is already running.
+  /// [accept] then applies the draft to the live trip and [cancelPlanEdit]
+  /// drops it; the trip is untouched either way until the save.
+  bool _editingLivePlan = false;
+
+  /// True while the paste box is holding the live plan's own text. The next
+  /// [parse] merges into the plan instead of replacing it.
+  bool _repastingLivePlan = false;
+
+  /// The plan the merge is against, frozen when the re-paste was asked for.
+  /// Frozen rather than re-read so that flipping the date dialect re-merges
+  /// the same two things instead of merging into its own last answer.
+  List<ConfirmedDay>? _mergeBaseline;
+
+  /// The set-aside tray as it stood when the re-paste was asked for. It is
+  /// not written into the text (`renderPlanText` says why), so it is carried
+  /// across the merge here — a re-paste displaces content, it never empties
+  /// the tray.
+  List<_DraftAside>? _mergeBaselineAside;
 
   var _nextId = 0;
 
@@ -466,15 +528,34 @@ class PasteFlow extends Notifier<PasteFlowState> {
     _text = text;
     _monthFirst = false;
     _tripStartHint = null;
-    _reparse();
+    // Over a running trip there is no such thing as a replacing read. If some
+    // later route reaches the box without freezing a baseline, freeze one now
+    // so the fall-through below is a merge and never an overwrite.
+    if (_editingLivePlan && _mergeBaseline == null) _freezeMergeBaseline();
+    if (_mergesInsteadOfReplacing) {
+      _mergeReparse();
+    } else {
+      _reparse();
+    }
   }
+
+  /// **The one guard that keeps the destructive hatch shut.** While a running
+  /// trip's plan is being edited, every read is a merge into that plan — not
+  /// only the first one out of the paste box. A second read (the month-first
+  /// flip, the year answer) that fell through to [_reparse] would replace the
+  /// draft with a bare parse, and saving that would overwrite the trip and
+  /// empty its set-aside: exactly the destruction this slice removed. The
+  /// baseline is what makes it answerable, so the condition is the baseline
+  /// and not the mode the paste box happens to be in.
+  bool get _mergesInsteadOfReplacing =>
+      _editingLivePlan && _mergeBaseline != null;
 
   /// The round-8 FixingIt one-tap: re-read the whole paste in the other date
   /// dialect. One flip for everything — a plan doesn't change dialect halfway
   /// through.
   void readMonthFirst(bool monthFirst) {
     _monthFirst = monthFirst;
-    _reparse();
+    _readAgain();
   }
 
   /// One answer to "which year?": re-read with a trip-start hint so the
@@ -482,17 +563,49 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// second-guessing it.
   void useYear(int year) {
     _tripStartHint = DateTime(year, 1, 1);
-    _reparse();
+    _readAgain();
   }
 
   // -- editing a day -------------------------------------------------------
 
+  /// Give a day its date.
+  ///
+  /// **Dating the first day dates the whole plan.** A trip's days are
+  /// consecutive far more often than not, and the person who has just told
+  /// the phone when day one is has already told it when every other day is;
+  /// asking again, once per day, is asking a question that has an answer.
+  /// So the first day's date runs down the plan — day two the day after, and
+  /// so on — through [_fillDatesFromFirstDay].
+  ///
+  /// Every later day stays individually adjustable afterwards, and setting
+  /// one of *those* changes only that day. The trade-off is deliberate and
+  /// worth knowing: setting the first day's date **again** re-runs the fill,
+  /// so it overwrites a later day someone had adjusted by hand. Day one is
+  /// the anchor; moving the anchor moves the plan.
   void setDayDate(int dayNumber, DateTime date) {
     final day = _dayNumbered(dayNumber);
     if (day == null) return;
     day.date = DateTime(date.year, date.month, date.day);
     day.candidateAnswered = true;
+    if (identical(day, _draft?.days.firstOrNull)) _fillDatesFromFirstDay();
     _rebuildReview();
+  }
+
+  /// Consecutive dates down the plan from the first day's.
+  ///
+  /// `DateTime` is what does the arithmetic, so a plan that runs off the end
+  /// of a month or a year needs nothing said about it here. What is *not*
+  /// done here is marking the days answered: the first day's date is not an
+  /// answer to a later day's own question, and a day whose title named a date
+  /// keeps that candidate. It simply stops being asked, the way any dated day
+  /// does.
+  void _fillDatesFromFirstDay() {
+    final days = _draft?.days ?? const <_DraftDay>[];
+    final first = days.firstOrNull?.date;
+    if (first == null) return;
+    for (final (offset, day) in days.indexed.skip(1)) {
+      day.date = DateTime(first.year, first.month, first.day + offset);
+    }
   }
 
   /// The date sheet's one-tap yes: bind the date the day's own title named.
@@ -634,28 +747,161 @@ class PasteFlow extends Notifier<PasteFlowState> {
     _rebuildReview();
   }
 
+  // -- editing a trip that is already running ------------------------------
+
+  /// Opens this same editor over the live trip's plan
+  /// (`data/cairn-ux/design-mock.html`, screen 3: "Edit the whole plan").
+  ///
+  /// **Nothing is written here.** The plan is copied into a draft, and the
+  /// trip goes on being exactly what it was until [accept] saves the draft
+  /// over it; [cancelPlanEdit] closes the editor and the trip never knew.
+  void editLivePlan() {
+    final plan = ref.read(savedItineraryProvider).value;
+    if (plan == null) return;
+    _text = '';
+    _monthFirst = false;
+    _tripStartHint = null;
+    _repastingLivePlan = false;
+    _nothingRead = false;
+    _offerMonthFirstFix = false;
+    _nextId = 0;
+    _editingLivePlan = true;
+    _draft = _Draft(
+      days: [
+        for (final day in plan.days)
+          _DraftDay(
+            number: day.number,
+            place: day.place,
+            date: switch (day.date) {
+              null => null,
+              // The plan carries a bare calendar date at UTC midnight; the
+              // draft speaks local wall dates, so it is read back field by
+              // field rather than converted.
+              final d => DateTime(d.year, d.month, d.day),
+            },
+            // A saved plan carries no parser doubt: every question it had was
+            // answered before it was accepted. What it can still be is empty,
+            // and `_emptiedDoubt` asks about that on its own.
+            confidence: ip.Confidence.high,
+            stops: [
+              for (final stop in day.stops)
+                _DraftStop(
+                  id: _mintId('stop'),
+                  text: stop.text,
+                  time: _timeOf(stop.timeLabel),
+                  sourceLineNumber: 0,
+                ),
+            ],
+          ),
+      ],
+      aside: [
+        for (final line in plan.keptAside)
+          _DraftAside(
+            id: _mintId('aside'),
+            text: line.text,
+            explanation: line.explanation,
+            sourceLineNumber: line.sourceLineNumber,
+            removedByPerson: setAsideCameFromThePerson(line.explanation),
+          ),
+      ],
+    );
+    ref.read(planEditorProvider.notifier).open();
+    _rebuildReview();
+  }
+
+  /// The editor's other door: the paste box again, pre-filled with the plan
+  /// as it now stands, said back as the text a person could have pasted.
+  /// Reading it merges into the plan rather than replacing it.
+  void repasteCurrentPlan() {
+    if (_draft == null) return;
+    _freezeMergeBaseline();
+    _repastingLivePlan = true;
+    _monthFirst = false;
+    _tripStartHint = null;
+    state = PasteEditing(
+      initialText: renderPlanText(_mergeBaseline!),
+      repastingLivePlan: true,
+    );
+  }
+
+  /// The plan as it stands, frozen as the thing a re-read merges into. It is
+  /// the *draft*, not the stored plan: edits made in the editor before asking
+  /// for the text back are part of what the merge preserves, and a second
+  /// read in the other date dialect re-merges these same two things rather
+  /// than merging into its own last answer.
+  ///
+  /// **A degenerate draft never becomes the baseline.** A read that found no
+  /// days at all leaves a draft with nothing in it, and freezing *that* would
+  /// leave an empty plan to merge into — a replacement wearing a merge's
+  /// clothes, which is the hatch this slice removed. The last real plan is
+  /// kept instead.
+  void _freezeMergeBaseline() {
+    final draft = _draft;
+    if (draft == null) return;
+    final frozen = _asConfirmedDays(draft);
+    if (frozen.isEmpty && _mergeBaseline != null) return;
+    _mergeBaseline = frozen;
+    _mergeBaselineAside = List.of(draft.aside);
+  }
+
+  /// Out of the paste box and back into the editor, the plan as it was before
+  /// the re-paste was asked for. Nothing has been merged, so there is nothing
+  /// to undo.
+  ///
+  /// The frozen baseline stays frozen: while a live plan is being edited,
+  /// once there is a baseline there is always a baseline, so every read from
+  /// here on is a merge whichever door it came through.
+  void cancelRepaste() {
+    if (!_repastingLivePlan) return;
+    _repastingLivePlan = false;
+    _rebuildReview();
+  }
+
+  /// Closes the whole-plan editor without saving. The live trip is exactly
+  /// what it was; this is the promise the entry on the trip sheet makes.
+  void cancelPlanEdit() {
+    _editingLivePlan = false;
+    _repastingLivePlan = false;
+    _mergeBaseline = null;
+    _mergeBaselineAside = null;
+    _forgetThePaste();
+    ref.read(planEditorProvider.notifier).close();
+  }
+
   // -- leaving -------------------------------------------------------------
 
   /// Back to the paste box, the current paste kept.
+  ///
+  /// Over a running trip there is no such thing as a fresh paste, so this is
+  /// the re-paste: the box comes back holding the plan, and reading it merges.
+  /// **This is load-bearing.** Every route from the editor back to the paste
+  /// box goes through here or through [repasteCurrentPlan], and if one of them
+  /// left the flow in replace mode, reading again would overwrite the trip —
+  /// which is exactly the hatch this slice removed.
   void startOver() {
+    if (_editingLivePlan) {
+      repasteCurrentPlan();
+      return;
+    }
     state = PasteEditing(initialText: _text);
   }
 
-  /// **Temporary**, until a trip can be re-read without being thrown away:
-  /// the one way back to the paste box. Hands the person an empty paste box;
-  /// accepting there replaces the saved plan.
+  /// The way out of the nothing-read state: the box again, holding the text
+  /// that was just read rather than the plan said back.
   ///
-  /// **Still offered on a closed trip, and that is deliberate.** This route
-  /// is doing two jobs at once: it is how a plan gets replaced, and it is
-  /// the only way to the join door (`join_flow.dart`) — the paste box holds
-  /// both. Shutting it on an archived trip would lock somebody out of ever
-  /// joining another trip because their last one ended, which is not what a
-  /// read-only archive is protecting. So the *route* stays and the *write*
-  /// is refused: [accept] returns without saving, and the read-back says so
-  /// in words rather than failing silently.
-  void pasteAnother() {
-    _forgetThePaste();
-    ref.read(repasteRequestedProvider.notifier).request();
+  /// Over a running trip this is the one route that must *not* re-freeze the
+  /// baseline. The draft that produced a nothing-read has no days in it, so
+  /// re-freezing would hand back an empty box and an empty plan to merge
+  /// into; the baseline the re-paste froze is still the right one, and the
+  /// text the person is being given back is the one that failed to read.
+  void backToTheText() {
+    if (!_editingLivePlan) {
+      state = PasteEditing(initialText: _text);
+      return;
+    }
+    if (_mergeBaseline == null) _freezeMergeBaseline();
+    _repastingLivePlan = true;
+    state = PasteEditing(initialText: _text, repastingLivePlan: true);
   }
 
   /// The trip has been deleted, so the flow that made it starts again from
@@ -663,15 +909,20 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// is the one act that means gone, and handing back the plan somebody
   /// just deleted would be the app arguing with them.
   void forget() {
+    _editingLivePlan = false;
+    _repastingLivePlan = false;
+    _mergeBaseline = null;
+    _mergeBaselineAside = null;
     _forgetThePaste();
-    ref.read(repasteRequestedProvider.notifier).clear();
+    ref.read(planEditorProvider.notifier).close();
   }
 
   void _forgetThePaste() {
     _text = '';
     _monthFirst = false;
     _tripStartHint = null;
-    _result = null;
+    _nothingRead = false;
+    _offerMonthFirstFix = false;
     _draft = null;
     state = const PasteEditing();
   }
@@ -680,6 +931,13 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// left it, not the parse it started as. The itinerary is local-only in
   /// this slice; syncing it as a shared fact is later work
   /// (docs/decisions/2026-08-22-grill-round-one.md §2).
+  ///
+  /// One thing the draft holds that the store does not: a set-aside line's
+  /// time. `itinerary_set_asides` has no time column, so a starred stop that
+  /// was set aside — by hand or by a re-paste displacing it — keeps its time
+  /// until this save and no further; dragging it back after a reopen restores
+  /// it unstarred. Pre-existing, and deliberately left for the schema change
+  /// that closes it.
   Future<void> accept() async {
     final draft = _draft;
     if (draft == null) return;
@@ -730,7 +988,11 @@ class PasteFlow extends Notifier<PasteFlowState> {
           starterDisplayName: localMemberName,
           now: ref.read(nowProvider),
         );
-    ref.read(repasteRequestedProvider.notifier).clear();
+    _editingLivePlan = false;
+    _repastingLivePlan = false;
+    _mergeBaseline = null;
+    _mergeBaselineAside = null;
+    ref.read(planEditorProvider.notifier).close();
   }
 
   // -- internals -----------------------------------------------------------
@@ -753,13 +1015,141 @@ class PasteFlow extends Notifier<PasteFlowState> {
     return null;
   }
 
-  void _reparse() {
+  /// A whole-paste re-read, in whichever of the two modes is running: a first
+  /// paste replaces the draft, a re-paste of a live plan merges into it.
+  void _readAgain() {
+    // A draft built from the store came from no text at all, so there is
+    // nothing to read again — and a fall-through to [_reparse] here would
+    // throw that draft away.
+    if (_editingLivePlan && _mergeBaseline == null) return;
+    if (_mergesInsteadOfReplacing) {
+      _mergeReparse();
+    } else {
+      _reparse();
+    }
+  }
+
+  ip.ParseResult _parseText() {
     final result = ip.parseItinerary(
       _text,
       tripStartDate: _tripStartHint,
       monthFirstNumericDates: _monthFirst,
     );
-    _result = result;
+    _nothingRead = result.usedHeaderlessFallback || result.days.isEmpty;
+    _offerMonthFirstFix = result.hasAmbiguousNumericDates;
+    return result;
+  }
+
+  /// The re-paste's one act: hand the plan and the re-read to
+  /// [merge.mergeRepaste] and build the draft from what comes back.
+  ///
+  /// **Every merge decision is inside that call** — which day keeps which
+  /// number, what a day inherits when the text did not say it, and what is
+  /// displaced. Nothing here re-decides any of it; this end carries the
+  /// answer into the draft and carries the tray across, so swapping the
+  /// module underneath is a file replacement.
+  ///
+  /// One piece of the parse has to survive the merge: **the date a repasted
+  /// day's own title only named.** The merge hands it back on the merged day
+  /// itself ([merge.MergedDay.dateCandidate]) rather than binding it — a day
+  /// the re-paste added whose title says `Nara, 17 June` has a date to offer,
+  /// and dropping the candidate would draw the new day clean and save it with
+  /// its date silently open. It is read off the merged day and never off
+  /// `result.days` by index: the merge returns the current plan's days first
+  /// and the appended ones after, so the two lists do not line up.
+  void _mergeReparse() {
+    final baseline = _mergeBaseline;
+    if (baseline == null) return;
+    final result = _parseText();
+    final merged = merge.mergeRepaste(current: baseline, repasted: result.days);
+    _nextId = 0;
+    _draft = _Draft(
+      days: [
+        for (final day in merged.days)
+          _DraftDay(
+            number: day.number,
+            place: day.place,
+            date: _asDateTime(day.date),
+            candidate: day.dateCandidate,
+            // A merged day carries no other parser doubt: what the plan
+            // already held was answered before it was accepted, and the merge
+            // does not carry the rest of the parse's misgivings across.
+            confidence: ip.Confidence.high,
+            stops: [
+              for (final stop in day.stops)
+                _DraftStop(
+                  id: _mintId('stop'),
+                  text: stop.text,
+                  time: stop.time,
+                  sourceLineNumber: 0,
+                ),
+            ],
+          ),
+      ],
+      aside: [
+        // The tray as it stood, then what the merge displaced, then what the
+        // re-read itself could not place. Three sources, one promise.
+        for (final line in _mergeBaselineAside ?? const <_DraftAside>[])
+          _DraftAside(
+            id: _mintId('aside'),
+            text: line.text,
+            explanation: line.explanation,
+            sourceLineNumber: line.sourceLineNumber,
+            time: line.time,
+            removedByPerson: line.removedByPerson,
+          ),
+        for (final line in merged.setAside)
+          _DraftAside(
+            id: _mintId('aside'),
+            text: line.stop.text,
+            explanation: line.explanation,
+            sourceLineNumber: 0,
+            time: line.stop.time,
+            removedByPerson: setAsideCameFromThePerson(line.explanation),
+          ),
+        for (final line in result.unplacedLines)
+          _DraftAside(
+            id: _mintId('aside'),
+            text: line.sourceLine.text.trim(),
+            explanation: line.reason.explanation,
+            sourceLineNumber: line.sourceLine.lineNumber,
+          ),
+      ],
+    );
+    _repastingLivePlan = false;
+    _rebuildReview();
+  }
+
+  /// The draft as the merge reads a plan. The one place the two vocabularies
+  /// meet: the merge speaks [ConfirmedDay], the same shape the repository
+  /// saves, so nothing here invents a third.
+  List<ConfirmedDay> _asConfirmedDays(_Draft draft) => [
+    for (final day in draft.days)
+      ConfirmedDay(
+        number: day.number,
+        date: _asCalendarDate(day.date),
+        place: day.place,
+        stops: [
+          for (final stop in day.stops)
+            model.Stop(text: stop.text, time: stop.time),
+        ],
+      ),
+  ];
+
+  static model.CalendarDate? _asCalendarDate(DateTime? date) =>
+      date == null ? null : model.CalendarDate.fromDateTimeIgnoringZone(date);
+
+  static DateTime? _asDateTime(model.CalendarDate? date) =>
+      date == null ? null : DateTime(date.year, date.month, date.day);
+
+  static model.ClockTime? _timeOf(String? iso) {
+    if (iso == null) return null;
+    final parts = iso.split(':');
+    return model.ClockTime(int.parse(parts[0]), int.parse(parts[1]));
+  }
+
+  void _reparse() {
+    final result = _parseText();
     _nextId = 0;
     _draft = _Draft(
       days: [
@@ -800,10 +1190,9 @@ class PasteFlow extends Notifier<PasteFlowState> {
   }
 
   void _rebuildReview() {
-    final result = _result;
     final draft = _draft;
-    if (result == null || draft == null) return;
-    final nothingRead = result.usedHeaderlessFallback || result.days.isEmpty;
+    if (draft == null) return;
+    final nothingRead = _nothingRead;
     state = PasteReview(
       ItineraryReview(
         days: nothingRead
@@ -818,7 +1207,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
               removedByPerson: line.removedByPerson,
             ),
         ],
-        offerMonthFirstFix: result.hasAmbiguousNumericDates,
+        offerMonthFirstFix: _offerMonthFirstFix,
         readMonthFirst: _monthFirst,
         nothingRead: nothingRead,
         keptLines: nothingRead
@@ -832,6 +1221,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   'it holds is the record it closed with. The paste is here '
                   'if you want to read it back.'
             : null,
+        editingLivePlan: _editingLivePlan,
       ),
     );
   }

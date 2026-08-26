@@ -625,9 +625,9 @@ void main() {
       await launchInto(tester, june(21, 12));
       await openSheet(tester);
 
-      // The paste box is still reachable, and deliberately so: it is also
-      // the door somebody joins another trip through.
-      await tester.tap(find.byKey(const Key('start-over')));
+      // The route to the plan is still there, and deliberately so: the paste
+      // box behind it is also the door somebody joins another trip through.
+      await tester.tap(find.byKey(const Key('trip-repaste')));
       await tester.pumpAndSettle();
 
       await tester.enterText(

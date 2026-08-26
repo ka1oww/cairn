@@ -7,7 +7,7 @@ imports are the arrows:
 | Directory | Band on the map | May import |
 | --- | --- | --- |
 | `screens/` | SCREENS | `app_state/`, Flutter |
-| `app_state/` | APP STATE | `repositories/`, the domain packages, Riverpod, and the platform edges it drives |
+| `app_state/` | APP STATE | `logic/`, `repositories/`, the domain packages, Riverpod, and the platform edges it drives |
 | `logic/` | LOGIC — pure decision cores inside app state's reach | `repositories/` value types, the domain packages; no Flutter, no Riverpod, no IO. Called by `app_state/` (and tests), never by `screens/` |
 | `repositories/` | THE SEAM | `storage/`, `package:cairn_model` |
 | `storage/drift/` | STORAGE (Drift store) | Drift, `package:cairn_model`, the device disk |
@@ -26,6 +26,16 @@ service-role key and the database password never do.
 
 The DOMAIN band is not in `lib/` at all: it is the four pure-Dart packages
 under `packages/`, consumed as path dependencies and never modified.
+
+`logic/` is the youngest band and the narrowest: pure functions over plain
+values, for a rule that is the app's rather than the domain's but has no
+business knowing about Riverpod, a repository or a widget. It sits beside the
+domain packages on the map — everything above may import it, it imports
+nothing above itself — and a file that ends up needing `ref`, a store or
+`BuildContext` belongs in `app_state/` instead. It exists because the
+re-paste's merge rule (`logic/repaste_merge.dart`) and the plan-as-text
+rendering it reads back (`logic/plan_text.dart`) have to be readable and
+testable on their own.
 
 Two files sit outside the bands, deliberately:
 

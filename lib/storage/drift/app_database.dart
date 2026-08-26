@@ -406,7 +406,9 @@ class AppDatabase extends _$AppDatabase {
     itinerarySetAsides,
   )..orderBy([(t) => OrderingTerm.asc(t.position)])).get();
 
-  /// The days, read once instead of watched — what the sync hands over.
+  /// The days, read once instead of watched — what the sync hands over, and
+  /// what a caller inside a faked clock (a widget test) must use: awaiting a
+  /// drift stream's first event there never completes.
   Future<List<ItineraryDay>> readItineraryDays() => (select(
     itineraryDays,
   )..orderBy([(t) => OrderingTerm.asc(t.number)])).get();

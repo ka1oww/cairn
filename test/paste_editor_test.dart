@@ -286,6 +286,107 @@ void main() {
         expect(dayNumbered(1).dateSuggestion, isNull);
       });
 
+      test('binding it dates the days after it too', () {
+        paste();
+
+        flow().useDateSuggestion(1);
+
+        // The sheet's one tap is the same call as picking a date, so the fill
+        // runs from it: five consecutive days out of one answer.
+        expect(
+          [for (final day in read().days) day.dateLabel],
+          ['14 June', '15 June', '16 June', '17 June', '18 June'],
+        );
+      });
+    });
+
+    group('dating the first day dates the plan', () {
+      test('the days after it run on consecutively', () {
+        paste();
+
+        flow().setDayDate(1, DateTime(2027, 6, 14));
+
+        expect(
+          [for (final day in read().days) day.date],
+          [
+            DateTime(2027, 6, 14),
+            DateTime(2027, 6, 15),
+            DateTime(2027, 6, 16),
+            DateTime(2027, 6, 17),
+            DateTime(2027, 6, 18),
+          ],
+        );
+        // And the filled days read as dated days: the weekday is the one the
+        // fill worked out, not one the plan named.
+        expect(dayNumbered(2).title, 'Tuesday · Tokyo');
+      });
+
+      test('a plan that runs off the end of a month runs into the next', () {
+        paste();
+
+        flow().setDayDate(1, DateTime(2027, 6, 30));
+
+        expect(dayNumbered(3).date, DateTime(2027, 7, 2));
+        expect(dayNumbered(5).dateLabel, '4 July');
+      });
+
+      test('a later day adjusted by hand sticks, and moves nothing else', () {
+        paste();
+        flow().setDayDate(1, DateTime(2027, 6, 14));
+
+        // A rest day somewhere in the middle: day 3 is a week later than the
+        // fill made it, and only day 3 moves.
+        flow().setDayDate(3, DateTime(2027, 6, 23));
+
+        expect(dayNumbered(3).date, DateTime(2027, 6, 23));
+        expect(dayNumbered(2).date, DateTime(2027, 6, 15));
+        expect(dayNumbered(4).date, DateTime(2027, 6, 17));
+        expect(dayNumbered(5).date, DateTime(2027, 6, 18));
+      });
+
+      test('dating any day but the first fills nothing', () {
+        paste();
+
+        flow().setDayDate(4, DateTime(2027, 6, 17));
+
+        expect(dayNumbered(4).date, DateTime(2027, 6, 17));
+        expect(dayNumbered(1).date, isNull);
+        expect(dayNumbered(5).date, isNull);
+      });
+
+      test('moving the first day moves the plan with it', () {
+        paste();
+        flow().setDayDate(1, DateTime(2027, 6, 14));
+
+        // The trip is put back a week. Day one is the anchor, so re-running
+        // the fill is the point — including over a day someone had adjusted,
+        // which is the trade-off written on setDayDate.
+        flow().setDayDate(3, DateTime(2027, 6, 23));
+        flow().setDayDate(1, DateTime(2027, 6, 21));
+
+        expect(
+          [for (final day in read().days) day.date],
+          [
+            DateTime(2027, 6, 21),
+            DateTime(2027, 6, 22),
+            DateTime(2027, 6, 23),
+            DateTime(2027, 6, 24),
+            DateTime(2027, 6, 25),
+          ],
+        );
+      });
+
+      test('leaving the first day open fills nothing', () {
+        paste();
+
+        flow().leaveDateOpen(1);
+
+        expect(dayNumbered(1).date, isNull);
+        expect(dayNumbered(2).date, isNull);
+      });
+    });
+
+    group('the date a title named, continued', () {
       test('a year the title spelled out is used as written', () {
         paste('Day 1 - Tokyo, 14 June 2029\n- Senso-ji\n');
 
@@ -383,6 +484,11 @@ void main() {
         expect(find.byKey(const Key('date-prompt-1')), findsNothing);
         expect(find.text('14 June'), findsOneWidget);
         expect(find.text('Monday · Tokyo'), findsOneWidget);
+
+        // And the answer carried down the plan: one date given, five days
+        // dated, the rest of them consecutive.
+        expect(find.text('15 June'), findsOneWidget);
+        expect(find.text('18 June'), findsOneWidget);
 
         await tester.tap(find.byKey(const Key('accept-button')));
         await tester.pump();
