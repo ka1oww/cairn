@@ -65,8 +65,32 @@ const String passwordProtectedSentence =
 const String _oversizeSentence =
     'That PDF is larger than 25 MB — too big to read.';
 
+/// The liveness backstop. PDFium's failures do not all come back as
+/// exceptions: when the native library cannot be loaded at all, the throw
+/// happens *inside* `pdfrx_engine`'s worker isolate and never reaches the
+/// future this awaits, so the read simply never resolves. The import pill's
+/// progress label is the only thing on screen and it has no card to fall back
+/// to, so a read that never ends is a screen that never moves.
+///
+/// Two minutes is chosen to be far longer than any legitimate read: the caps
+/// above stop at 25 MB and 100 pages, and the 9-page Wanderlog print reads in
+/// well under a second on a dev machine — even a hundred-fold slower phone
+/// stays orders of magnitude inside this. It is a liveness bound, not a
+/// performance budget; a read that hits it is broken, not slow.
+const Duration pdfEngineTimeout = Duration(minutes: 2);
+
+/// Loud and by name: an engineer reading a bug report can tell this apart
+/// from a damaged file, and a person reads something true.
+const String pdfEngineUnavailableSentence =
+    'The PDF reader did not respond — it may have failed to load on this '
+    'device. Paste the plan as text instead.';
+
 class PdfExtractor implements PlanTextExtractor {
-  const PdfExtractor();
+  /// Overridable so a test can prove the timeout path returns the typed
+  /// refusal without waiting out [pdfEngineTimeout].
+  final Duration engineTimeout;
+
+  const PdfExtractor({this.engineTimeout = pdfEngineTimeout});
 
   @override
   Set<String> get extensions => const {'pdf'};
@@ -96,45 +120,95 @@ class PdfExtractor implements PlanTextExtractor {
     }
 
     PdfDocument? document;
-    try {
-      document = await PdfDocument.openData(
-        file.bytes,
-        // Never prompt: an encrypted file is a typed refusal, so the one
-        // empty-password attempt PDFium makes for free is the whole story.
-        // (Plenty of "protected" PDFs are owner-password only and open on
-        // that attempt; those read normally, which is right.)
-        passwordProvider: null,
-        firstAttemptByEmptyPassword: true,
-        sourceName: file.fileName,
-      );
+    // The whole engine body, open *and* page reads, under one bound: a
+    // timeout on only one of the two leaves the other able to hang.
+    Future<ExtractionResult> engineWork() async {
+      document = await openDocument(file);
       // `await`, and not merely `return`. In an async function a bare
-      // `return future;` hands the future on and runs the `finally` *now* —
+      // `return future;` hands the future on and runs the cleanup *now* —
       // which would dispose the document and stop the worker while the pages
       // were still being read, and the read would come back holding page one
       // and eight empty pages. It looks right and it is silent.
-      return await _readPages(document);
+      return await _readPages(document!);
+    }
+
+    final work = engineWork();
+    var timedOut = false;
+    // A read that lands *after* the timeout still has a document to dispose
+    // and a worker to stop, and a late failure would otherwise surface as an
+    // unhandled async error. This listener is registered before the one the
+    // `await` below installs, so on the ordinary path it sees `timedOut`
+    // false and leaves the cleanup to the `finally`.
+    unawaited(
+      work.then(
+        (_) => timedOut ? _cleanUp(document) : null,
+        onError: (_, _) => timedOut ? _cleanUp(document) : null,
+      ),
+    );
+    try {
+      return await work.timeout(engineTimeout);
+    } on TimeoutException {
+      // Never a partial read dressed up as the plan, and never a spin: the
+      // engine did not answer, so say so.
+      timedOut = true;
+      // Cleanup on this path is deliberately unawaited, and deliberately
+      // conditional. Both halves of it are round trips through the very
+      // engine that just failed to answer — `stopBackgroundWorker` is a
+      // `FPDF_DestroyLibrary` sent to the worker — so awaiting them would
+      // put the hang straight back where the timeout took it out, and
+      // sending a stop to an engine that never opened the document only
+      // spawns a *fresh* worker to hang again (and can destroy the library
+      // under a later read). A document in hand is proof the engine answered
+      // once, so that is when the stop is worth issuing; when the open
+      // itself never returned there is nothing this call opened to clean up,
+      // and a read that lands late still cleans up in full through the
+      // listener above.
+      if (document != null) unawaited(_cleanUp(document));
+      return const ExtractionFailure(
+        ExtractionFailureKind.unreadable,
+        pdfEngineUnavailableSentence,
+      );
     } on PdfPasswordException {
       return const ExtractionFailure(
         ExtractionFailureKind.passwordProtected,
         passwordProtectedSentence,
       );
     } catch (_) {
-      // The contract says an extractor never throws: a damaged file, a
-      // truncated one, or a PDFium that could not be loaded at all all land
-      // here as the same honest sentence.
+      // The contract says an extractor never throws: a damaged file or a
+      // truncated one lands here as the same honest sentence.
       return const ExtractionFailure(
         ExtractionFailureKind.unreadable,
         unreadableFileSentence,
       );
     } finally {
-      try {
-        await document?.dispose();
-      } catch (_) {
-        // Disposal failing must not turn a good read into a refusal.
-      }
-      await _stopWorker();
+      if (!timedOut) await _cleanUp(document);
     }
   }
+
+  /// Disposal and the worker stop, safe to run twice: the timeout path and
+  /// the engine's own completion may both reach it.
+  Future<void> _cleanUp(PdfDocument? document) async {
+    try {
+      await document?.dispose();
+    } catch (_) {
+      // Disposal failing must not turn a good read into a refusal.
+    }
+    await _stopWorker();
+  }
+
+  /// The one call into the engine that can hang, kept overridable so a test
+  /// can stand in a read that never answers — the very failure the timeout
+  /// exists for, and one that cannot be staged against a working PDFium.
+  Future<PdfDocument> openDocument(PickedBytes file) => PdfDocument.openData(
+    file.bytes,
+    // Never prompt: an encrypted file is a typed refusal, so the one
+    // empty-password attempt PDFium makes for free is the whole story.
+    // (Plenty of "protected" PDFs are owner-password only and open on that
+    // attempt; those read normally, which is right.)
+    passwordProvider: null,
+    firstAttemptByEmptyPassword: true,
+    sourceName: file.fileName,
+  );
 
   Future<ExtractionResult> _readPages(PdfDocument document) async {
     final total = document.pages.length;

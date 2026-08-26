@@ -184,6 +184,44 @@ void main() {
     expect(boxText(tester), tidyImport);
   });
 
+  testWidgets('a PDF whose engine never loads refuses instead of spinning', (
+    tester,
+  ) async {
+    // `flutter_tester` genuinely has no PDFium native asset, so the engine
+    // throws inside `pdfrx_engine`'s worker isolate and the read never
+    // resolves on its own. That is the very condition being exercised: the
+    // real registry routes these bytes to the real `PdfExtractor`, and only
+    // its timeout gets the person off the progress label. Without it this
+    // test would hang with no error at all — which is why the PDF path could
+    // not be covered here before.
+    final pdf = File(
+      'packages/plan_extraction/test/fixtures/garbled-itinerary.pdf',
+    ).readAsBytesSync();
+    await launch(
+      tester,
+      picks: [
+        PickedBytes(fileName: 'plan.pdf', extension: 'pdf', bytes: pdf),
+      ],
+    );
+
+    await tester.tap(find.byKey(const Key('import-pill')));
+    await tester.pump();
+    expect(find.text('Reading plan.pdf…'), findsOneWidget);
+
+    // Past the engine's liveness bound, and the screen moves.
+    await tester.pump(pdfEngineTimeout + const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(find.byKey(const Key('import-progress')), findsNothing);
+    expect(find.byKey(const Key('import-error')), findsOneWidget);
+    expect(find.textContaining('did not respond'), findsOneWidget);
+    expect(boxText(tester), '');
+    // The pill is back: the flow's re-entry guard cleared with the read.
+    await tester.tap(find.byKey(const Key('import-error-dismiss')));
+    await tester.pump();
+    expect(find.byKey(const Key('import-pill')), findsOneWidget);
+  });
+
   testWidgets('dismissing the picker changes nothing', (tester) async {
     final picker = await launch(tester, picks: [null]);
 

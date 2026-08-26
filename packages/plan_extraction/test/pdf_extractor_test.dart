@@ -5,11 +5,13 @@
 // One thing to know before running this file: the first `dart test` on a
 // fresh machine downloads PDFium (see the package README). It is a one-time
 // dev-machine cost and never happens at app runtime.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:itinerary_parser/itinerary_parser.dart';
+import 'package:pdfrx_engine/pdfrx_engine.dart';
 import 'package:plan_extraction/plan_extraction.dart';
 import 'package:test/test.dart';
 
@@ -284,6 +286,57 @@ void main() {
     });
   });
 
+  group('the engine never hangs', () {
+    // The failure this stands for is a PDFium that cannot be loaded at all:
+    // `pdfrx_engine` throws that inside its worker isolate, so the future
+    // `extract` awaits never resolves and the read spins forever. It is
+    // exactly what happens under `flutter_tester`, which carries no PDFium
+    // native asset — and it cannot be staged against a working engine, so
+    // the stand-in below is an open that never answers.
+    const stalled = _StalledExtractor();
+
+    test('an engine that never answers is a typed refusal', () async {
+      final result = await stalled
+          .extract(fixture('wanderlog-print.pdf'))
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => fail('extract() hung instead of refusing'),
+          );
+      expect(
+        result,
+        isA<ExtractionFailure>()
+            .having((f) => f.kind, 'kind', ExtractionFailureKind.unreadable)
+            .having(
+              (f) => f.explanation,
+              'explanation',
+              pdfEngineUnavailableSentence,
+            ),
+      );
+      // Loud and by name: a reader that did not answer must not read as a
+      // damaged file, and must never come back as text.
+      expect(result, isNot(isA<ExtractedText>()));
+      expect(
+        (result as ExtractionFailure).explanation,
+        isNot(unreadableFileSentence),
+      );
+    });
+
+    test('a timed-out read leaves the engine usable', () async {
+      // Cleanup has to stay correct on the timeout path, or a timed-out
+      // import strands a worker isolate for the life of the app.
+      await stalled.extract(fixture('garbled-itinerary.pdf'));
+      final after = await readText('garbled-itinerary.pdf');
+      expect(after.text, contains('Kyoto'));
+    });
+
+    test('the default bound is generous, not a performance budget', () {
+      expect(
+        pdfEngineTimeout,
+        greaterThanOrEqualTo(const Duration(minutes: 1)),
+      );
+    });
+  });
+
   test('two reads in one process both work', () async {
     // Each read stops the engine's background worker on its way out, because
     // in production it runs inside an `Isolate.run` that would otherwise
@@ -293,4 +346,15 @@ void main() {
     final second = await readText('garbled-itinerary.pdf');
     expect(second.text, first.text);
   });
+}
+
+/// An extractor whose engine never answers, with a bound short enough to
+/// prove it rather than to sit through it.
+class _StalledExtractor extends PdfExtractor {
+  const _StalledExtractor()
+    : super(engineTimeout: const Duration(milliseconds: 50));
+
+  @override
+  Future<PdfDocument> openDocument(PickedBytes file) =>
+      Completer<PdfDocument>().future;
 }

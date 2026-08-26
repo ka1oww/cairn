@@ -475,7 +475,16 @@ Sharp edges worth knowing before touching this directory again:
     page one and every other page empty (silently). And **the worker outlives
     the call unless it is stopped**, which strands an isolate per import under
     production's `Isolate.run`; `PdfExtractor` stops it in the `finally`, and
-    a test asserts two reads in one process both work.
+    a test asserts two reads in one process both work. And **the read is
+    bounded** (`pdfEngineTimeout`): a PDFium that cannot be loaded throws
+    *inside* the worker isolate, so the awaited future never resolves at all
+    — the import pill would sit on "Reading …" forever. Past the bound the
+    read returns a typed refusal that names the engine. Its cleanup is
+    unawaited and only issued when a document was opened, because
+    `stopBackgroundWorker` is itself a round trip through the engine that
+    just failed to answer (it spawns a fresh worker and destroys the
+    library), so awaiting it re-hangs the caller and issuing it blindly can
+    crash a later read.
   - **PDFium reaches the phone by a different road than it reaches
     `dart test`.** `pdfium_dart`'s build hook returns without emitting
     anything when the target is iOS, so the app depends on `pdfium_flutter`

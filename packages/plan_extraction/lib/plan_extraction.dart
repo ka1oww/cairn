@@ -42,7 +42,9 @@ export 'src/pdf_extractor.dart'
         maxPdfBytes,
         maxPdfPages,
         noTextLayerSentence,
-        passwordProtectedSentence;
+        passwordProtectedSentence,
+        pdfEngineTimeout,
+        pdfEngineUnavailableSentence;
 export 'src/plain_text_extractor.dart'
     show
         PlainTextExtractor,
