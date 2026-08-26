@@ -466,9 +466,16 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   credited to the stand-in and then re-credited. The identity is fixed for the
   life of the launch: an account minted too slowly on a first launch is stored
   and picked up on the next one rather than adopted mid-session. Two things this leaves open. A trip
-  *started* offline under `'me'` can never become a `trips` row —
-  `created_by` references `profiles.id`, a uuid — and nothing migrates it; it
-  is simply a local trip for good. And the roster the server hands back names
+  *started* under `'me'` can never become a `trips` row —
+  `created_by` references `profiles.id`, a uuid, `_createSharedTrip` is refused
+  for the life of that trip — and nothing migrates it; it is simply a local
+  trip for good. That is the plane, and it is **also a first launch on a merely
+  slow network**: a phone with nothing in its vault waits three seconds for an
+  account (`resolveMemberId`) and then runs as the stand-in, so slow and absent
+  land in the same place, and the person is given no signal that it happened.
+  The budget is deliberate — it is what keeps a bad network off the launch
+  screen — so this is a gap recorded rather than solved, and real sign-in is
+  what closes it. And the roster the server hands back names
   people by their profile's `display_name`, which nothing on the phone writes,
   so an anonymous account reads as `New traveller` rather than `You`. Both
   close when sign-in asks for a name.
