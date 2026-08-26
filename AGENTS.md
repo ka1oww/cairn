@@ -143,7 +143,12 @@ import what is written there, not here.
   `headerWeekday`, so a re-paste that appends `Sat - Nara` renders as a
   confident read, saves with its date silently open and is never asked about;
   closing that needs `MergedDay` to expose both for appended days, which is a
-  change to the shared merge module and is filed as a separate follow-up.
+  change to the shared merge module and is filed as a separate follow-up. A
+  third gap sits in `lib/logic/plan_text.dart`: a stop's time is written back
+  into the rendered line when the words contradict it, but a time the person
+  *cleared* cannot be — `10:00 Coffee` with its time taken off still says
+  10:00, so the re-read stars it again. Closing that needs the renderer to
+  reword what the person wrote, which it deliberately never does.
 - **The phone mints the trip's id, and the server keeps it**
   (`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`). A trip must be
   startable in flight mode, and the ping schedule seeds itself from the id, so

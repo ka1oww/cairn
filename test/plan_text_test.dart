@@ -88,6 +88,33 @@ void main() {
     },
   );
 
+  test('a time the words will out-argue is not written into them', () {
+    // The parser prefers a range over any single time on the line, so
+    // `13:00 Museum 10:00-12:00` reads back as 10:00 whatever we write. The
+    // hand-set time is lost either way; what rendering unchanged saves is the
+    // stop's own text and the false displacement that rewriting it causes.
+    final plan = [
+      ConfirmedDay(
+        number: 1,
+        place: 'Tokyo',
+        stops: [Stop(text: 'Museum 10:00-12:00', time: ClockTime(13, 0))],
+      ),
+    ];
+
+    expect(renderPlanText(plan), 'Day 1 - Tokyo\n- Museum 10:00-12:00');
+
+    final read = ip.parseItinerary(renderPlanText(plan));
+    expect(read.days.single.stops.single.text, 'Museum 10:00-12:00');
+    expect(read.days.single.stops.single.time?.hour, 10);
+
+    // The time reverts to what the words say — unavoidable — but the words
+    // themselves come through untouched, so nothing is displaced.
+    final merged = reread(plan);
+    expect(merged.days.single.stops.single.text, 'Museum 10:00-12:00');
+    expect(merged.days.single.stops.single.time, ClockTime(10, 0));
+    expect(merged.setAside, isEmpty);
+  });
+
   test(
     'setStopTime leaves the words alone, which is why the above is the shape',
     () {
@@ -110,4 +137,24 @@ void main() {
       expect(dayOne().stops.single.timeLabel, '13:00');
     },
   );
+
+  test('a range keeps its words through setStopTime too', () {
+    final container = ProviderContainer(
+      overrides: [todayProvider.overrideWithValue(DateTime.utc(2027, 6, 14))],
+    );
+    addTearDown(container.dispose);
+
+    final flow = container.read(pasteFlowProvider.notifier);
+    flow.parse('Day 1 - Tokyo\n- Museum 10:00-12:00\n');
+
+    ReviewDay dayOne() => (container.read(pasteFlowProvider) as PasteReview)
+        .review
+        .days
+        .firstWhere((d) => d.number == 1);
+
+    flow.setStopTime(dayOne().stops.single.id, 13, 0);
+
+    expect(dayOne().stops.single.text, 'Museum 10:00-12:00');
+    expect(dayOne().stops.single.timeLabel, '13:00');
+  });
 }

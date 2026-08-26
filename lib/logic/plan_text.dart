@@ -23,10 +23,10 @@
 //
 // A stop's time is usually already inside the text the parser gave it
 // (`10:12 Train to Kyoto`, `Romancecar 9:05am`), so writing the time out again
-// would both duplicate it and mangle the line. **The stored time is the
-// authority**: it is written back whenever the line's own words do not carry
-// that same time — a time the person set by hand in the editor, whether the
-// words carry no time at all or a different one. A line reading `Lunch at
+// would both duplicate it and mangle the line. **A stored time that is set is
+// the authority**: it is written back whenever the line's own words do not
+// carry that same time — a time the person set by hand in the editor, whether
+// the words carry no time at all or a different one. A line reading `Lunch at
 // 12pm` whose time was set to 13:00 renders as `13:00 Lunch at 12pm`, and the
 // duplication is the accepted cost of not silently reverting the hand edit.
 // It costs one more thing, worth knowing: that line's *words* changed, so the
@@ -35,6 +35,22 @@
 // deleted, but reported as displaced when it was only reworded. Only a stop
 // whose words contradict its time pays this; every other line round-trips
 // untouched.
+//
+// **Writing the time out is not always enough, and then the words win.** The
+// candidate line is re-probed before it is emitted: a stop reading `Museum
+// 10:00-12:00` set to 13:00 would render `13:00 Museum 10:00-12:00`, but the
+// parser prefers a *range* over any single time on the line, so it would read
+// 10:00 back anyway. There the time is lost whatever is written, and writing
+// it costs the two harms above for nothing — the stored text permanently
+// rewritten, and the original wording falsely filed in the set-aside as
+// displaced. So the words are rendered unchanged instead.
+//
+// **The authority is one-directional, and this is a known gap.** A time that
+// was *cleared* cannot be honoured: "Take the time off" (the stop menu's
+// `clearStopTime`) leaves `10:00 Coffee` reading exactly that, so the re-read
+// extracts 10:00 and stars the stop again. Closing it would mean rewording
+// what the person wrote, which this file never does; it is recorded with the
+// slice's other deferred gaps in `AGENTS.md` rather than fixed here.
 // What time a line carries is asked of the parser itself rather than guessed
 // at with a pattern of our own: the two must agree, and there is only one way
 // to be sure they do.
@@ -89,15 +105,22 @@ String _header(ConfirmedDay day) {
 
 String _stopLine(Stop stop) {
   final time = stop.time;
-  final written = _timeCarriedBy(stop.text);
-  final saysTheStoredTime =
-      time == null ||
-      (written != null &&
-          written.hour == time.hour &&
-          written.minute == time.minute);
-  return saysTheStoredTime
-      ? '$_bullet${stop.text}'
-      : '$_bullet${time.iso} ${stop.text}';
+  if (time == null || _readsBackAs(stop.text, time)) {
+    return '$_bullet${stop.text}';
+  }
+  final candidate = '${time.iso} ${stop.text}';
+  return _readsBackAs(candidate, time)
+      ? '$_bullet$candidate'
+      : '$_bullet${stop.text}';
+}
+
+/// Whether the parser, reading [line] again as a stop, would come back with
+/// [time] — asked of the parser itself, never of a second copy of its time
+/// grammar, because two copies of that grammar drift and this question is
+/// only worth asking if the answer is the parser's own.
+bool _readsBackAs(String line, ClockTime time) {
+  final read = _timeCarriedBy(line);
+  return read != null && read.hour == time.hour && read.minute == time.minute;
 }
 
 const _bullet = '- ';
