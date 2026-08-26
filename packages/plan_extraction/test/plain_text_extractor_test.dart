@@ -14,12 +14,12 @@ import 'package:plan_extraction/plan_extraction.dart';
 const extractor = PlainTextExtractor();
 
 PickedBytes named(String fileName, List<int> bytes) => PickedBytes(
-      fileName: fileName,
-      extension: fileName.contains('.')
-          ? fileName.split('.').last.toLowerCase()
-          : null,
-      bytes: Uint8List.fromList(bytes),
-    );
+  fileName: fileName,
+  extension: fileName.contains('.')
+      ? fileName.split('.').last.toLowerCase()
+      : null,
+  bytes: Uint8List.fromList(bytes),
+);
 
 void main() {
   ExtractionFailure asFailure(ExtractionResult result) {
@@ -133,10 +133,7 @@ void main() {
       final result = extractor.extract(named('empty.txt', []));
       final failure = asFailure(result);
       expect(failure.kind, ExtractionFailureKind.empty);
-      expect(
-        failure.explanation,
-        "That file didn't contain any text.",
-      );
+      expect(failure.explanation, "That file didn't contain any text.");
     });
 
     test('whitespace-only file -> empty failure too', () {
@@ -158,8 +155,10 @@ void main() {
       final result = extractor.extract(named('photo.txt', junk));
       final failure = asFailure(result);
       expect(failure.kind, ExtractionFailureKind.unreadable);
-      expect(failure.explanation,
-          "Couldn't read that file — it may be damaged or password-protected.");
+      expect(
+        failure.explanation,
+        "Couldn't read that file — it may be damaged or password-protected.",
+      );
     });
 
     test('known binary magic is refused even when ASCII-decodable', () {
@@ -173,10 +172,7 @@ void main() {
       final big = Uint8List(maxPlainBytes + 1);
       big[0] = 0x44;
       final result = extractor.extract(named('big.txt', big));
-      expect(
-        (result as ExtractionFailure).explanation,
-        contains('25 MB'),
-      );
+      expect((result as ExtractionFailure).explanation, contains('25 MB'));
     });
   });
 
@@ -192,8 +188,10 @@ void main() {
     test('does not match known binary containers by magic', () {
       final zip = [0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00];
       expect(extractor.matches(named('plan.docx', zip)), isFalse);
-      expect(extractor.matches(named('plan.pdf', utf8.encode('%PDF-1.6'))),
-          isFalse);
+      expect(
+        extractor.matches(named('plan.pdf', utf8.encode('%PDF-1.6'))),
+        isFalse,
+      );
     });
 
     test('never throws, whatever the bytes', () {

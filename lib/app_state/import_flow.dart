@@ -32,6 +32,7 @@ import 'text_recognition_edge.dart';
 const List<PlanTextExtractor> planExtractors = [
   CsvExtractor(),
   PlainTextExtractor(),
+  PdfExtractor(),
   DocxExtractor(),
   XlsxExtractor(),
 ];
@@ -200,6 +201,14 @@ class ImportFlow extends Notifier<ImportState> {
   @override
   ImportState build() => const ImportIdle();
 
+  /// True from the moment the picker is asked for until the read has landed.
+  /// [state] cannot carry this: it stays [ImportIdle] while the document
+  /// picker is on screen, so a second tap of the pill would present a second
+  /// picker — which iOS refuses, and the refusal reads as the person's file
+  /// being unopenable when nothing went wrong. It guards every door into
+  /// [_import], the photo library's included.
+  bool _running = false;
+
   /// The bytes of the last pick refused as `noTextLayer`, kept so the
   /// card's one-tap OCR route can re-read them through the recognition
   /// edge. Cleared once the route is taken (or a new import begins).
@@ -238,7 +247,16 @@ class ImportFlow extends Notifier<ImportState> {
   }
 
   Future<ImportSucceeded?> _import(Future<PickedBytes?> Function() pick) async {
-    if (state is ImportReading) return null;
+    if (_running || state is ImportReading) return null;
+    _running = true;
+    try {
+      return await _pick(pick);
+    } finally {
+      _running = false;
+    }
+  }
+
+  Future<ImportSucceeded?> _pick(Future<PickedBytes?> Function() pick) async {
     _scanCandidate = null;
 
     final PickedBytes? picked;

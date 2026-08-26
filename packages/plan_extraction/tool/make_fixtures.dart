@@ -74,28 +74,24 @@ void main() {
   write('tidy-utf8.txt', utf8.encode(tidyPlan));
 
   // UTF-8 with BOM — what plenty of Windows editors still write.
-  write(
-    'tidy-utf8-bom.txt',
-    [0xEF, 0xBB, 0xBF, ...utf8.encode(tidyPlan)],
-  );
+  write('tidy-utf8-bom.txt', [0xEF, 0xBB, 0xBF, ...utf8.encode(tidyPlan)]);
 
   // Windows line endings: CRLF is what Notepad has always produced.
-  write(
-    'tidy-crlf.txt',
-    utf8.encode(tidyPlan.replaceAll('\n', '\r\n')),
-  );
+  write('tidy-crlf.txt', utf8.encode(tidyPlan.replaceAll('\n', '\r\n')));
 
   // UTF-16 LE with BOM — Windows' "Unicode" save.
-  write(
-    'tidy-utf16le-bom.txt',
-    [0xFF, 0xFE, ..._utf16CodeUnits(tidyPlan, littleEndian: true)],
-  );
+  write('tidy-utf16le-bom.txt', [
+    0xFF,
+    0xFE,
+    ..._utf16CodeUnits(tidyPlan, littleEndian: true),
+  ]);
 
   // UTF-16 BE with BOM — rare, but PowerTools and network tools emit it.
-  write(
-    'tidy-utf16be-bom.txt',
-    [0xFE, 0xFF, ..._utf16CodeUnits(tidyPlan, littleEndian: false)],
-  );
+  write('tidy-utf16be-bom.txt', [
+    0xFE,
+    0xFF,
+    ..._utf16CodeUnits(tidyPlan, littleEndian: false),
+  ]);
 
   // Latin-1 / Windows-1252: the same plan with é as one byte (0xE9), which
   // strict UTF-8 decoding would refuse and the ladder must catch.

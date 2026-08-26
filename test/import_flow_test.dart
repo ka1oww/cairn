@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:cairn/app_state/file_picker_edge.dart';
+import 'package:cairn/app_state/import_flow.dart';
 import 'package:cairn/bootstrap.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 import 'package:plan_extraction/plan_extraction.dart';
@@ -183,6 +184,41 @@ void main() {
     expect(boxText(tester), tidyImport);
   });
 
+  testWidgets('a PDF whose engine never loads refuses instead of spinning', (
+    tester,
+  ) async {
+    // `flutter_tester` genuinely has no PDFium native asset, so the engine
+    // throws inside `pdfrx_engine`'s worker isolate and the read never
+    // resolves on its own. That is the very condition being exercised: the
+    // real registry routes these bytes to the real `PdfExtractor`, and only
+    // its timeout gets the person off the progress label. Without it this
+    // test would hang with no error at all — which is why the PDF path could
+    // not be covered here before.
+    final pdf = File(
+      'packages/plan_extraction/test/fixtures/garbled-itinerary.pdf',
+    ).readAsBytesSync();
+    await launch(
+      tester,
+      picks: [PickedBytes(fileName: 'plan.pdf', extension: 'pdf', bytes: pdf)],
+    );
+
+    await importAFile(tester);
+    expect(find.text('Reading plan.pdf…'), findsOneWidget);
+
+    // Past the engine's liveness bound, and the screen moves.
+    await tester.pump(pdfEngineTimeout + const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(find.byKey(const Key('import-progress')), findsNothing);
+    expect(find.byKey(const Key('import-error')), findsOneWidget);
+    expect(find.textContaining('did not respond'), findsOneWidget);
+    expect(boxText(tester), '');
+    // The pill is back: the flow's re-entry guard cleared with the read.
+    await tester.tap(find.byKey(const Key('import-error-dismiss')));
+    await tester.pump();
+    expect(find.byKey(const Key('import-pill')), findsOneWidget);
+  });
+
   testWidgets('dismissing the picker changes nothing', (tester) async {
     final picker = await launch(tester, picks: [null]);
 
@@ -191,9 +227,17 @@ void main() {
     expect(boxText(tester), '');
     expect(find.byKey(const Key('import-error')), findsNothing);
     expect(find.byKey(const Key('import-pill')), findsOneWidget);
-    // Every extension some registered extractor claims — slice C added
-    // docx/xlsx/csv to the registry alongside slice A's txt.
-    expect(picker.lastAllowedExtensions, {'csv', 'txt', 'docx', 'xlsx'});
+    // Every extension some registered extractor claims — the picker is
+    // offered exactly what the registry claims, so this stays true as each
+    // format slice lands rather than needing an edit per slice.
+    expect(picker.lastAllowedExtensions, supportedImportExtensions);
+    expect(picker.lastAllowedExtensions, {
+      'csv',
+      'txt',
+      'pdf',
+      'docx',
+      'xlsx',
+    });
   });
 
   testWidgets('unreadable bytes refuse into the error card, box untouched', (

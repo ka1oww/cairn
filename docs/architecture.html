@@ -200,7 +200,7 @@
 <div class="map-inner">
 
 <!-- ======================= arrows (under the nodes) ======================= -->
-<svg viewBox="0 0 1360 1690" width="1360" height="1690" aria-hidden="true">
+<svg viewBox="0 0 1360 1900" width="1360" height="1900" aria-hidden="true">
   <defs>
     <marker id="mi" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M0 0L10 5L0 10z" fill="#43382C" fill-opacity="0.55"/>
@@ -271,6 +271,7 @@
   <g stroke="#43382C" stroke-opacity="0.55" stroke-width="1.8" fill="none" marker-end="url(#mi)">
     <path d="M72 365 C 30 430, 30 480, 30 700 L30 1400 C 30 1450, 90 1478, 175 1491"/>       <!-- scheduler -> trip_moments -->
     <path d="M395 365 C 48 540, 48 620, 48 900 L48 1395 C 48 1452, 250 1478, 428 1491"/>     <!-- providers -> itinerary_parser -->
+    <path d="M420 365 C 66 560, 66 640, 66 920 L66 1640 C 66 1700, 140 1728, 236 1748"/>     <!-- import flow -> plan_extraction -->
     <path d="M610 725 L610 1370 C 610 1430, 640 1465, 678 1491"/>                            <!-- repositories -> cairn_model -->
     <path d="M1038 365 C 1348 540, 1348 620, 1348 900 L1348 1400 C 1348 1455, 1290 1478, 1208 1491"/> <!-- sweep -> photo_day_assignment -->
   </g>
@@ -283,6 +284,7 @@
     <text x="614" y="392" transform="rotate(90 614 392)">asks — never told where the answer came from</text>
     <text x="18" y="980" transform="rotate(90 18 980)">roster · clock · windows in — schedule out</text>
     <text x="54" y="990" transform="rotate(90 54 990)">paste in — days &amp; doubts out</text>
+    <text x="72" y="1180" transform="rotate(90 72 1180)">bytes in — plan text out</text>
     <text x="1344" y="980" transform="rotate(90 1344 980)">metadata in, day number + confidence out</text>
     <text x="620" y="1000" transform="rotate(90 620 1000)">speaks the vocabulary</text>
     <text x="500" y="1265" transform="rotate(64 500 1265)">rows typed against the model — planned</text>
@@ -481,7 +483,7 @@
 <div class="node partial" style="left:600px;top:1672px;width:400px;height:120px">
   <span class="chip">partial</span><h4>plan_extraction</h4>
   <p>The file-import contract: bytes in, honest lines of plan text out, so every format reduces to text <b>itinerary_parser</b> already reads. Typed refusals carry the sentence a person is shown.</p>
-  <span class="sub">the contract and the plain-text extractor built; PDF and calendar files not, and screenshot OCR deliberately an edge rather than an extractor — the registry lives in <code>lib/app_state/import_flow.dart</code></span>
+  <span class="sub">the contract, the plain-text, docx/xlsx/csv and PDF extractors built; the calendar format not, and screenshot OCR deliberately an edge rather than an extractor — the registry lives in <code>lib/app_state/import_flow.dart</code></span>
 </div>
 
 </div><!-- /map-inner -->
