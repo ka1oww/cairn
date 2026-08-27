@@ -233,10 +233,10 @@ void main() {
     // slice lands rather than needing an edit per slice.
     expect(picker.lastAllowedExtensions, supportedImportExtensions);
     expect(documentImportExtensions, {'csv', 'txt', 'pdf', 'docx', 'xlsx'});
-    expect(
-      picker.lastAllowedExtensions,
-      {...documentImportExtensions, ...imageImportExtensions},
-    );
+    expect(picker.lastAllowedExtensions, {
+      ...documentImportExtensions,
+      ...imageImportExtensions,
+    });
   });
 
   testWidgets('unreadable bytes refuse into the error card, box untouched', (
