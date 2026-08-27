@@ -13,11 +13,13 @@ import 'app_state/day_view.dart';
 import 'app_state/file_picker_edge.dart';
 import 'app_state/import_flow.dart';
 import 'app_state/ping_schedule.dart';
+import 'app_state/plan_draft.dart';
 import 'app_state/text_recognition_edge.dart';
 import 'app_state/trip_providers.dart';
 import 'repositories/itinerary_sync.dart';
 import 'repositories/membership_repository.dart';
 import 'repositories/photo_repository.dart';
+import 'repositories/plan_draft_repository.dart';
 import 'repositories/trip_repository.dart';
 import 'storage/drift/app_database.dart';
 import 'storage/remote/gotrue_sessions.dart';
@@ -84,6 +86,9 @@ Widget bootstrapApp({
   return ProviderScope(
     overrides: [
       tripRepositoryProvider.overrideWithValue(TripRepository(db)),
+      planDraftRepositoryProvider.overrideWithValue(
+        PlanDraftRepository(db),
+      ),
       photoRepositoryProvider.overrideWithValue(photos ?? store),
       photoStoreProvider.overrideWithValue(store),
       membershipRepositoryProvider.overrideWithValue(membership ?? roster),

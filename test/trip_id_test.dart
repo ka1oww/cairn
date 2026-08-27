@@ -56,6 +56,7 @@ const you = 'me';
 /// the itinerary's merge clock and the sync cursors
 /// (`supabase/migrations/0010_trip_itinerary.sql` is its other half).
 Future<void> windBackToV4(AppDatabase db) async {
+  await db.customStatement('DROP TABLE plan_drafts');
   await db.customStatement('DROP TABLE sync_states');
   await db.customStatement(
     'ALTER TABLE itinerary_days DROP COLUMN revised_at_utc_iso',

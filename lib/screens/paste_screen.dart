@@ -1,4 +1,5 @@
 // SCREENS band (docs/architecture.md): knows app state and nothing below it.
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_state/import_flow.dart';
 import '../app_state/paste_flow.dart';
+import '../app_state/plan_draft.dart';
 import 'join_screen.dart';
 
 // The Cairn look, scoped to this screen: the round-4 design mock's tokens
@@ -100,19 +102,63 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
   /// person may want to know about while they fix it in the editor.
   String? _importNote;
 
+  /// Coalesces the draft write while somebody is typing. A pending import
+  /// tracks the box (`plan_draft.dart`), and tracking it per keystroke would
+  /// be a disk write per keystroke for no gain — the thing being defended
+  /// against is the process dying, and 400 ms of it is not the loss R6 is
+  /// about.
+  Timer? _draftWrite;
+
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialText);
+    _controller.addListener(_keepTheDraftInStep);
+    // The pending import, put back (the torture-test's R6): the box opens as
+    // the person left it rather than blank. Only into a box that would
+    // otherwise open empty — a re-paste's pre-filled plan text is the live
+    // trip's own, and a draft over it would be an import nobody asked for.
+    if (widget.initialText.isEmpty && !widget.repastingLivePlan) {
+      _restoreThePendingImport();
+    }
   }
 
   @override
   void dispose() {
+    _draftWrite?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
+  Future<void> _restoreThePendingImport() async {
+    final pending = await ref.read(planDraftProvider).read();
+    // Never over what the person has typed in the meantime. The read is a
+    // local row and lands in a frame or two, but the box is live throughout
+    // it, and a restore that overwrote a typed line would be the very thing
+    // this feature must not do.
+    if (!mounted || pending == null || _controller.text.isNotEmpty) return;
+    setState(() => _controller.text = pending);
+  }
+
+  void _keepTheDraftInStep() {
+    _draftWrite?.cancel();
+    _draftWrite = Timer(
+      const Duration(milliseconds: 400),
+      () => ref.read(planDraftProvider).keepInStep(_controller.text),
+    );
+  }
+
+  /// Writes the draft now rather than in 400 ms. Called on the way out of
+  /// the box, where the pending timer would otherwise be cancelled by
+  /// [dispose] and the last edits lost.
+  void _flushTheDraft() {
+    _draftWrite?.cancel();
+    _draftWrite = null;
+    ref.read(planDraftProvider).keepInStep(_controller.text);
+  }
+
   void _read() {
+    _flushTheDraft();
     ref.read(pasteFlowProvider.notifier).parse(_controller.text);
   }
 
@@ -145,6 +191,9 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
       _controller.text = result.text;
       _importNote = result.notes.isEmpty ? null : result.notes.join(' ');
     });
+    // The one thing that starts a draft. A fresh import replaces the last
+    // one; nothing else on this screen creates one (`plan_draft.dart`).
+    await ref.read(planDraftProvider).remember(result.text);
   }
 
   /// The two doors of slice D's import sheet (the import plan §2.6):

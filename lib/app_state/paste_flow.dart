@@ -33,6 +33,7 @@ import '../repositories/trip_repository.dart';
 import 'date_labels.dart';
 import 'day_view.dart';
 import 'ping_schedule.dart';
+import 'plan_draft.dart';
 import 'trip_lifecycle.dart';
 import 'trip_providers.dart';
 
@@ -988,6 +989,10 @@ class PasteFlow extends Notifier<PasteFlowState> {
           starterDisplayName: localMemberName,
           now: ref.read(nowProvider),
         );
+    // The pending import has become the trip: there is nothing left for it
+    // to protect, and a draft that outlived its accept would be offered back
+    // the next time the box opened empty (`plan_draft.dart`).
+    await ref.read(planDraftProvider).forget();
     _editingLivePlan = false;
     _repastingLivePlan = false;
     _mergeBaseline = null;
