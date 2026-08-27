@@ -94,7 +94,8 @@ Widget bootstrapApp({
   // Always bound, and never conditionally: Riverpod refuses to update a scope
   // whose override *count* changed, and a test that pumps its own scope over
   // this one would break on a binding that came and went.
-  final standings = sharing ?? sync?.standings ?? const Stream<SyncOutcome>.empty();
+  final standings =
+      sharing ?? sync?.standings ?? const Stream<SyncOutcome>.empty();
   return ProviderScope(
     overrides: [
       sharedFactsStandingProvider.overrideWith((ref) => standings),

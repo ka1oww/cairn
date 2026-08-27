@@ -608,7 +608,7 @@ Each of these has already cost time, or is certain to.
   whether a statement threw. See `supabase/tests/README.md`.
 - **No RLS refusal has ever been observed on the hosted project.** Only one
   account has ever touched it, so only the permitted paths have run there. The
-  109 passing assertions are against a throwaway local Postgres 17. A green
+  108 passing assertions are against a throwaway local Postgres 17. A green
   probe is evidence about the schema, not about production.
 - **Dart's `int` bitwise operators are 32-bit when compiled to JavaScript.** The
   ping derivation uses arithmetic rather than shifts for exactly this reason, and

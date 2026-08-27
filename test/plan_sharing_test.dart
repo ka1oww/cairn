@@ -76,7 +76,10 @@ void main() {
       // does not know where the plan got to. The sheet's ending line already
       // says what an archive is.
       expect(
-        planSharingFor(SyncStanding.archived, planOf([DateTime.utc(2027, 6, 14)])),
+        planSharingFor(
+          SyncStanding.archived,
+          planOf([DateTime.utc(2027, 6, 14)]),
+        ),
         isNull,
       );
     });
@@ -87,7 +90,10 @@ void main() {
         planOf([DateTime.utc(2027, 6, 14)]),
       )!;
       expect(sharing.reached, isTrue);
-      expect(sharing.line, 'The plan is up. It is not only on this phone any more.');
+      expect(
+        sharing.line,
+        'The plan is up. It is not only on this phone any more.',
+      );
       expect(
         sharing.mark,
         isNull,
@@ -263,8 +269,9 @@ void main() {
       );
     });
 
-    testWidgets('a plan that has gone up says so, and marks nothing',
-        (tester) async {
+    testWidgets('a plan that has gone up says so, and marks nothing', (
+      tester,
+    ) async {
       await walkToTheTrail(tester, standing: SyncStanding.synced);
 
       expect(find.byKey(const Key('trail-sharing')), findsNothing);
@@ -275,8 +282,9 @@ void main() {
       );
     });
 
-    testWidgets('a tunnel is said in Cairn\'s words and not a machine\'s',
-        (tester) async {
+    testWidgets('a tunnel is said in Cairn\'s words and not a machine\'s', (
+      tester,
+    ) async {
       await walkToTheTrail(tester, standing: SyncStanding.offline);
 
       expect(textOf(const Key('trail-sharing')), 'Only on this phone.');
@@ -288,8 +296,9 @@ void main() {
       }
     });
 
-    testWidgets('a suite where nothing reconciles claims neither way',
-        (tester) async {
+    testWidgets('a suite where nothing reconciles claims neither way', (
+      tester,
+    ) async {
       // The default: `bootstrapApp` passes no sharing stream, nothing is
       // ever said, and both surfaces stay silent rather than asserting that
       // the plan did or did not go up.

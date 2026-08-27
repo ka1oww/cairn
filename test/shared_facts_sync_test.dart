@@ -287,7 +287,12 @@ void main() {
       final id = await startTrip(db);
       await TripRepository(db).saveItinerary(
         plan([
-          confirmed(1, 'Tokyo', date: CalendarDate(2027, 6, 14), stops: ['Senso-ji']),
+          confirmed(
+            1,
+            'Tokyo',
+            date: CalendarDate(2027, 6, 14),
+            stops: ['Senso-ji'],
+          ),
           confirmed(2, 'Kyoto', date: CalendarDate(2027, 6, 15)),
         ]),
         at: DateTime.utc(2027, 6, 1),
@@ -308,47 +313,51 @@ void main() {
       expect(outcome.standing, SyncStanding.synced);
       expect(server.created.single.id, id);
       expect(server.created.single.timeZone, 'Asia/Tokyo');
-      expect(
-        server.pushes.single.days.map((d) => d.place),
-        ['Tokyo', 'Kyoto'],
-        reason: 'the plan itself has to have gone up, not just the trip row',
-      );
+      expect(server.pushes.single.days.map((d) => d.place), [
+        'Tokyo',
+        'Kyoto',
+      ], reason: 'the plan itself has to have gone up, not just the trip row');
     });
 
-    test('publishes a trip nobody has named, and does not name it here', () async {
-      final db = inMemory();
-      addTearDown(db.close);
-      await startTrip(db);
-      await TripRepository(db).saveItinerary(
-        plan([confirmed(1, 'Tokyo', date: CalendarDate(2027, 6, 14))]),
-        at: DateTime.utc(2027, 6, 1),
-      );
-      final server = FakeServer(trip: null);
-      final sync = TripSync(
-        database: db,
-        facts: server,
-        now: duringTheTrip,
-        tripRow: tripRowFor(const FixedTimeZone('Asia/Tokyo')),
-      );
+    test(
+      'publishes a trip nobody has named, and does not name it here',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        await startTrip(db);
+        await TripRepository(db).saveItinerary(
+          plan([confirmed(1, 'Tokyo', date: CalendarDate(2027, 6, 14))]),
+          at: DateTime.utc(2027, 6, 1),
+        );
+        final server = FakeServer(trip: null);
+        final sync = TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+          tripRow: tripRowFor(const FixedTimeZone('Asia/Tokyo')),
+        );
 
-      expect((await sync.syncNow()).standing, SyncStanding.synced);
-      expect(
-        server.created.single.name,
-        unnamedTripPlaceholder,
-        reason: '`trips.name` is not null, and a plan that never leaves the '
-            'phone because nobody typed a title is the worse lie',
-      );
+        expect((await sync.syncNow()).standing, SyncStanding.synced);
+        expect(
+          server.created.single.name,
+          unnamedTripPlaceholder,
+          reason:
+              '`trips.name` is not null, and a plan that never leaves the '
+              'phone because nobody typed a title is the worse lie',
+        );
 
-      // The second pass reads the row back and applies the roster, which is
-      // where the placeholder would come home as a name. It must not.
-      expect((await sync.syncNow()).standing, SyncStanding.synced);
-      expect(
-        (await db.readTripFacts())!.name,
-        isNull,
-        reason: 'the word the phone publishes for an unnamed trip is not a '
-            'name and is never adopted as one',
-      );
-    });
+        // The second pass reads the row back and applies the roster, which is
+        // where the placeholder would come home as a name. It must not.
+        expect((await sync.syncNow()).standing, SyncStanding.synced);
+        expect(
+          (await db.readTripFacts())!.name,
+          isNull,
+          reason:
+              'the word the phone publishes for an unnamed trip is not a '
+              'name and is never adopted as one',
+        );
+      },
+    );
 
     test('says nothing has gone up while the plan has no dates', () async {
       final db = inMemory();
@@ -399,29 +408,32 @@ void main() {
       expect(server.created, isEmpty);
     });
 
-    test('claims no clock on a phone that cannot say which one it keeps', () async {
-      final db = inMemory();
-      addTearDown(db.close);
-      await startTrip(db);
-      await TripRepository(db).saveItinerary(
-        plan([confirmed(1, 'Tokyo', date: CalendarDate(2027, 6, 14))]),
-        at: DateTime.utc(2027, 6, 1),
-      );
-      final server = FakeServer(trip: null);
+    test(
+      'claims no clock on a phone that cannot say which one it keeps',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        await startTrip(db);
+        await TripRepository(db).saveItinerary(
+          plan([confirmed(1, 'Tokyo', date: CalendarDate(2027, 6, 14))]),
+          at: DateTime.utc(2027, 6, 1),
+        );
+        final server = FakeServer(trip: null);
 
-      final outcome = await TripSync(
-        database: db,
-        facts: server,
-        now: duringTheTrip,
-        tripRow: tripRowFor(const FixedTimeZone(null)),
-      ).syncNow();
+        final outcome = await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+          tripRow: tripRowFor(const FixedTimeZone(null)),
+        ).syncNow();
 
-      // Does not happen on an iPhone; asserted because the alternative to
-      // declining would be inventing a zone, and `trips.timezone` is checked
-      // against `pg_timezone_names` at write time anyway.
-      expect(outcome.standing, SyncStanding.awaitingTripRow);
-      expect(server.created, isEmpty);
-    });
+        // Does not happen on an iPhone; asserted because the alternative to
+        // declining would be inventing a zone, and `trips.timezone` is checked
+        // against `pg_timezone_names` at write time anyway.
+        expect(outcome.standing, SyncStanding.awaitingTripRow);
+        expect(server.created, isEmpty);
+      },
+    );
 
     test('a name typed on this phone survives the next reconcile', () async {
       // The ratchet the sync being off was hiding: nothing pushes a rename,
