@@ -320,6 +320,77 @@ void main() {
     expect(boxText(tester), '');
   });
 
+  testWidgets(
+    "a picture recognition made nothing of blames the picture, not the device",
+    (tester) async {
+      // The import torture-test's R5: PNG bytes under a .txt name route by
+      // content to recognition (correct), a picture with no text in it then
+      // refuses, and the card used to say the device couldn't read text —
+      // which reads as a broken phone rather than the truth.
+      await launch(
+        tester,
+        documentPicks: [
+          PickedBytes(
+            fileName: 'plan.txt',
+            extension: 'txt',
+            bytes: pngBytes(),
+          ),
+        ],
+        recognitionAnswers: [
+          const RecognitionRefused(
+            "This device couldn't read text from that picture.",
+            kind: RecognitionRefusalKind.noTextFound,
+          ),
+        ],
+      );
+
+      await openSheet(tester);
+      await tester.tap(find.byKey(const Key('import-door-file')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('import-error')), findsOneWidget);
+      expect(
+        find.text("Couldn't find any readable text in that picture."),
+        findsOneWidget,
+      );
+      // The device is not blamed — the edge's own words never reach the card
+      // on this flavour.
+      expect(find.textContaining('This device'), findsNothing);
+      // Nothing already in the box is touched, and the card dismisses.
+      expect(boxText(tester), '');
+      await tester.tap(find.byKey(const Key('import-error-dismiss')));
+      await tester.pump();
+      expect(find.byKey(const Key('import-error')), findsNothing);
+    },
+  );
+
+  testWidgets('a device that cannot recognize text still says so', (
+    tester,
+  ) async {
+    await launch(
+      tester,
+      imagePicks: [
+        PickedBytes(fileName: 'shot.png', extension: 'png', bytes: pngBytes()),
+      ],
+      recognitionAnswers: [
+        const RecognitionRefused(
+          'This device cannot read text from pictures.',
+          kind: RecognitionRefusalKind.unavailable,
+        ),
+      ],
+    );
+
+    await openSheet(tester);
+    await tester.tap(find.byKey(const Key('import-door-photo')));
+    await tester.pump();
+
+    expect(
+      find.text('This device cannot read text from pictures.'),
+      findsOneWidget,
+    );
+    expect(boxText(tester), '');
+  });
+
   testWidgets('a scan refused by the reader offers one-tap OCR off the card', (
     tester,
   ) async {

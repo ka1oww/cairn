@@ -247,7 +247,16 @@ import what is written there, not here.
   the only one any automated test ever exercises. **A green suite and a green
   simulator run are no evidence OCR works**, exactly as for the camera; real
   recognition quality is judged on a device against a manual corpus — with one
-  exception, below, which is arithmetic rather than judgement. Four
+  exception, below, which is arithmetic rather than judgement. **A
+  refusal has two flavours and they must not share a sentence**:
+  `RecognitionRefused.kind` is `unavailable` (no channel host, a device Vision
+  cannot query languages for) or `noTextFound`, and only the first blames the
+  device — the second lands on `noReadableTextInPictureSentence`, the same
+  words an empty answer gets, written once. Native raises the split as the
+  `no_text` error code, and it does so on *both* halves of a Vision refusal
+  (an error handed to the completion, and a throw out of `perform` — a
+  one-pixel image fails through the second). Blaming the phone for an ordinary
+  textless picture is the thing to refuse in review. Four
   things worth knowing. Pictures never enter `planExtractors` — `claimsImage`
   in `import_flow.dart` claims them by extension first and magic bytes second,
   so a renamed screenshot still finds the route — and it runs *before*
