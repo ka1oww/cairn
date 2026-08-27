@@ -250,6 +250,23 @@ import what is written there, not here.
   door needs `NSPhotoLibraryUsageDescription` in `Info.plist` because
   `file_picker`'s image mode builds `PHPickerConfiguration(photoLibrary:)`,
   the authorization-requiring form.
+- **Reading order is measured off the text, never off the page.**
+  `ios/Runner/TextLineOrder.swift` is the whole rule: Vision reports one
+  observation per visual line, in no order, and names each quadrilateral's
+  corners in the *text's* own frame, so `topRight - topLeft` points along the
+  reading direction whichever way up the picture is. Sorting on
+  `boundingBox.midY` instead — which the edge did until 2026-08-27 — is
+  reading order only while the page happens to be upright: a plan photographed
+  sideways with no EXIF orientation tag recognises every line and returns them
+  fully shuffled, days interleaved, and a careless person accepts a scrambled
+  trip. Reintroducing an assumed axis is the thing to refuse in review. The
+  file is deliberately pure geometry — no Vision, no Flutter — and is compiled
+  into **both** the Runner and RunnerTests targets, which is what lets
+  `ios/RunnerTests/TextLineOrderTests.swift` cover the rotated case at all:
+  it is the only automated test of anything in `ios/Runner/`, and it runs
+  under `xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner
+  -only-testing:RunnerTests` (a simulator destination; `flutter test` never
+  reaches it).
 - **Capture is a route, not a tab.** The only way in is the day page's one
   call to action, and only an open or a late window offers it. The camera is
   behind `CameraSource` (`lib/app_state/camera_source.dart`): a real back
