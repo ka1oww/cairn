@@ -136,6 +136,40 @@ void main() {
     ]),
   );
 
+  // The report's W1 reproduction: day headers as ordinary paragraphs, every
+  // stop a two-column table row `[HH:MM][what]`. Eight rows over three
+  // days, one of them carrying a soft break inside its text cell. A reader
+  // sees eight stops; before the row rule the extractor said sixteen lines.
+  write(
+    'kyoto-week.docx',
+    _docx([
+      _p('Fri 20 Nov 2026 - Kyoto'),
+      _table([
+        [_p('08:30'), _p('Fushimi Inari before the crowds')],
+        [_p('12:00'), _p('Nishiki Market lunch')],
+        [
+          _p('16:00'),
+          _pRuns([
+            _t('Gion at dusk'),
+            _raw('<w:br/>'),
+            _t('(walk from Yasaka)'),
+          ]),
+        ],
+      ]),
+      _p('Sat 21 Nov 2026 - Nara'),
+      _table([
+        [_p('09:15'), _p('Todai-ji')],
+        [_p('11:00'), _p('Nara Park deer')],
+        [_p('15:30'), _p('Kasuga-taisha lanterns')],
+      ]),
+      _p('Sun 22 Nov 2026 - Osaka'),
+      _table([
+        [_p('10:00'), _p('Osaka Castle')],
+        [_p('19:00'), _p('Dotonbori dinner')],
+      ]),
+    ]),
+  );
+
   // The shared garbled itinerary as a Word document: one paragraph per
   // line, which is what extraction must give back (modulo whitespace).
   write(

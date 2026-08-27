@@ -382,14 +382,14 @@ void main() {
 
     await importAFile(tester);
 
-    // One line per WordprocessingML paragraph; the table's cells row-major.
+    // One line per WordprocessingML paragraph, and one line per table
+    // *row* with its cells joined: `[09:00][Senso-ji]` is one stop to a
+    // reader and must be one stop here.
     expect(
       boxText(tester),
       'Mon 14 June 2027 - Tokyo\n'
-      '09:00\n'
-      'Senso-ji\n'
-      '12:00\n'
-      'Ramen in Asakusa\n'
+      '09:00 Senso-ji\n'
+      '12:00 Ramen in Asakusa\n'
       'Tue 15 June 2027 - Kyoto\n'
       'Fushimi Inari at dawn',
     );
@@ -406,8 +406,23 @@ void main() {
     final stops = await db.readItineraryStops();
     expect(
       stops.map((s) => s.stopText),
-      containsAll(['Senso-ji', 'Fushimi Inari at dawn']),
+      containsAll(['09:00 Senso-ji', 'Fushimi Inari at dawn']),
     );
+  });
+
+  testWidgets('a [time | stop] Word table imports one stop per row', (
+    tester,
+  ) async {
+    // The scout report's W1: eight table rows over three days used to read
+    // back as twelve stops, every time torn off the place it belonged to.
+    await launch(tester, picks: [fixture('kyoto-week.docx')]);
+
+    await importAFile(tester);
+    await tester.tap(find.byKey(const Key('read-button')));
+    await tester.pump();
+
+    expect(find.textContaining('3 days'), findsOneWidget);
+    expect(find.textContaining('8 stops'), findsOneWidget);
   });
 
   testWidgets('an imported xlsx with a date column lands in the dialect', (

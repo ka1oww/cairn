@@ -15,6 +15,14 @@ import slice codes against and one extractor per format.
   here; each slice adds exactly one line to it.
 - The extractors, one per format: `PlainTextExtractor` (slice A) and
   `DocxExtractor` / `XlsxExtractor` / `CsvExtractor` (slice C).
+- `DocxExtractor` says a table **one line per row**, its filled cells joined
+  in column order, so `[08:30 | Fushimi Inari]` reaches the box as the one
+  stop a reader sees and the parser reads its leading time. A row down to a
+  single filled cell keeps its paragraphs as separate lines: a one-column
+  table is layout, not pairing. This is the row model's rule reached the
+  other way round — WordprocessingML types no cell, so `plan_rows.dart`
+  has nothing to pair, and giving it a time grammar over text cells would
+  change xlsx and csv too.
 - `src/plan_rows.dart` is what xlsx and csv share: a row model
   (`DateCell`/`TimeCell`/`TextCell` → `DayRow`/`StopRow`/`PreambleRow`) and
   the one renderer that says those rows back in the plan-text dialect. Only a

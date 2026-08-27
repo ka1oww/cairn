@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:test/test.dart';
 
+import 'package:itinerary_parser/itinerary_parser.dart';
 import 'package:plan_extraction/plan_extraction.dart';
 
 const extractor = DocxExtractor();
@@ -53,20 +54,58 @@ void main() {
   });
 
   group('extraction', () {
-    test('paragraphs and table cells come out in document order, '
-        'cells read row-major', () {
+    test('paragraphs and table rows come out in document order, one line '
+        'per row with its cells joined', () {
       final result = extractor.extract(fixture('tables.docx'));
       expect(result, isA<ExtractedText>());
       final lines = (result as ExtractedText).text.split('\n');
       expect(lines, [
         'Mon 14 June 2027 - Tokyo',
-        '09:00',
-        'Senso-ji',
-        '12:00',
-        'Ramen in Asakusa',
+        // `[09:00][Senso-ji]` is one stop to a reader and one line here:
+        // the time stays with the place the way the row model keeps a
+        // typed spreadsheet's time with its own row.
+        '09:00 Senso-ji',
+        '12:00 Ramen in Asakusa',
         'Tue 15 June 2027 - Kyoto',
+        // A row down to one filled cell is layout, not pairing.
         'Fushimi Inari at dawn',
       ]);
+    });
+
+    test('a two-column [time | stop] table gives one stop per row, and the '
+        'parser reads the row as a starred stop (report W1)', () {
+      final result = extractor.extract(fixture('kyoto-week.docx'));
+      expect(result, isA<ExtractedText>());
+      final parsed = parseItinerary((result as ExtractedText).text);
+
+      expect(parsed.days, hasLength(3));
+      expect(
+        parsed.days.map((day) => day.stops.length),
+        [3, 3, 2],
+        reason: 'eight table rows are the eight stops a reader sees',
+      );
+      expect(parsed.days.expand((day) => day.stops).length, 8);
+
+      final first = parsed.days.first.stops.first;
+      expect(first.time, const ParsedTime(8, 30));
+      expect(first.isStarred, isTrue);
+      expect(first.text, contains('Fushimi Inari before the crowds'));
+
+      // The soft break inside a cell still joins as a space, and the row's
+      // time still leads the joined line.
+      expect(
+        parsed.days.first.stops.last.text,
+        '16:00 Gion at dusk (walk from Yasaka)',
+      );
+      expect(parsed.days.first.stops.last.time, const ParsedTime(16, 0));
+    });
+
+    test('a single-column table keeps one line per paragraph', () {
+      // Layout tables are common in Word; collapsing a column of stops into
+      // one line would be worse than the bug the row rule fixes.
+      final result = extractor.extract(fixture('tables.docx'));
+      final text = (result as ExtractedText).text;
+      expect(text, contains('Fushimi Inari at dawn'));
     });
 
     test('a soft line break inside one cell joins as a space, not a '
