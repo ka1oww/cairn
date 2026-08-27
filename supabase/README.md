@@ -111,10 +111,27 @@ trips/<trip_id>/photos/<photo_id>/original.<ext>
 `original.<ext>` holds the frame exactly as the camera wrote it: the upload
 signs a PUT and transforms nothing, so what lands is what the phone took. A
 photo id is minted once and `r2_object_key` is `unique`, so no second *row*
-can ever claim an original — but note `r2-upload-url` will re-sign a key it
-has signed before, so a client that re-uploads under the same photo id
-overwrites an original. Nothing does that today; a client that starts to is
-breaking this rule, not extending it.
+can ever claim an original — and **`r2-upload-url` refuses to sign a photo id
+a row already holds**, so no second set of *bytes* can either. The refusal is
+flat: a claimed original is refused to everyone, its own contributor included.
+An original is immutable, which is the whole reason a phone may cache its
+bytes forever, and a contributor re-uploading would make every cached copy
+silently stale.
+
+This used not to be true, and the gap was the real one. The function checked
+only that the caller was a member of the trip, while every member can read
+every photo row in that trip — its `id` and its `r2_object_key` included
+(`photos_select_trip_member`). So one member could ask for an upload URL under
+another member's photo id and PUT arbitrary bytes over their original, leaving
+the row untouched: same id, same byline, same size, same capture time, so the
+swap was invisible to the index and to every RLS policy. `photos` was well
+protected; the object it pointed at was protected by nothing. The two probe
+checks under *"a co-member can read what an upload URL is minted from"* pin the
+premise, and the function's own tests pin the refusal.
+
+The ordering is what makes a flat refusal cost nothing: bytes first, row
+second. A retry of an upload that never landed happens while no row exists and
+is still signed; a row is what says "these bytes are the record now".
 If a smaller derived variant is generated it is `.../thumbnail.<ext>`
 *alongside* the original, never in place of it. A composed day page's key is
 `trips/<trip_id>/pages/<day_page_id>.<ext>`.
@@ -576,20 +593,47 @@ person signing in with both providers on the same address gets one
    in the app binary. The app never talks to R2 directly for uploads:
    - The client authenticates to Supabase, then calls the `r2-upload-url`
      edge function (`supabase/functions/r2-upload-url/`) with
-     `{ tripId, photoId, contentType }` and its session JWT.
-   - The function re-checks trip membership **as that user**, via the
-     same `trip_members` table and the same RLS the rest of the schema
-     relies on (it uses the caller's JWT against the anon client to do this
-     check, not the service role, so there is exactly one source of truth for
-     "is this person allowed to write here").
+     `{ tripId, photoId, contentType, contentLength }` and its session JWT.
+     `photoId` is a client-minted uuid in the hyphenated form `photos.id`
+     reads back — `PhotoId.mint` on the phone, `UUID_RE` in the function, one
+     spelling compared by `test/photo_id_format_test.dart`.
+   - The function asks Postgres three questions, all **as that user**, via the
+     same tables and the same RLS the rest of the schema relies on (the
+     caller's JWT against the anon client, never the service role, so there is
+     exactly one source of truth for "is this person allowed to write here"):
+     is the caller a member of this trip; has the trip closed
+     (`trip_closes_at`, the same condition `photos_insert_trip_member`
+     imposes, so bytes cannot land for a trip that can never accept the
+     matching row); and does a `photos` row already hold this id — see the
+     object-key section above for why that last one is the important refusal.
+   - It also refuses a declared size over 64 MiB. Storage is the only line in
+     this backend that ever invoices, and the measured JPEG median is 3.08 MB
+     with the largest photograph in the corpus at 7.00 MB
+     (`../docs/storage-and-cost.md`), so the ceiling is nine times the largest
+     real one. It is a sanity bound and not a quota: a member who wants to
+     fill the bucket does it with ordinary photographs.
    - It then mints a presigned S3-compatible `PUT` URL (R2 is
      S3-API-compatible) scoped to the exact object key
      `trips/<tripId>/photos/<photoId>/original.<ext>`, valid for 5
-     minutes, and returns it.
+     minutes, and returns it. **The declared content type and content length
+     are signed into that URL** (`allHeaders: true` in `index.ts` — aws4fetch
+     leaves both out of the signature by default, which is what made the
+     content-type allowlist advisory), so R2 refuses a PUT that declares
+     anything else. The client must therefore send both headers, and a
+     `content-length` rather than chunked transfer-encoding.
    - The client `PUT`s the file bytes directly to that URL (R2, not
      through Supabase — keeps Supabase's own bandwidth/compute out of
      the hot path), then inserts the corresponding `photos` row itself,
      which is separately checked by `photos_insert_trip_member`.
+   - **The function is split in two, and the split is what makes it testable.**
+     `handler.ts` holds every decision behind three injected dependencies and
+     imports nothing remote; `index.ts` builds the real ones out of
+     `supabase-js`, `aws4fetch` and `Deno.env`. `handler_test.ts` drives the
+     whole request/response boundary offline (`deno test`), which is the only
+     way to exercise an edge function that has never been deployed. What it
+     cannot cover: whether the PostgREST queries in `index.ts` really answer
+     the three questions, and whether R2 honours a signed `content-length`.
+     Both need a deployment, and there has not been one.
 4. **Downloads are not built yet**, and this is the highest-severity blank in
    the backend. The bucket stays private, so reads need a presigned `GET` from
    a sibling `r2-download-url` function. When it is written it **must**:
@@ -597,6 +641,11 @@ person signing in with both providers on the same address gets one
      and
    - call `day_page_is_open(trip_id, trip_day, uid)` before signing, which is
      where the gate actually bites.
+
+   Copy the upload function's *split* as well as its skeleton: decisions in a
+   `handler.ts` that imports nothing remote, clients in `index.ts`. The gate is
+   the single worst thing in this app to get wrong and the only way to test it
+   before a deployment is to keep it reachable offline.
 
    The R2 keys are derivable from ids that flow through sync, so a download
    function that signs any key for any authenticated caller would let any user
@@ -744,7 +793,7 @@ independently built clusters — 17.10 and a Homebrew 17.11 — so the results a
 not an artefact of one machine's setup.
 
 - All ten migrations apply cleanly, and apply again cleanly on a second run.
-- 109 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 113 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
@@ -764,7 +813,20 @@ not an artefact of one machine's setup.
   line, a non-member reading zero days and unable to push or write round the
   function, and the roster view answering a member with every co-member's name
   and a non-member with nobody, and the merged plan coming back ordered by the
-  day *number* rather than by the text of it.
+  day *number* rather than by the text of it; and, as premises rather than
+  policies, the two facts `r2-upload-url`'s refusals rest on — a co-member can
+  read another member's photo `id` and `r2_object_key`, so a photo id is
+  never evidence of who may write that object, and `trip_closes_at` answers a
+  member and returns null to a stranger, which is a refusal and not "never
+  closes".
+- **The edge function's own refusals are tested, offline**
+  (`deno test supabase/functions/r2-upload-url/handler_test.ts`, 22 checks):
+  a non-member and a closed trip get no URL and nothing is signed, a photo id
+  a row already holds is refused with 409, a retry before the row exists is
+  still signed, an undashed id and a size past the 64 MiB ceiling are refused,
+  and the declared type and size are what reach the signer. That is possible
+  only because the function is split — see the section above. It proves
+  nothing about R2 or about the PostgREST queries in `index.ts`.
 - The recursion fix is checked at the mechanism level
   (`tests/recursion_mechanism.py`): the whole schema is applied by an ordinary
   role that is neither superuser nor `BYPASSRLS`, the policies resolve, and
@@ -796,6 +858,8 @@ account cannot pose as the eight adversaries they need. Nothing has exercised
 has been observed there — only the permitted paths. GoTrue's real providers
 (identity linking, Apple's private relay), the edge functions, R2 and
 `pg_cron` were not exercised at all, and no photo has ever moved.
+`r2-upload-url`'s decisions are tested offline, which is a different claim:
+nothing has deployed it, called it, or signed a URL R2 has seen.
 
 ### A trap worth knowing before adding a test
 

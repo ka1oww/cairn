@@ -399,6 +399,15 @@ import what is written there, not here.
   built against, `PhotoStore` is the Drift implementation that also owns the
   write path, and `bootstrap.dart` binds both providers to the one instance.
   Bind them to two and every test still passes while the Pool goes blank.
+  **The phone mints the photo's id, and it must be spelled the way `photos.id`
+  reads back** -- one lower-case hyphenated v4 uuid, drawn by `mintPhotoId`
+  and formatted by `PhotoId.mint`, the same split `mintTripId` / `TripId.mint`
+  uses (one formatter, `_uuidFrom`, serves both). It used to emit thirty-two
+  undashed hex characters, which no `uuid` column accepts and which
+  `r2-upload-url` refuses outright -- a seam whose two halves had simply never
+  been run against each other. `test/photo_id_format_test.dart` reads the
+  function's own `UUID_RE` out of its source and compares, rather than keeping
+  a third copy.
 - **There is one day screen and no separate day detail.** Today is
   `DayPage(date:)` handed today's date; the Trail opens the same widget for
   every node, through `DayPage.planDay(n)`. Two ways in, one screen: the
@@ -559,6 +568,35 @@ Sharp edges worth knowing before touching this directory again:
   change to a policy -- RLS refuses by filtering to zero rows rather than
   raising, so a change that silently opens or closes access looks identical to
   one that works until something actually queries it.
+- **The one edge function is split so that it can be tested without being
+  deployed, and nothing here has ever been deployed.**
+  `supabase/functions/r2-upload-url/handler.ts` holds every decision behind
+  three injected dependencies and **imports nothing remote**; `index.ts` builds
+  the real ones from `supabase-js`, `aws4fetch` and `Deno.env`. That is the
+  only reason its refusals can be exercised at all — `deno test
+  handler_test.ts`, 22 checks, no network, no secrets — and
+  `deno check --no-remote handler.ts` in CI is what keeps the split honest.
+  Teaching the handler to import a client directly is the thing to refuse in
+  review. What no test here can reach: whether the PostgREST queries in
+  `index.ts` really answer the three questions, and whether R2 honours a signed
+  `content-length`. Both need the deployment nobody has made.
+- **A `photos` row is what claims an original, and a claimed original is
+  nobody's to overwrite.** The function refuses to sign a photo id a row
+  already holds — flatly, its own contributor included, because an original is
+  immutable and that immutability is what lets a phone cache bytes forever.
+  Without it any member could sign a PUT over any other member's photograph and
+  leave the row untouched, which is invisible to every RLS policy (RLS protects
+  the row; nothing in Postgres protects the object). The refusal costs the
+  retry path nothing **only because the ordering is bytes-first-row-second** —
+  an outbox that inserted the row first would refuse its own retry. The two
+  probe checks under *"a co-member can read what an upload URL is minted from"*
+  pin the premise that a photo id is not a secret.
+- **A presigned PUT bounds nothing unless the headers are signed.** aws4fetch
+  leaves `content-type` and `content-length` out of the signature by default
+  (its `UNSIGNABLE_HEADERS`), so the content-type allowlist was advisory and
+  the object size unbounded. `allHeaders: true` in `index.ts` is what puts both
+  in `X-Amz-SignedHeaders` and gives the 64 MiB ceiling teeth; deleting it
+  looks harmless and silently removes both bounds.
 
 ## Packages
 
