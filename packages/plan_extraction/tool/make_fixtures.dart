@@ -112,9 +112,10 @@ void main() {
 
   // --- Slice C: docx --------------------------------------------------------
 
-  // A tidy itinerary laid out partly as Word tables: paragraphs and table
-  // cells interleaved, cells read row-major, a soft line break (w:br)
-  // joined as a space inside one cell.
+  // A tidy itinerary laid out partly as Word tables: paragraphs and tables
+  // interleaved, each two-column row said as one line with its cells joined,
+  // a single-filled-cell row kept as its own lines, and a soft line break
+  // (w:br) joined as a space inside one cell.
   write(
     'tables.docx',
     _docx([
