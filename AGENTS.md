@@ -29,7 +29,7 @@ import what is written there, not here.
 - Drift's generated code (`lib/**/*.g.dart`) is not checked in (root
   `.gitignore`): run `dart run build_runner build` after checkout, before
   analyzing or testing the app.
-- Schema is at v6. A test that stands up an *old* schema by winding
+- Schema is at v7. A test that stands up an *old* schema by winding
   `user_version` back must also drop everything later versions added
   (`test/trip_id_test.dart`'s `windBackToV4` is the pattern) -- an upgrade that
   finds its own column already there fails outright, and the failure reads like
@@ -74,6 +74,26 @@ import what is written there, not here.
   re-dates an existing day. It speaks `ConfirmedDay`, not
   `cairn_model.TripDay`: saved plans carry open dates and have no clock yet
   (the repository says why).
+- **The paste box survives the process, but only for an import.**
+  `lib/app_state/plan_draft.dart` holds the whole rule and
+  `plan_drafts` (one row, id 1, schema v7) holds the text. An import that
+  lands starts the draft, and only an import or the person's own editing may
+  write to it — not the example, not a plan typed from scratch, and a
+  programmatic fill that isn't an import leaves a standing draft alone rather
+  than overwrite it — because what it defends is an expensive read (a
+  three-page scan through recognition), not typing. While it stands it
+  *tracks the box*, which is what makes "never resurrect over something the
+  person has since typed by hand" true by construction instead of by a
+  timestamp; there is deliberately **no expiry**. Emptying the box discards
+  it, `PasteFlow.accept` forgets it, a fresh import replaces it. The restore
+  rule is the paste screen's, because only it knows what is in the box: a
+  draft is put back **only into a box that would otherwise open empty**, so
+  it never lands over a re-paste's pre-filled live plan, and the read
+  re-checks the box before writing into it. It is local and must stay local
+  — pre-accept text has no trip, no clock and nothing eight phones could
+  agree on, so it is not in `itinerary_sync.dart`'s cargo and never becomes
+  a shared fact. `test/plan_draft_test.dart` relaunches the app over the
+  same database to prove all of it.
 - **The read-back is an editor, and it never demolishes.** The confirm screen
   edits a *draft* inside `paste_flow.dart`, and `accept()` builds the
   `ConfirmedItinerary` from that draft rather than from the parse. Every stop

@@ -275,6 +275,28 @@ class SyncStates extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// The paste box's pending import, kept across launches.
+///
+/// This is **not** a shared fact and never becomes one: it is pre-accept
+/// text on one phone, it is never pushed anywhere (the sync's cargo is the
+/// itinerary and the roster, and this table is not in either), and it stops
+/// existing the moment the plan is accepted. What it buys is the one thing
+/// the person cannot recreate cheaply: a three-page scan that went through
+/// text recognition and then died with the process.
+///
+/// One row, always id 1, exactly like [SyncStates] — a phone has one paste
+/// box, and a second draft would be a second box nobody can reach.
+class PlanDrafts extends Table {
+  /// Always 1.
+  IntColumn get id => integer()();
+
+  /// The box's text as it last stood.
+  TextColumn get planText => text()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     ItineraryDays,
@@ -285,6 +307,7 @@ class SyncStates extends Table {
     TripMembers,
     TripInviteCodes,
     SyncStates,
+    PlanDrafts,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -296,7 +319,7 @@ class AppDatabase extends _$AppDatabase {
   final TripId Function() mint;
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -383,6 +406,12 @@ class AppDatabase extends _$AppDatabase {
           "strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
           'where exists (select 1 from itinerary_days)',
         );
+      }
+      if (from < 7) {
+        // The paste box survives the process now (the import torture-test's
+        // R6). Nothing carries over: a phone upgrading here has no pending
+        // import, because before this table there was nowhere to put one.
+        await m.createTable(planDrafts);
       }
     },
   );
@@ -862,6 +891,43 @@ class AppDatabase extends _$AppDatabase {
     TripInviteCodesCompanion(revokedAtUtcIso: Value(atUtcIso)),
   );
 
+  // -- the paste box's pending import ---------------------------------------
+
+  /// The pending import, or null when there is none.
+  Future<String?> readPlanDraft() async {
+    final row = await (select(
+      planDrafts,
+    )..where((t) => t.id.equals(_theOneDraft))).getSingleOrNull();
+    return row?.planText;
+  }
+
+  /// Starts (or replaces) the pending import. The only caller is an import
+  /// that landed: nothing else creates a draft, which is what keeps the
+  /// example plan and a hand-typed one out of this table.
+  Future<void> writePlanDraft(String text) => into(planDrafts)
+      .insertOnConflictUpdate(
+        PlanDraftsCompanion.insert(
+          id: const Value(_theOneDraft),
+          planText: text,
+        ),
+      );
+
+  /// Keeps an existing draft in step with the box, and creates nothing.
+  ///
+  /// The distinction from [writePlanDraft] is the whole rule: while a draft
+  /// stands it tracks what is on screen, so a restored draft can never be
+  /// older than what the person last had in front of them — but a box that
+  /// never held an import is not a draft and does not become one by being
+  /// typed in.
+  Future<void> updatePlanDraftIfPresent(String text) =>
+      (update(planDrafts)..where((t) => t.id.equals(_theOneDraft))).write(
+        PlanDraftsCompanion(planText: Value(text)),
+      );
+
+  /// Forgets the pending import: accepted, emptied, or gone with its trip.
+  Future<void> clearPlanDraft() =>
+      (delete(planDrafts)..where((t) => t.id.equals(_theOneDraft))).go();
+
   /// Deletes the whole trip from this phone: the plan, the pool's rows, the
   /// roster, the codes and the trip itself.
   ///
@@ -883,12 +949,17 @@ class AppDatabase extends _$AppDatabase {
       // would tell the next trip's first sync that it had already said
       // things it never said.
       await delete(syncStates).go();
+      // A pending import belongs to the box the deleted trip came out of.
+      await delete(planDrafts).go();
     });
   }
 }
 
 /// The one trip's row key. See [TripFacts].
 const _theOneTrip = 1;
+
+/// The one row of [PlanDrafts]: a phone has one paste box.
+const _theOneDraft = 1;
 
 /// The write-side shape [AppDatabase.insertInviteCode] accepts.
 typedef InviteCodeRecord = ({
