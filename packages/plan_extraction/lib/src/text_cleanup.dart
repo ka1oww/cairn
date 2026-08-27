@@ -36,9 +36,14 @@
 //     a one-page export (a booking confirmation, a short plan) carries the
 //     browser's header and footer exactly once. On a page that is the whole
 //     document, and at its edge, a line that is *nothing but* a web address
-//     (with the browser's `1/1` after it or not) or *nothing but* a numeric
-//     date-and-clock stamp is furniture. Both shapes are anchored end to
-//     end on purpose: `10:00 tickets at https://…` keeps its address and
+//     (with the browser's `1/1` after it or not) is furniture on its own —
+//     a line that is nothing but a web address is never a stop somebody
+//     wrote. A line that is *nothing but* a numeric date-and-clock stamp is
+//     furniture only when that same page *also* carries the web-address
+//     line: a bare date-and-time can be a real check-in or departure stub,
+//     and the browser's own footer is the corroborating evidence that turns
+//     it into a printed header instead. Both shapes are anchored end to end
+//     on purpose: `10:00 tickets at https://…` keeps its address and
 //     `Mon 14 June 2027 - Tokyo` keeps its date, because neither line is
 //     only that. The rule is confined to a single-page document, so the
 //     repetition rule above it is untouched.
@@ -66,6 +71,8 @@ String cleanPaginatedText(List<List<String>> pages) {
   for (final page in normalized) {
     final kept = <String>[];
     final edges = _edgeIndices(page);
+    final hasWebFooter = lonePage &&
+        edges.any((i) => _loneWebAddress.hasMatch(page[i]));
     for (var i = 0; i < page.length; i++) {
       final line = page[i];
       if (line.isEmpty) {
@@ -75,7 +82,11 @@ String cleanPaginatedText(List<List<String>> pages) {
       final atEdge = edges.contains(i);
       if (atEdge && furniture.contains(_furnitureKey(line))) continue;
       if (atEdge && _isPageNumber(line, pageCount)) continue;
-      if (atEdge && lonePage && _isLonePagePrintFurniture(line)) continue;
+      if (atEdge &&
+          lonePage &&
+          _isLonePagePrintFurniture(line, corroboratedByFooter: hasWebFooter)) {
+        continue;
+      }
       if (_isPrintFurniture(line)) continue;
       kept.add(line);
     }
@@ -232,14 +243,27 @@ final RegExp _loneWebAddress = RegExp(
 /// The date wears the separators a browser's short date wears — `/` and `.` —
 /// and never a dash, because `2027-06-14 09:00` is the shape a person writes
 /// by hand far more often than a browser prints it.
+///
+/// This shape alone is not proof: a bare date-and-time can just as easily be
+/// a real check-in or departure stub a person wrote down. It is only stripped
+/// when the same page also carries the browser's web-address footer — that
+/// footer is what corroborates the page as a browser print in the first
+/// place, and without it a date-and-time line is left alone.
 final RegExp _lonePrintStamp = RegExp(
   r'^\d{1,2}[/.]\d{1,2}[/.]\d{2,4}\.?\s*,?\s+'
   r'\d{1,2}[:.]\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?$',
   caseSensitive: false,
 );
 
-bool _isLonePagePrintFurniture(String line) =>
-    _loneWebAddress.hasMatch(line) || _lonePrintStamp.hasMatch(line);
+/// [corroboratedByFooter] is whether this page's edges also carry a line
+/// matching [_loneWebAddress] — the evidence that turns a bare date-and-time
+/// line from a plausible real stop into a browser's printed header.
+bool _isLonePagePrintFurniture(
+  String line, {
+  required bool corroboratedByFooter,
+}) =>
+    _loneWebAddress.hasMatch(line) ||
+    (corroboratedByFooter && _lonePrintStamp.hasMatch(line));
 
 // ---------------------------------------------------------------------------
 // Print furniture with a shape of its own (the plan's §4, Wanderlog)

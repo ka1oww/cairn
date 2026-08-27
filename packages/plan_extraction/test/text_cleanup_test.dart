@@ -225,6 +225,40 @@ void main() {
       expect(out, ['14/6', 'breakfast', '19:30']);
     });
 
+    test(
+      'a date-and-time line survives when nothing corroborates it as a '
+      "browser's header",
+      () {
+        // A bare date-and-time stamp can be a real check-in or departure
+        // stub. Only the browser's own web-address footer proves the page
+        // is a browser print; without it the line must be kept.
+        final out = clean([
+          [
+            '27/8/2026, 09:00',
+            'Day 1 - Rome',
+            '13:00 Lunch in Monti',
+          ],
+        ]);
+        expect(out, contains('27/8/2026, 09:00'));
+      },
+    );
+
+    test(
+      "the same date-and-time line goes once the page's own web-address "
+      'footer corroborates it',
+      () {
+        final out = clean([
+          [
+            '27/8/2026, 09:00',
+            'Day 1 - Rome',
+            '13:00 Lunch in Monti',
+            'file:///Users/someone/plans/rome.html 1/1',
+          ],
+        ]);
+        expect(out, isNot(contains('27/8/2026, 09:00')));
+      },
+    );
+
     test('an ISO date and time is left alone', () {
       final out = clean([
         ['2027-06-14 09:00', 'Day 1 - Rome'],

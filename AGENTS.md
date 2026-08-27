@@ -542,13 +542,17 @@ Sharp edges worth knowing before touching this directory again:
     provable repetition is the one page on which repetition cannot be proved**:
     a single-page export — the commonest print there is — carries the browser's
     header and footer exactly once, so on a lone page an edge line that is
-    *nothing but* a web address (folio or not) or *nothing but* a numeric
-    date-and-clock stamp is furniture. Both shapes are anchored end to end
-    deliberately, because a line that merely mentions an address is somebody's
-    stop, a lone date is the header the parser most needs, and a dashed ISO
-    `2027-06-14 09:00` is a plan's own line far more often than a browser's.
-    The exception reaches a one-page document only; multi-page prints are still
-    judged by repetition alone.
+    *nothing but* a web address (folio or not) is furniture on its own. A lone
+    edge line that is *nothing but* a numeric date-and-clock stamp is furniture
+    only when that same page also carries the web-address line — a bare
+    date-and-time can be a real check-in or departure stub, and the browser's
+    own footer is the corroborating evidence that it is a printed header
+    instead, so the stamp is never stripped by its shape alone. Both shapes are
+    anchored end to end deliberately, because a line that merely mentions an
+    address is somebody's stop, a lone date is the header the parser most
+    needs, and a dashed ISO `2027-06-14 09:00` is a plan's own line far more
+    often than a browser's. The exception reaches a one-page document only;
+    multi-page prints are still judged by repetition alone.
 
 ## Design and decisions
 
