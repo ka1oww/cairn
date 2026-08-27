@@ -116,6 +116,29 @@ void main() {
     test('named-month dates never count as ambiguous', () {
       final result = parseItinerary('3 November 2026 - Arrival\n- Land\n');
       expect(result.hasAmbiguousNumericDates, isFalse);
+      expect(result.firstAmbiguousNumericDate, isNull);
+    });
+
+    test('the first ambiguous date comes back as the person wrote it', () {
+      for (final monthFirst in [false, true]) {
+        final result = parseItinerary(
+          '12/11 - Porto\n- Livraria Lello\n11/12 - Porto\n- Douro walk\n',
+          monthFirstNumericDates: monthFirst,
+        );
+        final example = result.firstAmbiguousNumericDate!;
+        // The pair as written, not as this parse chose to read it: the
+        // confirmation screen quotes the person's own date back either way.
+        expect(example.asWritten, '12/11');
+        expect(example.dayFirstDay, 12);
+        expect(example.dayFirstMonth, 11);
+        expect(example.monthFirstMonth, 12);
+        expect(example.monthFirstDay, 11);
+      }
+    });
+
+    test('a date inside a day title is an ambiguous example too', () {
+      final result = parseItinerary('Day 1 - Porto, 4/9\n- Livraria Lello\n');
+      expect(result.firstAmbiguousNumericDate?.asWritten, '4/9');
     });
 
     test('ItineraryParser.parse accepts the same flag', () {

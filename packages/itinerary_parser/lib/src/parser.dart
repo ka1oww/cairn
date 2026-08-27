@@ -280,7 +280,7 @@ ParseResult _buildHeaderModeResult(
   final unplaced = <UnplacedLine>[];
   _OpenDay? current;
   var contentLineCount = 0;
-  var sawAmbiguousNumericDate = false;
+  AmbiguousNumericDate? firstAmbiguousNumericDate;
 
   void closeCurrent() {
     if (current != null) {
@@ -306,9 +306,7 @@ ParseResult _buildHeaderModeResult(
         contentLineCount++;
         closeCurrent();
         final fragment = c.headerDateFragment;
-        if (fragment != null && fragment.ambiguousNumericOrder) {
-          sawAmbiguousNumericDate = true;
-        }
+        firstAmbiguousNumericDate ??= fragment?.numericAsWritten;
         current = _OpenDay(
           index: days.length + 1,
           date: tripStartDate == null
@@ -332,7 +330,7 @@ ParseResult _buildHeaderModeResult(
         contentLineCount++;
         closeCurrent();
         final m = c.dateMatch!;
-        if (m.ambiguousNumericOrder) sawAmbiguousNumericDate = true;
+        firstAmbiguousNumericDate ??= m.numericAsWritten;
         final resolvedDate = _resolveDateHeaderDate(m, tripStartDate);
         final DayUncertainty? uncertainty;
         if (resolvedDate != null) {
@@ -387,7 +385,7 @@ ParseResult _buildHeaderModeResult(
     unplacedLines: unplaced,
     overallConfidence: overall,
     usedHeaderlessFallback: false,
-    hasAmbiguousNumericDates: sawAmbiguousNumericDate,
+    firstAmbiguousNumericDate: firstAmbiguousNumericDate,
   );
 }
 

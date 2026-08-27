@@ -59,9 +59,12 @@ would otherwise have to be guessed.
 are read: `3/11` is 3 November by default, March 11th with the flag on.
 It exists so a confirmation screen can offer "these are month-first
 dates" as one tap that re-parses the whole paste consistently —
-`ParseResult.hasAmbiguousNumericDates` says whether any recognized
-numeric date would actually change under the flip, i.e. whether the offer
-is worth showing at all.
+`ParseResult.firstAmbiguousNumericDate` hands back the first recognized
+numeric date that would actually change under the flip — as the two
+numbers the person wrote, so a confirmation screen can teach the flip with
+their own date rather than an invented one. It is null when no date would
+move, i.e. when the offer is not worth showing at all;
+`ParseResult.hasAmbiguousNumericDates` is a getter over exactly that.
 
 ## The star rule
 

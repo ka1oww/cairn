@@ -263,15 +263,46 @@ class KeptAsideLine {
   });
 }
 
+/// The person's own ambiguous date, spelled both ways, for the month-first
+/// flip card to teach with.
+///
+/// The words are settled here rather than on the screen because this band is
+/// where person-facing date spelling lives ([monthName], [ordinal]); the
+/// screen arranges them and never re-derives one. A parse with no ambiguous
+/// date has no example, and the card is not offered at all — which is the
+/// same condition that used to be a separate `offerMonthFirstFix` flag, now
+/// derived so the two cannot disagree.
+class MonthFirstExample {
+  /// `12/11` — the pair exactly as the person wrote it.
+  final String asWritten;
+
+  /// `12 November` — what [asWritten] means read day-first.
+  final String dayFirstReading;
+
+  /// `December 11th` — what it means read month-first.
+  final String monthFirstReading;
+
+  const MonthFirstExample({
+    required this.asWritten,
+    required this.dayFirstReading,
+    required this.monthFirstReading,
+  });
+}
+
 /// Everything the confirmation screen renders.
 class ItineraryReview {
   final List<ReviewDay> days;
   final List<KeptAsideLine> keptAside;
 
-  /// Whether the one-tap date-dialect re-read is worth offering at all —
-  /// true only when some recognized numeric date genuinely changes under
-  /// the flip.
-  final bool offerMonthFirstFix;
+  /// The plan's own first date that reads both ways round, or null when it
+  /// has none. Its presence is the whole condition for offering the one-tap
+  /// date-dialect re-read: only a date that genuinely changes under the flip
+  /// makes the flip worth offering, and it is also the example the card
+  /// teaches with.
+  final MonthFirstExample? monthFirstExample;
+
+  /// Whether the one-tap date-dialect re-read is worth offering at all.
+  bool get offerMonthFirstFix => monthFirstExample != null;
 
   /// The dialect the paste is currently read in.
   final bool readMonthFirst;
@@ -301,7 +332,7 @@ class ItineraryReview {
   const ItineraryReview({
     required this.days,
     required this.keptAside,
-    required this.offerMonthFirstFix,
+    required this.monthFirstExample,
     required this.readMonthFirst,
     required this.nothingRead,
     required this.keptLines,
@@ -490,7 +521,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// [ip.ParseResult]: a draft can also come from a live plan, which never
   /// had a parse result at all.
   bool _nothingRead = false;
-  bool _offerMonthFirstFix = false;
+  MonthFirstExample? _monthFirstExample;
 
   /// The read as it is being edited. Rebuilt from scratch by anything that
   /// re-reads the whole paste ([readMonthFirst], [useYear]): a re-read makes
@@ -763,7 +794,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
     _tripStartHint = null;
     _repastingLivePlan = false;
     _nothingRead = false;
-    _offerMonthFirstFix = false;
+    _monthFirstExample = null;
     _nextId = 0;
     _editingLivePlan = true;
     _draft = _Draft(
@@ -922,7 +953,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
     _monthFirst = false;
     _tripStartHint = null;
     _nothingRead = false;
-    _offerMonthFirstFix = false;
+    _monthFirstExample = null;
     _draft = null;
     state = const PasteEditing();
   }
@@ -1029,6 +1060,19 @@ class PasteFlow extends Notifier<PasteFlowState> {
     }
   }
 
+  /// Spells the parse's own ambiguous date both ways round, or null when the
+  /// paste had none. `12/11` becomes `12 November` day-first and
+  /// `December 11th` month-first — the two readings the flip moves between.
+  MonthFirstExample? _exampleFrom(ip.AmbiguousNumericDate? date) {
+    if (date == null) return null;
+    return MonthFirstExample(
+      asWritten: date.asWritten,
+      dayFirstReading: '${date.dayFirstDay} ${monthName(date.dayFirstMonth)}',
+      monthFirstReading:
+          '${monthName(date.monthFirstMonth)} ${ordinal(date.monthFirstDay)}',
+    );
+  }
+
   ip.ParseResult _parseText() {
     final result = ip.parseItinerary(
       _text,
@@ -1036,7 +1080,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
       monthFirstNumericDates: _monthFirst,
     );
     _nothingRead = result.usedHeaderlessFallback || result.days.isEmpty;
-    _offerMonthFirstFix = result.hasAmbiguousNumericDates;
+    _monthFirstExample = _exampleFrom(result.firstAmbiguousNumericDate);
     return result;
   }
 
@@ -1219,7 +1263,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
               removedByPerson: line.removedByPerson,
             ),
         ],
-        offerMonthFirstFix: _offerMonthFirstFix,
+        monthFirstExample: _monthFirstExample,
         readMonthFirst: _monthFirst,
         nothingRead: nothingRead,
         keptLines: nothingRead

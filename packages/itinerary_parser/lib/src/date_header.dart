@@ -1,3 +1,5 @@
+import 'models.dart';
+
 /// Result of recognizing a line as a date-shaped (not `Day N`-shaped) day
 /// header.
 class DateHeaderMatch {
@@ -20,11 +22,21 @@ class DateHeaderMatch {
   /// `Mon 3 Nov - Kyoto`.
   final String? trailingText;
 
+  /// The two numbers of a numeric slash date that would also have been
+  /// valid — and different — read the other way round, in the order they
+  /// were written (`3/11` gives 3 then 11); null for every unambiguous
+  /// form, since named-month and ISO dates read only one way.
+  ///
+  /// Recorded rather than re-derived from [day] and [month] so that the
+  /// confirmation screen can teach the flip with the person's own date
+  /// without knowing which dialect this parse ran in.
+  final AmbiguousNumericDate? numericAsWritten;
+
   /// True when this match came from a numeric slash date (`3/11`) that
   /// would also have been valid — and different — read the other way
   /// round, i.e. both components were in 1-12 and not equal. Named month
   /// and ISO forms are never ambiguous.
-  final bool ambiguousNumericOrder;
+  bool get ambiguousNumericOrder => numericAsWritten != null;
 
   const DateHeaderMatch({
     this.day,
@@ -32,7 +44,7 @@ class DateHeaderMatch {
     this.year,
     this.weekday,
     this.trailingText,
-    this.ambiguousNumericOrder = false,
+    this.numericAsWritten,
   });
 
   bool get hasFullDate => day != null && month != null;
@@ -286,7 +298,9 @@ DateHeaderMatch? tryParseDateHeader(
         month: readMonthFirst ? first : second,
         year: m.group(3) != null ? _fullYear(int.parse(m.group(3)!)) : null,
         trailingText: _cleanTrailing(m.group(4)),
-        ambiguousNumericOrder: ambiguous,
+        numericAsWritten: ambiguous
+            ? AmbiguousNumericDate(first: first, second: second)
+            : null,
       );
     }
   }
@@ -335,10 +349,15 @@ class DateFragment {
   /// person what was recognized.
   final String text;
 
+  /// The two numbers of a numeric slash date that reads both ways round, in
+  /// the order they were written; null otherwise. Mirrors
+  /// [DateHeaderMatch.numericAsWritten].
+  final AmbiguousNumericDate? numericAsWritten;
+
   /// True when this came from a numeric slash date that would also have been
   /// valid — and different — read the other way round. Mirrors
   /// [DateHeaderMatch.ambiguousNumericOrder].
-  final bool ambiguousNumericOrder;
+  bool get ambiguousNumericOrder => numericAsWritten != null;
 
   final int start;
   final int end;
@@ -350,7 +369,7 @@ class DateFragment {
     required this.text,
     required this.start,
     required this.end,
-    this.ambiguousNumericOrder = false,
+    this.numericAsWritten,
   });
 }
 
@@ -366,7 +385,8 @@ final RegExp _fragmentMonthDay = RegExp(
 
 final RegExp _fragmentIso = RegExp(r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b');
 
-final RegExp _fragmentNumeric = RegExp(r'\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b');
+final RegExp _fragmentNumeric =
+    RegExp(r'\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b');
 
 bool _validDay(int d) => d >= 1 && d <= 31;
 
@@ -447,8 +467,9 @@ DateFragment? findDateFragment(
       text: m.group(0)!,
       start: m.start,
       end: m.end,
-      ambiguousNumericOrder:
-          dayFirstValid && monthFirstValid && first != second,
+      numericAsWritten: dayFirstValid && monthFirstValid && first != second
+          ? AmbiguousNumericDate(first: first, second: second)
+          : null,
     ));
     break;
   }
@@ -470,8 +491,7 @@ final RegExp _doubledSeparators = RegExp(r'\s*[,·|]\s*(?=[,·|])');
 /// `Tokyo`, and `14 June` on its own becomes null rather than a place named
 /// after a date.
 String? textWithoutFragment(String text, DateFragment fragment) {
-  final rest =
-      text.substring(0, fragment.start) + text.substring(fragment.end);
+  final rest = text.substring(0, fragment.start) + text.substring(fragment.end);
   final tidied = rest
       .replaceAll(_doubledSeparators, '')
       .replaceAll(_edgeSeparators, '')

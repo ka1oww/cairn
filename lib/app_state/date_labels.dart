@@ -36,6 +36,9 @@ String weekdayName(int isoWeekday) => _weekdayNames[isoWeekday - 1];
 String weekdayAbbrev(int isoWeekday) =>
     _weekdayNames[isoWeekday - 1].substring(0, 3);
 
+/// `June` for month 6.
+String monthName(int month) => _monthNames[month - 1];
+
 /// `14 June` — the spelling design round 8 puts beside a day.
 String dayMonthLabel(DateTime date) =>
     '${date.day} ${_monthNames[date.month - 1]}';

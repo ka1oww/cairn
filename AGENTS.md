@@ -88,7 +88,16 @@ import what is written there, not here.
   emptiness is live state, not a parse verdict — drag the last stop off a day
   and it asks what a day that arrived empty asks, which also collapses the
   clean days to slim rows. A whole-paste re-read (`readMonthFirst`, `useYear`)
-  reparses and so discards the draft; its card says so.
+  reparses and so discards the draft; its card says so. **That card teaches
+  with the plan's own date, never an invented one** — the parser hands back
+  the first date that reads both ways round
+  (`ParseResult.firstAmbiguousNumericDate`, recorded at the match rather than
+  re-derived from the dialect the parse ran in), the app band spells it both
+  ways (`MonthFirstExample`), and the screen only arranges the two readings.
+  Whether the flip is offered at all *is* that example's presence
+  (`offerMonthFirstFix` is a getter over it), so a card teaching a date the
+  plan does not contain, or offered where no date would move, is a state that
+  cannot be built.
 - **A date inside a day's own title is a candidate, never a binding.**
   `Day 1 - Tokyo, 14 June` used to lose the date entirely; the parser now
   surfaces it as `ParsedDay.dateCandidate` (`src/date_header.dart`'s

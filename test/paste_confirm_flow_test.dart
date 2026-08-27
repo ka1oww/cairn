@@ -57,6 +57,16 @@ const ambiguousDatesPaste = '''
 - Fushimi Inari
 ''';
 
+/// The report's own reproduction (R4): the first ambiguous date is 12/11,
+/// nothing like the 3/11 the card used to teach with.
+const ownAmbiguousDatesPaste = '''
+12/11/2027 - Porto
+- Livraria Lello
+
+4/9/2027 - Lisbon
+- Douro walk
+''';
+
 /// Three lines the parser sets aside: preamble chat, a bare URL, a booking
 /// reference. None may be silently dropped.
 const setAsidePaste = '''
@@ -206,6 +216,49 @@ void main() {
     expect(find.text('3 November'), findsNothing);
     // And the door back is open.
     expect(find.text('Read day-first instead'), findsOneWidget);
+  });
+
+  testWidgets('the month-first card teaches with the plan\'s own date', (
+    tester,
+  ) async {
+    await launch(tester);
+    await paste(tester, ownAmbiguousDatesPaste);
+
+    // The example is the date in front of the person, not a hardcoded one.
+    expect(find.text('12/11  →  12 November'), findsOneWidget);
+    expect(
+      find.textContaining('month-first — December 11th —'),
+      findsOneWidget,
+    );
+    // Read day-first, so the plan's dates are the day-first ones.
+    expect(find.text('12 November'), findsOneWidget);
+    expect(find.text('4 September'), findsOneWidget);
+    expect(find.textContaining('3/11'), findsNothing);
+    expect(find.textContaining('March 11th'), findsNothing);
+
+    // The flip is unchanged: one tap, every date in the paste together.
+    await tester.tap(find.byKey(const Key('month-first-fix')));
+    await tester.pump();
+
+    // Every date in the paste followed together, not just the example's.
+    expect(find.text('11 December'), findsOneWidget);
+    expect(find.text('9 April'), findsOneWidget);
+    expect(find.text('12 November'), findsNothing);
+    expect(find.text('4 September'), findsNothing);
+    // And the card now teaches the way back with the same date.
+    expect(find.text('12/11  →  December 11th'), findsOneWidget);
+    expect(find.text('Read day-first instead'), findsOneWidget);
+  });
+
+  testWidgets('a plan with no ambiguous date is offered no flip at all', (
+    tester,
+  ) async {
+    await launch(tester);
+    await paste(tester, cleanPaste);
+
+    // Nothing to teach, so no card — the state the example is derived from.
+    expect(find.byKey(const Key('month-first-fix')), findsNothing);
+    expect(find.textContaining('month-first'), findsNothing);
   });
 
   testWidgets('set-aside lines are shown kept, each with its reason', (
