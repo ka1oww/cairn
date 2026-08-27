@@ -164,6 +164,23 @@ class _Sheet extends ConsumerWidget {
               ),
             ],
 
+            // Where the plan itself stands, right under who can see it,
+            // because it is the same question asked of the plan instead of
+            // the people. Absent — not blank, and never a spinner — while
+            // nothing has said, which is the only honest thing to draw when
+            // this phone does not know. The sentence is `trip_settings.dart`'s
+            // and this screen only places it.
+            if (view.sharing case final PlanSharing sharing) ...[
+              const SizedBox(height: 6),
+              Text(
+                sharing.line,
+                key: const Key('trip-sharing'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+
             const SizedBox(height: 20),
             _Code(view: view),
 

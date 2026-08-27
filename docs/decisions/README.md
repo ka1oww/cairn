@@ -34,5 +34,6 @@ Read in order:
 | [2026-08-25 — the line register](2026-08-25-book-line-register.md) | How a written line dresses in the book: typeset and set apart is the rule, the writer's own strokes an optional flourish, a script face refused |
 | [2026-08-25 — the trip's own id](2026-08-25-the-trip-mints-its-own-id.md) | The phone mints the trip id offline and the server keeps it; there is no id that arrives late and no schedule that re-deals |
 | [2026-08-26 — the ending](2026-08-26-the-ending.md) | Seventy-two hours of grace, then the trip is a record: uploads shut, codes die, the sheet stops offering what it cannot do, and the sync goes quiet |
+| [2026-08-27 — the trip's clock](2026-08-27-the-trip-clock-is-the-phones.md) | The itinerary leaves the phone on an ordinary build: the clock is the phone's own IANA name, a trip may be published before it is named, and a plan that has not gone up says so in Cairn's voice |
 
 Design handoffs that implement these live in [`../design/`](../design/).

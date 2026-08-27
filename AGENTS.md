@@ -250,8 +250,35 @@ import what is written there, not here.
   `flutter test test/hosted_smoke_test.dart --dart-define=CAIRN_HOSTED_SMOKE=true`.
   **A green suite is still no evidence the hosted project behaves** — that is
   what that one test is for, and `supabase/README.md` is the authority on the
-  defines, on why `CAIRN_TRIP_TIMEZONE` has no default, and on what the hosted
-  project has and has not actually done.
+  defines, on why `CAIRN_TRIP_TIMEZONE` is an override rather than a gate, and
+  on what the hosted project has and has not actually done.
+- **The plan really leaves the phone on an ordinary build, and the app says
+  when it has not.** Both halves are
+  `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`, and both were
+  one defect: `CAIRN_TRIP_TIMEZONE` used to be a gate with no default, so no
+  ordinary build could ever create the shared `trips` row — silently, forever.
+  The clock is now the phone's own IANA name
+  (`lib/app_state/device_time_zone.dart` over the hand-written
+  `cairn/time_zone` channel, `ios/Runner/DeviceTimeZone.swift`), assembled in
+  `bootstrap.dart`'s `tripRowFor`; the define survives only to pin a
+  destination's zone. A *name*, never the device's UTC offset — `Etc/GMT±N`
+  has no daylight saving and cannot spell a half-hour zone, and
+  `trips.timezone` is checked against `pg_timezone_names` at write time.
+  Reintroducing an offset-derived zone is the thing to refuse in review.
+  Three rules hold this together. **An unnamed trip still publishes**, as
+  `unnamedTripPlaceholder`, and the roster apply **must never adopt that word
+  back** — nothing pushes a rename *up*, so an adopting reconcile would revert
+  a rename typed here (the ratchet is `adoptName` in
+  `itinerary_sync.dart`, pinned by a test). **One gate remains and only one**:
+  a plan with no resolved first or last date, because those columns are
+  `not null` and inventing a date is the guess the paste flow exists to
+  refuse. And **`TripSync.standings` is the only thing above the seam that
+  knows the sync exists** — a read-only stream, bound by `bootstrapApp`
+  (`sharing:` in tests), turned into words *once* by `planSharingFor` in
+  `trip_settings.dart` and drawn twice: a short mark on the Trail, the full
+  sentence in the trip sheet. `SyncOutcome.detail` is for a log and is never
+  rendered; a second derivation of those words, or a technical string reaching
+  a person, is the thing to refuse in review.
 - **The trip's three Drift tables do not re-emit for free.** `trip_facts`,
   `trip_members` and `trip_invite_codes` are read through one stream, and it
   is a `customSelect` over all three with `readsFrom` — minting a code

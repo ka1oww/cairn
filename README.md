@@ -22,18 +22,31 @@ Under construction, and running. The app builds and opens on a phone: paste a
 rough itinerary, confirm what the parser read, and land on **Today** — the day
 screen the Trail opens for every other day too. A plan can also be **read out
 of a file** rather than typed: a document (`.txt`, `.csv`, `.docx`, `.xlsx`
-or `.pdf`, a printed Wanderlog plan included,
-and the app says which formats this build actually reads) or a photo or
-screenshot put through on-device text recognition. Either way the text lands
+or `.pdf`, and the app says which formats this build actually reads) or a photo
+or screenshot put through on-device text recognition. Either way the text lands
 in the paste box for the person to see and fix before the parser reads it, and
 recognition quality is still to be judged on a real device rather than by the
-test suite. The Trail,
-the Pool and the capture that fills it are built, and five pure-Dart packages
-sit under them. Nothing buzzes yet: the daily ping's schedule is real but
-nothing is registered with iOS. The one server path that exists — the
-itinerary and the roster syncing to every phone — is live against a hosted
-Supabase project: an ordinary build points at it and signs in as an anonymous
-account, which stands in until Sign in with Apple lands. A trip now *ends* as
+test suite. A printed Wanderlog plan is read, but not yet read *well* — the
+text comes out right and the parser then turns a three-day guide into
+thirty-two days, so that path currently needs fixing rather than showing off.
+The Trail, the Pool and the capture that fills it are built, and five pure-Dart
+packages sit under them.
+
+Two things are honestly missing rather than half-done, and they are the two
+that make Cairn a group: **nothing buzzes** (the daily ping's schedule is real
+and correct; nothing is registered with iOS, and there is no notification
+library in the project), and **no photograph can reach another phone** (the
+server-side table exists; no code on the phone moves bytes). Nor can anybody
+join a trip yet: the three-word invite code is real and no phone ever redeems
+one.
+
+The one server path that does exist — the itinerary and the roster — is live
+against a hosted Supabase project, and since 27 August 2026 it is live on an
+*ordinary* build: it had been silently switched off by a missing build-time
+default, so no binary anybody would have run had ever pushed a plan. The phone
+signs in as an anonymous account, which stands in until Sign in with Apple
+lands, and a plan that has not reached the server now says so on screen. It has
+still never been read by a second phone. A trip now *ends* as
 well as starting: when its last day passes it spends seventy-two hours taking
 late photographs and nothing else, and after that it is a read-only record —
 uploads shut, invite codes die, and the plan cannot be replaced. The book made

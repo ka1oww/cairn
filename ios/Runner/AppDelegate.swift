@@ -15,5 +15,8 @@ import UIKit
     // The file-import feature's OCR edge (slice D): one hand-written
     // channel beside the generated plugins.
     TextRecognition.register(with: engineBridge.applicationRegistrar.messenger())
+    // The trip clock's edge: the one fact the shared `trips` row needs that
+    // Dart cannot ask the phone for itself.
+    DeviceTimeZone.register(with: engineBridge.applicationRegistrar.messenger())
   }
 }

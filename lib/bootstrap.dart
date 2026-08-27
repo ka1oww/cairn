@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
 import 'app_state/camera_source.dart';
 import 'app_state/day_view.dart';
+import 'app_state/device_time_zone.dart';
 import 'app_state/file_picker_edge.dart';
 import 'app_state/import_flow.dart';
 import 'app_state/ping_schedule.dart';
@@ -65,6 +66,12 @@ import 'storage/remote/shared_facts.dart';
 /// app thinks it is, and they are the same account. `main` acquires the
 /// session, reads the id off it and hands both in; a test hands in neither
 /// and gets [NoSession] and the local stand-in, which is the same pair.
+///
+/// [sharing] is how a test says where the plan stands with the server without
+/// a server: the app binds the real sync's own [TripSync.standings], and a
+/// test hands in a stream of its own. Passing nothing means nothing is ever
+/// said about sharing, which is exactly right for a suite in which no sync
+/// runs — the trip's surfaces stay silent rather than claiming either way.
 Widget bootstrapApp({
   AppDatabase? database,
   DateTime? today,
@@ -78,13 +85,20 @@ Widget bootstrapApp({
   TextRecognitionEdge? textRecognition,
   SessionSource? sessions,
   String? memberId,
+  Stream<SyncOutcome>? sharing,
 }) {
   final db = database ?? openAppDatabase();
   final store = PhotoStore(db);
   final roster = MembershipStore(db);
-  _startSharedFactsSync(db, sessions ?? const NoSession());
+  final sync = _startSharedFactsSync(db, sessions ?? const NoSession());
+  // Always bound, and never conditionally: Riverpod refuses to update a scope
+  // whose override *count* changed, and a test that pumps its own scope over
+  // this one would break on a binding that came and went.
+  final standings =
+      sharing ?? sync?.standings ?? const Stream<SyncOutcome>.empty();
   return ProviderScope(
     overrides: [
+      sharedFactsStandingProvider.overrideWith((ref) => standings),
       tripRepositoryProvider.overrideWithValue(TripRepository(db)),
       planDraftRepositoryProvider.overrideWithValue(PlanDraftRepository(db)),
       photoRepositoryProvider.overrideWithValue(photos ?? store),
@@ -116,63 +130,88 @@ Widget bootstrapApp({
 /// a timer pending and hanging the test at teardown. A build that wants the
 /// old inert behaviour asks for it with `--dart-define=CAIRN_SUPABASE_URL=`.
 ///
-/// It is started here rather than exposed as a provider because no surface
-/// consumes it. The sync's whole job is to make the Drift store agree with
-/// seven other phones; every screen already reads that store, and a provider
-/// nobody watched would only invite one to.
-void _startSharedFactsSync(AppDatabase db, SessionSource sessions) {
+/// The sync itself is still not a provider, and nothing above the seam may
+/// ask it to do anything: the class's whole job is to make the Drift store
+/// agree with seven other phones, and every screen already reads that store.
+/// What *is* handed up is one read-only stream — where each reconcile got to
+/// ([TripSync.standings]) — because a plan that never left the phone looked
+/// identical to one that had, on every screen, and that silence was the
+/// defect (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`).
+///
+/// Returns null when nothing syncs, which is every test.
+TripSync? _startSharedFactsSync(AppDatabase db, SessionSource sessions) {
   const config = SharedFactsConfig.fromEnvironment;
-  if (!config.isConfigured || sessions is NoSession) return;
-  TripSync(
+  if (!config.isConfigured || sessions is NoSession) return null;
+  return TripSync(
     database: db,
     facts: PostgrestSharedFacts(config: config, sessions: sessions),
-    tripRow: _tripRowFromEnvironment,
-  ).start(pollEvery: const Duration(minutes: 2));
+    tripRow: tripRowFor(_tripTimeZoneOfThisPhone),
+  )..start(pollEvery: const Duration(minutes: 2));
 }
 
-/// The trip's clock, if the build was told it.
+/// The trip's clock, if the build insists on one.
 ///
 /// ```sh
 /// flutter run --dart-define=CAIRN_TRIP_TIMEZONE=Asia/Tokyo
 /// ```
 ///
-/// Absent by default, and that is honest rather than lazy: `trips.timezone`
-/// is the one clock eight phones agree on, the app asks for country and city
-/// and derives the zone from them, and that question is asked at sign-in —
-/// which does not exist (`SyncStanding.awaitingTripRow` names this exact
-/// gap). Deriving `Etc/GMT-9` from the device's UTC offset would be a lie the
-/// first time somebody crossed a border. So the build may *tell* the app the
-/// zone, and until sign-in asks, nothing guesses it.
-const _tripTimeZone = String.fromEnvironment('CAIRN_TRIP_TIMEZONE');
+/// **No longer a gate**, and that is the whole of defect D3's first half. It
+/// used to be a compile-time constant with no default, so an ordinary
+/// `flutter build ios` produced a binary that could never create the shared
+/// `trips` row and never said so. It survives as an *override* rather than a
+/// requirement, because it is the one way to pin the destination's zone on a
+/// plan made at home, and pinning it is strictly better than the phone's own
+/// answer. Left unset — which is every ordinary build — the phone answers
+/// (`_tripTimeZoneOfThisPhone`).
+const _tripTimeZoneOverride = String.fromEnvironment('CAIRN_TRIP_TIMEZONE');
+
+/// Which zone the app takes as the trip's, when nothing was passed.
+///
+/// The phone's own, read through the platform
+/// (`app_state/device_time_zone.dart`). Not the device's UTC *offset*: a
+/// fixed offset carries no daylight saving and `Etc/GMT±N` cannot spell the
+/// half-hour zones a billion people live in, and `trips.timezone` is checked
+/// against `pg_timezone_names` at write time anyway. See
+/// `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md` for what this
+/// is right about and what it is not.
+const _tripTimeZoneOfThisPhone = DeviceTimeZone();
 
 /// Answers with the shared `trips` row to create, or null to say "not yet".
 ///
-/// Three things must be known and none of them is invented here:
+/// A function of the [TimeZoneEdge] rather than a bare one, so the app's own
+/// answer is the thing a test drives (`test/shared_facts_sync_test.dart`
+/// hands it a [FixedTimeZone] and asserts the plan reaches the server on a
+/// build with no defines at all).
 ///
-///  * the zone, from the define above;
-///  * the trip's first and last dates, which are the plan's own resolved
-///    dates — a plan whose every date is still open cannot be a `trips` row,
-///    because `start_date` and `end_date` are `not null`;
-///  * the name, because `trips.name` is `not null` and the phone's is
-///    nullable. Pushing the app's own word for an unnamed trip would come
-///    back through the roster apply and *rename* the trip, so an unnamed trip
-///    waits instead. Naming it in the trip sheet is what starts the sync.
-Future<RemoteTripDraft?> _tripRowFromEnvironment(PendingTripRow pending) async {
-  final name = pending.name;
+/// **One thing can still be missing, and only one.** The trip's first and
+/// last dates are the plan's own resolved dates: `start_date` and `end_date`
+/// are `not null` on the server, and inventing a date is the guess the whole
+/// paste flow exists to refuse. So a plan that has not said when it happens
+/// waits — visibly now, in the trip's own sheet.
+///
+/// The name is deliberately **not** among them any more. `trips.name` is
+/// `not null`, so an unnamed trip is published under
+/// [unnamedTripPlaceholder] — the same word the app already shows over a trip
+/// nobody has named — and the sync refuses to adopt it back, so nothing here
+/// invents a name. A plan that never leaves the phone because nobody typed a
+/// title is the worse of the two lies.
+TripRowSource tripRowFor(TimeZoneEdge clock) => (pending) async {
   final first = pending.firstDateIso;
   final last = pending.lastDateIso;
-  if (_tripTimeZone.isEmpty || name == null || first == null || last == null) {
-    return null;
-  }
+  if (first == null || last == null) return null;
+  final zone = _tripTimeZoneOverride.isNotEmpty
+      ? _tripTimeZoneOverride
+      : await clock.ianaName();
+  if (zone == null || zone.isEmpty) return null;
   return RemoteTripDraft(
     id: pending.tripId,
-    name: name,
+    name: pending.name ?? unnamedTripPlaceholder,
     createdBy: pending.startedBy,
-    timeZone: _tripTimeZone,
+    timeZone: zone,
     startDateIso: first,
     endDateIso: last,
   );
-}
+};
 
 /// How long a first-ever launch may wait for an account before it gives up
 /// and runs as the stand-in.

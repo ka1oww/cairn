@@ -5,7 +5,10 @@
 This file records **what is built, what is not, and the order the rest arrives in** —
 and, where the order is not obvious, why it is that order.
 
-Last true as of 25 August 2026.
+Last true as of 27 August 2026, reconciled claim by claim against a full bug
+sweep run on a simulator against the live backend. Where this file used to
+claim something that turned out not to be true, the claim has been replaced
+rather than annotated.
 
 ---
 
@@ -24,6 +27,21 @@ That is the entire product. Everything below is in service of it.
 
 ---
 
+## The one-line state of it
+
+**Everything Cairn has built works. What is not built is the part that makes it
+a group.** As of today the itinerary does leave the phone on an ordinary build —
+that was fixed on 27 August and had been silently broken since the sync was
+written — but **no photograph has any way to reach another phone, and no phone
+has any way to buzz.** Neither is broken; both are unwritten. On today's build,
+for the seven people who are not the planner, Cairn is a very good single-player
+app.
+
+That sentence is the honest headline, and the rest of this file should be read
+against it.
+
+---
+
 ## The line: what the first release is
 
 Not everything above is the first release. The line was drawn on 22 August —
@@ -37,6 +55,10 @@ it makes the rest of this file orderable:
 - Everyone's pocket buzzes at their own minute
 - Taking a photo opens today's page
 - The photos land in one pool everybody can see
+
+Of those five, **one and a half are built**: the itinerary is pasted and now
+genuinely reaches the server (nobody else can read it yet, because nobody else
+can join). Joining, buzzing, and the shared pool are all unwritten.
 
 **Explicitly after it — deliberate choices, not omissions:**
 
@@ -65,6 +87,31 @@ on the "in" list belongs on the "out" list.
 **The target:** [December](decisions/2026-08-22-december-target.md), chosen
 rather than discovered — no trip is actually in the calendar. First release
 estimated mid-to-late October; the slack is the point.
+
+### The 31 October tripwire, stated at zero
+
+The captain set a condition on the seven's half of the product: **by 31 October
+the ping must fire on a real phone, and a photograph must cross between two real
+phones — or that half gets cut.**
+
+**Both conditions currently sit at zero, and neither is close in the sense of
+"nearly working".**
+
+- *The ping firing on a real phone* needs an implementation of
+  `NotificationEdge` against iOS. There is none, and there is **no notification
+  dependency in `pubspec.yaml` at all** — not `flutter_local_notifications`,
+  not Firebase, nothing. What exists is the schedule that decides the minute,
+  which is correct and tested.
+- *A photograph crossing between two phones* needs photo methods on
+  `SharedFacts` and an R2 client. Neither exists. `SharedFacts` has four
+  methods and none of them mentions a photograph; every occurrence of "R2" in
+  `lib/` is inside a comment describing an adapter that was never written.
+
+Both are **unwritten rather than broken**, which is better news than the
+alternative — the server-side table (`supabase/migrations/0006_photos.sql`) and
+the gate rule are already in place and tested, so what was built was built
+well. But nothing about either is partly done, and no estimate here should be
+read as though it were.
 
 ---
 
@@ -113,7 +160,8 @@ chip or the dashed "+" tile, each of which waits on something that does not
 exist yet. Both its states are real — an empty pool is a written line rather
 than a skeleton grid, and a photo whose bytes are not on this phone is a tile
 waiting for them rather than a broken one, which is a permanent state of a
-pool eight people share.
+pool eight people share. **What no state of it can say yet is that somebody
+else took a photograph**, because nothing moves one (see the tripwire above).
 
 **Capture fills it, back-camera-only** — which is the line's own scope and not
 a shortcut, since the front inset is explicitly after the line. The whole loop
@@ -125,10 +173,12 @@ photo index with the frame beside it on disk — where the Pool, reading the sam
 store, draws it. A missed slot is never a lockout: the door stays open till
 midnight and what you take then lands at the hour it was taken.
 
-Two pieces of it are honestly unfinished. Nothing is registered with iOS yet,
-so no pocket actually buzzes; and where there is no camera (the Simulator) the
-app draws its own frame, so a green run there is not evidence the real camera
-path works.
+Two pieces of it are honestly unfinished. **Nothing is registered with iOS and
+no notification library is in the project at all**, so no pocket buzzes; and
+where there is no camera (the Simulator) the app draws its own frame, so a
+green run there is not evidence the real camera path works — and *that fallback
+is silent*, which is a hazard on a real phone as well as a convenience on a
+simulator (see the bites, below).
 
 **The gate now says what the record says.** Today's photographs stay shut to
 you until you have put something into today, and a day that is over is open to
@@ -159,37 +209,64 @@ The pings are dealt across that roster now, so the stub member is gone.
 Two halves of it are honestly unfinished, and they are the same half twice: a
 phone can only ever write its own row, so the roster holds one person, and a
 code — real, canonical, revocable, dying with the trip — cannot admit anybody,
-because nothing carries a membership to another phone. Saying a code back is
-built and answers every case this phone can see; for a well-formed code
-belonging to somebody else's trip it says so plainly rather than spinning.
-That last step is Phase 2 and nothing else.
+because **nothing on this phone ever asks the server to redeem a code.** Saying
+a code back is built and answers every case this phone can see; for a
+well-formed code belonging to somebody else's trip it says so plainly rather
+than spinning. That last step is Phase 2 and nothing else.
 
-The itinerary syncs for real: the hosted project exists, an ordinary build
-points at it, and the phone signs in as an anonymous account until Apple lands.
-What is still Phase 2 is everything the *roster* needs — nothing carries a
-membership to another phone, so the party the plan syncs to is still one. A
-pool of one phone's
-photos is likewise only half the Pool — nobody else's bytes can arrive until
-Phase 2 moves them, and that is also what the gate is waiting on to matter.
+**The itinerary really does leave the phone now — and that was not true until
+27 August 2026.** The hosted project exists, all ten migrations are applied, an
+ordinary build points at it, and the phone signs in as an anonymous GoTrue
+account until Apple lands. But until today, `CAIRN_TRIP_TIMEZONE` was a
+compile-time constant with **no default**, so an ordinary `flutter build ios`
+produced a binary that could never create the shared `trips` row, never pushed
+a plan, and **never said so on any screen**. This file previously said the
+itinerary "syncs for real"; that was true of the code and false of every binary
+anybody would have run. Both halves are fixed and both are recorded in
+[the trip's clock](decisions/2026-08-27-the-trip-clock-is-the-phones.md): the
+clock is now the phone's own IANA zone, an unnamed trip publishes rather than
+waiting for a title, and a plan that has *not* reached the server now says so
+on the Trail and in the trip sheet, in the app's own voice. What remains false
+about "syncs for real" is the audience: **no itinerary has ever been read by a
+second phone**, because nothing carries a membership to one. A pool of one
+phone's photos is likewise only half the Pool, and that is what the gate is
+waiting on to matter.
+
 Still not built: the day page's photo timeline, the Trail's filled node, and
 the gate's face on the day page — the rule is there, the page has no
 photographs to withhold yet.
 
-**The paste box now has a file door.** A plan can arrive as a file rather than
-as pasted text: the pill under the box opens the document picker, the picked
-bytes are routed to the one extractor that claims them (magic bytes first, the
-extension only as tiebreak), and the text lands *in the box* rather than
-parsing on its own — so every route out of the box, including the re-paste
+**The paste box now has two doors beside it.** A plan can arrive as a file
+rather than as pasted text: the pill under the box opens the document picker,
+the picked bytes are routed to the one extractor that claims them (magic bytes
+first, the extension only as tiebreak), and the text lands *in the box* rather
+than parsing on its own — so every route out of the box, including the re-paste
 merge over a running trip, works exactly as it already did. Five formats read
-today: plain text, `.docx`, `.xlsx`, `.csv` and `.pdf` — the last one
-including a Wanderlog itinerary printed to PDF, whose repeated page furniture
-is stripped only where a print can prove it repeated. Spreadsheets and CSVs lift
-their typed cells into one shared row model and are said back in the parser's
-own dialect when a date column is there to drive it; when it is not, every
-cell becomes a faithful row-major line, which is never worse than pasting the
-same table as text. A file that is damaged, encrypted or not what its name
-claims is refused in a sentence rather than decoded into junk. OCR of a
-screenshotted plan is the slice after this one and is not built.
+today: plain text, `.docx`, `.xlsx`, `.csv` and `.pdf`. Spreadsheets and CSVs
+lift their typed cells into one shared row model and are said back in the
+parser's own dialect when a date column is there to drive it; when it is not,
+every cell becomes a faithful row-major line, which is never worse than pasting
+the same table as text. A file that is damaged, encrypted or not what its name
+claims is refused in a sentence rather than decoded into junk — six
+deliberately broken files were checked and none of them leaked a stack trace, a
+class name or a path.
+
+**And screenshots read**, which this file used to list as the slice after: real
+Apple Vision behind a seam reads a plan photographed or screenshotted, through
+either door, and a scanned PDF with no text layer gets a one-tap offer to read
+it the same way. Recognition quality is judged on a device and never by the
+suite.
+
+**The one import path that is genuinely bad is the flagship one.** The
+repository's own real Wanderlog print — a three-day Asahikawa guide — extracts
+correctly (622 lines, the three real `Day N` headers among them) and then
+**parses into 32 days and 555 stops**, because the page cleanup does not strip
+Wanderlog's `Save` button label (30 lines end in it, merged onto the end of a
+place name) or its `9/9 – 9/10` opening-hours ranges (12 lines, which read as
+dates). The confirm screen is honest about it — "3 read clean. 29 need your
+eye." — so nothing lies, but the only sane action a person has is to give up
+and paste the text by hand. This file used to describe that path as working;
+it does not work.
 
 Beneath it: five pure-Dart libraries, a backend schema, a
 dual-camera spike, the decision record, and the design handoffs, all
@@ -198,15 +275,15 @@ tested.
 | Piece | State |
 | --- | --- |
 | Every product decision | **Settled.** See `docs/decisions/`. |
-| `packages/itinerary_parser` | Landed. Parses pasted trip plans into days and stops. |
+| `packages/itinerary_parser` | Landed. Parses pasted trip plans into days and stops. Fed real Wanderlog chrome it invents days — see the queued fix. |
 | `packages/photo_day_assignment` | Landed. Decides which day a photo belongs to. |
-| `packages/trip_moments` | Landed. Deals one ping per person across the party. |
+| `packages/trip_moments` | Landed. Deals one ping per person across the party. Nothing delivers what it deals. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
-| `packages/plan_extraction` | Landed. Bytes in, plan text out — the file-import contract and its `.txt`/`.docx`/`.xlsx`/`.csv`/`.pdf` extractors. |
-| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with all ten migrations applied. |
-| CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
+| `packages/plan_extraction` | Landed. Bytes in, plan text out — the file-import contract and its `.txt`/`.docx`/`.xlsx`/`.csv`/`.pdf` extractors. Extraction is correct on the Wanderlog print; the cleanup does not strip two of its chrome shapes. |
+| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with all ten migrations applied. **No photo transport, and no phone-side call that redeems an invite.** |
+| CI | Landed. Package tests, the JS-safety golden, the RLS probe — and the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** The paste-and-confirm flow persisting the itinerary locally — with a second door beside the box: importing a file — a document (`.txt`, `.docx`, `.xlsx`, `.csv`, `.pdf`), or a photo or screenshot through Apple Vision — fills it and never auto-parses, so one tap reads it through the same pipeline, and recognition is judged on a device, never by the suite — the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them and the Pool obeys it (the day page's own gated half still waits on the photo timeline) — and now the trip as a stored fact: roster, starter, flat-but-gated powers, three-word codes that die with the trip, and the sheet off the Trail's title. Nothing registered with iOS yet; no code can reach another phone yet. |
+| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** Paste-and-confirm persisting the itinerary locally, with two doors beside the box — a document (`.txt`, `.docx`, `.xlsx`, `.csv`, `.pdf`) or a photo/screenshot through Apple Vision — filling it and never auto-parsing; the day page it lands on, the trip's path, the three-tab container, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them, the trip as a stored fact (roster, starter, flat-but-gated powers, three-word codes that die with the trip, the sheet off the Trail's title), and the itinerary reaching the hosted project on an ordinary build with the app saying when it has not. **Nothing registered with iOS; no photograph can move; no code can admit anybody.** |
 
 ---
 
@@ -241,13 +318,21 @@ propagated to every phone, so the ping schedule is never dealt from a stale
 roster or a stale plan
 ([grill round one](decisions/2026-08-22-grill-round-one.md) §2).
 
-**The last of those has landed early, and is live.** The itinerary and the
-roster are stored, merged last-write-wins per day, and reconciled by
-`lib/repositories/itinerary_sync.dart` over a first slice of the Supabase
-adapter — against a hosted project, signed in as an anonymous GoTrue account
-(`supabase/README.md`). Real accounts, the pool and the bytes are still the
-whole of the work here, and so is the thing that makes a roster worth syncing:
-nothing yet carries a membership to a second phone.
+**The itinerary half has landed and, since 27 August, is live on an ordinary
+build.** The itinerary and the roster are stored, merged last-write-wins per
+day, and reconciled by `lib/repositories/itinerary_sync.dart` over a first
+slice of the Supabase adapter — against a hosted project, signed in as an
+anonymous GoTrue account (`supabase/README.md`). Everything else in this phase
+is untouched, and two pieces of it are the whole reason the phase exists:
+
+- **Nothing carries a membership to a second phone.** The invite code is real,
+  canonical, revocable and dies with the trip; no code on this phone ever calls
+  `redeem_trip_invite`. Until that call exists, a roster of one is all the sync
+  can converge on and the trip is not a group.
+- **No photograph has any transport.** `SharedFacts` declares four methods and
+  none is about a photo; there is no R2 client. The table and its policies are
+  written and tested on the server side, and nothing on the phone can reach
+  them.
 
 The pool stores **originals**; resizing is for display only (§3 of the same
 decision). The bill has now been measured rather than guessed at:
@@ -330,6 +415,17 @@ Nothing here can be delegated, and several of these block a whole phase.
   project is live. No secret — the service-role key, the database password —
   ever enters this repository, a pull request, or an agent's hands
   (`supabase/README.md` is the authority on which key is which).
+- **Clearing the sweep's residue from the hosted project.** The 27 August bug
+  sweep wrote real rows into the live project to establish whether the
+  itinerary reached it: a `trips` row `921ac2fa-c6c7-49c5-8bc4-77b79e3c1b55`
+  named "Bug sweep trip" with its days, stops and starting membership, and
+  several anonymous GoTrue accounts each with a `profiles` row. They are inert.
+  Deleting them needs the service-role key, so only you can.
+- **Deciding whether a member may rename a trip.** The phone says any member
+  may (`canRenameTrip` is flat); the server says only the creator may
+  (`trips_update_starter`). Both are deliberate and they disagree. Until it is
+  settled, no rename is pushed at all, so a renamed trip is stale on the
+  server.
 - **Paying Apple** at the weekend test, **and Google** at Android delivery.
 - **Sending design prompts to Claude Design**, and returning the handoffs.
 - **Showing the app to any of the eight.** Nothing has been shown yet, and a
@@ -342,14 +438,48 @@ Nothing here can be delegated, and several of these block a whole phase.
 
 ## Work already queued, sorted by the line
 
-Not a schedule. An inventory, so nothing is quietly forgotten.
+Not a schedule. An inventory, so nothing is quietly forgotten. The first three
+are the ones that stand between Cairn and being a group at all.
 
 **First release:**
 
-- Carry a membership to another phone, which is the one thing standing between
-  a real invite code and somebody actually joining. Everything on this side of
-  it is built — roster, roles, three-word codes that die with the trip, and the
-  door that reads them back — and honestly says so when it cannot reach a trip.
+- **Move a photograph between phones.** Never built: `SharedFacts` has no photo
+  method, and no R2 client exists in `lib/` — only comments describing the
+  adapter that would be one. The server half is written and tested
+  (`supabase/migrations/0006_photos.sql`, the upload-URL edge function). Until
+  this exists a person's Pool shows only their own photographs, forever, with
+  no error and no explanation. One half of the 31 October tripwire.
+- **Make a phone buzz.** Never built: `NotificationEdge` has exactly one
+  implementation, `RecordingNotificationEdge`, which appends to a list — and
+  there is no notification dependency in `pubspec.yaml` at all. The schedule it
+  would deliver is correct and tested. The other half of the tripwire.
+- **Carry a membership to another phone**, which is the one thing standing
+  between a real invite code and somebody actually joining. Everything on this
+  side of it is built — roster, powers, three-word codes that die with the
+  trip, and the door that reads them back — and honestly says so when it cannot
+  reach a trip. What is missing is the call: nothing ever asks the server to
+  redeem a code.
+- **Stop the undated re-paste from misfiling photographs.** Reproduced: on a
+  plan whose days carry **no dates**, re-pasting an edited plan pairs repasted
+  days to current days *by position*, and because `mergeRepaste` never
+  renumbers (deliberately — `photos.dayNumber` is the only link a photograph
+  has to a day), a photograph stays on a number whose content has moved
+  underneath it. Delete the first of three undated days and day 1 keeps its
+  Tokyo photographs while becoming Kyoto; day 3 duplicates day 2. Nobody is
+  told and nothing errors. **The dated case is correct and was checked** —
+  date-matching pins every day. The same position pass is also how a genuinely
+  new undated day rides in without being asked about. The fix is a decision
+  about what position-pairing may claim, not a patch.
+- **Fix the Wanderlog print's parse.** Extraction is right and the parser is
+  fed chrome the cleanup does not strip: Wanderlog's `Save` button label, which
+  the PDF merges onto the end of a place name, and its `9/9 – 9/10`
+  opening-hours ranges, which read as dates. Three real days become 32 days and
+  555 stops. This is the flagship import path and the fixture is in the
+  repository.
+- **The Maps hand-off.** Named in the brief as half the planner's job and
+  **never built and never decided**: no `url_launcher` in `pubspec.yaml`, no
+  maps URL anywhere in `lib/`, and no decision file about it. It needs a
+  decision before it needs code.
 - Finish reconciling the schema with the settled decisions. The three-word
   grammar is on the server now — `supabase/migrations/0005_trip_invites.sql`
   mints two words and a number, forgives order and spelling by the same rule
@@ -357,36 +487,44 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
   at a per-invite `expires_at` (the single timestamp the grace-window decision
   exists to prevent), with `tests/rls_probe.py` reading the Dart vocabulary to
   keep the two halves from drifting. What is still unreconciled: `max_uses`,
-  which the phone has no notion of, and starter-only rename/delete with no
-  photo condition and no succession.
+  which the phone has no notion of; and rename, where the server is
+  starter-only and the phone is flat (above, in what only Zhehang can decide).
 - Throttle `redeem_trip_invite`. Three spoken words are a little over six
   hundred thousand codes where eight characters were ~850 billion, and each
   guess covers a neighbourhood of near-spellings. Sayable was the point and
   the trade is the decision's; the rate limit it assumes is not written yet,
   at the database level or above it.
-- ~~Wake the itinerary and roster sync.~~ **Done, 2026-08-26.** It points at
-  the hosted project by default and signs in anonymously;
-  `test/hosted_smoke_test.dart` is the live proof, and a green `flutter test`
-  is not. What is left of it is real sign-in: an account somebody owns, a
-  display name that is theirs, and a trip started offline under `'me'` — which
-  can never become a `trips` row and is a local trip for good.
+- **Push a rename.** The roster reconcile pulls the trip's name down; nothing
+  pushes one up, so a trip renamed on this phone stays `This trip` on the
+  server and on everyone else's. The phone deliberately refuses to adopt the
+  placeholder back, which is what stops the pull from *reverting* a local
+  rename. Closing it needs a name clock — a third merge rule where the design
+  has two — and the rename-power decision above.
+- Real sign-in: an account somebody owns and a display name that is theirs. The
+  anonymous GoTrue account is real and its id *is* this phone's member id, so
+  the roster and the gate ask about the right person; what is still a local
+  constant is the display name (`'You'`), and a trip started offline under
+  `'me'` can never become a `trips` row and is a local trip for good.
+- **Put the refresh token in the Keychain.** `gotrue_sessions.dart` writes
+  `cairn_session.json` — `user_id` and `refresh_token` as plain JSON — into
+  Application Support, which is in iCloud and iTunes backups and is not the
+  Keychain. The account is anonymous with only that phone's own membership
+  behind it, so the blast radius is small; it is still the wrong place.
 - The trip's close at trip end + 72 hours as a *stored* rule. Both halves
   derive it correctly now — `cairn_model`'s `tripStandingAt` on the phone, and
   `trip_closes_at()` on the server, which is what kills an invite code and
   what shuts `photos_insert_trip_member` — but each derives it from what it
   holds rather than from a fact of the trip everybody's phone agrees on. The
   phone's half reads the *device's* offset, so two travellers in different
-  zones can disagree about the hour it shuts. The stored trip clock is what
-  closes that.
-- The trip's own clock. Nothing stores one, so the trip is read at the
-  device's UTC offset in the two places that admit it, and the timezone power
-  the starter-and-container decision settled has nothing to act on yet.
-- Register the ping with iOS. The schedule is derived and handed to a
-  `NotificationEdge`; nothing implements that edge against the OS, so the last
-  inch of the ping — the buzz — is the piece still missing.
-- Fetch other people's bytes into the pool. The Pool draws what this phone
-  took; a photo somebody else took is a tile waiting for bytes until Phase 2
-  moves them.
+  zones can disagree about the hour it shuts.
+- **Finish the trip's own clock.** The shared `trips` row now carries one — the
+  creating phone's IANA zone, or a zone the build pinned
+  ([the trip's clock](decisions/2026-08-27-the-trip-clock-is-the-phones.md)) —
+  but nothing on the phone *reads* it back, so the two places that admit a
+  clock still use the device's offset, and the timezone power the
+  starter-and-container decision settled still has nothing to act on. The row
+  is also written once and never revised, so a trip's clock does not follow the
+  trip; whether it should is undecided.
 - Show the frame on today's page and on the Trail's nodes, and put the live
   viewfinder behind the shutter.
 - Authored words: the one line typed at the breath is built. What is *not* is
@@ -409,7 +547,8 @@ Not a schedule. An inventory, so nothing is quietly forgotten.
 - The cat.
 - The countdown.
 - Android delivery through the Play testing track.
-- Autofill the itinerary from a Wanderlog export.
+- Autofill the itinerary from a Wanderlog *export* — distinct from reading a
+  Wanderlog *print*, which is built and, today, produces an unusable plan.
 - Google sign-in with accounts keyed to their own id rather than Apple's.
 - Standing ops so Cairn survives the quiet months between trips.
 
@@ -422,6 +561,19 @@ trip that crosses several timezones in one day.
 
 Each of these has already cost time, or is certain to.
 
+- **A feature can be complete and switched off, and nothing will say so.** This
+  is what happened to the itinerary sync: every line of it was written, tested
+  and correct, and one `String.fromEnvironment` with no default meant no
+  ordinary build had ever pushed a plan — with no banner, no spinner and no
+  error, because a standing the code knew perfectly well was never allowed
+  above the repository seam. The lesson generalises past this one bug: **a
+  build-time constant that gates a whole capability, and a state a person
+  cannot see, are the same defect twice.** See
+  `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`.
+- **Re-pasting an undated plan can move photographs onto another day's
+  content.** Reproduced; the fix is queued above. A dated plan is safe. The
+  paste flow pushes hard toward dating — dating day 1 fills the whole plan
+  down — but nothing requires it, and the app happily runs an undated trip.
 - **iOS never wakes a third-party app because a new photo appeared.** There is no
   background trigger and no entitlement that buys one. The import runs when the
   app is open, and the interface says exactly that. See
@@ -454,23 +606,42 @@ Each of these has already cost time, or is certain to.
   asserting "this was rejected" can pass while testing nothing. This already
   burned one analysis. Assert on the state of the table afterwards, never on
   whether a statement threw. See `supabase/tests/README.md`.
+- **No RLS refusal has ever been observed on the hosted project.** Only one
+  account has ever touched it, so only the permitted paths have run there. The
+  109 passing assertions are against a throwaway local Postgres 17. A green
+  probe is evidence about the schema, not about production.
 - **Dart's `int` bitwise operators are 32-bit when compiled to JavaScript.** The
   ping derivation uses arithmetic rather than shifts for exactly this reason, and
   a golden test pins it. See `packages/trip_moments/`.
-- **The Simulator has no camera, so the app draws its own frame there.** That is
-  what makes the capture flow walkable without a cable, and it is also a trap:
-  a green simulator run says the flow is right and says *nothing* about whether
-  the camera path works. The real back camera has to be judged on a device, and
-  only on a device.
-- **The person holding the phone is `me`, and their name is "You".** There is
-  no sign-in, so there is no account id to be. The roster row is real and every
-  photo is credited to it; only the id and the display name are local
-  constants, and they are the last stand-ins in the app state. They go when
-  sign-in lands, and every row written before then still says `me`.
+- **The Simulator has no camera, so the app draws its own frame there — and the
+  fallback is silent.** That is what makes the capture flow walkable without a
+  cable, and it is two traps, not one. A green simulator run says the flow is
+  right and says *nothing* about whether the camera path works; the real back
+  camera has to be judged on a device. And `DeviceCameraSource._hasBackCamera()`
+  wraps `availableCameras()` in a bare `catch (_) { return false; }`, so on a
+  *real* phone any unexpected throw substitutes a generated 360×480 two-tone
+  PNG for somebody's photograph, into the real pool, with nothing shown. This
+  has not been reproduced on a device — on iOS `availableCameras()` does not
+  require authorization and a denial surfaces honestly later — so it is a
+  latent hazard on an unknown path, named rather than claimed.
+- **The person holding the phone has a real id and a placeholder name.** The
+  anonymous GoTrue account's id *is* this phone's member id, resolved on the
+  boot path from a local file rather than over the network, so the roster and
+  the gate ask about the right person. The display name is still the constant
+  `'You'`, and a trip started before any account exists is credited to `'me'` —
+  visibly not an `auth.users` id, so a push carrying it is refused loudly
+  rather than writing a stranger's row.
 - **A photo row is an index; the photograph is a file beside it.** Locally that
   is Drift plus a file in the app's documents directory, mirroring Postgres
   plus R2 on the server. Deleting the row does not delete the photograph, and
   nothing yet reconciles the two in either direction.
+- **A green suite proves the app, not the product.** Every automated test binds
+  a fake: `NoSession` for the network, `FakeTextRecognition` for Vision,
+  `StandInCameraSource` for the camera, a direct call for the extraction
+  isolate. The real camera, real recognition quality, real notification
+  delivery, real photo transport, and anything involving a second phone are all
+  unestablished by any suite in this repository, and the only test that touches
+  the hosted project is skipped unless asked for by define.
 
 ---
 
@@ -480,3 +651,13 @@ Update it when a phase actually changes state, not when work is merely planned.
 A roadmap that lists intentions is worse than no roadmap, because it reads as
 progress. If something here has stopped being true, correcting it is more
 valuable than adding to it.
+
+Two rules learned the hard way on 27 August 2026, when a sweep found several
+claims here that were true of the code and false of the product:
+
+- **Say "never built" when nothing was built.** "Not yet" and "still Phase 2"
+  read as partly done. `NotificationEdge` and photo transport had both been
+  described as pending for weeks; neither had a line of implementation.
+- **A claim about a capability is a claim about a build somebody would run.**
+  "The itinerary syncs for real" was written about code that worked and a
+  binary that could not. Where the two differ, this file records the binary.

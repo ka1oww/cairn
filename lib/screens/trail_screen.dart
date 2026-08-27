@@ -98,7 +98,14 @@ class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final name = ref.watch(tripSettingsProvider).value?.name;
+    final settings = ref.watch(tripSettingsProvider).value;
+    final name = settings?.name;
+    // The Trail is the screen a person is actually standing on, so it carries
+    // the short form of where the plan stands — and only when there is
+    // something to say. The whole sentence, and the reason, are one tap away
+    // in the sheet the chevron beside this opens. Both read the one line
+    // `trip_settings.dart` writes; neither decides anything.
+    final mark = settings?.sharing?.mark;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 14, 8, 0),
       child: Row(
@@ -127,6 +134,16 @@ class _Header extends ConsumerWidget {
                     view.detail!,
                     key: const Key('trail-detail'),
                     style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                if (mark != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    mark,
+                    key: const Key('trail-sharing'),
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),

@@ -63,15 +63,23 @@ enum SyncStanding {
   /// This phone has not started a trip, so there is nothing shared to be.
   noTrip,
 
-  /// The trip has never reached a server and the phone cannot yet say what
-  /// its clock is, so the shared row cannot be created.
+  /// The trip has never reached a server and the phone cannot yet say
+  /// everything the shared row needs, so it has not been created.
   ///
-  /// A real gap, named rather than papered over: `trips` requires an IANA
-  /// zone and a start and end date, and this slice of the app holds a device
-  /// UTC offset and a plan whose dates may all still be open. Deriving
-  /// `Etc/GMT-8` from an offset would be a lie the first time somebody
-  /// crossed a border, and inventing dates would be worse. The blank closes
-  /// when sign-in asks for country and city (`supabase/README.md`).
+  /// A real gap, named rather than papered over. Since 2026-08-27 it is one
+  /// gap and not three: the clock is the phone's own IANA zone and the name
+  /// is no longer a gate at all
+  /// (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`), so what
+  /// is left is **a plan that has not said when it happens**. `start_date`
+  /// and `end_date` are `not null` on the server and inventing either would
+  /// be the guess this whole file refuses; a plan with no dates, or one whose
+  /// last day is still open, therefore waits here until somebody dates it.
+  ///
+  /// **This is the standing a person has to be shown.** It is the one state
+  /// in which the plan is quietly staying on this phone for a reason the
+  /// person can actually fix, which is why `trip_settings.dart` renders it
+  /// and why [SyncOutcome.detail] — which is for a log — is not what it
+  /// renders.
   awaitingTripRow,
 
   /// The server could not be reached. **The local copy is untouched and
@@ -153,9 +161,23 @@ class PendingTripRow {
 
 /// Answers with the shared row to create, or null to say "not yet".
 ///
-/// Null is the app's answer today, and [SyncStanding.awaitingTripRow] is what
-/// the sync reports when it hears it.
+/// Null is what a source says when the plan has not said when it happens, and
+/// [SyncStanding.awaitingTripRow] is what the sync reports when it hears it.
 typedef TripRowSource = Future<RemoteTripDraft?> Function(PendingTripRow);
+
+/// The word this phone publishes for a trip nobody has named.
+///
+/// **It is not a name, and it is never taken back as one.** `trips.name` is
+/// `not null`, so something has to go in it, and a plan that never leaves the
+/// phone because nobody typed a title is a worse lie than a placeholder
+/// everyone can see and change. This is the same word the trip's own surface
+/// already shows over an unnamed trip (`trip_settings.dart` reads it from
+/// here so the two cannot drift), which is why publishing it invents nothing:
+/// the app was already saying it out loud.
+///
+/// [TripSync._applyRoster] refuses to adopt it, so a trip nobody has named
+/// does not come back from the server *named*.
+const unnamedTripPlaceholder = 'This trip';
 
 /// Keeps this phone's copy of the trip's *shared facts* — the itinerary and
 /// the roster — in step with the server's.
@@ -194,10 +216,24 @@ class TripSync {
   final TripRowSource? tripRow;
 
   final _subscriptions = <StreamSubscription<void>>[];
+  final _standings = StreamController<SyncOutcome>.broadcast();
   Timer? _poll;
   Future<SyncOutcome>? _inFlight;
   Future<SyncOutcome>? _queued;
   var _started = false;
+
+  /// Where every reconcile got to, as it gets there.
+  ///
+  /// **The one thing about this class anything above the seam may know**, and
+  /// it exists because of the defect that made it: with no way to hear this,
+  /// a plan that never left the phone looked exactly like one that had, on
+  /// every screen, forever. `trip_settings.dart` turns the standing into the
+  /// sentence a person reads; nothing else listens, and nothing that listens
+  /// may act on it — reconciling is still entirely this class's business.
+  ///
+  /// A broadcast stream with no listeners drops what it emits, which is
+  /// deliberate: the app has exactly one listener and a test may have none.
+  Stream<SyncOutcome> get standings => _standings.stream;
 
   /// Starts reconciling: once now, again whenever anything local changes, and
   /// every [pollEvery] if one is given.
@@ -232,6 +268,7 @@ class TripSync {
     _started = false;
     await _queued?.catchError((_) => const SyncOutcome(SyncStanding.dormant));
     await _inFlight?.catchError((_) => const SyncOutcome(SyncStanding.dormant));
+    await _standings.close();
   }
 
   /// Asks for a reconcile without waiting for it.
@@ -257,7 +294,14 @@ class TripSync {
   }
 
   Future<SyncOutcome> _run() {
-    final started = _reconcile().whenComplete(() => _inFlight = null);
+    final started = _reconcile()
+        .then((outcome) {
+          // Announced here rather than at each return inside `_reconcile`,
+          // so a standing cannot be reached without being said.
+          if (!_standings.isClosed) _standings.add(outcome);
+          return outcome;
+        })
+        .whenComplete(() => _inFlight = null);
     _inFlight = started;
     return started;
   }
@@ -410,6 +454,32 @@ class TripSync {
         ),
     ];
 
+    // **The name is the one shared fact this apply does not take back.**
+    //
+    // Nothing pushes a rename. `_createSharedTrip` writes `trips.name` once,
+    // at creation, and there is no second call — so pulling the name is a
+    // one-way ratchet: rename the trip here and the very next reconcile puts
+    // the old word back, silently, in front of the person who just typed the
+    // new one. That was invisible while the sync never ran at all (the
+    // defect this file's clock work fixed) and would have been the first
+    // thing anyone saw once it did.
+    //
+    // So the rule is: **adopt a name only when this phone holds none**, and
+    // never adopt [unnamedTripPlaceholder], which is not a name. A phone that
+    // has been told what the trip is called by somebody else still learns it;
+    // a name typed here is never overwritten by one nobody can push.
+    //
+    // The cost is real and is named rather than hidden: the server's copy of
+    // the name goes stale after a rename. Nothing reads it back today — no
+    // second phone can join a trip yet — and closing it properly needs the
+    // name to carry a clock and a push path, which is a decision about
+    // `trips_update_starter` (starter-only on the server, flat on the phone)
+    // that this change deliberately does not make.
+    final adoptName =
+        local.name == null &&
+        shared.name != null &&
+        shared.name != unnamedTripPlaceholder;
+
     // **A reconcile that changed nothing must write nothing.** The roster's
     // stream is one of the two this class listens to, so a write here asks
     // for the sync that produced it — and a sync that always writes is a sync
@@ -417,12 +487,12 @@ class TripSync {
     final settled =
         _sameRoster(stored, incoming) &&
         local.startedByMemberId == shared.startedBy.value &&
-        local.name == shared.name;
+        !adoptName;
     if (!settled) {
       await database.replaceRoster(
         members: incoming,
         startedByMemberId: shared.startedBy.value,
-        name: shared.name,
+        name: adoptName ? shared.name : null,
       );
     }
     await database.markSynced(rosterSyncedAtUtcIso: _stamp());

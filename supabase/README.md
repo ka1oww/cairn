@@ -454,7 +454,7 @@ Three defines steer it, all read at compile time:
 | --- | --- | --- |
 | `CAIRN_SUPABASE_URL` | the hosted project | Where the backend is. **Pass it empty to turn the backend off entirely** — the sync goes dormant and the phone is purely local. Note that this is *not* what keeps `flutter test` off the network: the suite passes no defines, so `SharedFactsConfig.fromEnvironment` inside it is this project. What stops it reaching out is that `bootstrapApp` defaults its `sessions` to `NoSession` and `_startSharedFactsSync` returns early on one, so nothing ever signs in and nothing is sent. |
 | `CAIRN_SUPABASE_ANON_KEY` | the hosted project's publishable key | Identifies the project. Grants nothing on its own: every table here is behind RLS keyed on `auth.uid()`, so a request with no session reaches zero rows. |
-| `CAIRN_TRIP_TIMEZONE` | *absent* | The trip's IANA clock. Without it the sync reports `awaitingTripRow` and never creates the shared `trips` row — see below. |
+| `CAIRN_TRIP_TIMEZONE` | *the phone's own zone* | Pins the trip's IANA clock, overriding what the phone answers. **An override, not a requirement** — see below. |
 
 ```sh
 flutter run --dart-define=CAIRN_TRIP_TIMEZONE=Asia/Tokyo
@@ -465,19 +465,42 @@ nor this repository.** The anon key does: it is the *publishable* one, designed
 to ship inside a client. That distinction is the only one that matters here —
 the service-role key bypasses every policy on this page.
 
-### Why `CAIRN_TRIP_TIMEZONE` has no default
+### Why `CAIRN_TRIP_TIMEZONE` is an override and not a gate
 
-`trips.timezone` is the one clock eight phones agree on, and the app is meant
-to ask for country and city at sign-in and derive the IANA name from them.
-Sign-in does not ask yet, so nothing on the phone knows it. Deriving `Etc/GMT-9`
-from the device's UTC offset would be a lie the first time somebody crossed a
-border, so the build may *tell* the app the zone and nothing guesses it.
-`SyncStanding.awaitingTripRow` names this exact gap. Two smaller things also
-have to be true before the shared row can be created, for the same reason:
-the plan must have at least one *resolved* date (`start_date`/`end_date` are
-`not null`), and the trip must have been named (`trips.name` is `not null`,
-and the phone's name is nullable — pushing a placeholder would come back
-through the roster apply and rename the trip).
+It used to be a gate, and that was defect D3: with no default, an ordinary
+`flutter build ios` produced a binary that could never create the shared
+`trips` row, so no itinerary had ever reached this project from a real build —
+and no screen said so. The full reasoning is in
+[`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`](../docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md);
+what matters here is what the server now receives.
+
+**The zone is the phone's own IANA name**, read from the platform
+(`ios/Runner/DeviceTimeZone.swift`, behind `lib/app_state/device_time_zone.dart`).
+A *name*, deliberately, and never the device's UTC offset: `trips.timezone` is
+validated against `pg_timezone_names` by a trigger at write time, and
+`Etc/GMT±N` carries no daylight saving and cannot spell the half-hour zones
+India, Iran, South Australia, Newfoundland and Nepal keep. The define survives
+because pinning the *destination's* zone on a plan made at home is strictly
+better than the phone's answer — the phone's answer is the zone the plan was
+pasted in, which is not always the zone the trip is lived in. The row is
+created once and the clock is not re-read, so a phone that flies does not
+rewrite it.
+
+**A trip may be published before it is named.** `trips.name` is `not null`, so
+an unnamed trip goes up as `This trip` (`unnamedTripPlaceholder`), and the
+phone **refuses to adopt that word back** as a name — otherwise the roster
+apply would rename the trip on the next reconcile, and, worse, would revert a
+rename typed on this phone, since nothing ever pushes a rename *up*. The cost
+is that the server's copy of the name goes stale; closing that needs a name
+clock and a decision about `trips_update_starter` (starter-only) against the
+phone's flat `canRenameTrip`, which the roadmap carries as unreconciled.
+
+**One thing can still stop the row being created, and only one:** the plan must
+carry at least one resolved date at each end, because `start_date` and
+`end_date` are `not null` and inventing a date is the guess the whole paste
+flow exists to refuse. `SyncStanding.awaitingTripRow` names exactly that gap —
+and, since 27 August 2026, the trip sheet and the Trail say so to the person
+holding the phone rather than sitting silent.
 
 ### How the phone signs in today
 
@@ -755,9 +778,15 @@ own code: an anonymous sign-in through GoTrue; `handle_new_user` minting the
 profile; a `trips` insert with the phone-minted id; `handle_new_trip` seeding
 `trip_members`; the `trip_roster` view; and `sync_trip_itinerary` in both
 directions, including a day edited by one caller and pulled down by another.
-`test/hosted_smoke_test.dart` is that path as a test. The same walk was made by
-the built iOS app on a simulator, which pushed its Drift plan up and pulled a
-remote edit back down.
+`test/hosted_smoke_test.dart` is that path as a test, and since 27 August 2026
+it assembles the `trips` row with the app's own `tripRowFor` rather than a
+hand-written stand-in — only the clock is pinned, because `flutter test` has no
+method-channel host to answer the real one. The same walk was made by the built
+iOS app on a simulator, which pushed its Drift plan up and pulled a remote edit
+back down. That simulator walk predates the defect D3 fix and was made with
+`--dart-define=CAIRN_TRIP_TIMEZONE` passed; **no build reading the phone's own
+zone has yet reached this project**, because that path needs a device or
+simulator run and none has been made since.
 
 **What it still does not prove.** The environment in `tests/supabase_env.sql`
 is a reconstruction of the parts a migration sees, not a Supabase clone; it is

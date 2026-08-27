@@ -9,9 +9,12 @@
 //
 // **What this can and cannot do is the whole point of the file.** Redeeming a
 // code means being added to somebody else's trip, and a trip lives on the
-// phone it was started on. Nothing carries it across yet: the backend exists
-// as a schema and has never been applied to a hosted project
-// (`supabase/README.md`). So this flow answers honestly about a code it can
+// phone it was started on. Nothing carries it across yet — not because there
+// is nowhere to carry it to: the backend is hosted, all ten migrations are
+// applied, `0005_trip_invites.sql` holds the same three-word grammar this
+// file reads, and the itinerary already reaches it (`supabase/README.md`).
+// What is missing is the call: nothing on this phone ever asks the server to
+// redeem a code. So this flow answers honestly about a code it can
 // actually see — this phone's own trip, its retired codes, a trip that has
 // closed — and, for a well-formed code belonging to a trip somewhere else,
 // says plainly that Cairn cannot reach it rather than spinning, or pretending
