@@ -5,7 +5,24 @@
 //   w:p                one output line per paragraph
 //   w:t                a text run inside a paragraph
 //   w:br / w:cr / w:tab    a break or tab, joined as a space
-//   w:tbl > w:tr > wtc cells hold ordinary paragraphs, read row-major
+//   w:tbl > w:tr > w:tc    one output line per *row*, cells joined
+//
+// The row rule is the row model's rule, arrived at the other way round. A
+// spreadsheet says `[08:30 | Fushimi Inari]` as one starred stop because
+// its cells are typed and `plan_rows.dart` pairs them; a Word table is
+// laid out the same way by the same people but carries no typing at all,
+// so nothing in that file could pair its cells — it would fall through to
+// the untyped path and emit one line per cell, which is the bug. A row is
+// therefore said as one line here, in column order, and the *parser's*
+// own grammar reads the leading `08:30` exactly as it reads the rendered
+// dialect's `- 08:30 Fushimi Inari`. What is deliberately not done is
+// teach `plan_rows.dart` a second time grammar over text cells: that file
+// says in its own head that no such grammar lives there, and it would
+// change what xlsx and csv already do.
+//
+// A row with only one filled cell keeps its paragraphs as separate lines.
+// Single-column tables are layout, not pairing — a day whose stops are
+// paragraphs inside one cell must not collapse into a single stop.
 //
 // `word/header*.xml` / `footer*.xml` are skipped deliberately: we only ever
 // open document.xml. Legacy binary `.doc` and encrypted OOXML (both CFB
@@ -100,41 +117,55 @@ class DocxExtractor implements PlanTextExtractor {
     return null;
   }
 
-  /// Depth-first over the body: paragraphs become lines, tables are walked
-  /// row-major (each cell recursed, so nested tables land in order), and
-  /// anything else with children is descended into (content controls,
-  /// textboxes).
+  /// Depth-first over the body: paragraphs become lines, a table row
+  /// becomes one line with its cells joined (each cell recursed first, so
+  /// nested tables and their own rows land in order), and anything else
+  /// with children is descended into (content controls, textboxes).
   static List<String> _documentLines(XmlDocument xml) {
+    final body = xml.children
+        .whereType<XmlElement>()
+        .expand(
+          (node) => node.name.local == 'body'
+              ? node.children.whereType<XmlElement>()
+              : [node],
+        );
+    return _linesOf(body);
+  }
+
+  /// The lines [elements] say, in document order.
+  static List<String> _linesOf(Iterable<XmlElement> elements) {
     final out = <String>[];
-    void visit(XmlElement element) {
+    for (final element in elements) {
       switch (element.name.local) {
         case 'p':
           final line = _collapse(_paragraphText(element));
           if (line.isNotEmpty) out.add(line);
         case 'tbl':
-          for (final row in element.children.whereType<XmlElement>()) {
-            if (row.name.local != 'tr') continue;
-            for (final cell in row.children.whereType<XmlElement>()) {
-              if (cell.name.local != 'tc') continue;
-              for (final child in cell.children.whereType<XmlElement>()) {
-                visit(child);
-              }
-            }
-          }
+          out.addAll(_tableLines(element));
         default:
-          for (final child in element.children.whereType<XmlElement>()) {
-            visit(child);
-          }
+          out.addAll(_linesOf(element.children.whereType<XmlElement>()));
       }
     }
+    return out;
+  }
 
-    for (final node in xml.children.whereType<XmlElement>()) {
-      if (node.name.local == 'body') {
-        for (final child in node.children.whereType<XmlElement>()) {
-          visit(child);
-        }
+  /// One line per row: the filled cells of a row, each said as its own
+  /// lines and then joined in column order, so `[08:30][Fushimi Inari]`
+  /// arrives as the one stop a reader sees. A row down to a single filled
+  /// cell is layout rather than pairing and keeps its lines apart.
+  static List<String> _tableLines(XmlElement table) {
+    final out = <String>[];
+    for (final row in table.children.whereType<XmlElement>()) {
+      if (row.name.local != 'tr') continue;
+      final cells = <List<String>>[
+        for (final cell in row.children.whereType<XmlElement>())
+          if (cell.name.local == 'tc')
+            _linesOf(cell.children.whereType<XmlElement>()),
+      ]..removeWhere((lines) => lines.isEmpty);
+      if (cells.length <= 1) {
+        out.addAll(cells.expand((lines) => lines));
       } else {
-        visit(node);
+        out.add(_collapse(cells.map((lines) => lines.join(' ')).join(' ')));
       }
     }
     return out;

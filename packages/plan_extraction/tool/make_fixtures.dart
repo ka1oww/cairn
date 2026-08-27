@@ -112,9 +112,10 @@ void main() {
 
   // --- Slice C: docx --------------------------------------------------------
 
-  // A tidy itinerary laid out partly as Word tables: paragraphs and table
-  // cells interleaved, cells read row-major, a soft line break (w:br)
-  // joined as a space inside one cell.
+  // A tidy itinerary laid out partly as Word tables: paragraphs and tables
+  // interleaved, each two-column row said as one line with its cells joined,
+  // a single-filled-cell row kept as its own lines, and a soft line break
+  // (w:br) joined as a space inside one cell.
   write(
     'tables.docx',
     _docx([
@@ -132,6 +133,40 @@ void main() {
             _t('at dawn'),
           ]),
         ],
+      ]),
+    ]),
+  );
+
+  // The report's W1 reproduction: day headers as ordinary paragraphs, every
+  // stop a two-column table row `[HH:MM][what]`. Eight rows over three
+  // days, one of them carrying a soft break inside its text cell. A reader
+  // sees eight stops; before the row rule the extractor said sixteen lines.
+  write(
+    'kyoto-week.docx',
+    _docx([
+      _p('Fri 20 Nov 2026 - Kyoto'),
+      _table([
+        [_p('08:30'), _p('Fushimi Inari before the crowds')],
+        [_p('12:00'), _p('Nishiki Market lunch')],
+        [
+          _p('16:00'),
+          _pRuns([
+            _t('Gion at dusk'),
+            _raw('<w:br/>'),
+            _t('(walk from Yasaka)'),
+          ]),
+        ],
+      ]),
+      _p('Sat 21 Nov 2026 - Nara'),
+      _table([
+        [_p('09:15'), _p('Todai-ji')],
+        [_p('11:00'), _p('Nara Park deer')],
+        [_p('15:30'), _p('Kasuga-taisha lanterns')],
+      ]),
+      _p('Sun 22 Nov 2026 - Osaka'),
+      _table([
+        [_p('10:00'), _p('Osaka Castle')],
+        [_p('19:00'), _p('Dotonbori dinner')],
       ]),
     ]),
   );
