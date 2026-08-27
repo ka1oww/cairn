@@ -174,6 +174,105 @@ void main() {
     });
   });
 
+  group("the header and footer a browser prints on a page that is the whole "
+      'document', () {
+    // The commonest print of all is one page long, so repetition can never
+    // be proved on it. Chrome's default header and footer therefore used to
+    // import as two stops, and the timestamp as a *starred* 01:55.
+    List<String> romePrint() => clean([
+      [
+        '8/27/26, 1:55 AM',
+        'Rome in four days',
+        'Day 1 - Rome',
+        '09:00 Colosseum before the queues',
+        '13:00 Lunch in Monti',
+        'Day 2 - Rome',
+        '10:00 Vatican Museums',
+        'file:///Users/someone/plans/rome.html 1/1',
+      ],
+    ]);
+
+    test("the browser's timestamp and address are not stops", () {
+      final out = romePrint();
+      expect(out, isNot(contains('8/27/26, 1:55 AM')));
+      expect(
+        out.where((l) => l.contains('rome.html')),
+        isEmpty,
+        reason: 'the footer carries its folio on the same line as the address',
+      );
+      expect(out, contains('Day 1 - Rome'));
+      expect(out, contains('09:00 Colosseum before the queues'));
+      expect(out, contains('Rome in four days'));
+    });
+
+    test('a stop that merely mentions an address keeps it', () {
+      final out = clean([
+        [
+          '10:00 Tickets at https://colosseo.it/en/visit',
+          'Day 1 - Rome',
+          'Booked through www.example-hotels.com, ref 88213',
+        ],
+      ]);
+      expect(out, hasLength(3));
+    });
+
+    test('a lone date or a lone clock is never the print stamp', () {
+      // Both halves are required. A date on its own heading a one-page plan
+      // is the line the parser most needs; a bare clock is a stop.
+      final out = clean([
+        ['14/6', 'breakfast', '19:30'],
+      ]);
+      expect(out, ['14/6', 'breakfast', '19:30']);
+    });
+
+    test('an ISO date and time is left alone', () {
+      final out = clean([
+        ['2027-06-14 09:00', 'Day 1 - Rome'],
+      ]);
+      expect(out, contains('2027-06-14 09:00'));
+    });
+
+    test('the rule reaches the page edge only', () {
+      // Two filled lines at each end are the edge; an address in the body of
+      // the page is somebody's stop wherever it came from.
+      final out = clean([
+        [
+          'Day 1 - Rome',
+          '09:00 Colosseum',
+          'https://colosseo.it/en/visit',
+          '13:00 Lunch in Monti',
+          'Day 2 - Rome',
+          '10:00 Vatican Museums',
+        ],
+      ]);
+      expect(out, contains('https://colosseo.it/en/visit'));
+    });
+
+    test('a genuine one-page plan is untouched', () {
+      final plan = [
+        'Rome, three days',
+        'Day 1 - Rome',
+        '09:00 Colosseum',
+        'Day 2 - Rome',
+        '10:00 Vatican Museums',
+        'Day 3 - Rome',
+        'Trastevere, no plan',
+      ];
+      expect(clean([plan]), plan);
+    });
+
+    test('a multi-page print is judged by repetition, exactly as before', () {
+      // Two pages cannot prove repetition and the lone-page rule does not
+      // reach them, so both footers stay — the behaviour this change was
+      // required to leave alone.
+      final out = clean([
+        ['Day 1 - Rome', 'file:///Users/someone/plans/rome.html 1/2'],
+        ['Day 2 - Rome', 'file:///Users/someone/plans/rome.html 2/2'],
+      ]);
+      expect(out.where((l) => l.contains('rome.html')), hasLength(2));
+    });
+  });
+
   group('the two rules above all the others', () {
     test('line order is preserved', () {
       final out = clean([
