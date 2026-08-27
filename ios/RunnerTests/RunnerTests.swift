@@ -135,6 +135,27 @@ class TextRecognitionRenderScaleTests: XCTestCase {
     )
   }
 
+  /// A page-shaped image is not enough on its own: a low-resolution,
+  /// page-proportioned background (a full-bleed watermark, say) sitting
+  /// behind outlined vector text must not drag the page down to its own
+  /// coarse resolution, so it has to also carry at least one pixel per
+  /// point of the page's long edge. This image clears `proportionsAgree`
+  /// but falls well under 72dpi, so the page must keep the long-edge target.
+  func testAPageProportionedImageCoarserThanOnePixelPerPointIsNotThePage() throws {
+    let pdf = try singleImagePdf(
+      pageSize: CGSize(width: 612, height: 792),
+      imagePixels: CGSize(width: 200, height: 257),
+      drawnInto: CGRect(x: 0, y: 0, width: 612, height: 792)
+    )
+    let page = try XCTUnwrap(pdf.page(at: 1))
+    XCTAssertNil(
+      TextRecognition.nativePixelLongEdge(
+        of: page,
+        uprightSize: CGSize(width: 612, height: 792)
+      )
+    )
+  }
+
   func testProportionsAgreeIgnoresWhichWayEachBoxIsTurned() {
     XCTAssertTrue(
       TextRecognition.proportionsAgree(

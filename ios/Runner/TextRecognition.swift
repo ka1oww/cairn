@@ -45,7 +45,11 @@ enum TextRecognition {
   ///
   /// Never below 1: a page drawn from an image smaller than its own box is
   /// being enlarged by the PDF itself, and rendering under the box's points
-  /// would throw away what the page's own layout has.
+  /// would throw away what the page's own layout has. In practice
+  /// `nativePixelLongEdge(of:uprightSize:)` never hands this function a
+  /// value below the page's own long edge, so the floor does not bind for
+  /// that caller today — it stays here because this function must be
+  /// correct on its own terms for any caller, not just its current one.
   static func renderScale(
     uprightLongEdge: CGFloat,
     nativePixelLongEdge: CGFloat?,
@@ -62,10 +66,18 @@ enum TextRecognition {
   /// when the page is not one — in which case nothing here knows better than
   /// [renderLongEdgeTarget].
   ///
-  /// Deliberately narrow: only an image whose proportions are the page's own
-  /// counts, so a logo sitting beside vector text can never drag a whole
-  /// page down to its box's 72dpi. A page that is several images, or one
-  /// letterboxed inside its box, falls back to the target.
+  /// The largest image the page's resources reach (recursing into Form
+  /// XObjects) must clear two tests before it is trusted, regardless of how
+  /// many other images the page also holds. First, its proportions must be
+  /// the page's own (`proportionsAgree`), so a logo sitting beside vector
+  /// text can never drag a whole page down to its box's resolution. Second,
+  /// it must carry at least one pixel per point of the page's long edge
+  /// (>= 72dpi) — every genuine scan clears this by a wide margin (real
+  /// scans run 150-300dpi), while a low-resolution, page-proportioned
+  /// full-bleed background or watermark sitting behind outlined vector text
+  /// does not, so that page keeps [renderLongEdgeTarget] instead of being
+  /// dragged down to the watermark's resolution. Failing either test, or the
+  /// page not being a single full-page picture at all, falls back to nil.
   static func nativePixelLongEdge(of page: CGPDFPage, uprightSize: CGSize) -> CGFloat? {
     guard let pageDictionary = page.dictionary else { return nil }
     var resources: CGPDFDictionaryRef?
@@ -82,7 +94,10 @@ enum TextRecognition {
       largest.height > 0,
       proportionsAgree(largest, uprightSize)
     else { return nil }
-    return max(largest.width, largest.height)
+    let nativeLongEdge = max(largest.width, largest.height)
+    let pageLongEdge = max(uprightSize.width, uprightSize.height)
+    guard nativeLongEdge >= pageLongEdge else { return nil }
+    return nativeLongEdge
   }
 
   /// Whether two boxes have the same shape, to within a tolerance that
