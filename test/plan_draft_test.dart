@@ -211,6 +211,34 @@ void main() {
     expect(boxText(tester), edited);
   });
 
+  testWidgets(
+    "'Try an example' does not overwrite a standing import draft",
+    (tester) async {
+      await launch(
+        tester,
+        picks: [
+          PickedBytes(
+            fileName: 'japan-trip.txt',
+            extension: 'txt',
+            bytes: _bytes(_importedPlan),
+          ),
+        ],
+      );
+      await importAFile(tester);
+      expect(await db.readPlanDraft(), _importedPlan);
+
+      await tester.tap(find.byKey(const Key('try-example')));
+      await settleTheDraft(tester);
+
+      // The example is a programmatic fill, not an import: it must not
+      // touch the standing draft, imported before it.
+      expect(await db.readPlanDraft(), _importedPlan);
+
+      await relaunch(tester);
+      expect(boxText(tester), _importedPlan);
+    },
+  );
+
   testWidgets('a box typed from scratch is not a draft', (tester) async {
     await launch(tester);
 

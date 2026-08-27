@@ -109,6 +109,28 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
   /// about.
   Timer? _draftWrite;
 
+  /// Raised around every programmatic assignment to [_controller] — the
+  /// example plan, the pending draft being put back, and an import landing.
+  /// None of them are the person editing the box by hand, so the listener
+  /// that debounces the tracked write ignores the change while this is up;
+  /// an import instead writes its draft directly ([PlanDraft.remember]).
+  bool _fillingWithoutTracking = false;
+
+  /// Sets the box's text without tripping [_keepTheDraftInStep] — the seam
+  /// every non-import assignment to [_controller] must go through, so the
+  /// invariant is readable at the call site rather than needing a comment
+  /// to stay safe. Also drops any debounced write still pending from an
+  /// earlier tracked edit: that timer's closure reads `_controller.text` at
+  /// the moment it fires, not at the moment it was scheduled, so left armed
+  /// it would persist whatever this untracked fill just put in the box.
+  void _setControllerTextWithoutTracking(String text) {
+    _draftWrite?.cancel();
+    _draftWrite = null;
+    _fillingWithoutTracking = true;
+    _controller.text = text;
+    _fillingWithoutTracking = false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -137,10 +159,11 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
     // it, and a restore that overwrote a typed line would be the very thing
     // this feature must not do.
     if (!mounted || pending == null || _controller.text.isNotEmpty) return;
-    setState(() => _controller.text = pending);
+    setState(() => _setControllerTextWithoutTracking(pending));
   }
 
   void _keepTheDraftInStep() {
+    if (_fillingWithoutTracking) return;
     _draftWrite?.cancel();
     _draftWrite = Timer(
       const Duration(milliseconds: 400),
@@ -188,7 +211,7 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
     final result = await done;
     if (!mounted || result == null) return;
     setState(() {
-      _controller.text = result.text;
+      _setControllerTextWithoutTracking(result.text);
       _importNote = result.notes.isEmpty ? null : result.notes.join(' ');
     });
     // The one thing that starts a draft. A fresh import replaces the last
@@ -254,7 +277,7 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
   }
 
   void _fillExample() {
-    _controller.text = sampleItinerary;
+    _setControllerTextWithoutTracking(sampleItinerary);
   }
 
   // The hand-building entrance. The real destination is Screen 4's editor

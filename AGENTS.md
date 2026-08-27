@@ -77,8 +77,10 @@ import what is written there, not here.
 - **The paste box survives the process, but only for an import.**
   `lib/app_state/plan_draft.dart` holds the whole rule and
   `plan_drafts` (one row, id 1, schema v7) holds the text. An import that
-  lands starts the draft and nothing else does — not the example, not a plan
-  typed from scratch — because what it defends is an expensive read (a
+  lands starts the draft, and only an import or the person's own editing may
+  write to it — not the example, not a plan typed from scratch, and a
+  programmatic fill that isn't an import leaves a standing draft alone rather
+  than overwrite it — because what it defends is an expensive read (a
   three-page scan through recognition), not typing. While it stands it
   *tracks the box*, which is what makes "never resurrect over something the
   person has since typed by hand" true by construction instead of by a

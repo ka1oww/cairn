@@ -7,11 +7,16 @@
 //
 // The rules, all four of them, live here and nowhere else:
 //
-//  - **An import starts a draft.** Nothing else does — not the example plan,
+//  - **An import starts a draft, and only an import or the person's own
+//    editing may write to it.** Nothing else does — not the example plan,
 //    not "build it by hand", not a plan typed from scratch. The draft exists
 //    because recognition and extraction are expensive to redo; typing is
 //    not, and a box that quietly remembered every keystroke would be a
-//    different feature with a different question to answer.
+//    different feature with a different question to answer. A programmatic
+//    fill that is not an import (the example plan, the draft being put back)
+//    must leave a standing draft alone rather than overwrite it — the paste
+//    screen routes every such fill through one seam that skips the box
+//    tracker on purpose.
 //  - **While it stands, it tracks the box.** Every edit the person makes to
 //    imported text updates it ([keepInStep]), so a restored draft can never
 //    be older than what they last had in front of them. This is what makes
