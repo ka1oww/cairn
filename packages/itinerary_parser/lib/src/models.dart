@@ -167,7 +167,6 @@ class Stop {
   String toString() => 'Stop(${time != null ? '${time!.toIso()} ' : ''}$text)';
 }
 
-
 /// A date the parser *recognized in a day's header but did not bind* to the
 /// day.
 ///
@@ -399,6 +398,51 @@ class UnplacedLine {
       'UnplacedLine(${reason.slug}: ${sourceLine.text.trim()})';
 }
 
+/// A numeric slash date that reads two different, equally valid ways
+/// (`12/11` is either 12 November or 11 December), held as the two numbers
+/// in the order the person wrote them.
+///
+/// The parser hands the first one it saw back on
+/// [ParseResult.firstAmbiguousNumericDate] so a confirmation screen can
+/// teach the day-first/month-first flip with the person's own date instead
+/// of a made-up one.
+class AmbiguousNumericDate {
+  /// The number written before the slash.
+  final int first;
+
+  /// The number written after it.
+  final int second;
+
+  const AmbiguousNumericDate({required this.first, required this.second});
+
+  /// `12/11` — the pair as written, without any year the header spelled out.
+  String get asWritten => '$first/$second';
+
+  /// Day of month when the pair is read day-first.
+  int get dayFirstDay => first;
+
+  /// Month when the pair is read day-first.
+  int get dayFirstMonth => second;
+
+  /// Month when the pair is read month-first.
+  int get monthFirstMonth => first;
+
+  /// Day of month when the pair is read month-first.
+  int get monthFirstDay => second;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AmbiguousNumericDate &&
+      other.first == first &&
+      other.second == second;
+
+  @override
+  int get hashCode => Object.hash(first, second);
+
+  @override
+  String toString() => 'AmbiguousNumericDate($asWritten)';
+}
+
 /// The full result of parsing one pasted itinerary.
 class ParseResult {
   final List<ParsedDay> days;
@@ -416,20 +460,27 @@ class ParseResult {
   /// text as one day. This always implies `overallConfidence == low`.
   final bool usedHeaderlessFallback;
 
-  /// True when at least one recognized numeric date header (`3/11`) could
-  /// also be read the other way round (both components were 1-12 and
-  /// differ) — i.e. re-parsing with the opposite `monthFirstNumericDates`
-  /// setting would genuinely change a date. The confirmation screen uses
-  /// this to decide whether to offer the "these are month-first dates"
-  /// one-tap re-read at all.
-  final bool hasAmbiguousNumericDates;
+  /// The first recognized numeric date (`3/11`) that could also be read the
+  /// other way round (both components were 1-12 and differ), in the order it
+  /// was written — or null when the paste holds no such date.
+  ///
+  /// Its presence is what makes re-parsing with the opposite
+  /// `monthFirstNumericDates` setting genuinely change a date, so the
+  /// confirmation screen uses it both to decide whether to offer the "these
+  /// are month-first dates" one-tap re-read at all and to show the person
+  /// their own date rather than an invented example.
+  final AmbiguousNumericDate? firstAmbiguousNumericDate;
+
+  /// True when [firstAmbiguousNumericDate] found one. The two can never
+  /// disagree, which is the point of deriving it.
+  bool get hasAmbiguousNumericDates => firstAmbiguousNumericDate != null;
 
   const ParseResult({
     required this.days,
     required this.unplacedLines,
     required this.overallConfidence,
     required this.usedHeaderlessFallback,
-    this.hasAmbiguousNumericDates = false,
+    this.firstAmbiguousNumericDate,
   });
 
   Map<String, dynamic> toJson() => {

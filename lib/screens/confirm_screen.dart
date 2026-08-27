@@ -56,8 +56,11 @@ class ConfirmScreen extends ConsumerWidget {
           children: [
             _Headline(review: review),
             const SizedBox(height: 14),
-            if (review.offerMonthFirstFix) ...[
-              _MonthFirstCard(readMonthFirst: review.readMonthFirst),
+            if (review.monthFirstExample case final example?) ...[
+              _MonthFirstCard(
+                example: example,
+                readMonthFirst: review.readMonthFirst,
+              ),
               const SizedBox(height: 10),
             ],
             if (review.keptAside.isNotEmpty) ...[
@@ -171,9 +174,15 @@ class _Headline extends StatelessWidget {
 /// date dialect — never a per-line correction, because a plan doesn't change
 /// dialect halfway through. Shown only when the flip would actually change a
 /// date.
+///
+/// It teaches with the **plan's own** first ambiguous date, not an invented
+/// one: a card reading `3/11` beside a plan that says `12/11` makes the
+/// person translate the lesson before they can use it. The example is built
+/// in the app-state band ([MonthFirstExample]); this only arranges it.
 class _MonthFirstCard extends ConsumerWidget {
-  const _MonthFirstCard({required this.readMonthFirst});
+  const _MonthFirstCard({required this.example, required this.readMonthFirst});
 
+  final MonthFirstExample example;
   final bool readMonthFirst;
 
   @override
@@ -186,7 +195,8 @@ class _MonthFirstCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              readMonthFirst ? '3/11  →  March 11th' : '3/11  →  3 November',
+              '${example.asWritten}  →  '
+              '${readMonthFirst ? example.monthFirstReading : example.dayFirstReading}',
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontFamily: 'monospace',
               ),
@@ -197,8 +207,8 @@ class _MonthFirstCard extends ConsumerWidget {
                   ? 'Every date in the paste is being read month-first — '
                         'one flip covered them all.'
                   : 'Dates here read day-first. If your plan speaks '
-                        'month-first — March 11th — flip it once, and every '
-                        'date in the paste follows together.',
+                        'month-first — ${example.monthFirstReading} — flip it '
+                        'once, and every date in the paste follows together.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 4),
