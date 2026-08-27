@@ -202,6 +202,20 @@ lives nowhere else:
   before the first round trip so a pull cannot lay somebody's plan over a
   closed record (invariant 10).
 
+  **One thing now crosses this seam upward, and it is deliberately the only
+  one.** `TripSync.standings` is a read-only stream of where each reconcile
+  got to, bound by the composition root and turned into a sentence once
+  (`planSharingFor` in `trip_settings.dart`). It exists because the opacity
+  above had a cost nobody had priced: a plan that had never left the phone
+  looked identical, on every screen, to one that had, and that silence was
+  defect D3's second half
+  (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`). The seam's
+  rule is unchanged in the direction that matters — **nothing above may ask
+  the sync to do anything**, and nothing does; the plan's own Drift stream
+  still drives every reconcile. A standing read *upward* is not the same
+  arrow as a command sent *downward*, and growing the second one is the
+  thing to refuse in review.
+
 The rest is not built, and the conflict policy beyond the itinerary's is
 **undecided** — drawn on the map as open, not settled.
 
@@ -339,7 +353,7 @@ nothing about pings fired or who has answered today.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (96-probe RLS suite); **applied to the hosted project 2026-08-26**, where only the permitted paths have been walked (one account, so no refusal observed there); starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos`, `day_unlocks`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check. |
+| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (109-probe RLS suite); **applied to the hosted project 2026-08-26**, where only the permitted paths have been walked (one account, so no refusal observed there); starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos`, `day_unlocks`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check. |
 | **Supabase Auth (GoTrue)** | partial — **anonymous accounts are live** on the hosted project and are how the phone signs in (`gotrue_sessions.dart`); Apple and Google are dashboard steps and are not enabled | (platform service) | Postgres (`auth.uid()` in every policy), client adapter, edge functions | Accounts. Sign in with Apple first; display name editable at join because providers supply legal names. |
 | **`r2-upload-url` edge fn** | partial — code exists (membership check fixed in #9), never deployed | Postgres (re-checks membership as the caller), R2 (mints a 5-minute presigned PUT) | The only write path for photo bytes | Exists solely because the R2 secret cannot live in the app binary. |
 | **`r2-download-url` edge fn** | **not built** — requirements settled in `supabase/README.md` | Postgres (**must call `day_page_is_open` before signing**), R2 (presigned GET) | The gate itself: a version that skips the check is the single worst potential leak in the app | The bucket is private; every read needs a signature; gating the signature is what makes the shut gate real rather than a curtain. |
@@ -500,14 +514,20 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   clock wins edits it should lose. Photos still have only three written notes
   (outbox ordering, `day_pages` insert→update fallback, deletion refetch), and
   no reconciliation of rows against R2 objects exists in any direction.
-- **The shared facts' sync is live, and one test is the only thing that says
-  so.** A green `flutter test` still proves nothing about the hosted project:
+- **The shared facts' sync is live on an ordinary build — since 27 August 2026
+  and not before — and one test is the only thing that says so.** It was
+  written, tested and correct for weeks while a `String.fromEnvironment` with
+  no default meant no binary anybody would run could create the shared `trips`
+  row; the clock is now the phone's own IANA zone and an unnamed trip
+  publishes under a placeholder the phone refuses to adopt back
+  (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`).
+  A green `flutter test` still proves nothing about the hosted project:
   every widget test binds `NoSession` and an in-memory database, deliberately,
   because a sync started under `testWidgets` hangs the test. The live check is
   `test/hosted_smoke_test.dart`, skipped unless asked for
   (`--dart-define=CAIRN_HOSTED_SMOKE=true`). What it does *not* cover: more
   than one account at a time, so no RLS refusal has ever been observed on the
-  hosted project — only the permitted paths. The 55 adversarial checks still
+  hosted project — only the permitted paths. The 109 adversarial checks still
   run against a throwaway local Postgres, and must.
 - **The shared roster replaces this phone's, and this phone is now whoever
   signed in.** `localMemberIdProvider` (`lib/app_state/ping_schedule.dart`) is
