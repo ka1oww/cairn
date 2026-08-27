@@ -317,9 +317,26 @@ class ImportFlow extends Notifier<ImportState> {
         ),
       };
     } on RecognitionRefused catch (e) {
-      // The recognition edge's own refusals carry their person-showable
-      // sentences; they reach the card verbatim.
-      return _refuse(ExtractionFailureKind.unreadable, e.reason);
+      // Two flavours, and confusing them is the whole of the import
+      // torture-test's R5: a device that cannot recognize text at all is
+      // honestly the device's problem and says so, but a picture
+      // recognition read perfectly well and found no text in is the
+      // *picture's*, and blaming the phone for it reads as a broken phone.
+      // A picture with nothing in it therefore lands on exactly the
+      // sentence an empty answer already gets, from the one place that
+      // sentence is written.
+      return switch (e.kind) {
+        RecognitionRefusalKind.noTextFound => _refuse(
+          ExtractionFailureKind.empty,
+          noReadableTextInPictureSentence,
+        ),
+        // Anything else carries its own person-showable sentence from the
+        // edge, and reaches the card verbatim.
+        RecognitionRefusalKind.unavailable => _refuse(
+          ExtractionFailureKind.unreadable,
+          e.reason,
+        ),
+      };
     } catch (_) {
       // Extractors promise never to throw, and other recognition failures
       // are typed; this catches the ways the world around them can still

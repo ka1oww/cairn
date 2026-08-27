@@ -189,6 +189,13 @@ enum TextRecognition {
     /// queue for minutes. Itineraries live far under it.
     private static let maxPdfPages = 100
 
+    /// The fallback sentence for a picture recognition made nothing of.
+    /// The Dart side authors the one a person actually reads (the flow's
+    /// `noReadableTextInPictureSentence`); this is what shows if it ever
+    /// stops being able to.
+    static let noTextSentence = "Couldn't find any readable text in that picture."
+
+
     init(channel: FlutterMethodChannel) {
       self.channel = channel
     }
@@ -214,9 +221,18 @@ enum TextRecognition {
       }
     }
 
-    private func refuse(_ result: @escaping FlutterResult, _ message: String) {
+    /// The code the Dart edge reads to tell the two flavours of nothing
+    /// apart: recognition being unusable here, and recognition having run
+    /// and found no text. Anything but `noTextCode` is the former.
+    static let noTextCode = "no_text"
+
+    private func refuse(
+      _ result: @escaping FlutterResult,
+      _ message: String,
+      code: String = "refused"
+    ) {
       DispatchQueue.main.async {
-        result(FlutterError(code: "refused", message: message, details: nil))
+        result(FlutterError(code: code, message: message, details: nil))
       }
     }
 
@@ -241,10 +257,15 @@ enum TextRecognition {
         let handler = VNImageRequestHandler(data: data, options: [:])
         let lines = try recognizedLines(handler: handler)
         finish(result, lines: lines, pages: 1)
+      } catch ReadError.noText(let message) {
+        refuse(result, message, code: Reader.noTextCode)
       } catch ReadError.refused(let message) {
         refuse(result, message)
       } catch {
-        refuse(result, "This device couldn't read text from that picture.")
+        // Anything Vision itself declined about *this picture* is the
+        // picture's problem, not the device's: the phone recognizes text
+        // perfectly well, there is simply none here to find.
+        refuse(result, Reader.noTextSentence, code: Reader.noTextCode)
       }
     }
 
@@ -331,11 +352,14 @@ enum TextRecognition {
         do {
           let handler = VNImageRequestHandler(cgImage: rendered, options: [:])
           allLines.append(contentsOf: try recognizedLines(handler: handler))
+        } catch ReadError.noText(let message) {
+          refuse(result, message, code: Reader.noTextCode)
+          return
         } catch ReadError.refused(let message) {
           refuse(result, message)
           return
         } catch {
-          refuse(result, "This device couldn't read text from that scan.")
+          refuse(result, Reader.noTextSentence, code: Reader.noTextCode)
           return
         }
       }
@@ -384,9 +408,18 @@ enum TextRecognition {
         }
       }
 
-      try handler.perform([request])
+      // A picture Vision refuses — one pixel across, or bytes it can
+      // decode but find nothing in — is not a device that cannot read
+      // text. Both halves of that refusal (a throw out of perform, and an
+      // error handed to the completion) mean the same thing to a person,
+      // and it is the picture's flavour of sentence, never the device's.
+      do {
+        try handler.perform([request])
+      } catch {
+        throw ReadError.noText(Reader.noTextSentence)
+      }
       if failure != nil {
-        throw ReadError.refused("This device couldn't read text from that picture.")
+        throw ReadError.noText(Reader.noTextSentence)
       }
 
       // Screenshots are single-column, so a pass down the lines with a
@@ -412,6 +445,12 @@ enum TextRecognition {
   /// Errors this file raises on purpose, each already carrying its
   /// person-readable sentence.
   private enum ReadError: Error {
+    /// The reader could not be used at all.
     case refused(String)
+
+    /// Recognition ran and found no text. A distinct case because it
+    /// leaves over the channel under `Reader.noTextCode`, which is the
+    /// whole of how the Dart side says the honest sentence.
+    case noText(String)
   }
 }

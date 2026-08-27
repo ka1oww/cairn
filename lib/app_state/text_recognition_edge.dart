@@ -30,11 +30,30 @@ class RecognizedScan {
   const RecognizedScan({required this.lines, required this.pageCount});
 }
 
+/// The two ways a recognition call can come back with nothing, which a
+/// person reads as entirely different problems.
+enum RecognitionRefusalKind {
+  /// Recognition could not be used here at all — no channel host, or a
+  /// device that cannot recognize text. Blaming the device is honest.
+  unavailable,
+
+  /// Recognition ran perfectly well and made nothing of *that picture*.
+  /// Blaming the device here is the wrong flavour of sentence: the phone is
+  /// fine, the picture simply has no text in it.
+  noTextFound,
+}
+
 /// The reader could not be used, or the bytes could not be read as a
-/// picture at all. Carries a sentence a person could read.
+/// picture at all. Carries a sentence a person could read, and [kind] —
+/// which is what lets a caller say the honest one of the two sentences
+/// instead of the device-blaming one for both.
 class RecognitionRefused implements Exception {
   final String reason;
-  const RecognitionRefused(this.reason);
+  final RecognitionRefusalKind kind;
+  const RecognitionRefused(
+    this.reason, {
+    this.kind = RecognitionRefusalKind.unavailable,
+  });
 
   @override
   String toString() => 'RecognitionRefused: $reason';
@@ -59,6 +78,11 @@ abstract interface class TextRecognitionEdge {
 /// where Vision lives; this side only speaks lines and pages.
 class DeviceTextRecognizer implements TextRecognitionEdge {
   const DeviceTextRecognizer();
+
+  /// The error code native raises when recognition ran and found no text
+  /// in the picture, as opposed to being unusable. Written on both sides of
+  /// the channel (ios/Runner/TextRecognition.swift) and nowhere else.
+  static const noTextRecognitionCode = 'no_text';
 
   static const _channel = MethodChannel('cairn/text_recognition');
 
@@ -90,8 +114,14 @@ class DeviceTextRecognizer implements TextRecognitionEdge {
         pageCount: answer?['pages'] as int? ?? 1,
       );
     } on PlatformException catch (e) {
+      // Native separates the two: `no_text` is Vision having looked and
+      // found nothing (or refused one picture on a device whose
+      // recognition works), anything else is the reader being unusable.
       throw RecognitionRefused(
         e.message ?? 'This device could not read that picture.',
+        kind: e.code == noTextRecognitionCode
+            ? RecognitionRefusalKind.noTextFound
+            : RecognitionRefusalKind.unavailable,
       );
     } on MissingPluginException {
       // No channel host — a platform this feature does not run on.
