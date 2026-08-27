@@ -285,7 +285,8 @@ import what is written there, not here.
   file is deliberately pure geometry — no Vision, no Flutter — and is compiled
   into **both** the Runner and RunnerTests targets, which is what lets
   `ios/RunnerTests/TextLineOrderTests.swift` cover the rotated case at all:
-  it is the only automated test of anything in `ios/Runner/`, and it runs
+  it is one of the two automated tests of anything in `ios/Runner/` (the
+  other is `RunnerTests.swift`, over the render-scale arithmetic), and it runs
   under `xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner
   -only-testing:RunnerTests` (a simulator destination; `flutter test` never
   reaches it).
@@ -297,8 +298,9 @@ import what is written there, not here.
   -only-testing:RunnerTests CODE_SIGNING_ALLOWED=NO` after a
   `flutter build ios --simulator --debug --no-codesign` (Debug, because the
   tests need `ENABLE_TESTABILITY`). Only the platform code that is *decidable*
-  belongs there — the OCR render-scale arithmetic above is the whole of it
-  today, and recognition quality still is not testable anywhere.
+  belongs there — the OCR render-scale arithmetic and the reading-order
+  geometry above are the whole of it today, and recognition quality still is
+  not testable anywhere.
 - **Capture is a route, not a tab.** The only way in is the day page's one
   call to action, and only an open or a late window offers it. The camera is
   behind `CameraSource` (`lib/app_state/camera_source.dart`): a real back
