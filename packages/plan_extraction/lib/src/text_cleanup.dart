@@ -71,8 +71,8 @@ String cleanPaginatedText(List<List<String>> pages) {
   for (final page in normalized) {
     final kept = <String>[];
     final edges = _edgeIndices(page);
-    final hasWebFooter = lonePage &&
-        edges.any((i) => _loneWebAddress.hasMatch(page[i]));
+    final hasWebFooter =
+        lonePage && edges.any((i) => _loneWebAddress.hasMatch(page[i]));
     for (var i = 0; i < page.length; i++) {
       final line = page[i];
       if (line.isEmpty) {
