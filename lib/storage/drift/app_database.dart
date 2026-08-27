@@ -904,9 +904,12 @@ class AppDatabase extends _$AppDatabase {
   /// Starts (or replaces) the pending import. The only caller is an import
   /// that landed: nothing else creates a draft, which is what keeps the
   /// example plan and a hand-typed one out of this table.
-  Future<void> writePlanDraft(String text) =>
-      into(planDrafts).insertOnConflictUpdate(
-        PlanDraftsCompanion.insert(id: const Value(_theOneDraft), planText: text),
+  Future<void> writePlanDraft(String text) => into(planDrafts)
+      .insertOnConflictUpdate(
+        PlanDraftsCompanion.insert(
+          id: const Value(_theOneDraft),
+          planText: text,
+        ),
       );
 
   /// Keeps an existing draft in step with the box, and creates nothing.
@@ -917,8 +920,9 @@ class AppDatabase extends _$AppDatabase {
   /// never held an import is not a draft and does not become one by being
   /// typed in.
   Future<void> updatePlanDraftIfPresent(String text) =>
-      (update(planDrafts)..where((t) => t.id.equals(_theOneDraft)))
-          .write(PlanDraftsCompanion(planText: Value(text)));
+      (update(planDrafts)..where((t) => t.id.equals(_theOneDraft))).write(
+        PlanDraftsCompanion(planText: Value(text)),
+      );
 
   /// Forgets the pending import: accepted, emptied, or gone with its trip.
   Future<void> clearPlanDraft() =>

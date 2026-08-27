@@ -86,9 +86,7 @@ Widget bootstrapApp({
   return ProviderScope(
     overrides: [
       tripRepositoryProvider.overrideWithValue(TripRepository(db)),
-      planDraftRepositoryProvider.overrideWithValue(
-        PlanDraftRepository(db),
-      ),
+      planDraftRepositoryProvider.overrideWithValue(PlanDraftRepository(db)),
       photoRepositoryProvider.overrideWithValue(photos ?? store),
       photoStoreProvider.overrideWithValue(store),
       membershipRepositoryProvider.overrideWithValue(membership ?? roster),

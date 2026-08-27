@@ -50,7 +50,10 @@ void main() {
   );
   tearDown(() => db.close());
 
-  Future<void> launch(WidgetTester tester, {List<PickedBytes?> picks = const []}) async {
+  Future<void> launch(
+    WidgetTester tester, {
+    List<PickedBytes?> picks = const [],
+  }) async {
     tester.view.physicalSize = const Size(800, 2600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -211,33 +214,32 @@ void main() {
     expect(boxText(tester), edited);
   });
 
-  testWidgets(
-    "'Try an example' does not overwrite a standing import draft",
-    (tester) async {
-      await launch(
-        tester,
-        picks: [
-          PickedBytes(
-            fileName: 'japan-trip.txt',
-            extension: 'txt',
-            bytes: _bytes(_importedPlan),
-          ),
-        ],
-      );
-      await importAFile(tester);
-      expect(await db.readPlanDraft(), _importedPlan);
+  testWidgets("'Try an example' does not overwrite a standing import draft", (
+    tester,
+  ) async {
+    await launch(
+      tester,
+      picks: [
+        PickedBytes(
+          fileName: 'japan-trip.txt',
+          extension: 'txt',
+          bytes: _bytes(_importedPlan),
+        ),
+      ],
+    );
+    await importAFile(tester);
+    expect(await db.readPlanDraft(), _importedPlan);
 
-      await tester.tap(find.byKey(const Key('try-example')));
-      await settleTheDraft(tester);
+    await tester.tap(find.byKey(const Key('try-example')));
+    await settleTheDraft(tester);
 
-      // The example is a programmatic fill, not an import: it must not
-      // touch the standing draft, imported before it.
-      expect(await db.readPlanDraft(), _importedPlan);
+    // The example is a programmatic fill, not an import: it must not
+    // touch the standing draft, imported before it.
+    expect(await db.readPlanDraft(), _importedPlan);
 
-      await relaunch(tester);
-      expect(boxText(tester), _importedPlan);
-    },
-  );
+    await relaunch(tester);
+    expect(boxText(tester), _importedPlan);
+  });
 
   testWidgets('a box typed from scratch is not a draft', (tester) async {
     await launch(tester);

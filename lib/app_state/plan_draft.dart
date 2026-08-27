@@ -69,9 +69,8 @@ class PlanDraft {
 
   /// The box changed. A draft that stands follows it; an empty box forgets
   /// it; a box that never held an import is left alone.
-  Future<void> keepInStep(String text) => text.trim().isEmpty
-      ? _store.clear()
-      : _store.overwriteIfPresent(text);
+  Future<void> keepInStep(String text) =>
+      text.trim().isEmpty ? _store.clear() : _store.overwriteIfPresent(text);
 
   /// The draft has done its job, or been given up on.
   Future<void> forget() => _store.clear();
