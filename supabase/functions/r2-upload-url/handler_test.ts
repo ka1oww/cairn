@@ -16,18 +16,14 @@
 // whether R2 honours a signed `content-length`. Both need the thing that does
 // not exist yet.
 
-import {
-  assert,
-  assertEquals,
-  assertStringIncludes,
-} from "jsr:@std/assert@1";
+import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 
 import {
   createHandler,
   MAX_UPLOAD_BYTES,
   objectKeyFor,
-  type UploadDatabase,
   UPLOAD_URL_TTL_SECONDS,
+  type UploadDatabase,
 } from "./handler.ts";
 
 const TRIP = "11111111-1111-4111-8111-111111111111";
@@ -196,12 +192,17 @@ Deno.test("a size exactly at the ceiling is signed", async () => {
 
 Deno.test("the ceiling clears the largest photograph this repo has measured", () => {
   // docs/storage-and-cost.md: JPEG median 3.08 MB, p99 5.16 MB, max 7.00 MB.
-  assert(MAX_UPLOAD_BYTES > 7_000_000 * 8, "64 MiB is real headroom, not a tight fit");
+  assert(
+    MAX_UPLOAD_BYTES > 7_000_000 * 8,
+    "64 MiB is real headroom, not a tight fit",
+  );
 });
 
 Deno.test("the declared size and type reach the signer, because that is what binds them", async () => {
   const { handler, recorded } = harness();
-  await handler(post(wellFormed({ contentType: "image/heic", contentLength: 2_200_000 })));
+  await handler(
+    post(wellFormed({ contentType: "image/heic", contentLength: 2_200_000 })),
+  );
   assertEquals(recorded.signed, [{
     objectKey: `trips/${TRIP}/photos/${PHOTO}/original.heic`,
     contentType: "image/heic",
@@ -235,7 +236,10 @@ Deno.test("a closed trip gets no URL, so no byte can land that no row could clai
 });
 
 Deno.test("the grace is open right up to the closing instant and shut on it", async () => {
-  const justBefore = harness({ closesAt: OPEN, now: new Date(OPEN.getTime() - 1) });
+  const justBefore = harness({
+    closesAt: OPEN,
+    now: new Date(OPEN.getTime() - 1),
+  });
   assertEquals((await justBefore.handler(post(wellFormed()))).status, 200);
 
   const exactly = harness({ closesAt: OPEN, now: OPEN });
@@ -258,7 +262,11 @@ Deno.test("a photo id another member's row already holds is refused", async () =
   const { handler, recorded } = harness({ photoRowExists: true });
   const res = await handler(post(wellFormed()));
   assertEquals(res.status, 409);
-  assertEquals(recorded.signed, [], "no URL may be minted over a claimed original");
+  assertEquals(
+    recorded.signed,
+    [],
+    "no URL may be minted over a claimed original",
+  );
 });
 
 Deno.test("a photo id your OWN row already holds is refused too, because an original is immutable", async () => {
@@ -283,7 +291,11 @@ Deno.test("a retry before the row exists is still signed, which is the whole ord
 Deno.test("the claim is checked after membership, because RLS refuses by filtering", async () => {
   const { handler, recorded } = harness();
   await handler(post(wellFormed()));
-  assertEquals(recorded.asked, ["isTripMember", "tripClosesAt", "photoRowExists"]);
+  assertEquals(recorded.asked, [
+    "isTripMember",
+    "tripClosesAt",
+    "photoRowExists",
+  ]);
 });
 
 // ---------------------------------------------------------------------------

@@ -143,7 +143,9 @@ export function createHandler(
     }
 
     const { tripId, photoId, contentType, contentLength } = body;
-    if (!tripId || !UUID_RE.test(tripId) || !photoId || !UUID_RE.test(photoId)) {
+    if (
+      !tripId || !UUID_RE.test(tripId) || !photoId || !UUID_RE.test(photoId)
+    ) {
       return refuse(400, "tripId and photoId must be UUIDs");
     }
     if (!ALLOWED_CONTENT_TYPES.has(contentType)) {

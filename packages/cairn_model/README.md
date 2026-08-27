@@ -198,7 +198,7 @@ that will eventually be two. `Trip`'s own methods delegate to it.
 different action, available to everyone (`docs/design/`, 6e "Leave this
 trip"), and it is not modelled here.
 
-## Who names a trip
+## Who names a trip, and a photo
 
 **The phone mints the trip's id**
 (`docs/decisions/2026-08-25-the-trip-mints-its-own-id.md`), so `TripId` is the
@@ -215,6 +215,14 @@ hyphenated spelling `trips.id` reads back; where the bytes come from is the
 app's store's business. `TripId.isCanonical` is that spelling read backwards,
 and it is a question about shape rather than provenance: a phone-minted id and
 a server-minted one are the same thing, which is the whole point.
+
+`PhotoId.mint` is the same formatter over the same division, for the same
+reason: a photograph is taken and kept before anything asks the network, so
+the phone mints it too (`lib/repositories/photo_repository.dart`'s
+`mintPhotoId`), and the spelling has to be the one `photos.id` — also a
+Postgres `uuid` column — accepts. Both factories share one private
+`_uuidFrom` in `ids.dart` rather than two copies of the same nibble-stamping,
+because two copies are two chances to disagree.
 
 ## Invite codes, and when they die
 

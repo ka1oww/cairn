@@ -26,9 +26,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// throws instead of quietly passing, which is the point: a drift detector
 /// that cannot find one half is not reporting agreement.
 RegExp uploadFunctionUuidPattern() {
-  final source = File(
-    'supabase/functions/r2-upload-url/handler.ts',
-  ).readAsStringSync();
+  final source = File('supabase/functions/r2-upload-url/handler.ts')
+      .readAsStringSync();
   final declaration = RegExp(
     r'export const UUID_RE\s*=\s*/(.+)/([a-z]*);',
     dotAll: false,
@@ -56,11 +55,14 @@ void main() {
     }
   });
 
-  test('and it is a version-4 uuid, which is what photos.id will read back', () {
-    for (var i = 0; i < 200; i++) {
-      expect(PhotoId(mintPhotoId()).isCanonical, isTrue);
-    }
-  });
+  test(
+    'and it is a version-4 uuid, which is what photos.id will read back',
+    () {
+      for (var i = 0; i < 200; i++) {
+        expect(PhotoId(mintPhotoId()).isCanonical, isTrue);
+      }
+    },
+  );
 
   test('a trip id and a photo id are spelled identically', () {
     // Both are `uuid` columns and both are minted on the phone, so one
@@ -72,11 +74,14 @@ void main() {
     expect(tripId.isCanonical, isTrue);
   });
 
-  test('the undashed form the minter used to produce is refused by that pattern', () {
-    // Not a hypothetical: this is exactly what `_mintPhotoId` returned.
-    final pattern = uploadFunctionUuidPattern();
-    expect(pattern.hasMatch('2222222222224222822222222222222a'), isFalse);
-  });
+  test(
+    'the undashed form the minter used to produce is refused by that pattern',
+    () {
+      // Not a hypothetical: this is exactly what `_mintPhotoId` returned.
+      final pattern = uploadFunctionUuidPattern();
+      expect(pattern.hasMatch('2222222222224222822222222222222a'), isFalse);
+    },
+  );
 
   test('PhotoId.mint refuses anything that is not sixteen bytes', () {
     expect(() => PhotoId.mint(const []), throwsArgumentError);
