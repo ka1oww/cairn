@@ -60,17 +60,18 @@ void main() {
       expect(parsed.days, hasLength(2));
       expect(parsed.days[0].date, DateTime(2027, 6, 14));
       expect(parsed.days[0].confidence, Confidence.high);
+      // The place column folds into the header instead of standing as a
+      // bare place-name stop under every day.
+      expect(parsed.days[0].place, 'Tokyo');
       expect(parsed.days[0].stops.map((s) => s.text),
-          ['Tokyo', 'Senso-ji at 9:00', 'Ueno Park picnic']);
+          ['Senso-ji at 9:00', 'Ueno Park picnic']);
       expect(parsed.days[1].date, DateTime(2027, 6, 15));
+      expect(parsed.days[1].place, 'Kyoto');
       expect(parsed.days[1].stops.last.isStarred, isTrue);
       expect(parsed.days[1].stops.last.time, const ParsedTime(9, 30));
-      // The column-label row is preamble, filed visibly rather than
-      // dropped.
-      expect(
-        parsed.unplacedLines.map((u) => u.sourceLine.text.trim()),
-        ['Date', 'City', 'Plan'],
-      );
+      // The column-label row is furniture: dropped, not reported as lines
+      // nobody could place.
+      expect(parsed.unplacedLines, isEmpty);
     });
   });
 
