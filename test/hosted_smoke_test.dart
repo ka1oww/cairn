@@ -28,6 +28,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:cairn/app_state/device_time_zone.dart';
+import 'package:cairn/bootstrap.dart';
 import 'package:cairn/repositories/itinerary_sync.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 import 'package:cairn/storage/remote/gotrue_sessions.dart';
@@ -125,14 +127,12 @@ void main() {
         final pushing = TripSync(
           database: first,
           facts: PostgrestSharedFacts(config: config, sessions: sessions),
-          tripRow: (pending) async => RemoteTripDraft(
-            id: pending.tripId,
-            name: pending.name!,
-            createdBy: pending.startedBy,
-            timeZone: 'Europe/Oslo',
-            startDateIso: pending.firstDateIso!,
-            endDateIso: pending.lastDateIso!,
-          ),
+          // The app's own assembly, not a hand-written stand-in: this is the
+          // one test that reaches the real project, so what it proves should
+          // be the code an ordinary build runs. Only the clock is pinned,
+          // because the real edge is a method channel and `flutter test` has
+          // no channel host to answer it.
+          tripRow: tripRowFor(const FixedTimeZone('Europe/Oslo')),
         );
 
         final pushed = await pushing.syncNow();

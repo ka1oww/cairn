@@ -2,6 +2,7 @@
 // truth per question; screens watch these and nothing below them.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../repositories/itinerary_sync.dart';
 import '../repositories/membership_repository.dart';
 import '../repositories/photo_repository.dart';
 import '../repositories/trip_repository.dart';
@@ -65,6 +66,23 @@ final membershipStoreProvider = Provider<MembershipStore>(
   (ref) => throw UnimplementedError(
     'membershipStoreProvider is bound in bootstrap.dart (or a test override)',
   ),
+);
+
+/// Where the last reconcile with the server got to, or nothing while no
+/// reconcile has happened.
+///
+/// **The only thing above the seam that knows the sync exists**, and it is
+/// read-only in both directions: nothing here can make a sync happen, and
+/// nothing here re-decides what a standing means. Bound by the composition
+/// root to the live `TripSync`'s own stream; left unbound — and bound to an
+/// empty stream in every test that does not care — it never emits, and every
+/// surface over it stays silent rather than claiming the plan did or did not
+/// go up.
+///
+/// It exists because of the defect it answers: with no way to hear this, a
+/// plan that never reached the server looked exactly like one that had.
+final sharedFactsStandingProvider = StreamProvider<SyncOutcome>(
+  (ref) => const Stream<SyncOutcome>.empty(),
 );
 
 /// The trip on this phone, or null while none has been started.

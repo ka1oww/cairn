@@ -31,12 +31,20 @@
 // Deliberately absent: removing someone (there is nobody else on this phone's
 // roster to remove, and a control that can never fire is chrome), leaving
 // (the same, and a party of one leaving would leave the trip with nobody),
-// changing the trip's clock (no trip clock is stored yet — it is the device's
-// offset, so there is nothing here to change), and the link half of sharing
-// (no deep link is registered, and a button that copies nothing is a lie).
+// changing the trip's clock (the shared row now carries the zone the phone
+// that created it keeps, and nothing on the phone can change it afterwards —
+// `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`), and the link
+// half of sharing (no deep link is registered, and a button that copies
+// nothing is a lie).
+//
+// **Present, and new: where the plan stands.** [PlanSharing] is the sentence
+// that says whether the plan has reached the trip's own copy. It is here
+// rather than on a screen because it is a fact about the trip, and it is one
+// sentence rather than two because the Trail reads the same object.
 import 'package:cairn_model/cairn_model.dart' as model;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../repositories/itinerary_sync.dart';
 import '../repositories/membership_repository.dart';
 import '../repositories/photo_repository.dart';
 import 'date_labels.dart';
@@ -81,6 +89,35 @@ class TripCode {
     required this.spoken,
     required this.expiry,
   });
+}
+
+/// Whether the plan has reached the trip's own copy, and how Cairn says so.
+///
+/// **This exists because its absence was the defect.** The itinerary sync was
+/// silently off on every ordinary build, and nothing anywhere on the phone
+/// said a word about it: eight people would each have held a private copy of
+/// a plan they all believed was shared. Fixing the sync is only half of that
+/// — an app that can fail silently once can fail silently again, the next
+/// time a tunnel or a refusal gets in the way — so where the plan stands is
+/// now a thing the trip says out loud.
+///
+/// The sentence is written once, here, and read in two places: in full on the
+/// trip's own sheet, and as [mark] on the Trail, which is the screen a person
+/// is actually standing on. Neither screen decides anything; a second opinion
+/// about what a standing means is the thing to refuse in review.
+class PlanSharing {
+  /// Whether the plan is on the trip's own copy and not only on this phone.
+  final bool reached;
+
+  /// The whole sentence, for the sheet. Always written, in both states: a
+  /// person who opens the trip's own surface is asking exactly this.
+  final String line;
+
+  /// The short line the Trail carries, or null when the plan is up — the
+  /// Trail says something only when there is something to say.
+  final String? mark;
+
+  const PlanSharing({required this.reached, required this.line, this.mark});
 }
 
 /// Whether the trip can be deleted, and the sentence that says why not.
@@ -133,6 +170,13 @@ class TripSettingsView {
   /// See `trip_lifecycle.dart`, which writes it.
   final String? ending;
 
+  /// Where the plan stands with the trip's own copy, or null while nothing
+  /// has said — a suite in which no sync runs, or the first moments of a
+  /// launch before the first reconcile has answered. Null means the trip
+  /// says nothing about it, which is the only honest thing to say when
+  /// nothing is known.
+  final PlanSharing? sharing;
+
   final TripDeletion deletion;
 
   const TripSettingsView({
@@ -146,6 +190,7 @@ class TripSettingsView {
     required this.canRename,
     required this.canMintCode,
     this.ending,
+    this.sharing,
     required this.deletion,
   });
 }
@@ -181,6 +226,7 @@ final tripSettingsProvider = Provider<AsyncValue<TripSettingsView?>>((ref) {
             now: ref.watch(nowProvider),
             utcOffset: ref.watch(tripUtcOffsetProvider),
             standing: ref.watch(tripStandingProvider),
+            sharing: ref.watch(sharedFactsStandingProvider).value?.standing,
           ),
         );
       }
@@ -296,6 +342,7 @@ TripSettingsView? tripSettingsFor({
   required DateTime now,
   required Duration utcOffset,
   required model.TripStanding standing,
+  SyncStanding? sharing,
 }) {
   if (trip == null) return null;
   final closesAt = tripCloseFor(plan, utcOffset);
@@ -309,7 +356,10 @@ TripSettingsView? tripSettingsFor({
 
   return TripSettingsView(
     name: trip.name,
-    headline: trip.name ?? 'This trip',
+    // The stand-in word, taken from the seam rather than written twice: it
+    // is also what the phone publishes for a trip nobody has named, and the
+    // sync refuses to adopt it back as a name (`itinerary_sync.dart`).
+    headline: trip.name ?? unnamedTripPlaceholder,
     span: _span(plan, utcOffset),
     people: [
       for (final member in trip.members)
@@ -348,9 +398,97 @@ TripSettingsView? tripSettingsFor({
       closesAt: closesAt,
       utcOffset: utcOffset,
     ),
+    sharing: planSharingFor(sharing, plan),
     deletion: _deletion(trip, you, holdsOthers),
   );
 }
+
+/// Where the plan stands with the trip's own copy, said in Cairn's words.
+///
+/// Public because it is the whole of the answer and a test asserts it
+/// directly; the provider above only hands it the standing.
+///
+/// **What each answer is derived from.** The standing says what the last
+/// reconcile did; the plan says why, in the one case a person can act on.
+/// `SyncOutcome.detail` is not read here on purpose — it is written for a log
+/// and says things like "the trip clock is not known yet", which is exactly
+/// the kind of sentence this app does not say at people.
+PlanSharing? planSharingFor(SyncStanding? standing, TripPlan? plan) {
+  const onlyHere = 'Only on this phone.';
+  switch (standing) {
+    // Nothing has reconciled yet, or there is nothing to reconcile. Saying
+    // either "it is up" or "it is not" would be a guess.
+    case null:
+    case SyncStanding.noTrip:
+      return null;
+
+    // A closed trip is not reconciled at all — the sync returns before any
+    // round trip (`docs/decisions/2026-08-26-the-ending.md`), so this phone
+    // genuinely does not know where the plan got to and does not pretend.
+    // The sheet's ending line already says what an archive is.
+    case SyncStanding.archived:
+      return null;
+
+    case SyncStanding.synced:
+      return const PlanSharing(
+        reached: true,
+        line: 'The plan is up. It is not only on this phone any more.',
+      );
+
+    case SyncStanding.offline:
+      return const PlanSharing(
+        reached: false,
+        mark: onlyHere,
+        line:
+            'The plan is only on this phone. Cairn cannot reach the trip from '
+            'here — it goes up on its own the next time you have signal.',
+      );
+
+    case SyncStanding.awaitingTripRow:
+      return PlanSharing(
+        reached: false,
+        mark: onlyHere,
+        line: _undated(plan)
+            ? 'The plan is only on this phone, and it stays here until the '
+                  'trip has dates. Put one on the first day and the rest '
+                  'follow.'
+            : _lastDayUndated(plan)
+            ? 'The plan is only on this phone, and it stays here until the '
+                  'last day has a date.'
+            // A plan that says when it happens and still cannot be published
+            // means the phone could not say which clock it keeps. It does not
+            // happen on an iPhone — `TimeZone.current.identifier` always
+            // answers — and it is written anyway, because the alternative is
+            // an empty line in a state nobody predicted.
+            : 'The plan is only on this phone. Cairn cannot tell what hours '
+                  'this trip keeps, so there is nowhere yet to put it.',
+      );
+
+    case SyncStanding.refused:
+      return const PlanSharing(
+        reached: false,
+        mark: onlyHere,
+        line:
+            'The plan is only on this phone. The trip\'s own copy turned this '
+            'phone away, and nothing here has been lost.',
+      );
+
+    case SyncStanding.dormant:
+      return const PlanSharing(
+        reached: false,
+        mark: onlyHere,
+        line:
+            'The plan is only on this phone. Nothing else holds a copy of it '
+            'yet, and Cairn will put one up as soon as it can.',
+      );
+  }
+}
+
+/// Whether the plan's last day carries a date. The trip's end is that day's
+/// and nobody else's (`cairn_model`'s `tripEndsAtFrom`), so a plan dated up
+/// to a last day left open still cannot be published.
+bool _lastDayUndated(TripPlan? plan) =>
+    plan == null || plan.days.isEmpty || plan.days.last.date == null;
 
 String? _noteFor(model.Member member, model.MemberId startedBy) {
   // "Started it" is a fact, not a rank: it says who began the trip and

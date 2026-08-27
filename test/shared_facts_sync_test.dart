@@ -28,6 +28,8 @@ import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:cairn/app_state/device_time_zone.dart';
+import 'package:cairn/bootstrap.dart';
 import 'package:cairn/repositories/itinerary_sync.dart';
 import 'package:cairn/repositories/trip_repository.dart';
 import 'package:cairn/storage/drift/app_database.dart';
@@ -262,6 +264,230 @@ void main() {
         expect(server.readTrips, 0);
       },
     );
+  });
+
+  // ------------------------------------------------------------------------
+  // Defect D3, as a regression test.
+  //
+  // The sync's code path was complete and silently disabled: the trip's clock
+  // came from `--dart-define=CAIRN_TRIP_TIMEZONE`, which had no default, so an
+  // ordinary `flutter build ios` produced a binary that reported
+  // `awaitingTripRow` forever and never pushed a plan — and nothing on the
+  // phone said a word about it.
+  //
+  // These tests drive the **app's own** trip-row source, `tripRowFor`, the one
+  // the composition root binds, under a suite that passes no defines at all.
+  // That is the whole point: a test that handed the sync a draft of its own
+  // would pass on exactly the build that shipped broken.
+  // ------------------------------------------------------------------------
+  group('an ordinary build, told nothing', () {
+    test('puts the plan on the server', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([
+          confirmed(1, 'Tokyo', date: CalendarDate(2027, 6, 14), stops: ['Senso-ji']),
+          confirmed(2, 'Kyoto', date: CalendarDate(2027, 6, 15)),
+        ]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: null);
+
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+        // No `--dart-define` is passed by `flutter test`, so the override
+        // inside `tripRowFor` is empty here exactly as it is in a plain
+        // `flutter build ios`. The zone is the phone's, and the fake stands
+        // in for the platform read that a test binary has no host for.
+        tripRow: tripRowFor(const FixedTimeZone('Asia/Tokyo')),
+      ).syncNow();
+
+      expect(outcome.standing, SyncStanding.synced);
+      expect(server.created.single.id, id);
+      expect(server.created.single.timeZone, 'Asia/Tokyo');
+      expect(
+        server.pushes.single.days.map((d) => d.place),
+        ['Tokyo', 'Kyoto'],
+        reason: 'the plan itself has to have gone up, not just the trip row',
+      );
+    });
+
+    test('publishes a trip nobody has named, and does not name it here', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([confirmed(1, 'Tokyo', date: CalendarDate(2027, 6, 14))]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: null);
+      final sync = TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+        tripRow: tripRowFor(const FixedTimeZone('Asia/Tokyo')),
+      );
+
+      expect((await sync.syncNow()).standing, SyncStanding.synced);
+      expect(
+        server.created.single.name,
+        unnamedTripPlaceholder,
+        reason: '`trips.name` is not null, and a plan that never leaves the '
+            'phone because nobody typed a title is the worse lie',
+      );
+
+      // The second pass reads the row back and applies the roster, which is
+      // where the placeholder would come home as a name. It must not.
+      expect((await sync.syncNow()).standing, SyncStanding.synced);
+      expect(
+        (await db.readTripFacts())!.name,
+        isNull,
+        reason: 'the word the phone publishes for an unnamed trip is not a '
+            'name and is never adopted as one',
+      );
+    });
+
+    test('says nothing has gone up while the plan has no dates', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([confirmed(1, 'Tokyo'), confirmed(2, 'Kyoto')]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: null);
+
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+        tripRow: tripRowFor(const FixedTimeZone('Asia/Tokyo')),
+      ).syncNow();
+
+      // `start_date` and `end_date` are `not null` and inventing either is
+      // the guess the whole paste flow exists to refuse. This is now the one
+      // remaining blank, and the trip's own surface renders it.
+      expect(outcome.standing, SyncStanding.awaitingTripRow);
+      expect(server.created, isEmpty);
+      expect(server.pushes, isEmpty);
+    });
+
+    test('and while its last day has no date', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([
+          confirmed(1, 'Tokyo', date: CalendarDate(2027, 6, 14)),
+          confirmed(2, 'Kyoto'),
+        ]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: null);
+
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+        tripRow: tripRowFor(const FixedTimeZone('Asia/Tokyo')),
+      ).syncNow();
+
+      expect(outcome.standing, SyncStanding.awaitingTripRow);
+      expect(server.created, isEmpty);
+    });
+
+    test('claims no clock on a phone that cannot say which one it keeps', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([confirmed(1, 'Tokyo', date: CalendarDate(2027, 6, 14))]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: null);
+
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+        tripRow: tripRowFor(const FixedTimeZone(null)),
+      ).syncNow();
+
+      // Does not happen on an iPhone; asserted because the alternative to
+      // declining would be inventing a zone, and `trips.timezone` is checked
+      // against `pg_timezone_names` at write time anyway.
+      expect(outcome.standing, SyncStanding.awaitingTripRow);
+      expect(server.created, isEmpty);
+    });
+
+    test('a name typed on this phone survives the next reconcile', () async {
+      // The ratchet the sync being off was hiding: nothing pushes a rename,
+      // so a phone that pulled the name would put the old word back in front
+      // of the person who had just typed the new one.
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([confirmed(1, 'Oslo', date: CalendarDate(2027, 6, 14))]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(
+        trip: sharedTrip(id, [
+          RemoteMember(
+            id: MemberId(anna),
+            displayName: 'Anna',
+            joinedAt: DateTime.utc(2027, 6, 1),
+          ),
+        ], name: 'Norway'),
+      );
+      final sync = TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+        tripRow: tripRowFor(const FixedTimeZone('Europe/Oslo')),
+      );
+
+      // A phone with no name of its own still learns the one it was told.
+      await sync.syncNow();
+      expect((await db.readTripFacts())!.name, 'Norway');
+
+      await db.renameTrip('Norway, June');
+      await sync.syncNow();
+
+      expect((await db.readTripFacts())!.name, 'Norway, June');
+    });
+
+    test('every reconcile says where it got to', () async {
+      // The second half of D3: the standing has to be hearable, or a plan
+      // that never left the phone looks exactly like one that had.
+      final db = inMemory();
+      addTearDown(db.close);
+      await startTrip(db);
+      final sync = TripSync(
+        database: db,
+        facts: FakeServer(trip: null),
+        now: duringTheTrip,
+        tripRow: tripRowFor(const FixedTimeZone('Asia/Tokyo')),
+      );
+      final heard = <SyncStanding>[];
+      final listening = sync.standings.listen((o) => heard.add(o.standing));
+      addTearDown(listening.cancel);
+
+      expect((await sync.syncNow()).standing, SyncStanding.awaitingTripRow);
+      await TripRepository(db).saveItinerary(
+        plan([confirmed(1, 'Tokyo', date: CalendarDate(2027, 6, 14))]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      expect((await sync.syncNow()).standing, SyncStanding.synced);
+      // The stream is a broadcast one, so its events land a microtask after
+      // the reconcile that produced them resolves.
+      await Future<void>.delayed(Duration.zero);
+
+      expect(heard, [SyncStanding.awaitingTripRow, SyncStanding.synced]);
+    });
   });
 
   group('a trip that has never been shared', () {
