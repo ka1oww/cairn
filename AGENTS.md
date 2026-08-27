@@ -237,7 +237,8 @@ import what is written there, not here.
   correction on) as the one real implementation and `FakeTextRecognition` as
   the only one any automated test ever exercises. **A green suite and a green
   simulator run are no evidence OCR works**, exactly as for the camera; real
-  recognition quality is judged on a device against a manual corpus. Three
+  recognition quality is judged on a device against a manual corpus — with one
+  exception, below, which is arithmetic rather than judgement. Four
   things worth knowing. Pictures never enter `planExtractors` — `claimsImage`
   in `import_flow.dart` claims them by extension first and magic bytes second,
   so a renamed screenshot still finds the route — and it runs *before*
@@ -258,7 +259,19 @@ import what is written there, not here.
   extractor that already said the pages were pictures. And the photo-library
   door needs `NSPhotoLibraryUsageDescription` in `Info.plist` because
   `file_picker`'s image mode builds `PHPickerConfiguration(photoLibrary:)`,
-  the authorization-requiring form.
+  the authorization-requiring form. And **a scanned page is never drawn larger
+  than the pixels it actually has**: `TextRecognition.renderScale` treats the
+  2400 long-edge target as a ceiling and clamps it to the page's own image
+  resolution (`nativePixelLongEdge`, which counts an image only when it is
+  shaped like its page *and* carries at least one pixel per point of the
+  page's long edge, so neither a logo beside vector text nor a low-resolution
+  full-bleed watermark behind it can drag a page down below the target).
+  Upscaling *loses* text rather than gaining it — a 700x900px screenshot
+  wrapped into a PDF read back 5 of its 17 lines at 4x and all 17 at 1x, with
+  the same picture through the photo door reading perfectly either way — which
+  is the counter-intuitive part and the thing to refuse in review if someone
+  raises the target again. A 300dpi scan is untouched; the target still bounds
+  it.
 - **Reading order is measured off the text, never off the page.**
   `ios/Runner/TextLineOrder.swift` is the whole rule: Vision reports one
   observation per visual line, in no order, and names each quadrilateral's
@@ -276,6 +289,16 @@ import what is written there, not here.
   under `xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner
   -only-testing:RunnerTests` (a simulator destination; `flutter test` never
   reaches it).
+- **The Swift side has tests, and `flutter test` does not run them.**
+  `ios/RunnerTests/` is an XCTest bundle already wired into the `Runner`
+  scheme; run it with
+  `xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner
+  -configuration Debug -destination 'platform=iOS Simulator,id=<UDID>'
+  -only-testing:RunnerTests CODE_SIGNING_ALLOWED=NO` after a
+  `flutter build ios --simulator --debug --no-codesign` (Debug, because the
+  tests need `ENABLE_TESTABILITY`). Only the platform code that is *decidable*
+  belongs there — the OCR render-scale arithmetic above is the whole of it
+  today, and recognition quality still is not testable anywhere.
 - **Capture is a route, not a tab.** The only way in is the day page's one
   call to action, and only an open or a late window offers it. The camera is
   behind `CameraSource` (`lib/app_state/camera_source.dart`): a real back

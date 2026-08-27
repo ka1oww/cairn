@@ -23,6 +23,146 @@ enum TextRecognition {
     channel.setMethodCallHandler(reader.handle)
   }
 
+  // MARK: - How large a scanned page is drawn
+
+  /// The long edge a scanned page is drawn to when nothing bounds it from
+  /// below: a hair over retina for a letter-size scan, which keeps
+  /// photographed text inside what accurate mode wants while bounding memory.
+  static let renderLongEdgeTarget: CGFloat = 2400
+
+  /// The scale a scanned page is rendered at.
+  ///
+  /// [renderLongEdgeTarget] is a *ceiling*, never a floor. A scan carries
+  /// exactly the detail the scanner wrote and not one pixel more, so drawing
+  /// a 700x900pt page that wraps a 700x900px image onto a 1867x2400 canvas
+  /// invents 2.7x the pixels it has — and Vision reads invented softness
+  /// worse than it reads the original, dropping whole legible lines without
+  /// saying so (the simulator torture-test's W2; the same picture through
+  /// the photo door, which never resamples, read perfectly). So a page whose
+  /// own pixels are coarser than the target is drawn at its own resolution.
+  /// A 300dpi letter scan is unaffected: its native long edge is already far
+  /// past the target, and the target still bounds it.
+  ///
+  /// Never below 1: a page drawn from an image smaller than its own box is
+  /// being enlarged by the PDF itself, and rendering under the box's points
+  /// would throw away what the page's own layout has.
+  static func renderScale(
+    uprightLongEdge: CGFloat,
+    nativePixelLongEdge: CGFloat?,
+    longEdgeTarget: CGFloat = TextRecognition.renderLongEdgeTarget,
+    maxScale: CGFloat = 4
+  ) -> CGFloat {
+    let edge = max(uprightLongEdge, 1)
+    let target = min(longEdgeTarget / edge, maxScale)
+    guard let native = nativePixelLongEdge, native > 0 else { return target }
+    return min(target, max(native / edge, 1))
+  }
+
+  /// The pixel long edge of the single image a scanned page *is*, or nil
+  /// when the page is not one — in which case nothing here knows better than
+  /// [renderLongEdgeTarget].
+  ///
+  /// Deliberately narrow: only an image whose proportions are the page's own
+  /// counts, so a logo sitting beside vector text can never drag a whole
+  /// page down to its box's 72dpi. A page that is several images, or one
+  /// letterboxed inside its box, falls back to the target.
+  static func nativePixelLongEdge(of page: CGPDFPage, uprightSize: CGSize) -> CGFloat? {
+    guard let pageDictionary = page.dictionary else { return nil }
+    var resources: CGPDFDictionaryRef?
+    guard
+      CGPDFDictionaryGetDictionary(pageDictionary, "Resources", &resources),
+      let resources
+    else { return nil }
+
+    let collector = ImageSizeCollector()
+    collectImageSizes(in: resources, into: collector)
+    guard
+      let largest = collector.sizes.max(by: { $0.width * $0.height < $1.width * $1.height }),
+      largest.width > 0,
+      largest.height > 0,
+      proportionsAgree(largest, uprightSize)
+    else { return nil }
+    return max(largest.width, largest.height)
+  }
+
+  /// Whether two boxes have the same shape, to within a tolerance that
+  /// forgives a scanner's rounding. Compared as long-edge-over-short-edge so
+  /// the answer does not depend on which way either box is turned.
+  static func proportionsAgree(
+    _ image: CGSize,
+    _ page: CGSize,
+    tolerance: CGFloat = 0.15
+  ) -> Bool {
+    let imageRatio = max(image.width, image.height) / max(min(image.width, image.height), 1)
+    let pageRatio = max(page.width, page.height) / max(min(page.width, page.height), 1)
+    guard pageRatio > 0 else { return false }
+    return abs(imageRatio - pageRatio) / pageRatio <= tolerance
+  }
+
+  /// Gathers the pixel sizes of every image a page's resources reach.
+  /// Mutable state behind a class because `CGPDFDictionaryApplyFunction`
+  /// takes a C function pointer, which can capture nothing.
+  private final class ImageSizeCollector {
+    var sizes: [CGSize] = []
+    var depth = 0
+  }
+
+  /// Form XObjects nest; four levels is far past anything a scanner emits
+  /// and keeps a cyclic resource graph from spinning.
+  private static let maxFormDepth = 4
+
+  private static func collectImageSizes(
+    in resources: CGPDFDictionaryRef,
+    into collector: ImageSizeCollector
+  ) {
+    var xobjects: CGPDFDictionaryRef?
+    guard
+      CGPDFDictionaryGetDictionary(resources, "XObject", &xobjects),
+      let xobjects
+    else { return }
+    CGPDFDictionaryApplyFunction(
+      xobjects,
+      collectImageSize,
+      Unmanaged.passUnretained(collector).toOpaque()
+    )
+  }
+
+  private static let collectImageSize: CGPDFDictionaryApplierFunction = { _, value, info in
+    guard let info else { return }
+    let collector = Unmanaged<ImageSizeCollector>.fromOpaque(info).takeUnretainedValue()
+    var stream: CGPDFStreamRef?
+    guard
+      CGPDFObjectGetValue(value, .stream, &stream),
+      let stream,
+      let dictionary = CGPDFStreamGetDictionary(stream)
+    else { return }
+    var subtype: UnsafePointer<Int8>?
+    guard CGPDFDictionaryGetName(dictionary, "Subtype", &subtype), let subtype else { return }
+    switch String(cString: subtype) {
+    case "Image":
+      var pixelWidth: CGPDFInteger = 0
+      var pixelHeight: CGPDFInteger = 0
+      guard
+        CGPDFDictionaryGetInteger(dictionary, "Width", &pixelWidth),
+        CGPDFDictionaryGetInteger(dictionary, "Height", &pixelHeight)
+      else { return }
+      collector.sizes.append(
+        CGSize(width: CGFloat(pixelWidth), height: CGFloat(pixelHeight))
+      )
+    case "Form" where collector.depth < TextRecognition.maxFormDepth:
+      var nested: CGPDFDictionaryRef?
+      guard
+        CGPDFDictionaryGetDictionary(dictionary, "Resources", &nested),
+        let nested
+      else { return }
+      collector.depth += 1
+      TextRecognition.collectImageSizes(in: nested, into: collector)
+      collector.depth -= 1
+    default:
+      return
+    }
+  }
+
   private final class Reader {
     private let channel: FlutterMethodChannel
 
@@ -93,9 +233,11 @@ enum TextRecognition {
       }
     }
 
-    /// Renders each page white-backed at print resolution and recognizes
-    /// it, top-to-bottom, reporting progress per page. One aggregate answer,
-    /// in page order — the person sees the whole scan land in the box.
+    /// Renders each page white-backed at print resolution, or at the page's
+    /// own where that is coarser (see `renderScale`), and recognizes it,
+    /// top-to-bottom,
+    /// reporting progress per page. One aggregate answer, in page order —
+    /// the person sees the whole scan land in the box.
     private func readScannedPdf(_ data: Data, result: @escaping FlutterResult) {
       guard
         let provider = CGDataProvider(data: data as CFData),
@@ -129,12 +271,13 @@ enum TextRecognition {
         let uprightSize = quarterTurned
           ? CGSize(width: mediaBox.height, height: mediaBox.width)
           : CGSize(width: mediaBox.width, height: mediaBox.height)
-        // Long-edge target keeps photographed text inside what accurate
-        // mode wants while bounding memory: a hair over retina for a
-        // letter-size scan.
-        let longEdge: CGFloat = 2400
-        let longest = max(uprightSize.width, uprightSize.height)
-        let scale = min(longEdge / max(longest, 1), 4)
+        let scale = TextRecognition.renderScale(
+          uprightLongEdge: max(uprightSize.width, uprightSize.height),
+          nativePixelLongEdge: TextRecognition.nativePixelLongEdge(
+            of: page,
+            uprightSize: uprightSize
+          )
+        )
         let width = max(1, Int(uprightSize.width * scale))
         let height = max(1, Int(uprightSize.height * scale))
 
