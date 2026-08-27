@@ -193,8 +193,9 @@ enum TextRecognition {
     // MARK: - Vision
 
     /// Performs recognition on [handler] and returns the visible text lines
-    /// sorted top-to-bottom — Vision reports one observation per visual
-    /// line, in no order, with boxes in a bottom-left-origin space.
+    /// in reading order — Vision reports one observation per visual line, in
+    /// no order, with corners in a bottom-left-origin space, and
+    /// `TextLineOrder` is what turns those into an order.
     private func recognizedLines(handler: VNImageRequestHandler) throws -> [String] {
       var observations: [VNRecognizedTextObservation] = []
       var failure: Error?
@@ -230,16 +231,23 @@ enum TextRecognition {
         throw ReadError.refused("This device couldn't read text from that picture.")
       }
 
-      // Screenshots are single-column, so a vertical pass with a same-line
-      // left-to-right tiebreak is the whole ordering problem here (the
-      // import plan §3).
-      return observations.sorted { lhs, rhs in
-        let lhsY = lhs.boundingBox.midY
-        let rhsY = rhs.boundingBox.midY
-        if abs(lhsY - rhsY) > 0.01 { return lhsY > rhsY }
-        return lhs.boundingBox.minX < rhs.boundingBox.minX
-      }
-      .compactMap { $0.topCandidates(1).first?.string }
+      // Screenshots are single-column, so a pass down the lines with a
+      // same-line tiebreak along them is the whole ordering problem here (the
+      // import plan §3) — but *down* is the text's own direction, not the
+      // page's. Vision names each quadrilateral's corners in the text's
+      // frame, and `TextLineOrder` measures the axes off them, so a
+      // photograph taken sideways with no EXIF orientation reads in order
+      // rather than shuffled.
+      return TextLineOrder
+        .readingOrder(observations) { observation in
+          TextLineOrder.Quad(
+            topLeft: observation.topLeft,
+            topRight: observation.topRight,
+            bottomLeft: observation.bottomLeft,
+            bottomRight: observation.bottomRight
+          )
+        }
+        .compactMap { $0.topCandidates(1).first?.string }
     }
   }
 
