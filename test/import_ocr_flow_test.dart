@@ -187,6 +187,46 @@ void main() {
     );
   });
 
+  testWidgets('a screenshot picked through the file door reads the same', (
+    tester,
+  ) async {
+    // The captain's 2026-08-27 decision: the two doors are a convenience,
+    // not a rule about where a picture may live. A screenshot saved into
+    // Files takes the file door and lands on the very same recognition
+    // path — no second reader, no different words.
+    final (picker, recognition) = await launch(
+      tester,
+      documentPicks: [
+        PickedBytes(
+          fileName: 'chat-screenshot.png',
+          extension: 'png',
+          bytes: pngBytes(),
+        ),
+      ],
+      recognitionAnswers: [
+        RecognizedScan(lines: recognizedScreenshot, pageCount: 1),
+      ],
+    );
+
+    await openSheet(tester);
+    await tester.tap(find.byKey(const Key('import-door-file')));
+    await tester.pump();
+    await tester.pump();
+
+    // The document picker was the one that opened, and it was offered the
+    // image types — without them Files greys a screenshot out and this door
+    // has no route at all (the scout's R2).
+    expect(picker.documentPicks, 1);
+    expect(picker.imagePicks, 0);
+    expect(picker.lastAllowedExtensions, containsAll(['png', 'jpg', 'jpeg']));
+    expect(picker.lastAllowedExtensions, containsAll(['txt', 'pdf', 'docx']));
+
+    // And the outcome is the photo door's outcome, note included.
+    expect(recognition.received, hasLength(1));
+    expect(boxText(tester), recognizedScreenshot.join('\n'));
+    expect(find.text('Read 1 page'), findsOneWidget);
+  });
+
   testWidgets('multi-page reads report their progress per page', (
     tester,
   ) async {

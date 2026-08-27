@@ -227,17 +227,16 @@ void main() {
     expect(boxText(tester), '');
     expect(find.byKey(const Key('import-error')), findsNothing);
     expect(find.byKey(const Key('import-pill')), findsOneWidget);
-    // Every extension some registered extractor claims — the picker is
-    // offered exactly what the registry claims, so this stays true as each
-    // format slice lands rather than needing an edit per slice.
+    // Every extension some registered extractor claims, plus the pictures
+    // the file door also accepts (import_flow.dart says why). The document
+    // half stays derived from the registry, so it holds as each format
+    // slice lands rather than needing an edit per slice.
     expect(picker.lastAllowedExtensions, supportedImportExtensions);
-    expect(picker.lastAllowedExtensions, {
-      'csv',
-      'txt',
-      'pdf',
-      'docx',
-      'xlsx',
-    });
+    expect(documentImportExtensions, {'csv', 'txt', 'pdf', 'docx', 'xlsx'});
+    expect(
+      picker.lastAllowedExtensions,
+      {...documentImportExtensions, ...imageImportExtensions},
+    );
   });
 
   testWidgets('unreadable bytes refuse into the error card, box untouched', (

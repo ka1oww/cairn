@@ -37,15 +37,29 @@ const List<PlanTextExtractor> planExtractors = [
   XlsxExtractor(),
 ];
 
-/// What the real document picker may offer: every extension some registered
-/// extractor claims. Sorted so the UTType list is stable.
-Set<String> get supportedImportExtensions => {
+/// The document formats this build reads: every extension some registered
+/// extractor claims. Slices add extractors, not entries here.
+Set<String> get documentImportExtensions => {
   for (final extractor in planExtractors) ...extractor.extensions,
 };
 
-/// The pill's honest sub-line: only the formats this build actually reads.
+/// What the real document picker may offer — the documents *and* the
+/// pictures. A screenshot saved into Files is the same screenshot as one in
+/// the photo library, and the person does not know or care which door they
+/// are standing at (captain's decision, 2026-08-27), so the file door offers
+/// both and [ImportFlow._read] routes a picked image to the very same
+/// recognition path the photo door uses. `UTType(filenameExtension:)` on the
+/// darwin side resolves each of these, so no UTType list is written out here.
+Set<String> get supportedImportExtensions => {
+  ...documentImportExtensions,
+  ...imageImportExtensions,
+};
+
+/// The pill's honest sub-line: the document formats spelled out, then one
+/// word for the pictures — naming all ten image extensions would bury the
+/// formats a person actually looks for.
 String get supportedFormatsLabel =>
-    supportedImportExtensions.map((e) => '.$e').join(' · ');
+    '${documentImportExtensions.map((e) => '.$e').join(' · ')} · pictures';
 
 /// Routes [file] to the extractor that claims it — magic bytes first, so a
 /// mis-named file lands where its content belongs, then the named extension

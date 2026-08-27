@@ -242,7 +242,16 @@ import what is written there, not here.
   in `import_flow.dart` claims them by extension first and magic bytes second,
   so a renamed screenshot still finds the route — and it runs *before*
   `routeToExtractor`, so an extension-based image claim pre-empts an
-  extractor's magic-byte match (a text file named `.png` goes to OCR). The **scanned-PDF door** is
+  extractor's magic-byte match (a text file named `.png` goes to OCR).
+  **Both doors accept pictures**: the file door's picker filter is
+  `documentImportExtensions` (derived from the registry, as before) *plus*
+  `imageImportExtensions`, because a screenshot saved into Files is the same
+  screenshot as one in the photo library and the person does not know which
+  door they are standing at (captain's decision, 2026-08-27). One route, not
+  two — the picked image falls through `_read`'s `claimsImage` to the very
+  same recognition call the photo door makes — so a second image path is the
+  thing to refuse in review; the pill's sub-line spells the documents out and
+  says `pictures` for the rest rather than naming ten image extensions. The **scanned-PDF door** is
   the one-tap offer off a `noTextLayer` refusal, and it must read with
   recognition *unconditionally* (`_runRead(viaOcrRoute: true)` bypasses the
   registry): routing it back through `_read` sends the bytes to the very
