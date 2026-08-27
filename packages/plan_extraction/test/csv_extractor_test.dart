@@ -87,19 +87,20 @@ void main() {
       expect(parsed.days, hasLength(2));
       expect(parsed.days[0].date, DateTime(2027, 6, 14));
       expect(parsed.days[0].confidence, Confidence.high);
+      expect(parsed.days[0].place, 'Tokyo');
       expect(
         parsed.days[0].stops.map((s) => s.text),
-        ['Tokyo', 'Senso-ji at 9:00, then Ueno'],
+        ['Senso-ji at 9:00, then Ueno'],
       );
       expect(parsed.days[1].date, DateTime(2027, 6, 15));
+      expect(parsed.days[1].place, 'Kyoto');
       expect(
         parsed.days[1].stops.map((s) => s.text),
-        ['Kyoto', 'Fushimi Inari'],
+        ['Fushimi Inari'],
       );
-      expect(
-        parsed.unplacedLines.map((u) => u.sourceLine.text.trim()),
-        ['Date', 'City', 'Plan'],
-      );
+      // The label row is furniture, dropped rather than filed as lines
+      // nobody could place.
+      expect(parsed.unplacedLines, isEmpty);
     });
   });
 

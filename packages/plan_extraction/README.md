@@ -29,7 +29,16 @@ import slice codes against and one extractor per format.
   *typed* date cell (or, in csv, an exact ISO-shaped string) dates a day for
   certain; no second date grammar lives here. Where no date column exists the
   extractor falls back to faithful row-major lines — never worse than pasting
-  the same table as text. The renderer cannot import the app's
+  the same table as text. A sheet's own furniture is not plan and is not
+  reported as lines nobody could place: a first row that *names* the date
+  column (`Date` / `Day` / `When`) in short digit-free text, directly above a
+  row that really carries a date there, is read as column labels and dropped,
+  and a column those labels call a place (`City`, `Place`, `Location`, …)
+  folds into the day header (`Sat 14 September 2027 - Zermatt`) rather than
+  standing as a bare place-name stop under every day. Nothing wider is
+  inferred from a label, and a sheet whose first row is real data fails the
+  very first test (its date cell is typed, not text) and is never eaten. The
+  renderer cannot import the app's
   `lib/logic/plan_text.dart`, so it carries its own tiny copy of the dialect;
   `test/plan_rows_round_trip_test.dart` is what keeps the two honest, feeding
   every shape the renderer emits back through the real `parseItinerary`.

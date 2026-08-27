@@ -432,9 +432,14 @@ void main() {
     await importAFile(tester);
 
     // The date-typed column drove the heuristic: dated headers, dash stops.
-    expect(boxText(tester), contains('Mon 14 June 2027'));
+    // The sheet's own furniture stays out of the plan — the label row is
+    // not in the box, and the place column is in the header rather than a
+    // bare stop of its own.
+    expect(boxText(tester), contains('Mon 14 June 2027 - Tokyo'));
     expect(boxText(tester), contains('- Senso-ji at 9:00'));
-    expect(boxText(tester), contains('Tue 15 June 2027'));
+    expect(boxText(tester), contains('Tue 15 June 2027 - Kyoto'));
+    expect(boxText(tester), isNot(contains('\n- Tokyo')));
+    expect(boxText(tester), isNot(contains('Date')));
 
     await tester.tap(find.byKey(const Key('read-button')));
     await tester.pump();
@@ -461,8 +466,9 @@ void main() {
 
     await importAFile(tester);
 
-    expect(boxText(tester), contains('Mon 14 June 2027'));
+    expect(boxText(tester), contains('Mon 14 June 2027 - Tokyo'));
     expect(boxText(tester), contains('- Senso-ji at 9:00, then Ueno'));
+    expect(boxText(tester), isNot(contains('\n- Tokyo')));
 
     await tester.tap(find.byKey(const Key('read-button')));
     await tester.pump();

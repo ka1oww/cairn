@@ -153,8 +153,85 @@ List<PlanRow> planRowsFromGrid(List<List<SourceCell?>> grid) {
     ];
   }
 
-  return _rowsFromDatedGrid(nonEmptyRows, dateColumn);
+  // A column-label row is furniture, not plan: dropped rather than filed as
+  // lines nobody could place. Everything below it is the sheet's own body.
+  final labels = _labelRow(nonEmptyRows, dateColumn);
+  return _rowsFromDatedGrid(
+    labels == null ? nonEmptyRows : nonEmptyRows.sublist(1),
+    dateColumn,
+    labels == null ? null : _placeColumn(labels, dateColumn),
+  );
 }
+
+/// The sheet's first row, when it reads as a row of column labels rather
+/// than a row of plan. Deliberately narrow (nothing here infers a schema):
+/// it must be the first row, name at least two columns, hold nothing but
+/// short digit-free text, *name the date column by one of the words a
+/// column of dates is called*, and sit directly above a row that actually
+/// carries a date there. A sheet whose first row is real data fails the
+/// first of those tests — its date cell is a [DateCell], not text — and is
+/// never eaten.
+List<_Filled>? _labelRow(List<List<_Filled>> rows, int dateColumn) {
+  if (rows.length < 2) return null;
+  final first = rows.first;
+  if (first.map((cell) => cell.column).toSet().length < 2) return null;
+  if (!rows[1].any(
+    (cell) => cell.column == dateColumn && cell.cell is DateCell,
+  )) {
+    return null;
+  }
+
+  var namesTheDateColumn = false;
+  for (final filled in first) {
+    final cell = filled.cell;
+    if (cell is! TextCell) return null;
+    final text = cell.text.trim();
+    if (text.length > _longestLabel) return null;
+    if (_hasDigit.hasMatch(text)) return null;
+    if (filled.column == dateColumn && _dateLabels.contains(_labelKey(text))) {
+      namesTheDateColumn = true;
+    }
+  }
+  return namesTheDateColumn ? first : null;
+}
+
+/// The column the labels call a place, if any. Its cells fold into the day
+/// header (`Sat 14 September 2027 - Zermatt`) instead of standing as a bare
+/// place-name stop under every day.
+int? _placeColumn(List<_Filled> labels, int dateColumn) {
+  for (final filled in labels) {
+    if (filled.column == dateColumn) continue;
+    final cell = filled.cell;
+    if (cell is! TextCell) continue;
+    if (_placeLabels.contains(_labelKey(cell.text))) return filled.column;
+  }
+  return null;
+}
+
+/// A label compared letters-only and case-blind, so `City:` and `city` are
+/// one word. Nothing else is read out of a label.
+String _labelKey(String text) =>
+    text.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+
+final RegExp _hasDigit = RegExp(r'[0-9]');
+
+/// Longer than any column label and shorter than most any real stop.
+const int _longestLabel = 24;
+
+const Set<String> _dateLabels = {'date', 'dates', 'day', 'days', 'when'};
+
+const Set<String> _placeLabels = {
+  'city',
+  'place',
+  'location',
+  'destination',
+  'where',
+  'town',
+  'country',
+  'region',
+  'area',
+  'base',
+};
 
 /// A text cell may hold several lines; each becomes its own cell.
 Iterable<_Filled> _filledTextCells(int column, String text) sync* {
@@ -188,38 +265,58 @@ int? _findDateColumn(List<List<_Filled>> rows) {
 
 /// Dialect mode: a run of rows sharing the date column's value is one day;
 /// a different (or absent) date opens the next. Cells from the date column
-/// become headers; every other cell in the run becomes a stop line, with a
-/// time-typed cell starring the first line of its own row.
-List<PlanRow> _rowsFromDatedGrid(List<List<_Filled>> rows, int dateColumn) {
+/// become headers; the place column (when the labels named one) folds into
+/// the header it opens and is dropped where it merely repeats down the
+/// day's rows; every other cell becomes a stop line, with a time-typed cell
+/// starring the first line of its own row.
+List<PlanRow> _rowsFromDatedGrid(
+  List<List<_Filled>> rows,
+  int dateColumn,
+  int? placeColumn,
+) {
   final out = <PlanRow>[];
   DateTime? currentDate;
+  String? currentPlace;
 
   for (final row in rows) {
     DateCell? rowDate;
-    final rest = <SourceCell>[];
+    final rest = <_Filled>[];
     for (final cell in row) {
       if (cell.column == dateColumn && cell.cell is DateCell) {
         rowDate ??= cell.cell as DateCell;
       } else {
-        rest.add(cell.cell);
+        rest.add(cell);
       }
     }
 
-    if (rowDate == null) {
-      if (currentDate == null) {
-        // Before the first day: sheet furniture, kept visibly.
-        out.addAll([for (final cell in rest) PreambleRow(_textOf(cell))]);
-      } else {
-        out.addAll(_stopsFor(rest));
-      }
-      continue;
-    }
+    final placeAt = placeColumn == null
+        ? -1
+        : rest.indexWhere(
+            (cell) => cell.column == placeColumn && cell.cell is TextCell,
+          );
+    final rowPlace =
+        placeAt < 0 ? null : (rest[placeAt].cell as TextCell).text.trim();
 
-    if (currentDate != rowDate.date) {
+    final opensADay = rowDate != null && currentDate != rowDate.date;
+    if (opensADay) {
       currentDate = rowDate.date;
-      out.add(DayRow(date: rowDate.date));
+      currentPlace = rowPlace;
+      if (placeAt >= 0) rest.removeAt(placeAt);
+      out.add(DayRow(date: currentDate, place: currentPlace));
+    } else if (placeAt >= 0 && rowPlace == currentPlace) {
+      // The same place said again on the day's next row: already in the
+      // header. A *changed* place is content, and stays a stop.
+      rest.removeAt(placeAt);
     }
-    out.addAll(_stopsFor(rest));
+
+    final cells = [for (final cell in rest) cell.cell];
+    if (rowDate == null && currentDate == null) {
+      // Before the first day: sheet furniture the labels did not explain,
+      // kept visibly.
+      out.addAll([for (final cell in cells) PreambleRow(_textOf(cell))]);
+    } else {
+      out.addAll(_stopsFor(cells));
+    }
   }
   return out;
 }
