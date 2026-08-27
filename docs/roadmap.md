@@ -203,7 +203,7 @@ tested.
 | `packages/trip_moments` | Landed. Deals one ping per person across the party. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
 | `packages/plan_extraction` | Landed. Bytes in, plan text out — the file-import contract and its `.txt`/`.docx`/`.xlsx`/`.csv`/`.pdf` extractors. |
-| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Nothing hosted yet. |
+| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with all ten migrations applied. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and now the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
 | The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** The paste-and-confirm flow persisting the itinerary locally — with a second door beside the box: importing a file — a document (`.txt`, `.docx`, `.xlsx`, `.csv`, `.pdf`), or a photo or screenshot through Apple Vision — fills it and never auto-parses, so one tap reads it through the same pipeline, and recognition is judged on a device, never by the suite — the day page it lands on, the trip's path, the three-tab container holding them, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them and the Pool obeys it (the day page's own gated half still waits on the photo timeline) — and now the trip as a stored fact: roster, starter, flat-but-gated powers, three-word codes that die with the trip, and the sheet off the Trail's title. Nothing registered with iOS yet; no code can reach another phone yet. |
@@ -262,8 +262,8 @@ multi-person. They cannot be honestly built or judged with one device. This is
 also the first phase that costs anything to keep alive, so it should not start
 before Phase 1 proves the thing is worth keeping alive.
 
-*Needs from you: a Supabase account and a Cloudflare account. Keys live in a
-local file that is never committed.*
+*Needs from you: a Cloudflare account — the Supabase one exists and its
+project is live. No secret is ever committed (`supabase/README.md`).*
 
 ### Phase 3 — the trip surfaces
 
@@ -326,8 +326,10 @@ to fill.
 Nothing here can be delegated, and several of these block a whole phase.
 
 - **Xcode**, and accepting its licence. Blocks Phase 1.
-- **The Supabase and Cloudflare accounts.** Blocks Phase 2. Keys never enter this
-  repository, a pull request, or an agent's hands.
+- **The Cloudflare account.** Blocks Phase 2; the Supabase one is done and its
+  project is live. No secret — the service-role key, the database password —
+  ever enters this repository, a pull request, or an agent's hands
+  (`supabase/README.md` is the authority on which key is which).
 - **Paying Apple** at the weekend test, **and Google** at Android delivery.
 - **Sending design prompts to Claude Design**, and returning the handoffs.
 - **Showing the app to any of the eight.** Nothing has been shown yet, and a

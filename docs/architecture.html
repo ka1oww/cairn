@@ -593,9 +593,10 @@
       is needed to draw a photo small — the phone decodes the stored original down to its
       box (lib/screens/photo_frame.dart); the between-trips dormancy keepalive is built and
       deployed as a Cloudflare Worker (<code>ops/keepalive-worker/</code>, documented in
-      <code>supabase/README.md</code>’s Free-tier limits section); no CI runs any test on any PR.</li>
-      <li><b>Nothing has touched a hosted Supabase project or a real R2 bucket.</b>
-      <code>supabase db push</code> against a throwaway project is still the gate.</li>
+      <code>supabase/README.md</code>’s Free-tier limits section); CI exists since #13 and covers the packages, the JS-safety golden, the RLS probe, the learning demo and the app.</li>
+      <li><b>The hosted Supabase project is real; a real R2 bucket still is not.</b>
+      All ten migrations are applied and an ordinary build points at it, but the
+      adversarial RLS probe still runs against a throwaway local Postgres, and must.</li>
     </ul>
   </div>
 
