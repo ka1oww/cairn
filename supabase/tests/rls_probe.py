@@ -167,6 +167,40 @@ def main():
            values (:t, :u, 'k/x', 'image/jpeg', 10)""", t=iceland, u=carol)
     check(status == "err", "and cannot insert into a trip they are not on", repr(rows)[:80])
 
+    # ------------------------------- what the row's protection does NOT reach
+    #
+    # These are premises, not policies: they pin the facts `r2-upload-url`'s
+    # refusals rest on, so that a change here surfaces as a failure beside the
+    # policy that caused it rather than as a silent widening of what that
+    # function must check.
+    #
+    # The row above is well protected. The *object* it points at is not
+    # protected by anything in this schema at all -- there is no R2 in
+    # Postgres -- so whatever a co-member can read here is the raw material for
+    # signing a PUT over somebody else's original. That is why the function
+    # refuses to sign a photo id a row already holds
+    # (`supabase/functions/r2-upload-url/handler.ts`, tested in its own
+    # `handler_test.ts`), and these two checks are why it has to.
+    print("\n== a co-member can read what an upload URL is minted from ==")
+    status, rows = c.try_run(
+        "select id, r2_object_key from public.photos where id = :id", id=PHOTO_A)
+    check(status == "ok" and len(rows) == 1 and str(rows[0][0]) == PHOTO_A,
+          "a co-member reads my photo's id and its object key -- neither is a secret",
+          repr(rows)[:90])
+    check(bool(rows) and bool(rows[0][1]),
+          "so a photo id is never evidence of who is entitled to write that object")
+
+    print("\n== trip_closes_at answers a member and hides from everyone else ==")
+    # `UploadDatabase.tripClosesAt` refuses on a null, and this is what makes
+    # that right: null is "a trip you cannot see", never "a trip with no end".
+    status, rows = a.try_run("select public.trip_closes_at(:t)", t=japan)
+    check(status == "ok" and rows[0][0] is not None,
+          "a member is told when their trip closes", repr(rows)[:90])
+    status, rows = b.try_run("select public.trip_closes_at(:t)", t=japan)
+    check(status == "ok" and rows[0][0] is None,
+          "and a stranger is told null, which is a refusal and not 'never closes'",
+          repr(rows)[:90])
+
     # ------------------------------------------------------------------- gate
     print("\n== the gate holds today shut until you have put something in it ==")
     today = db.run("select (now() at time zone 'Asia/Tokyo')::date")[0][0]

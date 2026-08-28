@@ -16,7 +16,7 @@ which is a question only Postgres can answer.
 | --- | --- |
 | `supabase_env.sql` | The parts of a fresh Supabase project the migrations touch: the `anon`/`authenticated`/`service_role` roles, an `auth.users` table, and `auth.uid()`. Nothing else. |
 | `harness.py` | Applies the migrations and issues statements the way PostgREST does — `set local role authenticated` plus the JWT claims GUC, inside a transaction. |
-| `rls_probe.py` | The adversarial suite, grouped by the product decision each check defends. **It reports 109 passes from 108 `check(` lines**, and the difference is not a typo: one call sits inside a two-item `for` loop over a non-member and a member of a different trip, so it runs twice. Take the count from a run's own `---- N passed ----` line, never from grepping the source. It also reads `packages/cairn_model/lib/src/` directly — the invite vocabulary and the grace after a trip exist on both sides of the phone/server seam, and comparing them is the only way this file can notice one of the two drifting. The itinerary sections are the same idea one level up: the merge rule is written both here and in `lib/repositories/itinerary_sync.dart`, and what these checks pin is that the SQL half behaves the way the Dart half assumes. |
+| `rls_probe.py` | The adversarial suite, grouped by the product decision each check defends. **It reports 113 passes from 112 `check(` lines**, and the difference is not a typo: one call sits inside a two-item `for` loop over a non-member and a member of a different trip, so it runs twice. Take the count from a run's own `---- N passed ----` line, never from grepping the source. It also reads `packages/cairn_model/lib/src/` directly — the invite vocabulary and the grace after a trip exist on both sides of the phone/server seam, and comparing them is the only way this file can notice one of the two drifting. The itinerary sections are the same idea one level up: the merge rule is written both here and in `lib/repositories/itinerary_sync.dart`, and what these checks pin is that the SQL half behaves the way the Dart half assumes. |
 | `recursion_mechanism.py` | Checks *why* the recursion fix works, not just that it does. Needs a superuser connection: it creates a role and a database. |
 
 ## Running them
@@ -82,5 +82,12 @@ tests exercise core Postgres behaviour — the RLS engine, `auth.uid()`,
 `SECURITY DEFINER` ownership, `RETURNING` against the SELECT policy — all of
 which reproduce identically on a real project. They do **not** cover GoTrue
 (identity linking across Apple and Google, Apple's private-relay addresses,
-the name returned only on first authorization), the edge functions, R2, or
-`pg_cron`. Those need the real thing.
+the name returned only on first authorization), R2, or `pg_cron`. Those need
+the real thing.
+
+They do not cover the edge functions either, but those are no longer untested:
+`r2-upload-url` is split so that every decision it makes lives in a
+`handler.ts` that imports nothing remote, and
+`supabase/functions/r2-upload-url/handler_test.ts` drives it offline with
+`deno test`. What that cannot reach is the same class of thing this directory
+cannot: the real PostgREST queries, and R2 itself.

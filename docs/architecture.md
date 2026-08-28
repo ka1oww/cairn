@@ -175,7 +175,12 @@ lives nowhere else:
 - **The outbox.** Upload bytes to R2 first, insert the `photos` row second, so
   a crash between the two leaves an orphan object (invisible, reconcilable)
   rather than a broken tile (visible to everyone). `supabase/README.md` names
-  this ordering; nothing implements it yet.
+  this ordering; nothing implements it yet. The ordering is now load-bearing
+  in a second way: `r2-upload-url` refuses to sign a photo id a `photos` row
+  already holds, so the row is what closes an original to further writes. A
+  retry of an upload that never landed happens while no row exists and is
+  still signed — but an outbox that inserted the row first would refuse its
+  own retry.
 - **Conflict fallbacks.** Two phones composing the same `day_pages` row: the
   second insert violates `unique (trip_id, page_date)` and must fall back to
   an update. The schema refuses to pick a winner; the repository must.
@@ -353,9 +358,9 @@ nothing about pings fired or who has answered today.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (109-probe RLS suite); **applied to the hosted project 2026-08-26**, where only the permitted paths have been walked (one account, so no refusal observed there); starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos`, `day_unlocks`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check. |
+| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (113-probe RLS suite); **applied to the hosted project 2026-08-26**, where only the permitted paths have been walked (one account, so no refusal observed there); starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos`, `day_unlocks`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check. |
 | **Supabase Auth (GoTrue)** | partial — **anonymous accounts are live** on the hosted project and are how the phone signs in (`gotrue_sessions.dart`); Apple and Google are dashboard steps and are not enabled | (platform service) | Postgres (`auth.uid()` in every policy), client adapter, edge functions | Accounts. Sign in with Apple first; display name editable at join because providers supply legal names. |
-| **`r2-upload-url` edge fn** | partial — code exists (membership check fixed in #9), never deployed | Postgres (re-checks membership as the caller), R2 (mints a 5-minute presigned PUT) | The only write path for photo bytes | Exists solely because the R2 secret cannot live in the app binary. |
+| **`r2-upload-url` edge fn** | partial — code exists and its decisions are now tested offline (`handler_test.ts`), never deployed | Postgres (re-checks membership, the trip's close, and whether a `photos` row already claims this id — all as the caller), R2 (mints a 5-minute presigned PUT, bounded to a declared type and size) | The only write path for photo bytes | Exists solely because the R2 secret cannot live in the app binary. Split in two on purpose: `handler.ts` decides and imports nothing remote, `index.ts` builds the clients — which is the only way an edge function nothing has deployed can be exercised at all. |
 | **`r2-download-url` edge fn** | **not built** — requirements settled in `supabase/README.md` | Postgres (**must call `day_page_is_open` before signing**), R2 (presigned GET) | The gate itself: a version that skips the check is the single worst potential leak in the app | The bucket is private; every read needs a signature; gating the signature is what makes the shut gate real rather than a curtain. |
 | **Cloudflare R2** | not built — bucket not created; plan settled | nothing | Both edge functions; the app's byte transfers; the 10 GB free tier is a real ceiling, and the only line in the backend that ever bills — measured in [docs/storage-and-cost.md](storage-and-cost.md) | Photo bytes and day-page composites at zero egress. Holds **originals**, untouched; a derived variant may sit beside one but never replaces it. Postgres is the index; R2 is never listed — the `photos` row *is* the pointer. |
 
@@ -527,7 +532,7 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   `test/hosted_smoke_test.dart`, skipped unless asked for
   (`--dart-define=CAIRN_HOSTED_SMOKE=true`). What it does *not* cover: more
   than one account at a time, so no RLS refusal has ever been observed on the
-  hosted project — only the permitted paths. The 109 adversarial checks still
+  hosted project — only the permitted paths. The 113 adversarial checks still
   run against a throwaway local Postgres, and must.
 - **The shared roster replaces this phone's, and this phone is now whoever
   signed in.** `localMemberIdProvider` (`lib/app_state/ping_schedule.dart`) is

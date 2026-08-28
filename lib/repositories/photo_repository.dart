@@ -89,16 +89,23 @@ class InMemoryPhotoPool implements PhotoRepository {
 
 /// Mints a local photo id.
 ///
-/// `cairn_model` will not do this — it has no I/O and no randomness — and the
-/// bands above the seam should not be inventing storage identity, so it
-/// happens here. When the pool becomes shared, Postgres mints the uuid and
-/// this becomes the local half of the mapping.
+/// `cairn_model` will not draw the randomness — it has no I/O and no entropy —
+/// and the bands above the seam should not be inventing storage identity, so
+/// the draw happens here and `PhotoId.mint` does the formatting, exactly the
+/// split `mintTripId` and `TripId.mint` already use.
 typedef PhotoIdMinter = String Function();
 
-String _mintPhotoId() {
+/// Sixteen bytes of the platform's secure randomness, spelled as one uuid.
+///
+/// **The spelling is the whole point, and it used to be wrong**: this drew the
+/// same sixteen bytes but wrote them as thirty-two undashed hex characters,
+/// which no `uuid` column accepts and which `r2-upload-url` refuses outright
+/// before it will sign anything. The two halves of that seam had never been
+/// run against each other, so the first real upload would have been the first
+/// thing to notice. `test/photo_id_format_test.dart` compares them now.
+String mintPhotoId() {
   final random = Random.secure();
-  final bytes = [for (var i = 0; i < 16; i++) random.nextInt(256)];
-  return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  return PhotoId.mint([for (var i = 0; i < 16; i++) random.nextInt(256)]).value;
 }
 
 /// The photo pool with a store behind it: the read interface above, plus the
@@ -111,7 +118,7 @@ String _mintPhotoId() {
 class PhotoStore implements PhotoRepository {
   /// [mintId] exists for tests, which pin the ids so an assertion can name
   /// one; every other caller takes the random minter.
-  PhotoStore(this._db, {this.mintId = _mintPhotoId});
+  PhotoStore(this._db, {this.mintId = mintPhotoId});
 
   final AppDatabase _db;
   final PhotoIdMinter mintId;
