@@ -52,6 +52,19 @@ PHOTO_C = "cccccccc-0000-0000-0000-000000000001"
 PHOTO_D = "dddddddd-0000-0000-0000-000000000001"
 
 
+def photo_key(trip, photo, name="original.jpg"):
+    """`r2-upload-url`'s `objectKeyFor` said in Python, for fixtures.
+
+    Since `0011` a `photos` row may only claim a key inside its own
+    `trips/<trip_id>/photos/<photo_id>/` folder, so every insert below has to
+    build one -- which is also why every insert now names an explicit `id`
+    rather than letting `gen_random_uuid()` supply it. A photo whose key must
+    contain its own id cannot be written by a client that does not know the id
+    yet; the app already mints it (`PhotoId.mint`).
+    """
+    return f"trips/{trip}/photos/{photo}/{name}"
+
+
 def main():
     db = recreate_db("cairn_probe")
 
@@ -99,8 +112,8 @@ def main():
     a.run(
         """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
                                       content_type, byte_size, day_number, trip_day, captured_at)
-           values (:id, :t, :u, 'k/a1', 'image/jpeg', 100, 1, current_date - 2, now())""",
-        id=PHOTO_A, t=japan, u=alice,
+           values (:id, :t, :u, :k, 'image/jpeg', 100, 1, current_date - 2, now())""",
+        id=PHOTO_A, t=japan, u=alice, k=photo_key(japan, PHOTO_A),
     )
     status, rows = a.try_run("select r2_object_key from public.photos where trip_id = :t", t=japan)
     check(status == "ok" and len(rows) == 1, "a member reads her own trip's photo", repr(rows))
@@ -158,15 +171,18 @@ def main():
     c.try_run("delete from public.photos where id = :id", id=PHOTO_A)
     check(db.run("select count(*) from public.photos where id = :id", id=PHOTO_A)[0][0] == 1,
           "a co-member cannot delete my photo")
+    forged = "ffffffff-0000-0000-0000-000000000001"
     status, rows = c.try_run(
-        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type,
+        """insert into public.photos (id, trip_id, contributor_id, r2_object_key, content_type,
                                       byte_size, day_number)
-           values (:t, :other, 'k/forged', 'image/jpeg', 10, 1)""", t=japan, other=alice)
+           values (:id, :t, :other, :k, 'image/jpeg', 10, 1)""",
+        id=forged, t=japan, other=alice, k=photo_key(japan, forged))
     check(status == "err", "a member cannot tag a photo as someone else", repr(rows)[:80])
     status, rows = c.try_run(
-        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type,
+        """insert into public.photos (id, trip_id, contributor_id, r2_object_key, content_type,
                                       byte_size, day_number)
-           values (:t, :u, 'k/x', 'image/jpeg', 10, 1)""", t=iceland, u=carol)
+           values (:id, :t, :u, :k, 'image/jpeg', 10, 1)""",
+        id=forged, t=iceland, u=carol, k=photo_key(iceland, forged))
     check(status == "err", "and cannot insert into a trip they are not on", repr(rows)[:80])
 
     # ------------------------------- what the row's protection does NOT reach
@@ -237,8 +253,8 @@ def main():
     c.run(
         """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
                                       content_type, byte_size, day_number, trip_day, captured_at)
-           values (:id, :t, :u, 'k/c1', 'image/jpeg', 100, :n, :d, now())""",
-        id=PHOTO_C, t=japan, u=carol, n=TODAY_DAY, d=today)
+           values (:id, :t, :u, :k, 'image/jpeg', 100, :n, :d, now())""",
+        id=PHOTO_C, t=japan, u=carol, n=TODAY_DAY, d=today, k=photo_key(japan, PHOTO_C))
     check(c.run(is_open, t=japan, d=TODAY_DAY, u=carol)[0][0] is True,
           "and contributing opens it for her at once")
     check(c.run(is_open, t=japan, d=FUTURE_DAY, u=carol)[0][0] is False,
@@ -268,8 +284,9 @@ def main():
     undated_photo = "eeeeeeee-0000-0000-0000-000000000001"
     d.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
                                         content_type, byte_size, day_number, captured_at)
-             values (:id, :t, :u, 'k/d-undated', 'image/jpeg', 100, :n, now())""",
-          id=undated_photo, t=japan, u=dave, n=UNDATED_DAY)
+             values (:id, :t, :u, :k, 'image/jpeg', 100, :n, now())""",
+          id=undated_photo, t=japan, u=dave, n=UNDATED_DAY,
+          k=photo_key(japan, undated_photo))
     check(db.run("""select count(*) from public.day_unlocks
                     where trip_id = :t and user_id = :u and day_number = :n""",
                  t=japan, u=dave, n=UNDATED_DAY)[0][0] == 1,
@@ -330,8 +347,9 @@ def main():
     print("\n== the word under a photograph is its owner's, and nobody else's ==")
     d.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
                                         content_type, byte_size, day_number, captured_at)
-             values (:id, :t, :u, 'k/d-word', 'image/jpeg', 100, :n, now())""",
-          id=undated_photo, t=japan, u=dave, n=PAST_DAY)
+             values (:id, :t, :u, :k, 'image/jpeg', 100, :n, now())""",
+          id=undated_photo, t=japan, u=dave, n=PAST_DAY,
+          k=photo_key(japan, undated_photo))
     d.run("update public.photos set caption = 'the long way round' where id = :id", id=undated_photo)
     check(db.run("select caption from public.photos where id = :id", id=undated_photo)[0][0]
           == "the long way round", "a contributor writes the word on their own photograph")
@@ -370,8 +388,91 @@ def main():
           "including at another trip's composed page, which no unique index would have caught",
           repr(rows)[:80])
     check(db.run("select r2_object_key from public.photos where id = :id",
-                 id=undated_photo)[0][0] == "k/d-word",
+                 id=undated_photo)[0][0] == photo_key(japan, undated_photo),
           "and the row still points where it always did")
+
+    # ...and the other half of that, which the trigger structurally cannot do:
+    # a BEFORE UPDATE trigger has no old row to compare against on INSERT, so
+    # until `0011`'s CHECK a member could simply *start* with a foreign key.
+    # `unique` catches only a key another `photos` row already holds -- a day
+    # page's key lives in another table with another unique index -- and
+    # `r2-download-url` would then sign it faithfully, because signing the
+    # row's own stored key is exactly its promise. The promise is worth what
+    # the stored key is worth, so the stored key is now bounded to the row's
+    # own trip and its own id.
+    print("\n== nor was the first claim free: a row may only claim its own folder ==")
+    own = "ffffffff-0000-0000-0000-0000000000a1"
+    status, rows = d.try_run(
+        """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                      content_type, byte_size, day_number)
+           values (:id, :t, :u, :k, 'image/jpeg', 100, :n)""",
+        id=own, t=japan, u=dave, n=PAST_DAY, k=photo_key(japan, own))
+    check(status == "ok",
+          "a key built from the row's own trip and its own id is what the outbox mints",
+          repr(rows)[:80])
+
+    forgeries = (
+        (photo_key(iceland, own),
+         "another trip's folder, even for a photo id that is genuinely mine"),
+        (photo_key(japan, PHOTO_C),
+         "a co-member's photograph in my own trip -- the id is not a secret"),
+        (f"trips/{japan}/pages/{own}.jpg",
+         "a day page, whose key no unique index on photos would ever have caught"),
+        (f"trips/{japan}/photos/{own}",
+         "the folder itself rather than something inside it"),
+        (f"x/trips/{japan}/photos/{own}/original.jpg",
+         "the right folder with something prefixed in front of it"),
+    )
+    for key, what in forgeries:
+        bad = "ffffffff-0000-0000-0000-0000000000b1"
+        status, rows = d.try_run(
+            """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                          content_type, byte_size, day_number)
+               values (:id, :t, :u, :k, 'image/jpeg', 100, :n)""",
+            id=bad, t=japan, u=dave, n=PAST_DAY, k=key)
+        check(status == "err" and "photos_object_key_own_prefix_check" in str(rows),
+              f"but not {what}", repr(rows)[:90])
+    check(db.run("select count(*) from public.photos where id = :id",
+                 id="ffffffff-0000-0000-0000-0000000000b1")[0][0] == 0,
+          "and none of them landed")
+
+    # The `i` flag on `r2-upload-url`'s `UUID_RE` means it will sign a key whose
+    # uuid segments are spelled in upper case, while `photos.id` renders lower.
+    # The CHECK normalises deliberately: refusing that spelling would take the
+    # bytes and *then* refuse the row, leaving an orphan and a retry that
+    # re-mints the same rejected key forever.
+    upper = "ffffffff-0000-0000-0000-0000000000c1"
+    status, rows = d.try_run(
+        """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                      content_type, byte_size, day_number)
+           values (:id, :t, :u, :k, 'image/jpeg', 100, :n)""",
+        id=upper, t=japan, u=dave, n=PAST_DAY,
+        k=photo_key(japan, upper).upper())
+    check(status == "ok",
+          "an upper-cased spelling of the same folder is accepted, so no PUT is stranded",
+          repr(rows)[:90])
+    d.run("delete from public.photos where id = :id", id=upper)
+
+    # The same class of free claim existed on `r2_thumbnail_key` -- nullable,
+    # `unique`, no shape -- and it is the one the lock trigger deliberately
+    # leaves open, because filling it in later from null is a legitimate write.
+    # So the CHECK is the only thing guarding it, on INSERT and on that UPDATE.
+    print("\n== a thumbnail is bounded to the same folder, or it is nothing ==")
+    check(db.run("select r2_thumbnail_key from public.photos where id = :id",
+                 id=own)[0][0] is None,
+          "nothing generates one, so null is the ordinary state and stays allowed")
+    status, rows = d.try_run(
+        "update public.photos set r2_thumbnail_key = :k where id = :id",
+        id=own, k=photo_key(iceland, own, "thumbnail.jpg"))
+    check(status == "err" and "photos_thumbnail_key_own_prefix_check" in str(rows),
+          "a thumbnail cannot be filled in with another trip's object", repr(rows)[:90])
+    status, rows = d.try_run(
+        "update public.photos set r2_thumbnail_key = :k where id = :id",
+        id=own, k=photo_key(japan, own, "thumbnail.jpg"))
+    check(status == "ok" and db.run("select r2_thumbnail_key from public.photos where id = :id",
+                                    id=own)[0][0] == photo_key(japan, own, "thumbnail.jpg"),
+          "and one beside the original is what the column is for", repr(rows)[:90])
+    d.run("delete from public.photos where id = :id", id=own)
 
     # ----------------------------------------------------- tombstones, 0011
     #
@@ -382,7 +483,8 @@ def main():
     db.run("delete from public.photo_tombstones")
     d.run("delete from public.photos where id = :id", id=undated_photo)
     check(db.run("""select count(*) from public.photo_tombstones
-                    where r2_object_key = 'k/d-word' and trip_id = :t""", t=japan)[0][0] == 1,
+                    where r2_object_key = :k and trip_id = :t""",
+                 t=japan, k=photo_key(japan, undated_photo))[0][0] == 1,
           "deleting a photograph records its object key")
     status, rows = d.try_run("select count(*) from public.photo_tombstones")
     check(status == "ok" and rows[0][0] == 0,
@@ -560,20 +662,24 @@ def main():
 
     # ------------------------------------------ and the close shuts the pool
     print("\n== the grace takes photographs; the close takes none ==")
+    late = "ffffffff-0000-0000-0000-000000000002"
     status, rows = d.try_run(
-        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type,
+        """insert into public.photos (id, trip_id, contributor_id, r2_object_key, content_type,
                                       byte_size, day_number)
-           values (:t, :u, 'k/late', 'image/jpeg', 10, 1)""", t=fresh, u=dave)
+           values (:id, :t, :u, :k, 'image/jpeg', 10, 1)""",
+        id=late, t=fresh, u=dave, k=photo_key(fresh, late))
     check(status == "ok",
           "a photo taken on the way home still lands, days after the trip ended",
           repr(rows)[:90])
 
     # Bob is on last year's trip: he started it. So this refusal is the close
     # and nothing else -- not membership, and not a trip he cannot see.
+    too_late = "ffffffff-0000-0000-0000-000000000003"
     status, rows = b.try_run(
-        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type,
+        """insert into public.photos (id, trip_id, contributor_id, r2_object_key, content_type,
                                       byte_size, day_number)
-           values (:t, :u, 'k/too-late', 'image/jpeg', 10, 1)""", t=stale, u=bob)
+           values (:id, :t, :u, :k, 'image/jpeg', 10, 1)""",
+        id=too_late, t=stale, u=bob, k=photo_key(stale, too_late))
     check(status == "err" and "row-level security" in str(rows),
           "and a member of a closed trip cannot add to it -- the record is fixed",
           repr(rows)[:90])
@@ -581,7 +687,6 @@ def main():
           "so nothing landed in last year's archive")
 
     # What the close does not take: your own photograph stays yours.
-    late = str(db.run("select id from public.photos where trip_id = :t", t=fresh)[0][0])
     db.run("update public.trips set end_date = current_date - 40, start_date = current_date - 44 "
            "where id = :t", t=fresh)
     status, _ = d.try_run("update public.photos set trip_day = current_date - 42 where id = :id", id=late)
@@ -643,7 +748,8 @@ def main():
 
     b.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
                                        content_type, byte_size, day_number)
-             values (:id, :t, :u, 'k/b1', 'image/jpeg', 10, 1)""", id=PHOTO_B, t=iceland, u=bob)
+             values (:id, :t, :u, :k, 'image/jpeg', 10, 1)""",
+          id=PHOTO_B, t=iceland, u=bob, k=photo_key(iceland, PHOTO_B))
     db.run("insert into public.trip_members (trip_id, user_id) values (:t, :u)", t=iceland, u=carol)
     status, rows = c.try_run(
         "insert into public.day_page_photos (day_page_id, ordinal, photo_id) values (:p, 6, :ph)",
@@ -666,8 +772,8 @@ def main():
     print("\n== nor can a photo be repointed to another trip ==")
     c.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
                                        content_type, byte_size, day_number)
-             values (:id, :t, :u, 'k/c-iceland', 'image/jpeg', 10, 1)""",
-          id=PHOTO_D, t=iceland, u=carol)
+             values (:id, :t, :u, :k, 'image/jpeg', 10, 1)""",
+          id=PHOTO_D, t=iceland, u=carol, k=photo_key(iceland, PHOTO_D))
     status, rows = c.try_run(
         "update public.photos set trip_id = :t where id = :id", t=japan, id=PHOTO_D)
     check(status == "err" and "cannot be changed" in str(rows),

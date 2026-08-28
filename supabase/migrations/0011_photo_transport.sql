@@ -163,6 +163,11 @@ create index if not exists photos_trip_id_day_number_idx
 -- point their own row at `trips/<someone else's trip>/pages/<id>.jpg` and
 -- have it signed.
 --
+-- This is the *second* half of the pair. The trigger stops a key changing;
+-- the CHECK below stops the first claim being a foreign one in the first
+-- place. Neither is sufficient alone -- a locked key that was free to be
+-- anything at INSERT is just a permanent theft rather than a revocable one.
+--
 -- WITH CHECK cannot see the old row, so the lock is a trigger -- exactly as
 -- `photos_lock_trip_id` is, and as `trip_invites.trip_id`'s is in `0005`.
 -- The day number is deliberately *not* locked: correcting which day a
@@ -188,6 +193,104 @@ drop trigger if exists photos_lock_object_keys on public.photos;
 create trigger photos_lock_object_keys
   before update on public.photos
   for each row execute function public.photos_lock_object_keys();
+
+-- ---------------------------------------------------------------------------
+-- ...and the first claim is not free either
+-- ---------------------------------------------------------------------------
+--
+-- The lock above froze the key. It did not say what the key may be, and the
+-- trigger cannot: it only runs on UPDATE, because on INSERT there is no old
+-- row to compare against. So until this constraint, `photos_insert_trip_member`
+-- let a member state *any* key on the row they inserted -- including
+-- `trips/<someone else's trip>/pages/<their day page>.jpg`, which no unique
+-- index catches (that key lives in `day_pages`, a different table with a
+-- different unique index) -- and `r2-download-url` would then sign it,
+-- faithfully, because signing the row's own stored key is exactly what it
+-- promises to do. The promise is only worth what the stored key is worth.
+-- That was the finding in `supabase/functions/r2-download-url/REVIEW.md` §4,
+-- and this closes it: a row may only claim a key built from **its own trip
+-- and its own id**.
+--
+-- The shape is `r2-upload-url`'s `objectKeyFor` said in SQL, and the two must
+-- agree letter for letter, because the client mints the key and the database
+-- is what refuses it:
+--
+--     trips/<trip_id>/photos/<photo_id>/<whatever>
+--
+-- Everything past that prefix is deliberately unconstrained. Naming the file
+-- (`original.jpg`, `thumbnail.heic`) is the upload function's business, and a
+-- database that also spelled out the extension list would have to be migrated
+-- every time a format is added. What the prefix buys is the only thing that
+-- matters here: whatever the object is, it is inside this photograph's own
+-- folder, so a signature over it can only ever hand back this row's own bytes.
+--
+-- Three details, each of which was a decision:
+--
+-- * **`lower()`, not a bare comparison.** `r2-upload-url`'s `UUID_RE` carries
+--   the `i` flag, so it will happily sign a key whose uuid segments are spelled
+--   in upper case, while `photos.id` and `photos.trip_id` are `uuid` columns
+--   and always render lower. A case-sensitive check would therefore accept the
+--   PUT, take the bytes, and *then* refuse the row -- an orphaned object plus a
+--   retry that can never succeed, since the client would re-mint the same
+--   rejected key forever. Normalising here costs nothing: the case of the
+--   literal segments is not a permission, and `trips/` and `TRIPS/` are two
+--   different R2 namespaces that are both still bound to this trip and this id.
+--
+-- * **No LIKE-metacharacter hazard.** The pattern is built from two `uuid`
+--   columns, whose text form is hexadecimal and hyphens. Neither `%` nor `_`
+--   can appear in it, so a row cannot widen its own pattern.
+--
+-- * **The client must now mint the id.** A key that must contain the row's own
+--   id cannot be written by a client that let `gen_random_uuid()` supply it.
+--   That is already how the app works (`PhotoId.mint`, and
+--   `test/photo_id_format_test.dart` pins the spelling), and the fixtures in
+--   `supabase/tests/` were updated to match rather than the constraint being
+--   loosened to accommodate them.
+--
+-- `day_pages.r2_object_key` has the identical latent freedom and is
+-- deliberately left alone: nothing signs a day-page key today (no composer
+-- exists, and `r2-download-url` reads `photos` only), so constraining it now
+-- would be guessing at a shape no writer has yet had to agree to.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.photos'::regclass
+       and conname = 'photos_object_key_own_prefix_check'
+  ) then
+    alter table public.photos
+      add constraint photos_object_key_own_prefix_check check (
+        lower(r2_object_key)
+          like 'trips/' || trip_id::text || '/photos/' || id::text || '/%'
+      );
+  end if;
+end;
+$$;
+
+-- The same class of free claim exists on `r2_thumbnail_key`, and is closed the
+-- same way. It is a *nullable* `unique text` with no shape constraint, so a
+-- member could state a foreign key there on insert exactly as on the original
+-- -- and although nothing generates a thumbnail yet and nothing signs one, the
+-- lock trigger permits filling it in later from null, which is precisely the
+-- window a future reader would inherit. A thumbnail lives beside the original
+-- (`.../thumbnail.<ext>`, `supabase/README.md`), so it shares the prefix; null
+-- is still allowed, because the column means "no smaller variant exists".
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.photos'::regclass
+       and conname = 'photos_thumbnail_key_own_prefix_check'
+  ) then
+    alter table public.photos
+      add constraint photos_thumbnail_key_own_prefix_check check (
+        r2_thumbnail_key is null
+        or lower(r2_thumbnail_key)
+             like 'trips/' || trip_id::text || '/photos/' || id::text || '/%'
+      );
+  end if;
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- The single seat: may this person read this trip's photographs at all

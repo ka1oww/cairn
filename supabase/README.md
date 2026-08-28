@@ -137,6 +137,25 @@ If a smaller derived variant is generated it is `.../thumbnail.<ext>`
 *alongside* the original, never in place of it. A composed day page's key is
 `trips/<trip_id>/pages/<day_page_id>.<ext>`.
 
+**The key shape is enforced, not merely documented.** Since `0011` a `photos`
+row may only claim a key inside its own folder —
+`photos_object_key_own_prefix_check` and `photos_thumbnail_key_own_prefix_check`,
+which compare `lower(key)` against
+`'trips/' || trip_id || '/photos/' || id || '/%'`. That is what makes
+`r2-download-url`'s promise ("only the row's own stored key is signed") worth
+anything, because before it a member could simply insert a row claiming
+somebody else's day-page key — a different table, a different unique index,
+nothing in the way — and have it signed faithfully. Two consequences worth
+knowing. The client must **mint the photo id itself**, since a key that has to
+contain the row's own id cannot be written by a client waiting on
+`gen_random_uuid()`; the app already does (`PhotoId.mint`). And the comparison
+is case-insensitive on purpose: both edge functions' `UUID_RE` carries the `i`
+flag, so a strict check would take the PUT and then refuse the row, stranding an
+object and a retry that re-mints the same rejected key forever. Everything past
+the prefix stays free — naming the file is `objectKeyFor`'s business.
+`day_pages.r2_object_key` is deliberately **not** constrained: nothing signs a
+day-page key yet, and a shape no writer has agreed to is a guess.
+
 The app never lists an R2 bucket to show a trip's pool. It queries
 `photos where trip_id = $1` (RLS-filtered to members only) and reads
 `r2_object_key` off each row, then fetches that exact object. Postgres is
@@ -380,6 +399,7 @@ directions.
 | **…and the day stays open** | `day_unlocks` (`0007`, re-keyed by `0011`) has **no DELETE policy and no INSERT policy**. An unlock is written by a trigger when a photo lands and cannot be removed by anyone — not its owner, not the starter. "No re-lock" is the only behaviour the table permits, rather than a rule the app has to remember. |
 | **The gate holds a day's page shut until you have contributed to it** | `day_page_is_open(trip_id, day_number, user)` (`0007`, re-keyed onto the day number by `0011`). Not an RLS policy, on purpose — see below. |
 | **Every photograph read asks one question, so the leaver rule has one seat** | `may_read_trip_photos(trip_id, user)` (`0011`). Today it answers exactly `is_trip_member`. Both the `photos` SELECT policy and `r2-download-url` go through it from day one, so when leaving and being removed land, changing what a leaver may still see is a change to one function body and to nothing else. |
+| **A row can only point at its own object** | `photos_object_key_own_prefix_check` and `photos_thumbnail_key_own_prefix_check` (`0011`) bound both keys to `trips/<this trip>/photos/<this row>/…`, and `photos_lock_object_keys` (`0011`) stops either changing afterwards. The pair is what `r2-download-url` rests on: it signs the row's own stored key, so what may be stored is the whole of the invariant. |
 | **A caption is its own contributor's** | `photos_update_contributor` (`0006`) already restricted every UPDATE to the contributor, so `caption` (`0011`) needed no new policy. Worth watching refuse rather than assuming: `tests/rls_probe.py` does. |
 | **A member joining mid-trip sees every past day freely** | The *absence* of any day predicate in `photos_select_trip_member` (`0006`), plus the first branch of `day_page_is_open`: any day already finished on the trip's clock is open to every member. |
 | **Credit survives the person** | `profile_is_visible_to` (`0009`) resolves a name for anyone you travel with **or** anyone credited on a photo or trip in a trip you are in — because membership is exactly the thing that ends. |

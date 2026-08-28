@@ -89,8 +89,8 @@ actually reached, with those three arguments, over PostgREST. Unobserved.
 
 ## 4. Caller-supplied trip/day fields are ignored, and only the row's own key is signed
 
-**Verified offline — and see the finding below, which is about the stored key
-rather than about this function.**
+**Verified offline — and the finding below, which was about the stored key
+rather than about this function, is now CLOSED.**
 
 Three tests: the gate is asked about the row's trip and day rather than the
 request's; a body carrying `dayNumber`, `r2ObjectKey` and `userId` changes
@@ -99,33 +99,81 @@ signed); and the string handed to the signer is byte-for-byte the row's own
 `r2_object_key`. The handler's `DownloadPhotoRow` has exactly four fields, and
 they are the whole of what any decision is made from.
 
-**The finding.** "Only the row's own stored key is signed" is only as strong as
-what may be stored. `photos_insert_trip_member` (`0006`) places **no constraint
-on `r2_object_key`**: a member may insert a row for their own trip claiming any
-key that is not already taken. `unique` stops them claiming a key another
-`photos` row holds — so no other photograph can be stolen this way — but a
-`day_pages` key lives in a different table under a different unique index, and
-nothing stops a `photos` row pointing at one. The download function would then
-sign it, correctly, as that row's own key.
+### The finding, and what closed it
 
-It is guess-bounded rather than open: day-page keys are built from ids that
-never leave the trip they belong to, so the only composites reachable are ones
-the caller could already read. It is still a weaker invariant than the sentence
-above reads, and closing it is one line —
+**The finding, as written.** "Only the row's own stored key is signed" is only
+as strong as what may be stored. `photos_insert_trip_member` (`0006`) placed
+**no constraint on `r2_object_key`**: a member could insert a row for their own
+trip claiming any key that was not already taken. `unique` stopped them
+claiming a key another `photos` row held — so no other photograph could be
+stolen that way — but a `day_pages` key lives in a different table under a
+different unique index, and nothing stopped a `photos` row pointing at one. The
+download function would then have signed it, correctly, as that row's own key.
+It was guess-bounded rather than open (day-page keys are built from ids that
+never leave the trip they belong to), but it was still a weaker invariant than
+the sentence above reads.
+
+`photos_lock_object_keys` (`0011`) had closed only the adjacent hole: it stops
+a key being *changed* after the fact, which matters because a key a caller can
+PATCH is caller input by another route. A BEFORE UPDATE trigger has no old row
+to compare against on INSERT, so it structurally could not constrain the first
+claim.
+
+**CLOSED** (captain's decision, 2026-08-28), by two CHECK constraints added to
+`0011_photo_transport.sql` beside that trigger — the same migration, because
+`0011` has not been applied anywhere:
 
 ```sql
-check (r2_object_key like 'trips/' || trip_id || '/photos/' || id || '/%')
+constraint photos_object_key_own_prefix_check check (
+  lower(r2_object_key)
+    like 'trips/' || trip_id::text || '/photos/' || id::text || '/%'
+)
+constraint photos_thumbnail_key_own_prefix_check check (
+  r2_thumbnail_key is null
+  or lower(r2_thumbnail_key)
+       like 'trips/' || trip_id::text || '/photos/' || id::text || '/%'
+)
 ```
 
-— which was deliberately **not** added here, because it changes what a
-legitimate insert may say and the client outbox being built in parallel would
-have to match it exactly. It is a decision, not an oversight, and it is the
-captain's to make.
+A row may now only claim a key inside its **own trip's, own id's** folder, so
+whatever the object behind it turns out to be, a signature over it can only
+ever hand back this row's own bytes. The shape is `r2-upload-url`'s
+`objectKeyFor` said in SQL — `trips/<trip_id>/photos/<photo_id>/<whatever>` —
+and the client outbox mints exactly that; everything past the prefix stays
+unconstrained, because naming the file is the upload function's business and a
+database that spelled out the extension list would need migrating per format.
 
-`photos_lock_object_keys` (`0011`) closes the adjacent hole and not this one:
-it stops a key being *changed* after the fact, which matters because a key a
-caller can PATCH is caller input by another route. It does not constrain the
-first claim.
+Three things that came with it and are worth knowing here:
+
+- **`r2_thumbnail_key` had the same class of free claim**, and it is stated
+  rather than skipped: nullable, `unique`, no shape, and it is the one column
+  the lock trigger deliberately leaves writable (filling it in later from null
+  is legitimate), so the CHECK is the only thing guarding it — on INSERT and on
+  that UPDATE. Nothing generates a thumbnail yet, which is exactly why the
+  constraint should exist before something does.
+- **`lower()` is a decision, not laziness.** This function's `UUID_RE` and
+  `r2-upload-url`'s both carry the `i` flag, so the upload function will sign a
+  key whose uuid segments are spelled in upper case, while `photos.id` and
+  `trip_id` are `uuid` columns and always render lower. A case-sensitive check
+  would take the PUT and *then* refuse the row: an orphaned object plus a retry
+  that re-mints the same rejected key forever. Normalising costs nothing — the
+  case of the literal segments is not a permission, and both spellings are
+  still bound to this trip and this id.
+- **`day_pages.r2_object_key` has the identical latent freedom and is
+  deliberately left alone.** Nothing signs a day-page key today: no composer
+  exists, and this function reads `photos` only. Constraining it now would be
+  guessing at a shape no writer has yet had to agree to.
+
+**The honest caveat.** This is proven against **the local test database only**.
+`supabase/tests/rls_probe.py` applies the migrations to a throwaway Postgres 17
+and watches a legitimate insert land and five shapes of foreign key be refused
+(another trip's folder, a co-member's photograph in the same trip, a day page,
+the folder itself, and the right folder with a prefix in front of it), plus the
+thumbnail column's refusal and its legitimate fill. No hosted project has this
+constraint — `0011` is applied nowhere — and nothing has ever watched R2 refuse
+a PUT for a key a row could not have claimed. The constraint is the database's
+half; that the client mints a conforming key is still unobserved outside its own
+unit tests.
 
 ## 5. Nonexistent id, malformed id, oversize batch — refused without error-text leakage
 
@@ -216,7 +264,7 @@ gap said a different way, and one deployment closes both.
 | 1 | Non-member refused, indistinguishable from nonexistent | shape offline; refusal unobserved |
 | 2 | Cross-trip id refused | shape offline; refusal unobserved |
 | 3 | Shut day refused inside a mixed batch | offline + local SQL; wiring unobserved |
-| 4 | Caller's trip/day/key ignored; only the row's key signed | offline — **with a finding on what may be stored** |
+| 4 | Caller's trip/day/key ignored; only the row's key signed | offline + **local SQL — finding closed** |
 | 5 | Malformed, nonexistent, oversize — refused, no leakage | offline |
 | 6 | Expired URL rejected by R2 | unobserved, and unobservable here |
 | 7 | Reads route through `may_read_trip_photos` | structure local SQL; behaviour unobserved |
@@ -224,7 +272,9 @@ gap said a different way, and one deployment closes both.
 | 9 | No service-role key; reads as the caller | by reading |
 
 Four of the nine are closed as far as anything in this repository can close
-them (3 partially, 4, 5, 8, 9). Four are verified in shape and unobserved in
+them (3 partially, 4, 5, 8, 9) — and 4 is closed more firmly than it was, since
+the finding under it is now a constraint the local probe watches refuse rather
+than a decision left open. Four are verified in shape and unobserved in
 substance, all four waiting on the same thing: one scratch project where an RLS
 refusal can be watched happening. One (6) waits on a bucket.
 

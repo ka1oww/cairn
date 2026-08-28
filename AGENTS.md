@@ -594,6 +594,26 @@ Sharp edges worth knowing before touching this directory again:
   an outbox that inserted the row first would refuse its own retry. The two
   probe checks under *"a co-member can read what an upload URL is minted from"*
   pin the premise that a photo id is not a secret.
+- **A row may only point at its own object, and both halves of that are in
+  `0011`.** `photos_object_key_own_prefix_check` /
+  `photos_thumbnail_key_own_prefix_check` bound the *first* claim to
+  `lower(key) like 'trips/' || trip_id || '/photos/' || id || '/%'`, and the
+  `photos_lock_object_keys` trigger stops either key changing afterwards.
+  Neither is sufficient alone — a trigger has no old row on INSERT, and a
+  locked key that was free to be anything is a permanent theft rather than a
+  revocable one. This is what `r2-download-url`'s promise rests on: it signs
+  the row's own stored key, so what may be *stored* is the whole invariant, and
+  before the check a member could claim somebody else's `day_pages` key (a
+  different table, a different unique index) and have it signed faithfully.
+  Three things not to undo. The comparison is **case-insensitive on purpose**:
+  both functions' `UUID_RE` carries the `i` flag, so a strict check would take
+  the PUT and then refuse the row, stranding an object behind a retry that
+  re-mints the same rejected key forever. Everything past the prefix is
+  deliberately free, because naming the file is `objectKeyFor`'s business.
+  And the client must **mint the photo id itself** — a key containing the row's
+  own id cannot be written by a client waiting on `gen_random_uuid()`.
+  `day_pages.r2_object_key` has the identical latent freedom and is left alone
+  deliberately: nothing signs a day-page key yet.
 - **The download function signs the row's key and nothing else, and its four
   properties are load-bearing in order.** `r2-download-url` takes a trip and up
   to 64 photo ids and answers a verdict per id. (1) **The row decides**: every

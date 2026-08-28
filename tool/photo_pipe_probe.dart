@@ -591,6 +591,32 @@ class _Probe {
       detail: _say(row),
     );
 
+    // `r2-download-url` signs the row's own stored key, so what may be stored
+    // is the whole of that promise. `0011`'s
+    // `photos_object_key_own_prefix_check` is what makes it true, and the
+    // shape it refuses is the one the finding named: a day page's key, which
+    // lives in another table under another unique index and which no
+    // constraint on `photos` would otherwise have caught. Watched here rather
+    // than assumed, because the local probe drives SQL and this drives
+    // PostgREST -- a constraint the API layer swallowed would look identical
+    // to one that held.
+    final foreign = await _insertPhoto(
+      _contributor,
+      _trip,
+      PhotoId.mint(_bytes(16)),
+      dayNumber: _walkedDay,
+      objectKey:
+          'trips/${_trip.value}/pages/${PhotoId.mint(_bytes(16)).value}'
+          '.jpg',
+      byteSize: _frame.length,
+    );
+    transcript.check(
+      'and a row claiming a key outside its own folder is refused',
+      foreign.statusCode != 201 &&
+          foreign.body.contains('photos_object_key_own_prefix_check'),
+      detail: _say(foreign),
+    );
+
     // A second photograph, on a day still ahead, so a batch can hold one of
     // each and the gate has something to refuse.
     _futureDayPhoto = PhotoId.mint(_bytes(16));
