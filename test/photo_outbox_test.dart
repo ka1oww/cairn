@@ -111,7 +111,16 @@ class FakePool implements SharedFacts {
         '409: a photo with this id already exists',
       );
     }
-    final key = 'trips/${tripId.value}/photos/$photoId/original';
+    // The real mint's shape, byte for byte (`objectKeyFor` in
+    // `r2-upload-url/handler.ts`): `trips/<trip>/photos/<id>/original.<ext>`.
+    // The database now pins the prefix with a check constraint, so the fake
+    // minting anything else would be testing a server that cannot exist.
+    final ext = contentType == 'image/png'
+        ? 'png'
+        : contentType == 'image/heic'
+        ? 'heic'
+        : 'jpg';
+    final key = 'trips/${tripId.value}/photos/$photoId/original.$ext';
     return RemoteUploadTicket(
       uploadUrl: Uri.parse('https://r2.example/$key?signed=yes'),
       objectKey: key,
@@ -143,6 +152,21 @@ class FakePool implements SharedFacts {
       fail(
         'recordPhoto for ${photo.id} before its bytes landed at '
         '${photo.r2ObjectKey} — the bytes-first-row-second ordering is broken',
+      );
+    }
+    // The database's own rule on `photos.r2_object_key`, mirrored the way the
+    // claimed-id refusal is:
+    //   check (r2_object_key like 'trips/' || trip_id || '/photos/' || id || '/%')
+    // The phone never derives a key — it relays the ticket's — so a record
+    // failing this shape means something on the client path transformed or
+    // invented one, and the real insert would be rejected outright.
+    if (!photo.r2ObjectKey.startsWith(
+      'trips/${photo.tripId}/photos/${photo.id}/',
+    )) {
+      fail(
+        'recordPhoto for ${photo.id} names ${photo.r2ObjectKey}, which does '
+        "not match the database's trips/<trip_id>/photos/<id>/... constraint "
+        '— a key must be relayed from the mint, never derived on the phone',
       );
     }
     await onRecord?.call();
@@ -313,6 +337,36 @@ void main() {
       );
     });
 
+    test('the recorded key is in the shape the database now enforces, '
+        'relayed from the mint and never derived here', () async {
+      // `photos.r2_object_key` carries a check constraint:
+      //   check (r2_object_key like 'trips/' || trip_id || '/photos/' || id || '/%')
+      // A mismatched key is a rejected insert, not a cosmetic wart. The
+      // phone's half of the bargain is relaying the ticket's key verbatim
+      // (the derivation rule lives only in `r2-upload-url`), so the key
+      // that reaches the record must still spell the trip and the photo the
+      // way the mint did — this test fails if anything on the client path
+      // starts transforming or inventing keys, or if [FakePool]'s mint
+      // drifts from the settled shape.
+      final tripId = await startTrip();
+      await keepOne();
+
+      await driver().syncNow();
+
+      final row = pool.recorded['photo-1']!;
+      expect(
+        row.r2ObjectKey,
+        matches(
+          RegExp('^trips/${RegExp.escape(tripId.value)}/photos/photo-1/.+\$'),
+        ),
+      );
+      expect(
+        (await db.readOutboxRows()),
+        isEmpty,
+        reason: 'and the shape crossed cleanly — nothing was refused',
+      );
+    });
+
     test('the photo row and its outbox row are one transaction', () async {
       await startTrip();
       // Poison the second insert: an outbox row already holds the id the
@@ -403,7 +457,7 @@ void main() {
       // `queued`. Safe *because* no row exists yet — the claimed-id refusal
       // the fake mirrors cannot fire, which is the ordering rule earning its
       // keep a second time.
-      pool.objects['trips/${tripId.value}/photos/photo-1/original'] = List.of(
+      pool.objects['trips/${tripId.value}/photos/photo-1/original.jpg'] = List.of(
         frameBytes,
       );
 
@@ -418,7 +472,7 @@ void main() {
         'no bytes needed', () async {
       final tripId = await startTrip();
       await keepOne(word: 'kept word');
-      final key = 'trips/${tripId.value}/photos/photo-1/original';
+      final key = 'trips/${tripId.value}/photos/photo-1/original.jpg';
       await db.markOutboxUploaded(
         photoId: 'photo-1',
         r2ObjectKey: key,
@@ -443,7 +497,7 @@ void main() {
     test('record landed, ack lost: the replay is a silent success', () async {
       final tripId = await startTrip();
       await keepOne();
-      final key = 'trips/${tripId.value}/photos/photo-1/original';
+      final key = 'trips/${tripId.value}/photos/photo-1/original.jpg';
       await db.markOutboxUploaded(
         photoId: 'photo-1',
         r2ObjectKey: key,
@@ -478,7 +532,7 @@ void main() {
         'terminal, with the reason kept', () async {
       final tripId = await startTrip();
       await keepOne();
-      final key = 'trips/${tripId.value}/photos/photo-1/original';
+      final key = 'trips/${tripId.value}/photos/photo-1/original.jpg';
       await db.markOutboxUploaded(
         photoId: 'photo-1',
         r2ObjectKey: key,
