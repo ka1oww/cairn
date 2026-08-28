@@ -914,13 +914,13 @@ class AppDatabase extends _$AppDatabase {
   Future<List<OutboxItem>> readOutboxWork() async {
     final rows =
         await (select(photoOutbox).join([
-              innerJoin(photos, photos.id.equalsExp(photoOutbox.photoId)),
-            ])
-            ..where(photoOutbox.state.equals('refused').not())
-            ..orderBy([
-              OrderingTerm.asc(photos.takenAtUtcIso),
-              OrderingTerm.asc(photos.id),
-            ]))
+                innerJoin(photos, photos.id.equalsExp(photoOutbox.photoId)),
+              ])
+              ..where(photoOutbox.state.equals('refused').not())
+              ..orderBy([
+                OrderingTerm.asc(photos.takenAtUtcIso),
+                OrderingTerm.asc(photos.id),
+              ]))
             .get();
     return [
       for (final row in rows)
@@ -981,9 +981,7 @@ class AppDatabase extends _$AppDatabase {
         );
         return;
       }
-      await (delete(
-        photoOutbox,
-      )..where((t) => t.photoId.equals(photoId))).go();
+      await (delete(photoOutbox)..where((t) => t.photoId.equals(photoId))).go();
     });
   }
 

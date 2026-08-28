@@ -154,7 +154,10 @@ class PhotoSync {
     // outbox keeps pushing through it and only an archived trip stops the
     // pass cold. The server enforces the same line with its own clock, and
     // where the two disagree the server rules — relayed as `refused`.
-    final standing = tripStandingAt(now: now().toUtc(), endsAt: await _endsAt());
+    final standing = tripStandingAt(
+      now: now().toUtc(),
+      endsAt: await _endsAt(),
+    );
     if (!standing.takesPhotos) return;
 
     final work = await database.readOutboxWork();

@@ -477,9 +477,7 @@ void main() {
 
     test('a 4xx at the PUT kills the ticket, not the photograph', () async {
       final sync = facts(
-        MockClient(
-          (_) async => http.Response('SignatureDoesNotMatch', 403),
-        ),
+        MockClient((_) async => http.Response('SignatureDoesNotMatch', 403)),
       );
 
       await expectLater(
@@ -491,7 +489,8 @@ void main() {
             contains('SignatureDoesNotMatch'),
           ),
         ),
-        reason: 'expired signature or clock skew: mint afresh and retry, '
+        reason:
+            'expired signature or clock skew: mint afresh and retry, '
             'never refuse the photo',
       );
     });
@@ -626,7 +625,8 @@ void main() {
       await expectLater(
         sync.recordPhoto(photo()),
         throwsA(isA<SharedFactsRefused>()),
-        reason: 'the id is claimed and the claim is not this phone\'s; '
+        reason:
+            'the id is claimed and the claim is not this phone\'s; '
             'no retry changes that',
       );
     });

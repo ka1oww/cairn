@@ -107,7 +107,9 @@ class FakePool implements SharedFacts {
     // matrix's "PUT landed, 200 lost" row is safe precisely because no row
     // exists yet to make this fire.
     if (recorded.containsKey(photoId)) {
-      throw const SharedFactsRefused('409: a photo with this id already exists');
+      throw const SharedFactsRefused(
+        '409: a photo with this id already exists',
+      );
     }
     final key = 'trips/${tripId.value}/photos/$photoId/original';
     return RemoteUploadTicket(
@@ -229,11 +231,8 @@ void main() {
     frames.deleteSync(recursive: true);
   });
 
-  PhotoStore store({String Function()? mintId}) => PhotoStore(
-    db,
-    mintId: mintId ?? (() => 'photo-1'),
-    now: () => clock,
-  );
+  PhotoStore store({String Function()? mintId}) =>
+      PhotoStore(db, mintId: mintId ?? (() => 'photo-1'), now: () => clock);
 
   PhotoSync driver({Random? jitter}) => PhotoSync(
     database: db,
@@ -308,7 +307,8 @@ void main() {
       expect(
         await db.readOutboxRows(),
         isEmpty,
-        reason: 'terminal success is row deletion; an empty outbox means '
+        reason:
+            'terminal success is row deletion; an empty outbox means '
             'nothing pending',
       );
     });
@@ -403,8 +403,9 @@ void main() {
       // `queued`. Safe *because* no row exists yet — the claimed-id refusal
       // the fake mirrors cannot fire, which is the ordering rule earning its
       // keep a second time.
-      pool.objects['trips/${tripId.value}/photos/photo-1/original'] =
-          List.of(frameBytes);
+      pool.objects['trips/${tripId.value}/photos/photo-1/original'] = List.of(
+        frameBytes,
+      );
 
       await driver().syncNow();
 
@@ -466,7 +467,8 @@ void main() {
       expect(
         pool.recorded['photo-1'],
         same(already),
-        reason: 'ignore-duplicates: the first insert wins, the replay is a '
+        reason:
+            'ignore-duplicates: the first insert wins, the replay is a '
             'no-op',
       );
       expect(await db.readOutboxRows(), isEmpty);
@@ -517,11 +519,9 @@ void main() {
       pool.recordUnavailable = null;
       pool.calls.clear();
       await driver().syncNow();
-      expect(
-        pool.calls,
-        [('record', 'photo-1')],
-        reason: 'never re-mint once past the PUT',
-      );
+      expect(pool.calls, [
+        ('record', 'photo-1'),
+      ], reason: 'never re-mint once past the PUT');
       expect(await db.readOutboxRows(), isEmpty);
     });
   });
@@ -688,11 +688,11 @@ void main() {
         jitter: FixedRandom(0.0),
       ).syncNow();
       expect(
-        DateTime.parse(
-          (await db.readOutboxRows()).single.nextAttemptAtUtcIso,
-        ).difference(clock),
+        DateTime.parse((await db.readOutboxRows()).single.nextAttemptAtUtcIso)
+            .difference(clock),
         const Duration(seconds: 2880),
-        reason: '0.8 × 3600s: eight phones on one hotel wifi must not '
+        reason:
+            '0.8 × 3600s: eight phones on one hotel wifi must not '
             'retry in lockstep',
       );
     });
@@ -713,7 +713,8 @@ void main() {
       expect(
         pool.recorded,
         contains('photo-1'),
-        reason: 'the real deadline is the server\'s close-plus-grace, '
+        reason:
+            'the real deadline is the server\'s close-plus-grace, '
             'never an attempt count',
       );
     });
@@ -742,25 +743,28 @@ void main() {
       expect(await db.readOutboxRows(), isEmpty);
     });
 
-    test('a word written after the record follows as one caption push', () async {
-      final tripId = await startTrip();
-      await keepOne();
-      await deliver();
+    test(
+      'a word written after the record follows as one caption push',
+      () async {
+        final tripId = await startTrip();
+        await keepOne();
+        await deliver();
 
-      await store().writeWord(PhotoId('photo-1'), 'hindsight');
-      final debt = (await db.readOutboxRows()).single;
-      expect(debt.state, 'caption');
+        await store().writeWord(PhotoId('photo-1'), 'hindsight');
+        final debt = (await db.readOutboxRows()).single;
+        expect(debt.state, 'caption');
 
-      await driver().syncNow();
-      expect(pool.captions['photo-1'], 'hindsight');
-      expect(pool.calls.where((c) => c.$1 == 'caption'), hasLength(1));
-      expect(await db.readOutboxRows(), isEmpty);
-      expect(
-        pool.recorded['photo-1']!.tripId,
-        tripId.value,
-        reason: 'the photograph itself is untouched by its caption',
-      );
-    });
+        await driver().syncNow();
+        expect(pool.captions['photo-1'], 'hindsight');
+        expect(pool.calls.where((c) => c.$1 == 'caption'), hasLength(1));
+        expect(await db.readOutboxRows(), isEmpty);
+        expect(
+          pool.recorded['photo-1']!.tripId,
+          tripId.value,
+          reason: 'the photograph itself is untouched by its caption',
+        );
+      },
+    );
 
     test('two edits before the push collapse into one push, saying the '
         'later word', () async {
@@ -885,7 +889,8 @@ void main() {
       expect(
         pool.calls.length,
         before,
-        reason: 'the driver watches photo_outbox alone: applying a pull '
+        reason:
+            'the driver watches photo_outbox alone: applying a pull '
             'must never re-trigger the push',
       );
     });
@@ -961,7 +966,8 @@ void main() {
       expect(
         await upgraded.readOutboxRows(),
         isEmpty,
-        reason: 'no build that could capture has shipped; the migration '
+        reason:
+            'no build that could capture has shipped; the migration '
             'enqueues nothing',
       );
       expect((await upgraded.readSyncState()).photosUpdatedCursor, isNull);

@@ -823,8 +823,10 @@ Being honest about the edges:
   whose row insert never happens leaves an orphan object, invisible to every
   client and costing storage forever; a row whose upload never landed shows a
   broken tile to everyone; and deleting a `photos` row does not delete its R2
-  object. The sync should order the outbox upload-then-insert, and a
-  periodic sweep should reconcile objects against rows in both directions.
+  object. The client outbox now orders upload-then-insert
+  (`lib/repositories/photo_sync.dart`), which prevents the second case; a
+  periodic sweep to reconcile objects against rows in both directions is
+  still unbuilt.
 - **No handling for a trip's last member leaving.** If the person who started
   a trip removes themselves, nobody can remove anyone else afterwards; the
   trip is otherwise fully usable. Worth a product answer before it happens.

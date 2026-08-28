@@ -251,7 +251,9 @@ class PostgrestSharedFacts implements SharedFacts {
           if (photo.tripDayIso != null) 'trip_day': photo.tripDayIso,
           if (photo.caption != null) 'caption': photo.caption,
         },
-        headers: const {'Prefer': 'resolution=ignore-duplicates,return=minimal'},
+        headers: const {
+          'Prefer': 'resolution=ignore-duplicates,return=minimal',
+        },
       );
     } on SharedFactsRefused {
       // The refusal may be about a row that is already there — a replay the
