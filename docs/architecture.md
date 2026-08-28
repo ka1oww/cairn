@@ -108,8 +108,8 @@ phone nobody has signed into. The **itinerary and the roster are now shared
 facts** (grill round one §2): the schema holds them, and `TripSync`
 (`lib/repositories/itinerary_sync.dart`) reconciles them last-write-wins per
 day, over a first slice of the Supabase adapter that speaks PostgREST. That
-whole path is now **live**: a hosted project exists with every migration
-applied, an ordinary build points at it by default, and the phone signs in as a
+whole path is now **live**: a hosted project exists with migrations `0001`
+through `0010` applied, an ordinary build points at it by default, and the phone signs in as a
 GoTrue anonymous account — the stand-in until Sign in with Apple lands
 (`supabase/README.md`). The pool is still
 local: nobody else's bytes arrive until Phase 2. **A trip now ends** as well as
