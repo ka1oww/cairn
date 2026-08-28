@@ -7,12 +7,13 @@
 // else. The only band allowed to import it is `repositories/`, which is the
 // one layer that knows both backends exist.
 //
-// **What a shared fact is.** Three things move: the trip's own row (its name
-// and who started it), the roster, and the itinerary. Nothing else does. The
-// trail, the stars, the gate and the ping schedule are computed on the phone
-// and must never move server-side without a deliberate decision (AGENTS.md);
-// storing a shared fact is not computing on the server
-// (docs/decisions/2026-08-22-grill-round-one.md §2).
+// **What a shared fact is.** Four things move: the trip's own row (its name
+// and who started it), the roster, the itinerary, and the photographs —
+// which were the founding shared fact all along; the pool is the product.
+// Nothing else does. The trail, the stars, the gate and the ping schedule
+// are computed on the phone and must never move server-side without a
+// deliberate decision (AGENTS.md); storing a shared fact is not computing on
+// the server (docs/decisions/2026-08-22-grill-round-one.md §2).
 //
 // **Nothing here holds a secret.** [SharedFactsConfig] still reads the project
 // URL and the publishable anon key out of `--dart-define`s; what changed on
@@ -24,6 +25,8 @@
 // service-role key and the database password are a different kind of thing
 // and must never appear here, in a define, or anywhere else in this
 // repository.
+import 'dart:typed_data';
+
 import 'package:cairn_model/cairn_model.dart';
 
 /// Where the backend is, if there is one.
@@ -138,6 +141,23 @@ class SharedFactsRefused implements Exception {
 
   @override
   String toString() => 'SharedFactsRefused: $reason';
+}
+
+/// The object store said no to a PUT — which is the opposite of what a
+/// refusal means everywhere else, and why this is its own type rather than a
+/// [SharedFactsRefused].
+///
+/// A 4xx at the presigned PUT almost always means the *ticket* died — its
+/// five minutes ran out, or a clock skewed — not that the photograph is
+/// unwelcome. The outbox answers it by minting a fresh ticket and trying
+/// again on its backoff; surrendering here would terminally refuse a
+/// photograph over a slow lift lobby.
+class UploadTicketRejected implements Exception {
+  final String reason;
+  const UploadTicketRejected(this.reason);
+
+  @override
+  String toString() => 'UploadTicketRejected: $reason';
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +314,100 @@ class RemoteTripDraft {
   });
 }
 
+/// One row of the trip's shared photo index, spelled as the wire spells it.
+///
+/// The *index* and never the image: the bytes live in the object store under
+/// [r2ObjectKey], and a row exists only once they do — bytes first, row
+/// second is the seam's ordering rule (docs/architecture.md, "The outbox").
+class RemotePhoto {
+  /// Dashed lower-case uuid, minted on the phone (`mintPhotoId`).
+  final String id;
+
+  final String tripId;
+  final String contributorId;
+
+  /// Where the bytes are. **Server-derived**: the upload ticket named it and
+  /// the phone carried it, because the key-derivation rule lives in
+  /// `r2-upload-url` and a second copy could drift.
+  final String r2ObjectKey;
+
+  final String contentType;
+  final int byteSize;
+
+  /// Pixel dimensions, when known. This slice sends null — nothing decodes
+  /// the frame at enqueue.
+  final int? width, height;
+
+  /// When it was taken, as a UTC instant. Null tolerated on a pull.
+  final String? capturedAtIso;
+
+  final double? capturedLatitude, capturedLongitude;
+  final String? captureTimezone;
+
+  /// The photograph's home (`photo-day-key`, settled): the 1-based day of
+  /// the plan. **Always present** — a photo is taken on a day whether or not
+  /// that day has a date, and uploading never waits on one.
+  final int dayNumber;
+
+  /// The derived calendar view of [dayNumber], or null while that day's date
+  /// is still open. Along for the ride, never the identity.
+  final String? tripDayIso;
+
+  /// The capture word (`caption-travels`, settled): single-owner, the
+  /// contributor's latest write wins, no conflict machinery.
+  final String? caption;
+
+  /// The server's `updated_at` — the pull cursor's clock. Ignored on a push:
+  /// the server's touch trigger owns it.
+  final String updatedAtIso;
+
+  const RemotePhoto({
+    required this.id,
+    required this.tripId,
+    required this.contributorId,
+    required this.r2ObjectKey,
+    required this.contentType,
+    required this.byteSize,
+    this.width,
+    this.height,
+    this.capturedAtIso,
+    this.capturedLatitude,
+    this.capturedLongitude,
+    this.captureTimezone,
+    required this.dayNumber,
+    this.tripDayIso,
+    this.caption,
+    required this.updatedAtIso,
+  });
+}
+
+/// A short-lived, single-object, write-only permission to land one
+/// photograph's bytes.
+///
+/// **A bearer capability, and never persisted**: it lives five minutes, so
+/// the outbox mints one per attempt and a crash simply lets it expire
+/// harmlessly. [contentType] and [byteSize] are the two facts the signature
+/// covers — the PUT must repeat exactly these, or the store refuses it.
+class RemoteUploadTicket {
+  final Uri uploadUrl;
+
+  /// Where the bytes will live — the fact the phone keeps once the PUT
+  /// lands, since the eventual [RemotePhoto] row must name it.
+  final String objectKey;
+
+  final String contentType;
+  final int byteSize;
+  final DateTime expiresAt;
+
+  const RemoteUploadTicket({
+    required this.uploadUrl,
+    required this.objectKey,
+    required this.contentType,
+    required this.byteSize,
+    required this.expiresAt,
+  });
+}
+
 /// The backend, as one interface.
 ///
 /// Nothing above `repositories/` may name it, and nothing in the app outside
@@ -334,5 +448,56 @@ abstract interface class SharedFacts {
     required List<RemoteDay> days,
     required DateTime pocketRevisedAt,
     required List<RemoteSetAside> setAside,
+  });
+
+  /// Mints a ticket to land one photograph's bytes.
+  ///
+  /// Wraps `r2-upload-url`, which checks membership and the trip's close as
+  /// the caller before it signs anything. [byteSize] is required because the
+  /// signature covers it — a PUT of any other length is refused by the store
+  /// rather than by anyone who could explain.
+  ///
+  /// A [SharedFactsRefused] here is terminal for the photograph: not a
+  /// member, the trip closed past its grace, or the id already claimed by a
+  /// row — and the ordering rule is what makes that last refusal cost the
+  /// retry path nothing, because a retry of an upload that never landed
+  /// happens while no row exists.
+  Future<RemoteUploadTicket> photoUploadTicket({
+    required TripId tripId,
+    required String photoId,
+    required String contentType,
+    required int byteSize,
+  });
+
+  /// Lands the bytes the ticket was minted for.
+  ///
+  /// Bytes, not a stream: a median original is ~3 MB
+  /// (`docs/storage-and-cost.md`, measured) and fits in memory without
+  /// ceremony. Idempotent by construction — re-PUTting identical bytes to
+  /// the same immutable key is how a lost 200 replays safely. Throws
+  /// [UploadTicketRejected] when the store says no, which the caller answers
+  /// with a fresh ticket, never with surrender.
+  Future<void> putPhotoBytes(RemoteUploadTicket ticket, Uint8List bytes);
+
+  /// Inserts the photo's index row — the second half of the ordering, only
+  /// ever called once the bytes have landed.
+  ///
+  /// Idempotent: an insert that finds its row already there is a silent
+  /// success, so a crash between the insert landing and its ack replays as a
+  /// no-op. That is what closes the crash matrix, and it is safe *because*
+  /// the ticket mint refuses claimed ids — nobody else's bytes can be behind
+  /// this phone's id.
+  Future<void> recordPhoto(RemotePhoto photo);
+
+  /// Rewrites the caption on this phone's own photo row, or clears it.
+  ///
+  /// Single-owner by the policy that already exists (`photos` UPDATE is
+  /// contributor-only), so "the owner's latest write wins" needs nothing
+  /// beyond the row's own `updated_at` touch. No per-field clock, no
+  /// editable-shared-field machinery — deliberately.
+  Future<void> writePhotoCaption({
+    required TripId tripId,
+    required String photoId,
+    required String? caption,
   });
 }

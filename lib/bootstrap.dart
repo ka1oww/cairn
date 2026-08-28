@@ -20,6 +20,7 @@ import 'app_state/trip_providers.dart';
 import 'repositories/itinerary_sync.dart';
 import 'repositories/membership_repository.dart';
 import 'repositories/photo_repository.dart';
+import 'repositories/photo_sync.dart';
 import 'repositories/plan_draft_repository.dart';
 import 'repositories/trip_repository.dart';
 import 'storage/drift/app_database.dart';
@@ -142,9 +143,18 @@ Widget bootstrapApp({
 TripSync? _startSharedFactsSync(AppDatabase db, SessionSource sessions) {
   const config = SharedFactsConfig.fromEnvironment;
   if (!config.isConfigured || sessions is NoSession) return null;
+  final facts = PostgrestSharedFacts(config: config, sessions: sessions);
+  // The photographs' own push loop, beside the plan's and under the same
+  // guard, sharing one adapter (and so one HTTP client). It exposes nothing
+  // upward — no provider, no stream — so this call is the only place the
+  // app knows it exists.
+  PhotoSync(
+    database: db,
+    facts: facts,
+  ).start(pollEvery: const Duration(minutes: 2));
   return TripSync(
     database: db,
-    facts: PostgrestSharedFacts(config: config, sessions: sessions),
+    facts: facts,
     tripRow: tripRowFor(_tripTimeZoneOfThisPhone),
   )..start(pollEvery: const Duration(minutes: 2));
 }

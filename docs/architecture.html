@@ -405,26 +405,27 @@
   <div class="chips">
     <i>photos out: read-only interface</i>
     <i>photos in: one Drift store</i>
-    <i>outbox: bytes first, row second</i>
+    <i>outbox: bytes first, row second — built, photo_sync.dart pushes it</i>
     <i>day_pages insert → update fallback</i>
     <i>deletions need refetch</i>
     <i>package dialects → vocabulary</i>
     <i>itinerary in and out</i>
     <i>shared facts reconcile: last write wins, per day</i>
     <i>standings out: the one stream that crosses upward</i>
-    <i class="open">photo sync &amp; conflict policy undecided</i>
+    <i>caption: single-owner, latest write wins</i>
+    <i class="open">photo pull &amp; byte fetch not built</i>
   </div>
 </div>
 
 <!-- ======================= storage ======================= -->
 <div class="node partial" style="left:150px;top:805px;width:410px;height:120px">
   <span class="chip">partial</span><h4>Drift store — local SQLite</h4>
-  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Holds the itinerary tables (days, stops, set-aside lines), <code>photos</code> — the local index whose bytes sit beside it on disk, the same split as Postgres and R2 — the trip: <code>trip_facts</code>, <code>trip_members</code> (no role column, ever) and <code>trip_invite_codes</code> (no expiry column; a code dies with its trip) — and <code>plan_drafts</code>, the paste box's pending import, local-only and never synced. Schema v7; the trip_drafts demo is dropped, v5 gives a trip written before the mint a real uuid, v6 adds every day's merge clock plus <code>sync_states</code> &mdash; the cursor into the shared copy, and the one table here holding no shared fact &mdash; and v7 adds <code>plan_drafts</code> so an imported plan survives the process before it is accepted. <code>trip_facts.trip_id</code> is minted here on the phone &mdash; the counterpart of <code>trips.id</code>'s <code>default gen_random_uuid()</code>, moved so a trip can be started with no connection.</p>
+  <p>Typed tables, real joins, watchable queries — the streams that make the UI reactive. Native backend on iOS. Holds the itinerary tables (days, stops, set-aside lines), <code>photos</code> — the local index whose bytes sit beside it on disk, the same split as Postgres and R2 — the trip: <code>trip_facts</code>, <code>trip_members</code> (no role column, ever) and <code>trip_invite_codes</code> (no expiry column; a code dies with its trip) — and <code>plan_drafts</code>, the paste box's pending import, local-only and never synced. Schema v7; the trip_drafts demo is dropped, v5 gives a trip written before the mint a real uuid, v6 adds every day's merge clock plus <code>sync_states</code> &mdash; the cursor into the shared copy, and the one table here holding no shared fact &mdash; and v7 adds <code>plan_drafts</code> so an imported plan survives the process before it is accepted, and v8 the photographs' <code>photo_outbox</code> (with <code>photos.file_path</code> loosened for rows whose bytes live on another phone, <code>content_type</code> for the upload to sign, and the pull's cursor on <code>sync_states</code>). <code>trip_facts.trip_id</code> is minted here on the phone &mdash; the counterpart of <code>trips.id</code>'s <code>default gen_random_uuid()</code>, moved so a trip can be started with no connection.</p>
   <span class="sub">choice validated in the demo, built on, and recorded in docs/decisions/2026-08-25-riverpod-and-drift.md</span>
 </div>
 <div class="node partial" style="left:800px;top:805px;width:410px;height:120px">
   <span class="chip">partial</span><h4>Supabase / R2 client adapter</h4>
-  <p>Session JWT, RLS-filtered queries, edge-function calls, presigned byte transfers — behind one interface. Nothing else in the app may import a network symbol. Built: the shared facts' half (<code>lib/storage/remote/</code>), plain HTTP over PostgREST, and auth beside it &mdash; <code>GotrueSessions</code> keeps a GoTrue <b>anonymous</b> account, which is the <code>auth.uid()</code> every policy reads. Not built: Sign in with Apple (the real identity route), the edge functions, R2. Where the project lives is still a <code>--dart-define</code>, but as an <i>override</i>: it defaults to the hosted project's URL and its <b>publishable</b> anon key, both checked in. The invariant that survived is narrower &mdash; no <i>secret</i> is ever checked in, never a <code>service_role</code> key or the database password. Overridden to empty, it refuses before sending anything.</p>
+  <p>Session JWT, RLS-filtered queries, edge-function calls, presigned byte transfers — behind one interface. Nothing else in the app may import a network symbol. Built: the shared facts' half (<code>lib/storage/remote/</code>), plain HTTP over PostgREST, auth beside it &mdash; <code>GotrueSessions</code> keeps a GoTrue <b>anonymous</b> account, which is the <code>auth.uid()</code> every policy reads &mdash; and the photo push half: the upload-ticket mint, the raw presigned PUT (the one request that must carry <b>no</b> Supabase header), and the idempotent <code>photos</code> insert; proven against a fake, never a live bucket. Not built: Sign in with Apple (the real identity route), the download path. Where the project lives is still a <code>--dart-define</code>, but as an <i>override</i>: it defaults to the hosted project's URL and its <b>publishable</b> anon key, both checked in. The invariant that survived is narrower &mdash; no <i>secret</i> is ever checked in, never a <code>service_role</code> key or the database password. Overridden to empty, it refuses before sending anything.</p>
 </div>
 
 <!-- ======================= backend ======================= -->
@@ -434,7 +435,7 @@
 
 <div class="node partial" style="left:700px;top:1030px;width:180px;height:128px">
   <span class="chip">partial</span><h4>r2-upload-url</h4>
-  <p>Re-checks membership, mints a 5-min PUT. Written, never deployed.</p>
+  <p>Re-checks membership, mints a 5-min PUT. Written, never deployed; the phone's outbox now mints through it.</p>
 </div>
 <div class="node partial" style="left:950px;top:1030px;width:180px;height:128px">
   <span class="chip">partial</span><h4>r2-download-url</h4>

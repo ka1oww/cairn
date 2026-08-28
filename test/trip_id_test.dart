@@ -61,6 +61,24 @@ Future<void> windBackToV4(AppDatabase db) async {
   await db.customStatement(
     'ALTER TABLE itinerary_days DROP COLUMN revised_at_utc_iso',
   );
+  // v8 gave photographs an outbox and loosened `photos` itself; the column
+  // it added cannot be dropped in place any more than it could be added, so
+  // the table is rebuilt in its v4 shape (`file_path` not null, no
+  // `content_type`).
+  await db.customStatement('DROP TABLE photo_outbox');
+  await db.customStatement(
+    'CREATE TABLE photos_v4 ('
+    'id TEXT NOT NULL, day_number INTEGER NOT NULL, '
+    'contributor_id TEXT NOT NULL, taken_at_utc_iso TEXT NOT NULL, '
+    'origin TEXT NOT NULL, word TEXT, file_path TEXT NOT NULL, '
+    'PRIMARY KEY (id))',
+  );
+  await db.customStatement(
+    'INSERT INTO photos_v4 SELECT id, day_number, contributor_id, '
+    'taken_at_utc_iso, origin, word, file_path FROM photos',
+  );
+  await db.customStatement('DROP TABLE photos');
+  await db.customStatement('ALTER TABLE photos_v4 RENAME TO photos');
   await db.customStatement('PRAGMA user_version = 4');
 }
 

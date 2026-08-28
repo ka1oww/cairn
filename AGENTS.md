@@ -216,8 +216,9 @@ import what is written there, not here.
   membership to another phone, and the join door says so rather than
   spinning.
 - **The itinerary and the roster are shared facts, and the seam is what makes
-  them shared.** `lib/repositories/itinerary_sync.dart` is the one file holding
-  both backends at once: it pushes this phone's plan, applies what the merge
+  them shared.** `lib/repositories/itinerary_sync.dart` and its deliberate
+  sibling `photo_sync.dart` (the outbox bullet, below) are the only two files
+  holding both backends at once. The itinerary half pushes this phone's plan, applies what the merge
   hands back, and replaces the roster wholesale (RLS means the server only
   answers a member, so the roster it returns necessarily contains the caller;
   a merge that kept a local row would resurrect somebody who left and deal
@@ -408,7 +409,28 @@ import what is written there, not here.
   been run against each other. `test/photo_id_format_test.dart` reads the
   function's own `UUID_RE` out of its source and compares, rather than keeping
   a third copy.
-- **There is one day screen and no separate day detail.** Today is
+- **A kept photograph durably leaves the phone: bytes first, row second,
+  never the reverse.** `lib/repositories/photo_sync.dart` (whose header holds
+  the full rationale) drives the `photo_outbox` table (schema v8) that
+  `PhotoStore.keep` fills in the same transaction as the photo row; the
+  durable states — `queued`, `uploaded`, `caption`, `refused` — are exactly
+  the places a kill can leave you, and `test/photo_outbox_test.dart` replays
+  each. Four rules to keep. The driver watches `photo_outbox` and **never
+  `photos`**, so the pull (unbuilt) can apply rows without re-triggering the
+  push. An upload ticket is minted per attempt, never persisted, and **never
+  re-minted once a PUT has returned 200** — past that line the `photos` row
+  may land any moment and a row's existence is what makes `r2-upload-url`
+  refuse the id. `SharedFactsUnavailable` stops the whole pass with no
+  per-item penalty, `UploadTicketRejected` re-queues with backoff (attempts
+  never terminate; the server's close-plus-grace is the real deadline,
+  relayed as `refused`), `SharedFactsRefused` is terminal. And uploading
+  never requires a dated day — the photo's home is its day *number*, so no
+  form ever stands in front of the camera; a plan nobody dated still
+  publishes, `trip_day` simply null. The caption is a single-owner field
+  (latest write by the contributor wins, no conflict machinery): it rides
+  the record when still pending, else `PhotoStore.writeWord` queues one
+  `caption` push, and `settleOutboxPushed` converts rather than deletes when
+  the word moved mid-flight. Today is
   `DayPage(date:)` handed today's date; the Trail opens the same widget for
   every node, through `DayPage.planDay(n)`. Two ways in, one screen: the
   number is the only way to reach a day whose date is still open, since

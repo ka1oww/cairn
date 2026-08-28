@@ -235,7 +235,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final row = (await db.readPhotos()).single;
-      final onDisk = File(row.filePath);
+      // The column is nullable for rows whose bytes live on another phone;
+      // a row capture just wrote always has a path, and a null here should
+      // fail as loudly as a missing file would.
+      final onDisk = File(row.filePath!);
       expect(
         onDisk.existsSync(),
         isTrue,
@@ -284,7 +287,7 @@ void main() {
       final row = (await db.readPhotos()).single;
       expect(camera.written, hasLength(2));
       expect(
-        File(row.filePath).readAsBytesSync(),
+        File(row.filePath!).readAsBytesSync(),
         camera.written[row.filePath],
         reason: 'the kept frame is not the second frame, byte for byte',
       );

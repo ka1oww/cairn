@@ -117,15 +117,21 @@ starting (`fm/cairn-trip-end`): seventy-two hours of grace for late
 photographs, then it is a record — uploads shut on both sides of the seam,
 codes die, the sheet stops offering what it cannot do, the plan cannot be
 replaced and the sync goes quiet. No archive *presentation* was built; the
-book and the handover are still after the line. Everything else between the
+book and the handover are still after the line. **The photographs have begun
+to leave the phone** (`fm/cairn-photo-s1-outbox`): capture now enqueues every
+kept frame in a durable outbox (schema v8) and `PhotoSync`
+(`lib/repositories/photo_sync.dart`) pushes it — bytes to R2 through a
+`r2-upload-url` ticket first, the `photos` row second — surviving a kill and a
+dead network. Push half only: nothing pulls, so nobody else's bytes arrive
+until the pull lands, and the whole path is proven against a fake server
+(nothing has exercised it against a live bucket). Everything else between the
 screens and the packages — photos on the day page and the Trail, the import
-sweep, the rest of the platform glue, the R2 half of the adapter — is still
-**not built**, and the right edge has moved only where the Supabase half is
-concerned: a hosted Supabase project exists with migrations `0001`-`0010`
-applied (`0011`, the photo transport delta, is not applied anywhere but the
-local probe; the adversarial RLS suite still runs only against a local
-Postgres), but no R2 bucket has been created and no photo byte moves between
-phones.
+sweep, the rest of the platform glue, the download half of the adapter — is
+still **not built**, and the right edge has moved where the Supabase half is
+concerned: a hosted Supabase project exists with all eleven migrations applied
+(`0011`, the photo transport delta, included; the adversarial RLS suite still
+runs only against a local Postgres), but no R2 bucket has been created and no
+photo byte yet arrives on another phone.
 `lib/README.md` spells this map's bands as directories — read it alongside
 this file.
 
@@ -177,12 +183,15 @@ lives nowhere else:
 - **The outbox.** Upload bytes to R2 first, insert the `photos` row second, so
   a crash between the two leaves an orphan object (invisible, reconcilable)
   rather than a broken tile (visible to everyone). `supabase/README.md` names
-  this ordering; nothing implements it yet. The ordering is now load-bearing
-  in a second way: `r2-upload-url` refuses to sign a photo id a `photos` row
-  already holds, so the row is what closes an original to further writes. A
-  retry of an upload that never landed happens while no row exists and is
-  still signed — but an outbox that inserted the row first would refuse its
-  own retry.
+  this ordering, and `lib/repositories/photo_sync.dart` now implements it:
+  `PhotoStore.keep` writes the photo row and its `photo_outbox` row in one
+  transaction, and the driver walks `queued → uploaded → gone`, one item at a
+  time, oldest first, with every durable state a place a kill can leave you.
+  The ordering is load-bearing in a second way: `r2-upload-url` refuses to
+  sign a photo id a `photos` row already holds, so the row is what closes an
+  original to further writes. A retry of an upload that never landed happens
+  while no row exists and is still signed — but an outbox that inserted the
+  row first would refuse its own retry.
 - **Conflict fallbacks.** Two phones composing the same `day_pages` row: the
   second insert violates `unique (trip_id, page_date)` and must fall back to
   an update. The schema refuses to pick a winner; the repository must.
@@ -193,7 +202,9 @@ lives nowhere else:
   `trip_moments`' assignments) are converted into the vocabulary here — at one seam,
   not scattered through widgets.
 - **The shared facts' reconcile.** `itinerary_sync.dart` is the first of the
-  above to be built. It is the one file that holds both backends at once: it
+  above to be built — and `photo_sync.dart`, the outbox's driver, is now its
+  deliberate sibling rather than a lodger inside it: those two files are the
+  only ones that hold both backends at once. `itinerary_sync.dart`
   reads the plan and the roster out of Drift, pushes them through the adapter,
   applies what comes back, and reports a standing rather than an error —
   dormant, no trip, awaiting the trip row, offline, refused, archived,
@@ -362,7 +373,7 @@ nothing about pings fired or who has answered today.
 | --- | --- | --- | --- | --- |
 | **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (145-probe RLS suite); **applied to the hosted project 2026-08-26**, where only the permitted paths have been walked (one account, so no refusal observed there); starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos` (day-numbered since `0011`, and captioned), `day_unlocks` (likewise), `photo_tombstones`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `may_read_trip_photos`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check, and every *photo* read reaches it through `may_read_trip_photos` — one seat, so the leaver rule lands in one place. |
 | **Supabase Auth (GoTrue)** | partial — **anonymous accounts are live** on the hosted project and are how the phone signs in (`gotrue_sessions.dart`); Apple and Google are dashboard steps and are not enabled | (platform service) | Postgres (`auth.uid()` in every policy), client adapter, edge functions | Accounts. Sign in with Apple first; display name editable at join because providers supply legal names. |
-| **`r2-upload-url` edge fn** | partial — code exists and its decisions are now tested offline (`handler_test.ts`), never deployed | Postgres (re-checks membership, the trip's close, and whether a `photos` row already claims this id — all as the caller), R2 (mints a 5-minute presigned PUT, bounded to a declared type and size) | The only write path for photo bytes | Exists solely because the R2 secret cannot live in the app binary. Split in two on purpose: `handler.ts` decides and imports nothing remote, `index.ts` builds the clients — which is the only way an edge function nothing has deployed can be exercised at all. |
+| **`r2-upload-url` edge fn** | partial — code exists and its decisions are now tested offline (`handler_test.ts`), never deployed; **the phone now calls it** (`photoUploadTicket` in the adapter, driven by the outbox), so far only against a fake | Postgres (re-checks membership, the trip's close, and whether a `photos` row already claims this id — all as the caller), R2 (mints a 5-minute presigned PUT, bounded to a declared type and size) | The only write path for photo bytes — and the outbox's whole retry story leans on its flat refusal of a claimed id | Exists solely because the R2 secret cannot live in the app binary. Split in two on purpose: `handler.ts` decides and imports nothing remote, `index.ts` builds the clients — which is the only way an edge function nothing has deployed can be exercised at all. |
 | **`r2-download-url` edge fn** | partial — code exists and its refusals are tested offline (`handler_test.ts`), never deployed and never run against a project | Postgres, all as the caller: it reads each `photos` row through RLS (so authorisation is *inherited* from `may_read_trip_photos`, never re-decided) and calls `day_page_is_open(trip, day number, uid)` **before** signing, R2 (a 15-minute presigned GET) | The gate itself: a version that skips the check is the single worst potential leak in the app | The bucket is private; every read needs a signature; gating the signature is what makes the shut gate real rather than a curtain. Batched, with a verdict per id and **no reason attached to a refusal** — a reason would map the corpus. It signs only the row's own stored `r2_object_key`; a trip, day or key named by the caller is not read at all — and since `0011` a row may only *store* a key inside its own `trips/<trip>/photos/<id>/` folder (`photos_object_key_own_prefix_check`), which is what makes that sentence an invariant rather than a convention. Same split as the upload function, for the same reason. |
 | **Cloudflare R2** | not built — bucket not created, so no byte has ever moved and neither function has ever been run; plan settled, and the authorisation shape settled on 2026-08-28 as the time-limited signed link (no Worker proxy, no R2 binding) | nothing | Both edge functions — the PUT bounded to a declared type and size, the GET bounded to 15 minutes; the app's byte transfers; the 10 GB free tier is a real ceiling, and the only line in the backend that ever bills — measured in [docs/storage-and-cost.md](storage-and-cost.md) | Photo bytes and day-page composites at zero egress. Holds **originals**, untouched; a derived variant may sit beside one but never replaces it. Postgres is the index; R2 is never listed — the `photos` row *is* the pointer. |
 
@@ -525,9 +536,12 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   undecided for everything else.** The two shared facts reconcile
   last-write-wins per day with no conflict UI and no CRDT — a deliberate
   choice, and it costs what last-write-wins always costs: a phone with a fast
-  clock wins edits it should lose. Photos still have only three written notes
-  (outbox ordering, `day_pages` insert→update fallback, deletion refetch), and
-  no reconciliation of rows against R2 objects exists in any direction.
+  clock wins edits it should lose. Of the photos' three written notes, the
+  outbox ordering is now built (the push half, `photo_sync.dart`; the caption
+  is a single-owner field whose latest write wins, no conflict machinery);
+  the `day_pages` insert→update fallback and the deletion refetch remain
+  notes, and no reconciliation of rows against R2 objects exists in any
+  direction.
 - **The shared facts' sync is live on an ordinary build — since 27 August 2026
   and not before — and one test is the only thing that says so.** It was
   written, tested and correct for weeks while a `String.fromEnvironment` with
