@@ -142,32 +142,40 @@ jobs:
         working-directory: supabase/tests
         run: python3 recursion_mechanism.py
 
-  # The edge function's refusals, run without deploying it -- which matters
+  # Each edge function's refusals, run without deploying it -- which matters
   # because nothing in this repository has ever been deployed, so this job is
-  # the only thing standing behind any decision `r2-upload-url` makes. It is
-  # possible at all because the function is split: handler.ts holds the
+  # the only thing standing behind any decision either function makes. It is
+  # possible at all because both are split the same way: handler.ts holds the
   # decisions and imports nothing remote, index.ts holds the clients. The
   # `deno check --no-remote` step is what keeps that split honest -- it fails
-  # the moment the handler grows an import of supabase-js or aws4fetch, which
+  # the moment a handler grows an import of supabase-js or aws4fetch, which
   # would put its refusals back out of reach.
   #
-  # Neither step deploys anything, reads a secret, or touches the hosted
-  # Supabase project.
+  # The matrix is discovered by hand rather than globbed, unlike
+  # discover-packages above: a function without a handler_test.ts should fail
+  # review, not silently skip a leg here.
+  #
+  # No step deploys anything, reads a secret, or touches the hosted Supabase
+  # project.
   edge-function-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        function: [r2-upload-url, r2-download-url]
     steps:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
       - name: The handler decides nothing that needs a network
-        working-directory: supabase/functions/r2-upload-url
+        working-directory: supabase/functions/${{ matrix.function }}
         run: deno check --no-remote handler.ts
-      - name: What r2-upload-url refuses
-        working-directory: supabase/functions/r2-upload-url
+      - name: What ${{ matrix.function }} refuses
+        working-directory: supabase/functions/${{ matrix.function }}
         run: deno test handler_test.ts
       - name: The deployed entry point still type-checks against its clients
-        working-directory: supabase/functions/r2-upload-url
+        working-directory: supabase/functions/${{ matrix.function }}
         run: deno check index.ts
 
   # The application at the repository root: Drift codegen (lib/**/*.g.dart

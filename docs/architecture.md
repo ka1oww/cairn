@@ -121,9 +121,11 @@ book and the handover are still after the line. Everything else between the
 screens and the packages — photos on the day page and the Trail, the import
 sweep, the rest of the platform glue, the R2 half of the adapter — is still
 **not built**, and the right edge has moved only where the Supabase half is
-concerned: a hosted Supabase project exists with all ten migrations applied
-(the adversarial RLS suite still runs only against a local Postgres), but no
-R2 bucket has been created and no photo byte moves between phones.
+concerned: a hosted Supabase project exists with migrations `0001`-`0010`
+applied (`0011`, the photo transport delta, is not applied anywhere but the
+local probe; the adversarial RLS suite still runs only against a local
+Postgres), but no R2 bucket has been created and no photo byte moves between
+phones.
 `lib/README.md` spells this map's bands as directories — read it alongside
 this file.
 
@@ -358,11 +360,11 @@ nothing about pings fired or who has answered today.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (113-probe RLS suite); **applied to the hosted project 2026-08-26**, where only the permitted paths have been walked (one account, so no refusal observed there); starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos`, `day_unlocks`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check. |
+| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (145-probe RLS suite); **applied to the hosted project 2026-08-26**, where only the permitted paths have been walked (one account, so no refusal observed there); starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos` (day-numbered since `0011`, and captioned), `day_unlocks` (likewise), `photo_tombstones`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `may_read_trip_photos`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check, and every *photo* read reaches it through `may_read_trip_photos` — one seat, so the leaver rule lands in one place. |
 | **Supabase Auth (GoTrue)** | partial — **anonymous accounts are live** on the hosted project and are how the phone signs in (`gotrue_sessions.dart`); Apple and Google are dashboard steps and are not enabled | (platform service) | Postgres (`auth.uid()` in every policy), client adapter, edge functions | Accounts. Sign in with Apple first; display name editable at join because providers supply legal names. |
 | **`r2-upload-url` edge fn** | partial — code exists and its decisions are now tested offline (`handler_test.ts`), never deployed | Postgres (re-checks membership, the trip's close, and whether a `photos` row already claims this id — all as the caller), R2 (mints a 5-minute presigned PUT, bounded to a declared type and size) | The only write path for photo bytes | Exists solely because the R2 secret cannot live in the app binary. Split in two on purpose: `handler.ts` decides and imports nothing remote, `index.ts` builds the clients — which is the only way an edge function nothing has deployed can be exercised at all. |
-| **`r2-download-url` edge fn** | **not built** — requirements settled in `supabase/README.md` | Postgres (**must call `day_page_is_open` before signing**), R2 (presigned GET) | The gate itself: a version that skips the check is the single worst potential leak in the app | The bucket is private; every read needs a signature; gating the signature is what makes the shut gate real rather than a curtain. |
-| **Cloudflare R2** | not built — bucket not created; plan settled | nothing | Both edge functions; the app's byte transfers; the 10 GB free tier is a real ceiling, and the only line in the backend that ever bills — measured in [docs/storage-and-cost.md](storage-and-cost.md) | Photo bytes and day-page composites at zero egress. Holds **originals**, untouched; a derived variant may sit beside one but never replaces it. Postgres is the index; R2 is never listed — the `photos` row *is* the pointer. |
+| **`r2-download-url` edge fn** | partial — code exists and its refusals are tested offline (`handler_test.ts`), never deployed and never run against a project | Postgres, all as the caller: it reads each `photos` row through RLS (so authorisation is *inherited* from `may_read_trip_photos`, never re-decided) and calls `day_page_is_open(trip, day number, uid)` **before** signing, R2 (a 15-minute presigned GET) | The gate itself: a version that skips the check is the single worst potential leak in the app | The bucket is private; every read needs a signature; gating the signature is what makes the shut gate real rather than a curtain. Batched, with a verdict per id and **no reason attached to a refusal** — a reason would map the corpus. It signs only the row's own stored `r2_object_key`; a trip, day or key named by the caller is not read at all — and since `0011` a row may only *store* a key inside its own `trips/<trip>/photos/<id>/` folder (`photos_object_key_own_prefix_check`), which is what makes that sentence an invariant rather than a convention. Same split as the upload function, for the same reason. |
+| **Cloudflare R2** | not built — bucket not created, so no byte has ever moved and neither function has ever been run; plan settled, and the authorisation shape settled on 2026-08-28 as the time-limited signed link (no Worker proxy, no R2 binding) | nothing | Both edge functions — the PUT bounded to a declared type and size, the GET bounded to 15 minutes; the app's byte transfers; the 10 GB free tier is a real ceiling, and the only line in the backend that ever bills — measured in [docs/storage-and-cost.md](storage-and-cost.md) | Photo bytes and day-page composites at zero egress. Holds **originals**, untouched; a derived variant may sit beside one but never replaces it. Postgres is the index; R2 is never listed — the `photos` row *is* the pointer. |
 
 ### Platform edges — the camera and the document picker wired; the rest not built
 
@@ -410,8 +412,10 @@ a "change one, change all" edge:
    rule is `cairn_model.GateState.decide` — `Trip.gateFor` answers with it for
    a whole trip, and the app's `lib/app_state/day_gate.dart` answers with it
    for the one-phone slice that has no roster to build a `Trip` from. On the
-   server: `day_page_is_open` in SQL, which the download function must call
-   before signing a GET. Change what opens a day and both must move together,
+   server: `day_page_is_open` in SQL, keyed on `(trip, day number, user)`
+   since `0011` — a photograph's day is its *number*, not its date, so a day
+   whose date is still open still gates — which `r2-download-url` calls before
+   signing a GET. Change what opens a day and both must move together,
    or the phone will show what the server refuses (or worse, the reverse). A
    *third* copy — one in the Pool, one on the day page, one on the Trail — is
    the thing to refuse in review. The rule, since round one: the gate applies
@@ -509,9 +513,14 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   another phone. Until Phase 2 lands that, a well-formed code for somebody
   else's trip gets a written "Cairn cannot reach it yet", and the roster on
   this phone holds exactly one person.
-- **The download path does not exist.** Only uploads are built. The
-  requirements (sign nothing without `day_page_is_open`) are written down,
-  which is exactly why the blank is the map's most dangerous one.
+- **The download path exists in code and has never run.** `r2-download-url`
+  is written and its refusals are exercised offline, but there is no bucket,
+  no deployment and no project it has been pointed at, so not one of them has
+  been *observed*. `tool/photo_pipe_probe.dart` is the harness that would
+  observe them — three real accounts over the real stack, which is the only
+  place an RLS refusal has ever been watchable — and it is unrun for the same
+  reason. Written-and-unrun is a smaller blank than not-built, and it is still
+  the map's most dangerous one.
 - **Sync and conflict policy is settled for the itinerary and the roster, and
   undecided for everything else.** The two shared facts reconcile
   last-write-wins per day with no conflict UI and no CRDT — a deliberate
@@ -624,8 +633,8 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   Free-tier limits section is the authority on it. (CI exists since #13 and covers the
   packages, the JS-safety golden, the RLS probe, the learning demo and the app.)
 - **The hosted Supabase project is real; a real R2 bucket still is not.**
-  All ten migrations are applied to the hosted project and an ordinary build
-  points at it, but only the permitted paths have ever been walked there — the
+  Migrations `0001`-`0010` are applied to the hosted project and an ordinary
+  build points at it (`0011` is applied nowhere but the local probe), but only the permitted paths have ever been walked there — the
   adversarial verification (the RLS probe) still runs against a throwaway
   local Postgres, and must keep running there. No R2 bucket exists.
 
