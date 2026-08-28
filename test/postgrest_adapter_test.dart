@@ -15,6 +15,7 @@
 // found on a phone in another country.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cairn_model/cairn_model.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -359,5 +360,321 @@ void main() {
         );
       },
     );
+  });
+
+  group('the upload ticket is minted at the function, as the caller', () {
+    test('the mint carries the session and every field the handler '
+        'demands', () async {
+      // `r2-upload-url/handler.ts` requires all four, and signs the content
+      // length into the URL — a mint without it produces a ticket no PUT can
+      // honour. These key spellings are the handler's, letter for letter.
+      late http.Request seen;
+      final sync = facts(
+        MockClient((request) async {
+          seen = request;
+          return http.Response(
+            jsonEncode({
+              'uploadUrl':
+                  'https://r2.example/trips/${trip.value}/photos/photo-9/original.jpg?X-Amz-Signature=abc',
+              'objectKey': 'trips/${trip.value}/photos/photo-9/original.jpg',
+              'expiresInSeconds': 300,
+            }),
+            200,
+          );
+        }),
+      );
+
+      final before = DateTime.now().toUtc();
+      final ticket = await sync.photoUploadTicket(
+        tripId: trip,
+        photoId: 'photo-9',
+        contentType: 'image/jpeg',
+        byteSize: 12345,
+      );
+
+      expect(seen.url.path, '/functions/v1/r2-upload-url');
+      expect(seen.method, 'POST');
+      expect(seen.headers['apikey'], 'publishable-anon-key');
+      expect(seen.headers['Authorization'], 'Bearer jwt-for-anna');
+      final body = jsonDecode(seen.body) as Map<String, dynamic>;
+      expect(body, {
+        'tripId': trip.value,
+        'photoId': 'photo-9',
+        'contentType': 'image/jpeg',
+        'contentLength': 12345,
+      });
+      expect(
+        ticket.objectKey,
+        'trips/${trip.value}/photos/photo-9/original.jpg',
+      );
+      expect(ticket.uploadUrl.queryParameters, contains('X-Amz-Signature'));
+      expect(ticket.contentType, 'image/jpeg');
+      expect(ticket.byteSize, 12345);
+      expect(
+        ticket.expiresAt.difference(before).inSeconds,
+        inInclusiveRange(295, 305),
+        reason: 'expiresInSeconds: 300, counted from the mint',
+      );
+    });
+
+    test('a refusal at the mint is no, and terminal', () async {
+      // Not a member, the trip closed, the id claimed: the handler's 4xxs
+      // all mean the *photograph* is unwelcome, unlike a 4xx at the PUT.
+      final sync = facts(
+        MockClient(
+          (_) async => http.Response('{"error":"trip is closed"}', 403),
+        ),
+      );
+
+      await expectLater(
+        sync.photoUploadTicket(
+          tripId: trip,
+          photoId: 'photo-9',
+          contentType: 'image/jpeg',
+          byteSize: 1,
+        ),
+        throwsA(isA<SharedFactsRefused>()),
+      );
+    });
+  });
+
+  group('the PUT is the other transport, and shares nothing', () {
+    final ticket = RemoteUploadTicket(
+      uploadUrl: Uri.parse(
+        'https://r2.example/trips/t/photos/p/original.jpg?X-Amz-Signature=abc',
+      ),
+      objectKey: 'trips/t/photos/p/original.jpg',
+      contentType: 'image/jpeg',
+      byteSize: 4,
+      expiresAt: DateTime.utc(2027, 6, 15, 12, 5),
+    );
+    final bytes = Uint8List.fromList([1, 2, 3, 4]);
+
+    test('signed URL, exact content type, whole body — and no Supabase '
+        'headers at all', () async {
+      // The URL's query signature *is* the authorization; an S3-dialect
+      // store refuses a request carrying an Authorization header besides.
+      // And aws4fetch signed the exact Content-Type and Content-Length into
+      // that signature, so both must be what was minted, byte for byte.
+      late http.Request seen;
+      final sync = facts(
+        MockClient((request) async {
+          seen = request;
+          return http.Response('', 200);
+        }),
+      );
+
+      await sync.putPhotoBytes(ticket, bytes);
+
+      expect(seen.method, 'PUT');
+      expect(seen.url, ticket.uploadUrl);
+      expect(seen.headers.containsKey('apikey'), isFalse);
+      expect(seen.headers.containsKey('Authorization'), isFalse);
+      expect(seen.headers['Content-Type'], 'image/jpeg');
+      expect(seen.bodyBytes, bytes);
+      expect(seen.contentLength, bytes.length);
+    });
+
+    test('a 4xx at the PUT kills the ticket, not the photograph', () async {
+      final sync = facts(
+        MockClient((_) async => http.Response('SignatureDoesNotMatch', 403)),
+      );
+
+      await expectLater(
+        sync.putPhotoBytes(ticket, bytes),
+        throwsA(
+          isA<UploadTicketRejected>().having(
+            (e) => e.reason,
+            'reason',
+            contains('SignatureDoesNotMatch'),
+          ),
+        ),
+        reason:
+            'expired signature or clock skew: mint afresh and retry, '
+            'never refuse the photo',
+      );
+    });
+
+    test('a 5xx at the store is later', () async {
+      final sync = facts(
+        MockClient((_) async => http.Response('InternalError', 500)),
+      );
+
+      await expectLater(
+        sync.putPhotoBytes(ticket, bytes),
+        throwsA(isA<SharedFactsUnavailable>()),
+      );
+    });
+
+    test('no route to the store is later too', () async {
+      final sync = facts(
+        MockClient((_) async => throw const SocketException('no route')),
+      );
+
+      await expectLater(
+        sync.putPhotoBytes(ticket, bytes),
+        throwsA(isA<SharedFactsUnavailable>()),
+      );
+    });
+  });
+
+  group('the photo row is spelled the way the table reads it', () {
+    RemotePhoto photo({String contributor = anna}) => RemotePhoto(
+      id: 'photo-9',
+      tripId: trip.value,
+      contributorId: contributor,
+      r2ObjectKey: 'trips/${trip.value}/photos/photo-9/original.jpg',
+      contentType: 'image/jpeg',
+      byteSize: 12345,
+      capturedAtIso: '2027-06-14T09:00:00.000Z',
+      dayNumber: 1,
+      tripDayIso: '2027-06-14',
+      caption: 'first light',
+      updatedAtIso: '2027-06-15T12:00:00.000Z',
+    );
+
+    test('an idempotent insert: on_conflict, ignore-duplicates, and the '
+        'column spellings', () async {
+      late http.Request seen;
+      final sync = facts(
+        MockClient((request) async {
+          seen = request;
+          return http.Response('', 201);
+        }),
+      );
+
+      await sync.recordPhoto(photo());
+
+      expect(seen.url.path, '/rest/v1/photos');
+      expect(seen.url.queryParameters['on_conflict'], 'id');
+      expect(
+        seen.headers['Prefer'],
+        'resolution=ignore-duplicates,return=minimal',
+      );
+      final body = jsonDecode(seen.body) as Map<String, dynamic>;
+      expect(body['id'], 'photo-9');
+      expect(body['trip_id'], trip.value);
+      expect(body['contributor_id'], anna);
+      expect(
+        body['r2_object_key'],
+        'trips/${trip.value}/photos/photo-9/original.jpg',
+      );
+      expect(body['content_type'], 'image/jpeg');
+      expect(body['byte_size'], 12345);
+      expect(body['captured_at'], '2027-06-14T09:00:00.000Z');
+      expect(body['day_number'], 1);
+      expect(body['trip_day'], '2027-06-14');
+      expect(body['caption'], 'first light');
+      expect(
+        body.containsKey('updated_at'),
+        isFalse,
+        reason: "the server's touch trigger owns updated_at",
+      );
+      expect(
+        body.containsKey('width'),
+        isFalse,
+        reason: 'an absent dimension is absent, not null',
+      );
+    });
+
+    test('a refused insert whose row turns out to be mine is a silent '
+        'success', () async {
+      // The replay that ignore-duplicates could not swallow: the row landed,
+      // the ack was lost, and the retry's insert bounced. One read-back
+      // settles it.
+      final paths = <String>[];
+      final sync = facts(
+        MockClient((request) async {
+          paths.add('${request.method} ${request.url.path}');
+          if (request.method == 'POST') {
+            return http.Response('{"message":"duplicate key"}', 409);
+          }
+          expect(request.url.queryParameters['id'], 'eq.photo-9');
+          return http.Response(
+            jsonEncode([
+              {'id': 'photo-9', 'contributor_id': anna},
+            ]),
+            200,
+          );
+        }),
+      );
+
+      await sync.recordPhoto(photo());
+
+      expect(paths, ['POST /rest/v1/photos', 'GET /rest/v1/photos']);
+    });
+
+    test("a refused insert over somebody else's row stays refused", () async {
+      final sync = facts(
+        MockClient((request) async {
+          if (request.method == 'POST') {
+            return http.Response('{"message":"duplicate key"}', 409);
+          }
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'photo-9',
+                'contributor_id': 'b0000000-0000-4000-8000-000000000002',
+              },
+            ]),
+            200,
+          );
+        }),
+      );
+
+      await expectLater(
+        sync.recordPhoto(photo()),
+        throwsA(isA<SharedFactsRefused>()),
+        reason:
+            'the id is claimed and the claim is not this phone\'s; '
+            'no retry changes that',
+      );
+    });
+  });
+
+  group('the caption is a patch on the caller\'s own row', () {
+    test('both filters, the one column, and no row asked back', () async {
+      late http.Request seen;
+      final sync = facts(
+        MockClient((request) async {
+          seen = request;
+          return http.Response('', 204);
+        }),
+      );
+
+      await sync.writePhotoCaption(
+        tripId: trip,
+        photoId: 'photo-9',
+        caption: 'hindsight',
+      );
+
+      expect(seen.method, 'PATCH');
+      expect(seen.url.path, '/rest/v1/photos');
+      expect(seen.url.queryParameters['id'], 'eq.photo-9');
+      expect(seen.url.queryParameters['trip_id'], 'eq.${trip.value}');
+      expect(seen.headers['Prefer'], 'return=minimal');
+      expect(jsonDecode(seen.body), {'caption': 'hindsight'});
+    });
+
+    test('clearing the word sends an explicit null, not an empty '
+        'patch', () async {
+      late http.Request seen;
+      final sync = facts(
+        MockClient((request) async {
+          seen = request;
+          return http.Response('', 204);
+        }),
+      );
+
+      await sync.writePhotoCaption(
+        tripId: trip,
+        photoId: 'photo-9',
+        caption: null,
+      );
+
+      final body = jsonDecode(seen.body) as Map<String, dynamic>;
+      expect(body.containsKey('caption'), isTrue);
+      expect(body['caption'], isNull);
+    });
   });
 }

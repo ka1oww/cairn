@@ -13,9 +13,11 @@
 //   may name a concrete implementation.
 // - **The write side is one concrete store.** [PhotoStore] is the Drift-backed
 //   implementation: it answers the read interface *and* owns keeping a frame
-//   and writing a word. When the Supabase/R2 adapter is built it is consumed
-//   here — the outbox ordering the map names (bytes to R2 first, row second)
-//   belongs in this class and nowhere else.
+//   and writing a word. Keeping a frame now also files the debt to push it —
+//   the outbox row — in the same transaction, so a photograph cannot exist
+//   locally without its promise to leave. The pushing itself is
+//   `photo_sync.dart`'s, which is where the outbox ordering the map names
+//   (bytes to R2 first, row second) actually runs.
 //
 // Dialect translation happens here as it does for the itinerary: rows go up
 // as `cairn_model` vocabulary (`PhotoRef`) and come down as plain records, so
@@ -108,6 +110,23 @@ String mintPhotoId() {
   return PhotoId.mint([for (var i = 0; i < 16; i++) random.nextInt(256)]).value;
 }
 
+/// The frame's MIME type, read off its file name — one of the three types
+/// the pool accepts (`r2-upload-url`'s allowlist).
+///
+/// Extension-based on purpose: every frame reaching [PhotoStore.keep] was
+/// written by this repository's own code — `package:camera`'s JPEG on a
+/// device, the generated PNG stand-in elsewhere, HEIC if the camera path
+/// ever writes it — so the extension is this app's own word, not a
+/// stranger's. The upload signs the string and the PUT must repeat it
+/// exactly. An import sweep taking arbitrary files is the moment this must
+/// learn to sniff magic bytes instead.
+String contentTypeOfFrame(String filePath) {
+  final lower = filePath.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.heic')) return 'image/heic';
+  return 'image/jpeg';
+}
+
 /// The photo pool with a store behind it: the read interface above, plus the
 /// write path capture answers the ping through.
 ///
@@ -117,11 +136,14 @@ String mintPhotoId() {
 /// between the two features at all.
 class PhotoStore implements PhotoRepository {
   /// [mintId] exists for tests, which pin the ids so an assertion can name
-  /// one; every other caller takes the random minter.
-  PhotoStore(this._db, {this.mintId = mintPhotoId});
+  /// one; every other caller takes the random minter. [now] likewise: it
+  /// stamps when a queued push is due, and a test pins it so backoff
+  /// assertions can name an instant.
+  PhotoStore(this._db, {this.mintId = mintPhotoId, this.now = DateTime.now});
 
   final AppDatabase _db;
   final PhotoIdMinter mintId;
+  final DateTime Function() now;
 
   /// Every photo on this phone, oldest first.
   ///
@@ -152,6 +174,12 @@ class PhotoStore implements PhotoRepository {
   /// line is stored as no word at all, because silence is the default the
   /// capture sheet is shaped around and an empty string is not a shorter
   /// sentence — it is the absence of one.
+  ///
+  /// Keeping writes **two rows in one transaction**: the photo and its
+  /// outbox row, due immediately. A crash between the two would be a
+  /// photograph that silently never leaves this phone, and no ordering of
+  /// separate writes closes that — so there is deliberately no path that
+  /// inserts one without the other.
   Future<PooledPhoto> keep({
     required int dayNumber,
     required MemberId contributor,
@@ -168,7 +196,7 @@ class PhotoStore implements PhotoRepository {
       origin: origin,
     );
     final kept = word == null || word.trim().isEmpty ? null : word;
-    await _db.insertPhoto((
+    await _db.insertPhotoWithOutbox((
       id: ref.id.value,
       dayNumber: ref.dayNumber,
       contributorId: ref.contributor.value,
@@ -176,7 +204,8 @@ class PhotoStore implements PhotoRepository {
       origin: ref.origin.name,
       word: kept,
       filePath: filePath,
-    ));
+      contentType: contentTypeOfFrame(filePath),
+    ), nowUtcIso: now().toUtc().toIso8601String());
     return PooledPhoto(ref: ref, localPath: filePath, word: kept);
   }
 
@@ -185,10 +214,18 @@ class PhotoStore implements PhotoRepository {
   /// The line stays writable on your own print until the trip closes
   /// (design round 10, `18c`); *whose* print may be written on is a rule
   /// for the band above, not for the store.
-  Future<void> writeWord(PhotoId id, String? word) => _db.updatePhotoWord(
-    id: id.value,
-    word: word == null || word.trim().isEmpty ? null : word,
-  );
+  ///
+  /// A word on a photo that has already crossed owes the server a caption
+  /// push, and this is where that debt is filed (the store decides, because
+  /// only the store can see the outbox in the same transaction as the word).
+  /// A photo still queued needs nothing — the record insert reads the word
+  /// at record time — and one still refused stays refused.
+  Future<void> writeWord(PhotoId id, String? word) =>
+      _db.updatePhotoWordAndQueueCaption(
+        id: id.value,
+        word: word == null || word.trim().isEmpty ? null : word,
+        nowUtcIso: now().toUtc().toIso8601String(),
+      );
 
   static PooledPhoto _toPhoto(Photo row) => PooledPhoto(
     ref: PhotoRef(

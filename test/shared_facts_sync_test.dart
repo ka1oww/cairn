@@ -22,6 +22,7 @@
 // not about any screen, and nothing above the seam knows it exists.
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cairn_model/cairn_model.dart';
 import 'package:drift/drift.dart' show DatabaseConnection;
@@ -155,6 +156,33 @@ class FakeServer implements SharedFacts {
           setAside: setAside,
         );
   }
+
+  // The photo half of the seam is never spoken to by TripSync — these tests
+  // are about the plan and the roster — so reaching any of it here is a
+  // wrong number, not a stub to fill in. The photo outbox has its own fake
+  // (`test/photo_outbox_test.dart`).
+  @override
+  Future<RemoteUploadTicket> photoUploadTicket({
+    required TripId tripId,
+    required String photoId,
+    required String contentType,
+    required int byteSize,
+  }) => throw UnimplementedError('TripSync never mints an upload ticket');
+
+  @override
+  Future<void> putPhotoBytes(RemoteUploadTicket ticket, Uint8List bytes) =>
+      throw UnimplementedError('TripSync never uploads bytes');
+
+  @override
+  Future<void> recordPhoto(RemotePhoto photo) =>
+      throw UnimplementedError('TripSync never records a photo');
+
+  @override
+  Future<void> writePhotoCaption({
+    required TripId tripId,
+    required String photoId,
+    required String? caption,
+  }) => throw UnimplementedError('TripSync never writes a caption');
 }
 
 /// The plan as it arrives back from the server, spelled the way the RPC
@@ -1169,6 +1197,23 @@ void main() {
       await db.customStatement(
         'ALTER TABLE itinerary_days DROP COLUMN revised_at_utc_iso',
       );
+      // v8's additions go too: the outbox table, and the shape of `photos`
+      // itself — rebuilt as v5 had it (`file_path` not null, no
+      // `content_type`), since a dropped column cannot be undone in place.
+      await db.customStatement('DROP TABLE photo_outbox');
+      await db.customStatement(
+        'CREATE TABLE photos_v5 ('
+        'id TEXT NOT NULL, day_number INTEGER NOT NULL, '
+        'contributor_id TEXT NOT NULL, taken_at_utc_iso TEXT NOT NULL, '
+        'origin TEXT NOT NULL, word TEXT, file_path TEXT NOT NULL, '
+        'PRIMARY KEY (id))',
+      );
+      await db.customStatement(
+        'INSERT INTO photos_v5 SELECT id, day_number, contributor_id, '
+        'taken_at_utc_iso, origin, word, file_path FROM photos',
+      );
+      await db.customStatement('DROP TABLE photos');
+      await db.customStatement('ALTER TABLE photos_v5 RENAME TO photos');
       await db.customStatement('PRAGMA user_version = 5');
     }
 

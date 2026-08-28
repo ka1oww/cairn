@@ -182,6 +182,7 @@ void main() {
     // Wind the phone back to the itinerary slice's schema: everything a
     // later version added has to go, not only the version number, or the
     // upgrade re-adds what is already there.
+    await before.customStatement('DROP TABLE photo_outbox');
     await before.customStatement('DROP TABLE photos');
     await before.customStatement('DROP TABLE sync_states');
     await before.customStatement(

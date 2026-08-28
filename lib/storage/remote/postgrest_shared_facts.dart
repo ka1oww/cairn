@@ -13,6 +13,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cairn_model/cairn_model.dart';
 import 'package:http/http.dart' as http;
@@ -142,6 +143,157 @@ class PostgrestSharedFacts implements SharedFacts {
       },
     );
     return parseItinerary(response);
+  }
+
+  @override
+  Future<RemoteUploadTicket> photoUploadTicket({
+    required TripId tripId,
+    required String photoId,
+    required String contentType,
+    required int byteSize,
+  }) async {
+    final auth = await _demand();
+    // An edge function, not PostgREST, but the same transport: JSON up, JSON
+    // back, the session as the caller. `_send`'s 4xx→Refused mapping is
+    // right here — every refusal the function makes (not a member, trip
+    // closed, id claimed, bad input) is terminal for the photograph.
+    final response = await _send(
+      'POST',
+      '/functions/v1/r2-upload-url',
+      auth,
+      body: {
+        'tripId': tripId.value,
+        'photoId': photoId,
+        'contentType': contentType,
+        'contentLength': byteSize,
+      },
+    );
+    final body = response is Map<String, dynamic>
+        ? response
+        : throw SharedFactsRefused(
+            'the upload function returned ${response.runtimeType}',
+          );
+    return RemoteUploadTicket(
+      uploadUrl: Uri.parse(body['uploadUrl'] as String),
+      objectKey: body['objectKey'] as String,
+      contentType: contentType,
+      byteSize: byteSize,
+      expiresAt: DateTime.now().toUtc().add(
+        Duration(seconds: (body['expiresInSeconds'] as num).toInt()),
+      ),
+    );
+  }
+
+  @override
+  Future<void> putPhotoBytes(RemoteUploadTicket ticket, Uint8List bytes) async {
+    // The second transport path, and it must not share `_send`'s headers.
+    // The URL carries a query signature, and an S3-dialect store rejects a
+    // request bearing both that and an `Authorization` header — so no
+    // `apikey`, no bearer token. The `Content-Type` must be exactly the
+    // ticket's string and the body a known length, never chunked, because
+    // aws4fetch signed both headers into the URL (`r2-upload-url/index.ts`).
+    final request = http.Request('PUT', ticket.uploadUrl)
+      ..headers['Content-Type'] = ticket.contentType
+      ..bodyBytes = bytes;
+
+    final http.Response response;
+    try {
+      final streamed = await _client.send(request).timeout(timeout);
+      response = await http.Response.fromStream(streamed).timeout(timeout);
+    } on TimeoutException {
+      throw const SharedFactsUnavailable('the store did not answer in time');
+    } on SocketException catch (e) {
+      throw SharedFactsUnavailable('no route to the store: ${e.message}');
+    } on http.ClientException catch (e) {
+      throw SharedFactsUnavailable('the upload did not complete: ${e.message}');
+    }
+
+    if (response.statusCode >= 500) {
+      throw SharedFactsUnavailable('the store answered ${response.statusCode}');
+    }
+    // 4xx here is the *ticket* dying (expired signature, clock skew), not
+    // the photograph being unwelcome — the opposite of what `Refused` means
+    // everywhere else, so it gets its own type and the outbox mints afresh.
+    if (response.statusCode >= 400) {
+      throw UploadTicketRejected('${response.statusCode}: ${response.body}');
+    }
+  }
+
+  @override
+  Future<void> recordPhoto(RemotePhoto photo) async {
+    final auth = await _demand();
+    try {
+      // `ignore-duplicates` + `on_conflict=id` makes the insert idempotent:
+      // a crash between the row landing and its ack replays as a silent
+      // no-op instead of bouncing off the primary key. `updated_at` is
+      // deliberately not sent — the server's touch trigger owns it.
+      await _send(
+        'POST',
+        '/rest/v1/photos?on_conflict=id',
+        auth,
+        body: {
+          'id': photo.id,
+          'trip_id': photo.tripId,
+          'contributor_id': photo.contributorId,
+          'r2_object_key': photo.r2ObjectKey,
+          'content_type': photo.contentType,
+          'byte_size': photo.byteSize,
+          if (photo.width != null) 'width': photo.width,
+          if (photo.height != null) 'height': photo.height,
+          if (photo.capturedAtIso != null) 'captured_at': photo.capturedAtIso,
+          if (photo.capturedLatitude != null)
+            'captured_latitude': photo.capturedLatitude,
+          if (photo.capturedLongitude != null)
+            'captured_longitude': photo.capturedLongitude,
+          if (photo.captureTimezone != null)
+            'capture_timezone': photo.captureTimezone,
+          'day_number': photo.dayNumber,
+          if (photo.tripDayIso != null) 'trip_day': photo.tripDayIso,
+          if (photo.caption != null) 'caption': photo.caption,
+        },
+        headers: const {
+          'Prefer': 'resolution=ignore-duplicates,return=minimal',
+        },
+      );
+    } on SharedFactsRefused {
+      // The refusal may be about a row that is already there — a replay the
+      // ignore-duplicates path could not swallow. One read-back settles it:
+      // present and mine means recorded, and anything else re-raises the
+      // refusal as it stood. An `Unavailable` from the read-back propagates
+      // as itself, which is right — the caller retries from durable state.
+      final rows = _rows(
+        await _get(
+          '/rest/v1/photos?id=eq.${photo.id}'
+          '&select=id,contributor_id&limit=1',
+          auth,
+        ),
+      );
+      final mine =
+          rows.isNotEmpty &&
+          rows.first['contributor_id'] == photo.contributorId;
+      if (!mine) rethrow;
+    }
+  }
+
+  @override
+  Future<void> writePhotoCaption({
+    required TripId tripId,
+    required String photoId,
+    required String? caption,
+  }) async {
+    final auth = await _demand();
+    // A plain PATCH on the caller's own row; the UPDATE policy is
+    // contributor-only, which is the whole single-owner rule. RLS filters a
+    // row that is not the caller's to zero rows patched rather than raising,
+    // and that silence is fine: the outbox only owes captions for rows this
+    // phone recorded.
+    await _send(
+      'PATCH',
+      '/rest/v1/photos?id=eq.$photoId&trip_id=eq.${tripId.value}',
+      auth,
+      body: {'caption': caption},
+      headers: const {'Prefer': 'return=minimal'},
+    );
   }
 
   /// The function's return value, as the phone reads it.

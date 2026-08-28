@@ -15,8 +15,8 @@ imports are the arrows:
 
 `storage/`'s two directories are peers and neither imports the other. The
 seam above is the only layer that knows both exist — that is what
-`repositories/itinerary_sync.dart` is, and why it lives there rather than in
-either store. **Nothing outside `storage/remote/` may import an HTTP or
+`repositories/itinerary_sync.dart` and `repositories/photo_sync.dart` are,
+and why they live there rather than in either store. **Nothing outside `storage/remote/` may import an HTTP or
 Supabase symbol**, and **nothing anywhere may hold a secret**: the project URL
 and the publishable anon key are `--dart-define`s that default to the hosted
 project (`SharedFactsConfig.fromEnvironment`), which is why an ordinary build

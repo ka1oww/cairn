@@ -129,11 +129,78 @@ class Photos extends Table {
   /// construction and blank is the common answer (design round 10, `18a`).
   TextColumn get word => text().nullable()();
 
-  /// Where the bytes are on this device.
-  TextColumn get filePath => text()();
+  /// Where the bytes are on this device, or null when they are not here.
+  ///
+  /// Nullable since v8, because the pool is becoming shared: a row pulled
+  /// from another phone is a real photograph whose bytes have not been
+  /// fetched yet, and that is a permanent, legible state — not a defect
+  /// (`PooledPhoto.localPath` says the same thing one band up). Every photo
+  /// this phone captures still writes a path.
+  TextColumn get filePath => text().nullable()();
+
+  /// The frame's MIME type (`image/jpeg`, `image/heic`, `image/png`), or
+  /// null for a row written before v8.
+  ///
+  /// Filled at capture, because the upload needs it twice — the ticket signs
+  /// it and the PUT must repeat it exactly — and a pulled row needs it to
+  /// name its cache file's extension.
+  TextColumn get contentType => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// One photograph this phone still owes the shared pool — the outbox.
+///
+/// **The cursor, not the cargo**, exactly as [SyncStates] is for the plan: a
+/// [Photos] row stays a mirror of the shared fact, and what this phone has
+/// or has not managed to push lives here beside it. A photo with no row here
+/// is settled — either it crossed and the row was deleted, or it was never
+/// this phone's to push. That absence being the success state is deliberate:
+/// an empty outbox legibly means "nothing pending".
+///
+/// A durable state is exactly a place a crash can leave you. In-flight facts
+/// are not states: an upload ticket lives five minutes and is a bearer
+/// capability, so it is minted per attempt and **never written to disk**.
+class PhotoOutbox extends Table {
+  /// The photo this row is about.
+  TextColumn get photoId => text().references(Photos, #id)();
+
+  /// Where the push stands: `queued` (nothing is known to be durable
+  /// remotely), `uploaded` (a PUT returned 200; never re-mint past this),
+  /// `caption` (the row crossed but its word has changed since), or
+  /// `refused` (the server ruled; terminal, never retried).
+  TextColumn get state => text()();
+
+  /// How many attempts have failed. Drives the backoff and never
+  /// terminates: the real deadline is the server's own close-plus-grace
+  /// check, relayed as `refused` when passed.
+  IntColumn get attempts => integer().withDefault(const Constant(0))();
+
+  /// When the next attempt is due. Set to "now" at enqueue; pushed out by
+  /// the backoff on failure.
+  TextColumn get nextAttemptAtUtcIso => text()();
+
+  /// The object key the bytes landed under, set with `uploaded`.
+  ///
+  /// Persisted because it is part of what `uploaded` durably means — "the
+  /// bytes are at this key" — and the record insert must name it after a
+  /// crash. The ticket handed it over; the phone never derives a key of its
+  /// own, because the derivation rule lives in `r2-upload-url` and a second
+  /// copy here could drift.
+  TextColumn get r2ObjectKey => text().nullable()();
+
+  /// How many bytes landed, set with `r2ObjectKey` and for the same reason:
+  /// the record insert must say `byte_size`, and reading the file again
+  /// after a crash assumes a file the crash may have taken.
+  IntColumn get uploadedByteSize => integer().nullable()();
+
+  /// Why the last attempt failed, for a log or a test. **Never rendered** —
+  /// the `SyncOutcome.detail` rule.
+  TextColumn get lastError => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {photoId};
 }
 
 /// The trip itself: the facts that are true of it rather than of any one day.
@@ -271,6 +338,12 @@ class SyncStates extends Table {
   TextColumn get itinerarySyncedAtUtcIso => text().nullable()();
   TextColumn get rosterSyncedAtUtcIso => text().nullable()();
 
+  /// The photo pull's cursor: the highest `photos.updated_at` this phone has
+  /// applied, or null while it has never pulled. Written in v8 beside the
+  /// outbox because one migration beats two; nothing reads it until the pull
+  /// half is built.
+  TextColumn get photosUpdatedCursor => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -303,6 +376,7 @@ class PlanDrafts extends Table {
     ItineraryStops,
     ItinerarySetAsides,
     Photos,
+    PhotoOutbox,
     TripFacts,
     TripMembers,
     TripInviteCodes,
@@ -319,11 +393,16 @@ class AppDatabase extends _$AppDatabase {
   final TripId Function() mint;
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (m, from, to) async {
+      // `createTable` builds a table in the *current* schema, so a table
+      // created by an earlier branch of this very upgrade must not have a
+      // later branch retrofit columns it was born with.
+      var photosBornCurrent = false;
+      var syncStatesBornCurrent = false;
       if (from < 2) {
         // v1 was the scaffold's single disposable trip_drafts row: a
         // draft with no trip id at all, which is the sidestep
@@ -339,6 +418,7 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 3) {
         await m.createTable(photos);
+        photosBornCurrent = true;
       }
       if (from < 4) {
         await m.createTable(tripFacts);
@@ -390,6 +470,7 @@ class AppDatabase extends _$AppDatabase {
         // record of what it has told a server.
         await m.addColumn(itineraryDays, itineraryDays.revisedAtUtcIso);
         await m.createTable(syncStates);
+        syncStatesBornCurrent = true;
         // A plan already on this phone is the newest plan in existence: no
         // Supabase project has ever been applied, so no server has seen any
         // of it. Stamping it *now* rather than leaving it at the epoch is
@@ -412,6 +493,32 @@ class AppDatabase extends _$AppDatabase {
         // R6). Nothing carries over: a phone upgrading here has no pending
         // import, because before this table there was nowhere to put one.
         await m.createTable(planDrafts);
+      }
+      if (from < 8) {
+        // The pool becomes shared: photographs grow an outbox
+        // (bytes-first-row-second is the seam's rule; this table is where a
+        // crash between the two is recoverable from), `file_path` loosens
+        // for rows whose bytes are on another phone, `content_type` arrives
+        // for the upload to sign, and `sync_states` takes the pull's cursor.
+        //
+        // `content_type` must land *before* the rebuild: `alterTable` copies
+        // rows by selecting the new shape's columns from the old table, so a
+        // rebuild against a table without the column fails mid-migration.
+        // Then `alterTable` recreates `photos` in the current shape, which is
+        // the only way SQLite loosens `file_path` to nullable. A `photos` or
+        // `sync_states` born current in this same upgrade needs none of it.
+        await m.createTable(photoOutbox);
+        if (!photosBornCurrent) {
+          await m.addColumn(photos, photos.contentType);
+          await m.alterTable(TableMigration(photos));
+        }
+        if (!syncStatesBornCurrent) {
+          await m.addColumn(syncStates, syncStates.photosUpdatedCursor);
+        }
+        // Deliberately no backfill of outbox rows: no build that could
+        // capture a photo has ever shipped, so a photo already on a phone is
+        // a developer's, and enqueueing it against a hosted project it never
+        // agreed to reach would be a push nobody asked for.
       }
     },
   );
@@ -727,7 +834,8 @@ class AppDatabase extends _$AppDatabase {
       takenAtUtcIso: photo.takenAtUtcIso,
       origin: photo.origin,
       word: Value(photo.word),
-      filePath: photo.filePath,
+      filePath: Value(photo.filePath),
+      contentType: Value(photo.contentType),
     ),
   );
 
@@ -740,6 +848,171 @@ class AppDatabase extends _$AppDatabase {
       (update(photos)..where((t) => t.id.equals(id))).write(
         PhotosCompanion(word: Value(word)),
       );
+
+  // ------------------------------------------------------------- the outbox
+
+  /// Keeps one photo *and* the debt to push it, atomically.
+  ///
+  /// One transaction on purpose, and the whole point: a crash between the
+  /// two inserts would leave a photograph that silently never leaves this
+  /// phone, and no ordering of two separate writes closes that. The outbox
+  /// row is due immediately — capture wants to cross while the wifi it was
+  /// taken on is still in range.
+  Future<void> insertPhotoWithOutbox(
+    PhotoRecord photo, {
+    required String nowUtcIso,
+  }) {
+    return transaction(() async {
+      await insertPhoto(photo);
+      await into(photoOutbox).insert(
+        PhotoOutboxCompanion.insert(
+          photoId: photo.id,
+          state: 'queued',
+          nextAttemptAtUtcIso: nowUtcIso,
+        ),
+      );
+    });
+  }
+
+  /// Rewrites one photo's word and, when the photo has already crossed,
+  /// files the debt to say so — in one transaction, so the word and the debt
+  /// cannot disagree.
+  ///
+  /// "Already crossed" is exactly "no outbox row": a photo still `queued` or
+  /// `uploaded` needs nothing, because the record insert reads the word at
+  /// record time; a pending `caption` row already promises to push whatever
+  /// the word is by then, so a second edit rides the same row; and a photo
+  /// terminally `refused` stays refused — a caption on a photograph that
+  /// never crossed has nothing to ride.
+  Future<void> updatePhotoWordAndQueueCaption({
+    required String id,
+    required String? word,
+    required String nowUtcIso,
+  }) {
+    return transaction(() async {
+      final changed = await updatePhotoWord(id: id, word: word);
+      if (changed == 0) return;
+      final pending = await (select(
+        photoOutbox,
+      )..where((t) => t.photoId.equals(id))).getSingleOrNull();
+      if (pending != null) return;
+      await into(photoOutbox).insert(
+        PhotoOutboxCompanion.insert(
+          photoId: id,
+          state: 'caption',
+          nextAttemptAtUtcIso: nowUtcIso,
+        ),
+      );
+    });
+  }
+
+  /// Every push still owed, each with the photo it is about, oldest
+  /// photograph first — the order the pool reads in, so the pool fills in
+  /// the order it will be looked at. Terminally refused rows are not work
+  /// and are not returned; read them with [readOutboxRows] when a test or a
+  /// later surface asks what silently never crossed.
+  Future<List<OutboxItem>> readOutboxWork() async {
+    final rows =
+        await (select(photoOutbox).join([
+                innerJoin(photos, photos.id.equalsExp(photoOutbox.photoId)),
+              ])
+              ..where(photoOutbox.state.equals('refused').not())
+              ..orderBy([
+                OrderingTerm.asc(photos.takenAtUtcIso),
+                OrderingTerm.asc(photos.id),
+              ]))
+            .get();
+    return [
+      for (final row in rows)
+        (outbox: row.readTable(photoOutbox), photo: row.readTable(photos)),
+    ];
+  }
+
+  /// The whole outbox, refused rows included, read once.
+  Future<List<PhotoOutboxData>> readOutboxRows() => select(photoOutbox).get();
+
+  /// Fires whenever the outbox changes — the driver's trigger. Deliberately
+  /// a watch on this table alone and never on [photos]: the pull half will
+  /// write photo rows, and a driver that watched them would re-trigger
+  /// itself on every pull it applied.
+  Stream<List<PhotoOutboxData>> watchOutbox() => select(photoOutbox).watch();
+
+  /// Records that a PUT returned 200: [byteSize] bytes are durably at
+  /// [r2ObjectKey], and no attempt after this ever mints a ticket again.
+  Future<void> markOutboxUploaded({
+    required String photoId,
+    required String r2ObjectKey,
+    required int byteSize,
+  }) => (update(photoOutbox)..where((t) => t.photoId.equals(photoId))).write(
+    PhotoOutboxCompanion(
+      state: const Value('uploaded'),
+      r2ObjectKey: Value(r2ObjectKey),
+      uploadedByteSize: Value(byteSize),
+      lastError: const Value(null),
+    ),
+  );
+
+  /// Settles a push that just landed — the record insert or the caption
+  /// PATCH — carrying [sentWord], the word the push actually said.
+  ///
+  /// The row is deleted (terminal success) *unless* the word changed while
+  /// the push was in flight, in which case the row becomes a `caption` debt
+  /// instead: deleting it would strand an edit the enqueue path already saw
+  /// a pending row for. One transaction, so the comparison and the
+  /// settlement cannot straddle an edit.
+  Future<void> settleOutboxPushed({
+    required String photoId,
+    required String? sentWord,
+    required String nowUtcIso,
+  }) {
+    return transaction(() async {
+      final photo = await (select(
+        photos,
+      )..where((t) => t.id.equals(photoId))).getSingleOrNull();
+      if (photo != null && photo.word != sentWord) {
+        await (update(
+          photoOutbox,
+        )..where((t) => t.photoId.equals(photoId))).write(
+          PhotoOutboxCompanion(
+            state: const Value('caption'),
+            nextAttemptAtUtcIso: Value(nowUtcIso),
+            lastError: const Value(null),
+          ),
+        );
+        return;
+      }
+      await (delete(photoOutbox)..where((t) => t.photoId.equals(photoId))).go();
+    });
+  }
+
+  /// Files one failed attempt: back to `queued`, the ticket forgotten, the
+  /// next try pushed out to [nextAttemptAtUtcIso].
+  Future<void> delayOutboxRetry({
+    required String photoId,
+    required int attempts,
+    required String nextAttemptAtUtcIso,
+    required String lastError,
+  }) => (update(photoOutbox)..where((t) => t.photoId.equals(photoId))).write(
+    PhotoOutboxCompanion(
+      state: const Value('queued'),
+      attempts: Value(attempts),
+      nextAttemptAtUtcIso: Value(nextAttemptAtUtcIso),
+      lastError: Value(lastError),
+    ),
+  );
+
+  /// The server ruled, so the push is over. Kept rather than deleted:
+  /// "record only real state" cuts both ways, and a photograph that silently
+  /// never crossed should at least be queryable.
+  Future<void> markOutboxRefused({
+    required String photoId,
+    required String lastError,
+  }) => (update(photoOutbox)..where((t) => t.photoId.equals(photoId))).write(
+    PhotoOutboxCompanion(
+      state: const Value('refused'),
+      lastError: Value(lastError),
+    ),
+  );
   // -------------------------------------------------------------- the trip
 
   /// The trip's own facts, or null while this phone has not started one.
@@ -941,6 +1214,8 @@ class AppDatabase extends _$AppDatabase {
       await delete(itineraryStops).go();
       await delete(itinerarySetAsides).go();
       await delete(itineraryDays).go();
+      // The debt to push a photo dies with the trip it was owed to.
+      await delete(photoOutbox).go();
       await delete(photos).go();
       await delete(tripInviteCodes).go();
       await delete(tripMembers).go();
@@ -969,6 +1244,10 @@ typedef InviteCodeRecord = ({
 });
 
 /// The write-side shape [AppDatabase.insertPhoto] accepts.
+///
+/// [filePath] and [contentType] are nullable because the *schema* is — a
+/// pulled row's bytes are elsewhere — but everything this phone captures
+/// fills both.
 typedef PhotoRecord = ({
   String id,
   int dayNumber,
@@ -976,8 +1255,13 @@ typedef PhotoRecord = ({
   String takenAtUtcIso,
   String origin,
   String? word,
-  String filePath,
+  String? filePath,
+  String? contentType,
 });
+
+/// One pending push and the photograph it is about, as
+/// [AppDatabase.readOutboxWork] hands them over together.
+typedef OutboxItem = ({PhotoOutboxData outbox, Photo photo});
 
 /// The write-side shape [AppDatabase.replaceRoster] accepts.
 typedef TripMemberRecord = ({String id, String displayName, int joinedOnDay});

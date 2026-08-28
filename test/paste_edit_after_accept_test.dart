@@ -588,6 +588,7 @@ void main() {
       origin: 'capture',
       word: null,
       filePath: '/nowhere/day2.jpg',
+      contentType: 'image/jpeg',
     ));
 
     await openEditor(tester);
@@ -627,6 +628,7 @@ void main() {
       origin: 'capture',
       word: null,
       filePath: '/nowhere/day1.jpg',
+      contentType: 'image/jpeg',
     ));
 
     await openEditor(tester);
