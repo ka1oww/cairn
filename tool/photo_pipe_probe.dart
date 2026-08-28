@@ -91,7 +91,8 @@ const _maxBatch = 64;
 /// nothing about a real transfer.
 const _originalBytes = 3080000;
 
-const _usage = '''
+const _usage =
+    '''
 Proves the Cairn photo pipe against a scratch Supabase project + R2 bucket.
 
   dart run tool/photo_pipe_probe.dart --url <URL> --anon-key <KEY> [options]
@@ -161,8 +162,8 @@ class _Config {
 
     final env = Platform.environment;
     final url = (valueOf('--url') ?? env['CAIRN_PROBE_URL'] ?? '').trim();
-    final key =
-        (valueOf('--anon-key') ?? env['CAIRN_PROBE_ANON_KEY'] ?? '').trim();
+    final key = (valueOf('--anon-key') ?? env['CAIRN_PROBE_ANON_KEY'] ?? '')
+        .trim();
     if (url.isEmpty || key.isEmpty) return null;
 
     final fast = args.contains('--fast');
@@ -358,7 +359,8 @@ class _Probe {
     transcript.check(
       'three anonymous accounts sign in, with three distinct uids',
       {_contributor.id, _coMember.id, _stranger.id}.length == 3,
-      detail: 'contributor ${_contributor.id}\n'
+      detail:
+          'contributor ${_contributor.id}\n'
           'co-member   ${_coMember.id}\n'
           'stranger    ${_stranger.id}',
     );
@@ -389,8 +391,10 @@ class _Probe {
     if (created.statusCode != 201) {
       throw _Halt('the trip would not insert: ${_say(created)}');
     }
-    transcript.pass('the contributor creates the trip, keeping the minted id',
-        detail: _trip.value);
+    transcript.pass(
+      'the contributor creates the trip, keeping the minted id',
+      detail: _trip.value,
+    );
 
     final invite = await _rest(
       'POST',
@@ -409,14 +413,15 @@ class _Probe {
       detail: code,
     );
 
-    final redeemed =
-        await _rest('POST', '/rpc/redeem_trip_invite', _coMember, body: {
-      'p_code': code,
-    });
+    final redeemed = await _rest(
+      'POST',
+      '/rpc/redeem_trip_invite',
+      _coMember,
+      body: {'p_code': code},
+    );
     transcript.check(
       'the co-member redeems it and is answered the trip id',
-      redeemed.statusCode == 200 &&
-          _decode(redeemed) == _trip.value,
+      redeemed.statusCode == 200 && _decode(redeemed) == _trip.value,
       detail: _say(redeemed),
     );
 
@@ -480,7 +485,11 @@ class _Probe {
             'place': 'the day already walked',
             'revised_at': now,
             'stops': [
-              {'position': 0, 'stop_text': 'Fushimi Inari', 'time_of_day': '08:30'},
+              {
+                'position': 0,
+                'stop_text': 'Fushimi Inari',
+                'time_of_day': '08:30',
+              },
             ],
           },
           {
@@ -527,7 +536,9 @@ class _Probe {
     transcript.check(
       'four days reach the server, one of them deliberately undated',
       stored.length == 4 && stored.last['day_date'] == null,
-      detail: stored.map((r) => '${r['day_number']}: ${r['day_date']}').join(', '),
+      detail: stored
+          .map((r) => '${r['day_number']}: ${r['day_date']}')
+          .join(', '),
     );
   }
 
@@ -553,7 +564,8 @@ class _Probe {
     }
     transcript.pass(
       'a ticket is minted for a ${(_frame.length / 1e6).toStringAsFixed(2)} MB original',
-      detail: 'key ${_body(ticket)?['objectKey']}\n'
+      detail:
+          'key ${_body(ticket)?['objectKey']}\n'
           'expires in ${_body(ticket)?['expiresInSeconds']}s',
     );
 
@@ -778,11 +790,13 @@ class _Probe {
   Future<void> _theOrphan() async {
     transcript.section('S0 - bytes with no row are invisible debris');
 
-    final before = _rows(await _rest(
-      'GET',
-      '/photos?trip_id=eq.${_trip.value}&select=id',
-      _coMember,
-    )).length;
+    final before = _rows(
+      await _rest(
+        'GET',
+        '/photos?trip_id=eq.${_trip.value}&select=id',
+        _coMember,
+      ),
+    ).length;
 
     final orphan = PhotoId.mint(_bytes(16));
     final ticket = await _ticketFor(
@@ -798,16 +812,19 @@ class _Probe {
     final put = await _putOriginal(url, _frame, 'image/jpeg');
     // Bytes first, row second (docs/architecture.md). This is the crash
     // window made deliberate: the object is in the bucket and no row names it.
-    final after = _rows(await _rest(
-      'GET',
-      '/photos?trip_id=eq.${_trip.value}&select=id',
-      _coMember,
-    )).length;
+    final after = _rows(
+      await _rest(
+        'GET',
+        '/photos?trip_id=eq.${_trip.value}&select=id',
+        _coMember,
+      ),
+    ).length;
 
     transcript.check(
       'an object with no row is in the bucket and in nobody\'s pool',
       (put.statusCode == 200 || put.statusCode == 201) && after == before,
-      detail: 'key ${_body(ticket)?['objectKey']}\n'
+      detail:
+          'key ${_body(ticket)?['objectKey']}\n'
           'the co-member saw $before rows before and $after after',
     );
     transcript.note(
@@ -864,23 +881,28 @@ class _Probe {
       detail: fetched == null
           ? 'no URL to fetch'
           : '${fetched.statusCode}, ${fetched.bodyBytes.length} bytes '
-              '(sent ${_frame.length})',
+                '(sent ${_frame.length})',
     );
 
     // §7.3.1
-    final toStranger = await _downloadBatch(_stranger, _trip, [_walkedDayPhoto]);
+    final toStranger = await _downloadBatch(_stranger, _trip, [
+      _walkedDayPhoto,
+    ]);
     final nonexistent = PhotoId.mint(_bytes(16));
-    final toStrangerMissing =
-        await _downloadBatch(_stranger, _trip, [nonexistent]);
+    final toStrangerMissing = await _downloadBatch(_stranger, _trip, [
+      nonexistent,
+    ]);
     transcript.check(
       '§7.3.1 a non-member is refused, indistinguishably from nonexistent',
       toStranger.statusCode == 200 &&
           _urlsOf(toStranger).isEmpty &&
-          toStranger.body == toStrangerMissing.body.replaceAll(
-            nonexistent.value,
-            _walkedDayPhoto.value,
-          ),
-      detail: 'refused:   ${toStranger.body}\n'
+          toStranger.body ==
+              toStrangerMissing.body.replaceAll(
+                nonexistent.value,
+                _walkedDayPhoto.value,
+              ),
+      detail:
+          'refused:   ${toStranger.body}\n'
           'missing:   ${toStrangerMissing.body}',
     );
 
@@ -888,26 +910,25 @@ class _Probe {
     // already hands out (`supabase/README.md`), so a function that signed a
     // key it was handed would leak the whole corpus.
     await _aStrangersOwnPhoto();
-    final crossTrip = await _downloadBatch(
-      _coMember,
-      _strangerTrip,
-      [_strangerPhoto],
-    );
-    final crossTripDeclaredAsOurs =
-        await _downloadBatch(_coMember, _trip, [_strangerPhoto]);
+    final crossTrip = await _downloadBatch(_coMember, _strangerTrip, [
+      _strangerPhoto,
+    ]);
+    final crossTripDeclaredAsOurs = await _downloadBatch(_coMember, _trip, [
+      _strangerPhoto,
+    ]);
     transcript.check(
       '§7.3.2 another trip\'s photograph is refused, whichever trip is declared',
       _urlsOf(crossTrip).isEmpty && _urlsOf(crossTripDeclaredAsOurs).isEmpty,
-      detail: 'as its own trip: ${crossTrip.body}\n'
+      detail:
+          'as its own trip: ${crossTrip.body}\n'
           'as ours:         ${crossTripDeclaredAsOurs.body}',
     );
 
     // §7.3.3 -- the gate is inside the per-id loop, so one batch splits.
-    final mixed = await _downloadBatch(
-      _coMember,
-      _trip,
-      [_walkedDayPhoto, _futureDayPhoto],
-    );
+    final mixed = await _downloadBatch(_coMember, _trip, [
+      _walkedDayPhoto,
+      _futureDayPhoto,
+    ]);
     final mixedUrls = _urlsOf(mixed);
     transcript.check(
       '§7.3.3 a shut day is refused inside a batch whose open day succeeds',
@@ -917,11 +938,9 @@ class _Probe {
       detail: _say(mixed),
     );
 
-    final contributorsOwn = await _downloadBatch(
-      _contributor,
-      _trip,
-      [_futureDayPhoto],
-    );
+    final contributorsOwn = await _downloadBatch(_contributor, _trip, [
+      _futureDayPhoto,
+    ]);
     transcript.check(
       '§7.3.3 and the contributor, who opened that day, is signed for it',
       _urlsOf(contributorsOwn).containsKey(_futureDayPhoto.value),
@@ -933,7 +952,8 @@ class _Probe {
       'tripId': _trip.value,
       'photoIds': [_futureDayPhoto.value],
       'dayNumber': _walkedDay,
-      'r2ObjectKey': 'trips/${_strangerTrip.value}/photos/anything/original.jpg',
+      'r2ObjectKey':
+          'trips/${_strangerTrip.value}/photos/anything/original.jpg',
       'userId': _contributor.id,
     });
     transcript.check(
@@ -974,15 +994,16 @@ class _Probe {
       transcript.skip(
         '§7.3.6 X-Amz-Expires is honoured on a download URL',
         'skipped unless --slow; it costs a ${_downloadTtlSeconds}s wait. The '
-        'same mechanism is observed on the upload ticket above.',
+            'same mechanism is observed on the upload ticket above.',
       );
     } else {
       transcript.note(
         'waiting ${_downloadTtlSeconds + 20}s for the download URL to lapse',
       );
       await Future<void>.delayed(Duration(seconds: _downloadTtlSeconds + 20));
-      final replayed =
-          await _client.get(Uri.parse(openUrls[_walkedDayPhoto.value]!));
+      final replayed = await _client.get(
+        Uri.parse(openUrls[_walkedDayPhoto.value]!),
+      );
       transcript.check(
         '§7.3.6 a lapsed download URL is rejected by R2',
         replayed.statusCode == 403,
@@ -1008,7 +1029,8 @@ class _Probe {
       '§7.3.8 a co-member cannot write another contributor\'s caption',
       _rows(patched).isEmpty &&
           _firstRow(reread)?['caption'] == 'the contributor\'s own word',
-      detail: 'patch returned ${_say(patched)}\n'
+      detail:
+          'patch returned ${_say(patched)}\n'
           'the row still says ${_firstRow(reread)?['caption']}',
     );
 
@@ -1026,12 +1048,13 @@ class _Probe {
       transcript.skip(
         '§7.3.7 access decisions route through may_read_trip_photos',
         'the membership row would not delete (${_say(left)}); run the delete '
-        'by hand in SQL and re-run this section',
+            'by hand in SQL and re-run this section',
       );
       return;
     }
-    final afterLeaving =
-        await _downloadBatch(_coMember, _trip, [_walkedDayPhoto]);
+    final afterLeaving = await _downloadBatch(_coMember, _trip, [
+      _walkedDayPhoto,
+    ]);
     transcript.check(
       '§7.3.7 removing the membership row refuses the very next batch',
       _urlsOf(afterLeaving).isEmpty &&
@@ -1105,11 +1128,11 @@ class _Probe {
   }
 
   Map<String, String> _headers(_Account account) => {
-        'apikey': config.anonKey,
-        'Authorization': 'Bearer ${account.token}',
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
+    'apikey': config.anonKey,
+    'Authorization': 'Bearer ${account.token}',
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
 
   Future<http.Response> _rest(
     String method,
@@ -1118,11 +1141,10 @@ class _Probe {
     Object? body,
     String? prefer,
   }) async {
-    final request = http.Request(method, Uri.parse('${config.url}/rest/v1$path'))
-      ..headers.addAll({
-        ..._headers(account),
-        'Prefer': ?prefer,
-      });
+    final request = http.Request(
+      method,
+      Uri.parse('${config.url}/rest/v1$path'),
+    )..headers.addAll({..._headers(account), 'Prefer': ?prefer});
     if (body != null) request.body = jsonEncode(body);
     return http.Response.fromStream(await _client.send(request));
   }
@@ -1131,12 +1153,11 @@ class _Probe {
     String name,
     _Account account,
     Map<String, Object?> body,
-  ) =>
-      _client.post(
-        Uri.parse('${config.url}/functions/v1/$name'),
-        headers: _headers(account),
-        body: jsonEncode(body),
-      );
+  ) => _client.post(
+    Uri.parse('${config.url}/functions/v1/$name'),
+    headers: _headers(account),
+    body: jsonEncode(body),
+  );
 
   Future<http.Response> _ticketFor(
     _Account account,
@@ -1144,46 +1165,39 @@ class _Probe {
     PhotoId photo, {
     required int contentLength,
     String contentType = 'image/jpeg',
-  }) =>
-      _function('r2-upload-url', account, {
-        'tripId': trip.value,
-        'photoId': photo.value,
-        'contentType': contentType,
-        'contentLength': contentLength,
-      });
+  }) => _function('r2-upload-url', account, {
+    'tripId': trip.value,
+    'photoId': photo.value,
+    'contentType': contentType,
+    'contentLength': contentLength,
+  });
 
   Future<http.Response> _downloadBatch(
     _Account account,
     TripId trip,
     List<PhotoId> photos,
-  ) =>
-      _downloadRaw(account, {
-        'tripId': trip.value,
-        'photoIds': photos.map((p) => p.value).toList(),
-      });
+  ) => _downloadRaw(account, {
+    'tripId': trip.value,
+    'photoIds': photos.map((p) => p.value).toList(),
+  });
 
   Future<http.Response> _downloadRaw(
     _Account account,
     Map<String, Object?> body,
-  ) =>
-      _function('r2-download-url', account, body);
+  ) => _function('r2-download-url', account, body);
 
   Future<http.Response> _putOriginal(
     String url,
     Uint8List bytes,
     String contentType,
-  ) =>
-      _client.put(
-        Uri.parse(url),
-        // `allHeaders: true` on the signing side means R2 verifies both of
-        // these against the signature, so they are sent exactly and never
-        // left to the client to default.
-        headers: {
-          'content-type': contentType,
-          'content-length': '${bytes.length}',
-        },
-        body: bytes,
-      );
+  ) => _client.put(
+    Uri.parse(url),
+    // `allHeaders: true` on the signing side means R2 verifies both of
+    // these against the signature, so they are sent exactly and never
+    // left to the client to default.
+    headers: {'content-type': contentType, 'content-length': '${bytes.length}'},
+    body: bytes,
+  );
 
   Future<http.Response> _insertPhoto(
     _Account account,
@@ -1193,24 +1207,23 @@ class _Probe {
     required String objectKey,
     required int byteSize,
     String? caption,
-  }) =>
-      _rest(
-        'POST',
-        '/photos',
-        account,
-        body: {
-          'id': photo.value,
-          'trip_id': trip.value,
-          'contributor_id': account.id,
-          'r2_object_key': objectKey,
-          'content_type': 'image/jpeg',
-          'byte_size': byteSize,
-          'day_number': dayNumber,
-          'captured_at': DateTime.now().toUtc().toIso8601String(),
-          'caption': ?caption,
-        },
-        prefer: 'return=representation',
-      );
+  }) => _rest(
+    'POST',
+    '/photos',
+    account,
+    body: {
+      'id': photo.value,
+      'trip_id': trip.value,
+      'contributor_id': account.id,
+      'r2_object_key': objectKey,
+      'content_type': 'image/jpeg',
+      'byte_size': byteSize,
+      'day_number': dayNumber,
+      'captured_at': DateTime.now().toUtc().toIso8601String(),
+      'caption': ?caption,
+    },
+    prefer: 'return=representation',
+  );
 
   // -------------------------------------------------------------------------
   // Reading answers
