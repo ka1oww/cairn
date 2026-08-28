@@ -457,9 +457,8 @@ void main() {
       // `queued`. Safe *because* no row exists yet — the claimed-id refusal
       // the fake mirrors cannot fire, which is the ordering rule earning its
       // keep a second time.
-      pool.objects['trips/${tripId.value}/photos/photo-1/original.jpg'] = List.of(
-        frameBytes,
-      );
+      pool.objects['trips/${tripId.value}/photos/photo-1/original.jpg'] =
+          List.of(frameBytes);
 
       await driver().syncNow();
 
