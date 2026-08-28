@@ -215,8 +215,9 @@ well-formed code belonging to somebody else's trip it says so plainly rather
 than spinning. That last step is Phase 2 and nothing else.
 
 **The itinerary really does leave the phone now — and that was not true until
-27 August 2026.** The hosted project exists, all ten migrations are applied, an
-ordinary build points at it, and the phone signs in as an anonymous GoTrue
+27 August 2026.** The hosted project exists, migrations `0001`-`0010` are
+applied to it (`0011`, the photo transport delta, is not), an ordinary build
+points at it, and the phone signs in as an anonymous GoTrue
 account until Apple lands. But until today, `CAIRN_TRIP_TIMEZONE` was a
 compile-time constant with **no default**, so an ordinary `flutter build ios`
 produced a binary that could never create the shared `trips` row, never pushed
@@ -280,7 +281,7 @@ tested.
 | `packages/trip_moments` | Landed. Deals one ping per person across the party. Nothing delivers what it deals. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
 | `packages/plan_extraction` | Landed. Bytes in, plan text out — the file-import contract and its `.txt`/`.docx`/`.xlsx`/`.csv`/`.pdf` extractors. Extraction is correct on the Wanderlog print; the cleanup does not strip two of its chrome shapes. |
-| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with all ten migrations applied. **No photo transport, and no phone-side call that redeems an invite.** |
+| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with migrations `0001`-`0010` applied (`0011` is written and locally probed, not hosted). **No photo transport, and no phone-side call that redeems an invite.** |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
 | The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** Paste-and-confirm persisting the itinerary locally, with two doors beside the box — a document (`.txt`, `.docx`, `.xlsx`, `.csv`, `.pdf`) or a photo/screenshot through Apple Vision — filling it and never auto-parsing; the day page it lands on, the trip's path, the three-tab container, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them, the trip as a stored fact (roster, starter, flat-but-gated powers, three-word codes that die with the trip, the sheet off the Trail's title), and the itinerary reaching the hosted project on an ordinary build with the app saying when it has not. **Nothing registered with iOS; no photograph can move; no code can admit anybody.** |

@@ -31,8 +31,9 @@ the real sign-in providers are still untouched.
 | `trips` | A named container, plus the shared trip clock (timezone, dates, waking window). The plan itself hangs off it in the three tables below. **`trips.id` is minted by the phone, not here**; see [Who names a trip](#who-names-a-trip). |
 | `trip_members` | The root of every access-control check in this schema. A row is reachable by a user if and only if they have a matching `(trip_id, user_id)` row here. Carries **no role column**; see [Roles are flat](#roles-are-flat-except-one-thing). |
 | `trip_invites` | Invite codes — three spoken words each — kept in their own table rather than a column on `trips` so a code can be rotated, revoked, or usage-limited without touching trip identity, and a trip can have more than one outstanding code. Carries **no expiry column**; a code dies when its trip closes and at no other time. See [How someone joins](#how-someone-joins-a-trip). |
-| `photos` | One row per photo in the pool. The bytes live in R2; this row is the index the app queries and the thing RLS protects. |
-| `day_unlocks` | The gate, as a durable fact: "this person contributed to this day". Written only by a trigger on `photos`, and never deleted by anything. See [The gate](#the-gate). |
+| `photos` | One row per photo in the pool. The bytes live in R2; this row is the index the app queries and the thing RLS protects. Since `0011` it carries **`day_number`** — the photograph's home on the trail, and what the gate keys on — beside the retained `trip_day` date, and an optional **`caption`**. |
+| `day_unlocks` | The gate, as a durable fact: "this person contributed to this day". Keyed on `(trip_id, day_number, user_id)` since `0011`. Written only by a trigger on `photos`, and never deleted by anything. See [The gate](#the-gate). |
+| `photo_tombstones` | The R2 keys of deleted photographs, so the bytes can be swept later. RLS on and **no policies at all**: no client reads or writes it, only the delete trigger and a service-role sweeper. A tombstone is a *candidate*, not an instruction — a sweeper must re-check that no `photos` row claims the key before deleting an object. |
 | `day_pages` | A day's finished, composed page — one image per trip per day, made lazily at share or bind time. This was `daily_moments` and modelled a four-up panel; the four-up is retired. |
 | `day_page_photos` | Which photos went into a composed page, and in what order. Ordered by `ordinal`, not seated in a 1-to-4 slot. |
 | `trip_itineraries` | One row per trip, holding the plan's two clocks: when its *shape* last moved, and when the set-aside pocket last did. Not columns on `trips`, because a phone holds a plan revision before the trip's shared row exists. See [The itinerary](#the-itinerary-a-shared-fact-merged-per-day). |
@@ -172,6 +173,39 @@ The row stores everything needed to redo that computation or challenge it:
   (the app should always allow this as an escape hatch; timezone-boundary
   lookups are not infallible, especially near international date changes
   mid-trip).
+
+#### The day *number* is the photograph's home, and the date is provenance
+
+Settled 2026-08-28 and applied in `0011`. Everything above still runs — the
+ladder, the manual override, the retained `trip_day` — but what a photograph
+is filed under, and what the gate keys on, is now **`photos.day_number`**: the
+1-based position on the trail, the same number `DayPage.planDay(n)` opens and
+`trip_itinerary_days.day_number` is keyed by.
+
+Two reasons, and the second is the one that forced it:
+
+- The phone has always keyed photographs by day number (`photos.dayNumber` in
+  Drift is the only link between a photograph and a day, and nothing re-files
+  photographs when a plan is saved). A server keyed by date and a phone keyed
+  by number cannot both be right.
+- **A day is allowed to have no date.** The paste flow refuses to guess one,
+  so a plan can be accepted with a day's date still open — and a date-keyed
+  gate has nothing to say about such a day. Uploading to it must still work,
+  and contributing to it must still open it.
+
+`day_number` is `not null`: a photograph belongs to a day of the trip or it is
+not in the pool. The date is resolved through `trip_itinerary_days` when one is
+wanted, which is also how `day_page_is_open` decides whether a day has been
+walked. A day the itinerary has no row for, or one whose row has no date, reads
+as **walked** — see [The gate](#the-gate) for why that direction and not the
+other.
+
+`photos.caption` (`0011`) is a person's own word under their own photograph. It
+travels because it is the cheapest thing in the pool that is worth having, and
+it is single-owner for free: the existing `photos_update_contributor` policy
+already restricts every UPDATE to the contributor, so nobody can write anyone
+else's. The 280-character bound is a sanity limit on the wire, in the same
+spirit as the upload function's 64 MiB, not a design constraint.
 
 ### Who took each photo
 
@@ -343,8 +377,10 @@ directions.
 | **…except that the person who started the trip can remove someone** | `trip_members_delete_self_or_starter` (`0004`): `user_id = auth.uid() or is_trip_starter(...)`. The starter is `trips.created_by`, a fact about the trip rather than a row that can be deleted. |
 | **Nobody edits anyone else's photos or placements** | `photos_update_contributor` and `photos_delete_contributor` (`0006`) test `contributor_id = auth.uid()` and nothing else — the trip's starter included. |
 | **A person can delete their own photo** | `photos_delete_contributor` (`0006`). A hard delete, no tombstone row: the day leaves no visible gap. |
-| **…and the day stays open** | `day_unlocks` (`0007`) has **no DELETE policy and no INSERT policy**. An unlock is written by a trigger when a photo lands and cannot be removed by anyone — not its owner, not the starter. "No re-lock" is the only behaviour the table permits, rather than a rule the app has to remember. |
-| **The gate holds a day's page shut until you have contributed to it** | `day_page_is_open(trip, day, user)` (`0007`). Not an RLS policy, on purpose — see below. |
+| **…and the day stays open** | `day_unlocks` (`0007`, re-keyed by `0011`) has **no DELETE policy and no INSERT policy**. An unlock is written by a trigger when a photo lands and cannot be removed by anyone — not its owner, not the starter. "No re-lock" is the only behaviour the table permits, rather than a rule the app has to remember. |
+| **The gate holds a day's page shut until you have contributed to it** | `day_page_is_open(trip_id, day_number, user)` (`0007`, re-keyed onto the day number by `0011`). Not an RLS policy, on purpose — see below. |
+| **Every photograph read asks one question, so the leaver rule has one seat** | `may_read_trip_photos(trip_id, user)` (`0011`). Today it answers exactly `is_trip_member`. Both the `photos` SELECT policy and `r2-download-url` go through it from day one, so when leaving and being removed land, changing what a leaver may still see is a change to one function body and to nothing else. |
+| **A caption is its own contributor's** | `photos_update_contributor` (`0006`) already restricted every UPDATE to the contributor, so `caption` (`0011`) needed no new policy. Worth watching refuse rather than assuming: `tests/rls_probe.py` does. |
 | **A member joining mid-trip sees every past day freely** | The *absence* of any day predicate in `photos_select_trip_member` (`0006`), plus the first branch of `day_page_is_open`: any day already finished on the trip's clock is open to every member. |
 | **Credit survives the person** | `profile_is_visible_to` (`0009`) resolves a name for anyone you travel with **or** anyone credited on a photo or trip in a trip you are in — because membership is exactly the thing that ends. |
 | **The trip's clock is one shared clock** | `trips_update_starter` / `trips_delete_starter` (`0004`) keep the trip row with the person who authored it, and `validate_trip_timezone` (`0003`) refuses a zone that is not real. |
@@ -359,12 +395,23 @@ It cannot be. A shut gate is required to **show the shape of the day** — the
 times and the names, with the images withheld — so the rows have to stay
 readable to someone who has not contributed. What is withheld is the *bytes*.
 
-So `day_page_is_open` is the check the not-yet-written `r2-download-url` edge
-function must make before it signs a GET, exactly as `r2-upload-url` re-checks
-membership before it signs a PUT. It lives in SQL so that check is one call
+So `day_page_is_open` is the check `r2-download-url` makes before it signs a
+GET, exactly as `r2-upload-url` re-checks membership before it signs a PUT. It lives in SQL so that check is one call
 against the same tables rather than a second copy of the rule written in
 TypeScript. It reads "today" in the *trip's* timezone, so every phone agrees on
 which day is still in progress.
+
+Since `0011` it takes a **day number** and resolves the date through
+`trip_itinerary_days`. That introduces one case `0007` did not have: a day the
+itinerary cannot date — because the plan has never been synced, or because the
+person accepted it with that day's date still open. Such a day reads as
+**walked, and so open**, which mirrors the phone exactly
+(`lib/app_state/day_gate.dart`: an undated day is `walked`). The consequence is
+stated rather than buried: **a trip whose itinerary has not reached the server
+has no shut days at all.** The other direction is worse — a plan that has not
+synced would shut every day of a live trip against everyone including the
+people who took the photographs, and the phone would show what the server
+refuses.
 
 Knowing an `r2_object_key` is useless on its own — the bucket is private and
 every read needs a signature — which is what makes gating the signature rather
@@ -634,25 +681,41 @@ person signing in with both providers on the same address gets one
      cannot cover: whether the PostgREST queries in `index.ts` really answer
      the three questions, and whether R2 honours a signed `content-length`.
      Both need a deployment, and there has not been one.
-4. **Downloads are not built yet**, and this is the highest-severity blank in
-   the backend. The bucket stays private, so reads need a presigned `GET` from
-   a sibling `r2-download-url` function. When it is written it **must**:
-   - re-check membership as the caller, exactly as the upload function does,
-     and
-   - call `day_page_is_open(trip_id, trip_day, uid)` before signing, which is
-     where the gate actually bites.
+4. **`functions/r2-download-url/`** mints the presigned `GET`s, and is the
+   single worst file in this repository to get wrong. Same split as the
+   upload function, for the same reason: `handler.ts` decides and imports
+   nothing remote, `index.ts` builds the clients, `handler_test.ts` drives
+   every refusal offline.
 
-   Copy the upload function's *split* as well as its skeleton: decisions in a
-   `handler.ts` that imports nothing remote, clients in `index.ts`. The gate is
-   the single worst thing in this app to get wrong and the only way to test it
-   before a deployment is to keep it reachable offline.
+   The shape was settled by the captain on 2026-08-28: **a time-limited signed
+   link**, at the short end of the window — **15 minutes**. No Cloudflare
+   Worker proxy and no R2 binding, now or later. A presigned GET is a bearer
+   capability: anyone holding the URL has the bytes until it lapses, so the TTL
+   *is* the revocation granularity, and fifteen minutes is what a person can
+   forward before it stops working.
 
-   The R2 keys are derivable from ids that flow through sync, so a download
-   function that signs any key for any authenticated caller would let any user
-   read any trip's photos. R2 presigned URLs allow 1 second to 7 days; 1–6
-   hours is the sensible range for a pool people scroll repeatedly, cached per
-   phone by `r2_object_key` (which is immutable, so cached bytes never go
-   stale).
+   Four properties, in the order they matter:
+
+   - **The row decides, not the caller.** A request names a trip and up to 64
+     photo ids. Every id is looked up server-side and only that row's own
+     stored `r2_object_key` is ever signed. A key, a day or a uid in the body
+     is not read at all. The R2 keys are derivable from ids that flow through
+     sync, so a function that signed a key it was handed would let any
+     authenticated user read every trip's photographs.
+   - **Authorisation is inherited, not re-decided.** The row is read *as the
+     caller*, with the anon key and the caller's own `Authorization` header, so
+     RLS answers — which means it goes through `may_read_trip_photos` without
+     this file knowing the rule. There is no second copy of "who may see a
+     photograph" in TypeScript.
+   - **The gate is asked before anything is signed**, per id, inside the loop:
+     `day_page_is_open(trip_id, day_number, uid)` off the row's own day number.
+     A batch mixing an open day and a shut one comes back half signed.
+   - **A refusal carries no reason.** Unreadable, nonexistent, malformed and
+     gated all come back as the same bare id in `refused`. A reason would be an
+     oracle a caller could walk the corpus with.
+
+   Both a failed row read and a gate that cannot answer refuse rather than
+   sign. Nothing here reads a service-role key, and nothing may.
 
 ## Free-tier limits (verified 2026-08-21)
 
@@ -718,9 +781,14 @@ pause, and unbounded accumulation over years.
 
 Being honest about the edges:
 
-- **No download path is built.** Only `r2-upload-url` exists. See the
-  requirements above — this is where the worst potential leak lives, because
-  it is a blank the next person fills in.
+- **The download path is written and has never run.** `r2-download-url`
+  exists and its refusals are exercised offline, but there is no bucket, no
+  deployment and no project it has been pointed at, so **not one of its
+  refusals has been observed**. `tool/photo_pipe_probe.dart` is the harness
+  that would observe them — three real accounts over the real stack, which is
+  the only place an RLS refusal is watchable at all — and it is unrun for the
+  same reason. Written-and-unrun is a smaller blank than not-built; it is
+  still the worst one here.
 - **No derived-variant pipeline.** `photos.r2_thumbnail_key` and `day_pages`
   allow for a smaller derived image and a composed page being uploaded, but
   nothing here generates either — that's phone-side image work. Note what such
@@ -792,8 +860,8 @@ throwaway Postgres; see that directory's README. It has been run green on two
 independently built clusters — 17.10 and a Homebrew 17.11 — so the results are
 not an artefact of one machine's setup.
 
-- All ten migrations apply cleanly, and apply again cleanly on a second run.
-- 113 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- All eleven migrations apply cleanly, and apply again cleanly on a second run.
+- 134 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
@@ -834,8 +902,9 @@ not an artefact of one machine's setup.
   back — confirming that table ownership, not test-harness privilege, is what
   makes the helper functions safe.
 
-**What the hosted project has actually done** (2026-08-26). All ten migrations
-are applied to it, and the following ran against it for real, from the app's
+**What the hosted project has actually done** (2026-08-26). Migrations `0001`
+through `0010` are applied to it; **`0011` is not** — the photo transport delta
+exists only here and in the local probe. The following ran against it for real, from the app's
 own code: an anonymous sign-in through GoTrue; `handle_new_user` minting the
 profile; a `trips` insert with the phone-minted id; `handle_new_trip` seeding
 `trip_members`; the `trip_roster` view; and `sync_trip_itinerary` in both

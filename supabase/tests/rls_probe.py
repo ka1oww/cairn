@@ -98,8 +98,8 @@ def main():
     check(status == "ok", "a member reads the roster with no recursion", repr(rows))
     a.run(
         """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
-                                      content_type, byte_size, trip_day, captured_at)
-           values (:id, :t, :u, 'k/a1', 'image/jpeg', 100, current_date - 2, now())""",
+                                      content_type, byte_size, day_number, trip_day, captured_at)
+           values (:id, :t, :u, 'k/a1', 'image/jpeg', 100, 1, current_date - 2, now())""",
         id=PHOTO_A, t=japan, u=alice,
     )
     status, rows = a.try_run("select r2_object_key from public.photos where trip_id = :t", t=japan)
@@ -159,12 +159,14 @@ def main():
     check(db.run("select count(*) from public.photos where id = :id", id=PHOTO_A)[0][0] == 1,
           "a co-member cannot delete my photo")
     status, rows = c.try_run(
-        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type, byte_size)
-           values (:t, :other, 'k/forged', 'image/jpeg', 10)""", t=japan, other=alice)
+        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type,
+                                      byte_size, day_number)
+           values (:t, :other, 'k/forged', 'image/jpeg', 10, 1)""", t=japan, other=alice)
     check(status == "err", "a member cannot tag a photo as someone else", repr(rows)[:80])
     status, rows = c.try_run(
-        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type, byte_size)
-           values (:t, :u, 'k/x', 'image/jpeg', 10)""", t=iceland, u=carol)
+        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type,
+                                      byte_size, day_number)
+           values (:t, :u, 'k/x', 'image/jpeg', 10, 1)""", t=iceland, u=carol)
     check(status == "err", "and cannot insert into a trip they are not on", repr(rows)[:80])
 
     # ------------------------------- what the row's protection does NOT reach
@@ -202,12 +204,31 @@ def main():
           repr(rows)[:90])
 
     # ------------------------------------------------------------------- gate
+    #
+    # Since 0011 the gate is keyed by the day's **ordinal**, not its date: the
+    # photograph belongs to its day by number (move the trip a week later and a
+    # day-3 photograph is still on day 3), while whether you may see it yet is
+    # a fact about the calendar. So the function resolves the date itself,
+    # through the itinerary the trip has synced -- which is what these rows are
+    # for. Day 3 is today in the trip's own zone, day 1 is walked, day 5 has
+    # not arrived, day 9 carries no date at all, and day 42 is not in the plan.
     print("\n== the gate holds today shut until you have put something in it ==")
     today = db.run("select (now() at time zone 'Asia/Tokyo')::date")[0][0]
+    for n in range(1, 9):
+        db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+                  values (:t, :n, (:today::date + (:n - 3)), now())
+                  on conflict (trip_id, day_number) do nothing""", t=japan, n=n, today=today)
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 9, null, now())
+              on conflict (trip_id, day_number) do nothing""", t=japan)
+    TODAY_DAY, PAST_DAY, FUTURE_DAY, UNDATED_DAY, UNPLANNED_DAY = 3, 1, 5, 9, 42
+
     is_open = "select public.day_page_is_open(:t, :d, :u)"
     check(db.run("select count(*) from public.day_unlocks where user_id = :u", u=alice)[0][0] == 1,
           "contributing a photo records an unlock for that day")
-    check(c.run(is_open, t=japan, d=today, u=carol)[0][0] is False,
+    check(db.run("select day_number from public.day_unlocks where user_id = :u", u=alice)[0][0] == 1,
+          "and the unlock names the day by its number, not by a date")
+    check(c.run(is_open, t=japan, d=TODAY_DAY, u=carol)[0][0] is False,
           "today is shut for a member who has contributed nothing to it")
     status, rows = c.try_run(
         "select count(*), min(captured_at) from public.photos where trip_id = :t", t=japan)
@@ -215,37 +236,166 @@ def main():
           "but a shut gate can still read the day's times and names -- rows are not hidden")
     c.run(
         """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
-                                      content_type, byte_size, trip_day, captured_at)
-           values (:id, :t, :u, 'k/c1', 'image/jpeg', 100, :d, now())""",
-        id=PHOTO_C, t=japan, u=carol, d=today)
-    check(c.run(is_open, t=japan, d=today, u=carol)[0][0] is True,
+                                      content_type, byte_size, day_number, trip_day, captured_at)
+           values (:id, :t, :u, 'k/c1', 'image/jpeg', 100, :n, :d, now())""",
+        id=PHOTO_C, t=japan, u=carol, n=TODAY_DAY, d=today)
+    check(c.run(is_open, t=japan, d=TODAY_DAY, u=carol)[0][0] is True,
           "and contributing opens it for her at once")
+    check(c.run(is_open, t=japan, d=FUTURE_DAY, u=carol)[0][0] is False,
+          "a day that has not arrived is shut, and contribution is not offered as its key")
+
+    # The phone's own rule, mirrored deliberately: `standingOfPlanDay` reads
+    # `planDay?.date` and answers `walked` when it is null, which collapses "a
+    # day nobody has dated" and "a day the plan no longer claims" into the one
+    # answer. Its reasoning transfers exactly -- today has a date, so a day
+    # with none is certainly not the day being lived, and the gate has no
+    # business shutting any other day.
+    print("\n== a day with no date is walked, exactly as the phone reads it ==")
+    check(c.run(is_open, t=japan, d=UNDATED_DAY, u=carol)[0][0] is True,
+          "a day of the plan whose date is still open is open to the party")
+    check(c.run(is_open, t=japan, d=UNPLANNED_DAY, u=carol)[0][0] is True,
+          "and so is a day number the plan does not claim at all")
+    status, rows = b.try_run(is_open, t=japan, d=UNDATED_DAY, u=bob)
+    check(status == "ok" and rows[0][0] is False,
+          "while a stranger is refused every day of it, dated or not", repr(rows)[:60])
+
+    # The hole 0011 closes on the write path: the old trigger only recorded an
+    # unlock when `trip_day` was non-null, so a photograph taken on a day
+    # nobody had dated opened nothing and its own taker was gated out.
+    # Contributing never requires a day to have a date.
+    print("\n== contributing to an undated day still opens it ==")
+    d.run("select public.redeem_trip_invite('otter maple 42')")
+    undated_photo = "eeeeeeee-0000-0000-0000-000000000001"
+    d.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                        content_type, byte_size, day_number, captured_at)
+             values (:id, :t, :u, 'k/d-undated', 'image/jpeg', 100, :n, now())""",
+          id=undated_photo, t=japan, u=dave, n=UNDATED_DAY)
+    check(db.run("""select count(*) from public.day_unlocks
+                    where trip_id = :t and user_id = :u and day_number = :n""",
+                 t=japan, u=dave, n=UNDATED_DAY)[0][0] == 1,
+          "a photograph on a day with no date records an unlock all the same")
+    d.run("delete from public.photos where id = :id", id=undated_photo)
 
     print("\n== you can delete your own photo, and the day stays open ==")
     status, _ = c.try_run("delete from public.photos where id = :id", id=PHOTO_C)
     check(status == "ok" and db.run("select count(*) from public.photos where id = :id",
                                     id=PHOTO_C)[0][0] == 0,
           "a person can delete their own photo")
-    check(c.run(is_open, t=japan, d=today, u=carol)[0][0] is True,
+    check(c.run(is_open, t=japan, d=TODAY_DAY, u=carol)[0][0] is True,
           "the day stays open afterwards -- no re-lock")
     c.try_run("delete from public.day_unlocks where trip_id = :t and user_id = :u", t=japan, u=carol)
     check(db.run("select count(*) from public.day_unlocks where trip_id = :t and user_id = :u",
                  t=japan, u=carol)[0][0] == 1,
           "and nobody can delete the unlock, so nobody can re-lock the day")
     status, rows = d.try_run(
-        "insert into public.day_unlocks (trip_id, day_date, user_id) values (:t, :d, :u)",
-        t=japan, d=today, u=dave)
+        "insert into public.day_unlocks (trip_id, day_number, user_id) values (:t, :n, :u)",
+        t=japan, n=TODAY_DAY, u=dave)
     check(status == "err", "nor forge one", repr(rows)[:80])
 
     print("\n== someone joining mid-trip sees every past day freely ==")
-    d.run("select public.redeem_trip_invite('otter maple 42')")
-    past = db.run("select (current_date - 2)::date")[0][0]
-    check(d.run(is_open, t=japan, d=past, u=dave)[0][0] is True,
+    check(d.run(is_open, t=japan, d=PAST_DAY, u=dave)[0][0] is True,
           "a member who joined today can open a day that ended before he arrived")
-    check(d.run(is_open, t=japan, d=today, u=dave)[0][0] is False,
+    check(d.run(is_open, t=japan, d=TODAY_DAY, u=dave)[0][0] is False,
           "while today is gated for him normally")
     status, rows = d.try_run("select count(*) from public.photos where trip_id = :t", t=japan)
     check(status == "ok" and rows[0][0] == 1, "and past days' rows carry no day predicate at all")
+
+    # ------------------------------------------------- the single seat, 0011
+    #
+    # `may_read_trip_photos` answers `is_trip_member` today and nothing else.
+    # What is being pinned is not its body but its *position*: every photo read
+    # in the system -- the SELECT policy here, and `r2-download-url`, which
+    # inherits it by reading the row as the caller -- goes through this one
+    # function, so the leaver split ("if you leave you keep the trip; if you
+    # are removed you do not") lands in one body and not in scattered checks.
+    print("\n== every photo read goes through one seat, so the leaver rule has one ==")
+    policy = db.run("""select qual from pg_policies
+                       where schemaname = 'public' and tablename = 'photos'
+                         and policyname = 'photos_select_trip_member'""")[0][0]
+    check("may_read_trip_photos" in policy,
+          "the photos SELECT policy asks the seat, not is_trip_member directly", policy[:80])
+    check(db.run("select prosecdef from pg_proc where proname = 'may_read_trip_photos'")[0][0] is True,
+          "and the seat is SECURITY DEFINER, so a policy on a gated table cannot recurse into it")
+    check(c.run("select public.may_read_trip_photos(:t, :u)", t=japan, u=carol)[0][0] is True,
+          "a member may read the trip's photographs")
+    check(c.run("select public.may_read_trip_photos(:t, :u)", t=iceland, u=dave)[0][0] is False,
+          "and someone who is not on the trip may not")
+
+    # ------------------------------------------------------- the word, 0011
+    #
+    # Single-owner by the policy that already existed: `photos_update_contributor`
+    # is contributor-only with an explicit WITH CHECK, so no new machinery is
+    # needed to make "the owner's most recent write wins" true. Watch it refuse
+    # rather than assume it.
+    print("\n== the word under a photograph is its owner's, and nobody else's ==")
+    d.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                        content_type, byte_size, day_number, captured_at)
+             values (:id, :t, :u, 'k/d-word', 'image/jpeg', 100, :n, now())""",
+          id=undated_photo, t=japan, u=dave, n=PAST_DAY)
+    d.run("update public.photos set caption = 'the long way round' where id = :id", id=undated_photo)
+    check(db.run("select caption from public.photos where id = :id", id=undated_photo)[0][0]
+          == "the long way round", "a contributor writes the word on their own photograph")
+    c.try_run("update public.photos set caption = 'not hers to write' where id = :id",
+              id=undated_photo)
+    check(db.run("select caption from public.photos where id = :id", id=undated_photo)[0][0]
+          == "the long way round", "and a co-member cannot rewrite it")
+    status, rows = c.try_run(
+        "select caption from public.photos where id = :id", id=undated_photo)
+    check(status == "ok" and rows and rows[0][0] == "the long way round",
+          "though she can read it -- the word travels with the photograph", repr(rows)[:60])
+    status, rows = d.try_run(
+        "update public.photos set caption = repeat('x', 281) where id = :id", id=undated_photo)
+    check(status == "err" and "photos_caption_length_check" in str(rows),
+          "and the column is bounded, so one phone cannot post a novel to seven others",
+          repr(rows)[:80])
+
+    # ------------------------------------------ what the download signs, 0011
+    #
+    # `r2-download-url` signs the row's own stored `r2_object_key` and never a
+    # key derived from caller input. That promise is only worth anything if the
+    # stored key is not itself caller input: `photos_update_contributor` places
+    # no restriction on which columns a contributor may write, and `unique`
+    # only stops a row taking a key another *photo row* holds -- a day page's
+    # key lives in another table with another unique index.
+    print("\n== an original is immutable, so a signed key cannot be repointed ==")
+    status, rows = d.try_run(
+        "update public.photos set r2_object_key = 'k/somewhere-else' where id = :id",
+        id=undated_photo)
+    check(status == "err" and "cannot be changed" in str(rows),
+          "even its own contributor cannot repoint a row at another object", repr(rows)[:80])
+    status, rows = d.try_run(
+        """update public.photos set r2_object_key = 'trips/' || :t || '/pages/stolen.jpg'
+           where id = :id""", t=iceland, id=undated_photo)
+    check(status == "err" and "cannot be changed" in str(rows),
+          "including at another trip's composed page, which no unique index would have caught",
+          repr(rows)[:80])
+    check(db.run("select r2_object_key from public.photos where id = :id",
+                 id=undated_photo)[0][0] == "k/d-word",
+          "and the row still points where it always did")
+
+    # ----------------------------------------------------- tombstones, 0011
+    #
+    # A person can always delete their own photograph and the row goes with no
+    # visible gap. The object does not go anywhere -- RLS cannot reach R2 --
+    # so the key is recorded for the sweeper, and for nobody else.
+    print("\n== a deleted row leaves its object findable, and only to the sweeper ==")
+    db.run("delete from public.photo_tombstones")
+    d.run("delete from public.photos where id = :id", id=undated_photo)
+    check(db.run("""select count(*) from public.photo_tombstones
+                    where r2_object_key = 'k/d-word' and trip_id = :t""", t=japan)[0][0] == 1,
+          "deleting a photograph records its object key")
+    status, rows = d.try_run("select count(*) from public.photo_tombstones")
+    check(status == "ok" and rows[0][0] == 0,
+          "which not even the person who deleted it can read -- RLS on, no policies at all",
+          repr(rows)[:60])
+    status, rows = d.try_run("delete from public.photo_tombstones")
+    check(db.run("select count(*) from public.photo_tombstones")[0][0] == 1,
+          "and nobody can clear one either", repr(rows)[:60])
+    check(not db.run("""select 1 from information_schema.table_constraints
+                        where table_schema = 'public' and table_name = 'photo_tombstones'
+                          and constraint_type = 'FOREIGN KEY'"""),
+          "and it carries no foreign key: deleting a trip must not delete the "
+          "tombstones that delete cascade just wrote")
 
     # ----------------------------------------------------------------- credit
     print("\n== the credit under a photo outlives the person ==")
@@ -411,8 +561,9 @@ def main():
     # ------------------------------------------ and the close shuts the pool
     print("\n== the grace takes photographs; the close takes none ==")
     status, rows = d.try_run(
-        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type, byte_size)
-           values (:t, :u, 'k/late', 'image/jpeg', 10)""", t=fresh, u=dave)
+        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type,
+                                      byte_size, day_number)
+           values (:t, :u, 'k/late', 'image/jpeg', 10, 1)""", t=fresh, u=dave)
     check(status == "ok",
           "a photo taken on the way home still lands, days after the trip ended",
           repr(rows)[:90])
@@ -420,8 +571,9 @@ def main():
     # Bob is on last year's trip: he started it. So this refusal is the close
     # and nothing else -- not membership, and not a trip he cannot see.
     status, rows = b.try_run(
-        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type, byte_size)
-           values (:t, :u, 'k/too-late', 'image/jpeg', 10)""", t=stale, u=bob)
+        """insert into public.photos (trip_id, contributor_id, r2_object_key, content_type,
+                                      byte_size, day_number)
+           values (:t, :u, 'k/too-late', 'image/jpeg', 10, 1)""", t=stale, u=bob)
     check(status == "err" and "row-level security" in str(rows),
           "and a member of a closed trip cannot add to it -- the record is fixed",
           repr(rows)[:90])
@@ -489,8 +641,9 @@ def main():
         p=page, ph=PHOTO_A)
     check(status == "ok", "a page can list an eighth photo, or a fifth", repr(rows)[:80])
 
-    b.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key, content_type, byte_size)
-             values (:id, :t, :u, 'k/b1', 'image/jpeg', 10)""", id=PHOTO_B, t=iceland, u=bob)
+    b.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                       content_type, byte_size, day_number)
+             values (:id, :t, :u, 'k/b1', 'image/jpeg', 10, 1)""", id=PHOTO_B, t=iceland, u=bob)
     db.run("insert into public.trip_members (trip_id, user_id) values (:t, :u)", t=iceland, u=carol)
     status, rows = c.try_run(
         "insert into public.day_page_photos (day_page_id, ordinal, photo_id) values (:p, 6, :ph)",
@@ -512,8 +665,8 @@ def main():
     # photo that could be repointed afterwards would walk straight round it.
     print("\n== nor can a photo be repointed to another trip ==")
     c.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
-                                       content_type, byte_size)
-             values (:id, :t, :u, 'k/c-iceland', 'image/jpeg', 10)""",
+                                       content_type, byte_size, day_number)
+             values (:id, :t, :u, 'k/c-iceland', 'image/jpeg', 10, 1)""",
           id=PHOTO_D, t=iceland, u=carol)
     status, rows = c.try_run(
         "update public.photos set trip_id = :t where id = :id", t=japan, id=PHOTO_D)

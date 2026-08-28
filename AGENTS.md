@@ -557,7 +557,9 @@ Sharp edges worth knowing before touching this directory again:
   defers its own RLS policies to `0004_trip_members.sql`, because `trips` must
   exist before `trip_members` can reference it but the policies are written in
   terms of membership. Read that comment before reordering anything.
-- **A hosted project exists and all ten migrations are applied to it**, and an
+- **A hosted project exists and migrations `0001`-`0010` are applied to it**
+  (`0011`, the photo transport delta, is written and locally probed but applied
+  nowhere else), and an
   ordinary build points at it (`supabase/README.md` is the authority on the
   defines and on what the hosted project has and has not actually done). The
   adversarial checks still run somewhere else and must: `supabase/tests/`
@@ -568,18 +570,19 @@ Sharp edges worth knowing before touching this directory again:
   change to a policy -- RLS refuses by filtering to zero rows rather than
   raising, so a change that silently opens or closes access looks identical to
   one that works until something actually queries it.
-- **The one edge function is split so that it can be tested without being
-  deployed, and nothing here has ever been deployed.**
-  `supabase/functions/r2-upload-url/handler.ts` holds every decision behind
-  three injected dependencies and **imports nothing remote**; `index.ts` builds
-  the real ones from `supabase-js`, `aws4fetch` and `Deno.env`. That is the
-  only reason its refusals can be exercised at all — `deno test
-  handler_test.ts`, 22 checks, no network, no secrets — and
-  `deno check --no-remote handler.ts` in CI is what keeps the split honest.
-  Teaching the handler to import a client directly is the thing to refuse in
-  review. What no test here can reach: whether the PostgREST queries in
-  `index.ts` really answer the three questions, and whether R2 honours a signed
-  `content-length`. Both need the deployment nobody has made.
+- **Both edge functions are split so that they can be tested without being
+  deployed, and nothing here has ever been deployed.** In each of
+  `supabase/functions/r2-upload-url/` and `r2-download-url/`, `handler.ts`
+  holds every decision behind injected dependencies and **imports nothing
+  remote**; `index.ts` builds the real ones from `supabase-js`, `aws4fetch` and
+  `Deno.env`. That is the only reason their refusals can be exercised at all —
+  `deno test handler_test.ts`, no network, no secrets — and
+  `deno check --no-remote handler.ts` in CI (a matrix leg per function) is what
+  keeps the split honest. Teaching a handler to import a client directly is the
+  thing to refuse in review. What no test here can reach: whether the PostgREST
+  queries in either `index.ts` really answer the questions the handler asks,
+  and whether R2 honours a signed `content-length` or an `X-Amz-Expires`. All
+  of that needs the deployment nobody has made.
 - **A `photos` row is what claims an original, and a claimed original is
   nobody's to overwrite.** The function refuses to sign a photo id a row
   already holds — flatly, its own contributor included, because an original is
@@ -591,6 +594,64 @@ Sharp edges worth knowing before touching this directory again:
   an outbox that inserted the row first would refuse its own retry. The two
   probe checks under *"a co-member can read what an upload URL is minted from"*
   pin the premise that a photo id is not a secret.
+- **The download function signs the row's key and nothing else, and its four
+  properties are load-bearing in order.** `r2-download-url` takes a trip and up
+  to 64 photo ids and answers a verdict per id. (1) **The row decides**: every
+  id is looked up server-side and only that row's own stored `r2_object_key` is
+  signed — a trip, a day, a key or a uid in the body is not read at all, and R2
+  keys are derivable from ids the sync already hands out, so a function that
+  signed a key it was handed would leak every trip. (2) **Authorisation is
+  inherited, not re-decided**: the row is read *as the caller* through RLS, so
+  `may_read_trip_photos` answers and no second copy of the rule exists in
+  TypeScript. (3) **The gate is asked before anything is signed**, per id,
+  inside the loop. (4) **A refusal carries no reason** — unreadable,
+  nonexistent, malformed and gated are one answer, because a reason is an
+  oracle for walking the corpus. A failed read and an unanswerable gate both
+  refuse rather than sign. The shape is settled (2026-08-28): a time-limited
+  signed link, **15 minutes**, no Worker proxy and no R2 binding ever. The
+  signing is deliberately asymmetric with the PUT — no `allHeaders: true`,
+  because a GET declares nothing to bind.
+- **The gate keys on a day *number*, and an undated day is open.** `0011`
+  re-keyed `photos`, `day_unlocks` and `day_page_is_open` off
+  `(trip_id, day_number)`, resolving the calendar through
+  `trip_itinerary_days`; `photos.trip_day` and `day_unlocks.day_date` are
+  retained as never-read provenance. A day the itinerary cannot date reads as
+  **walked, and so open**, which is `lib/app_state/day_gate.dart`'s rule said
+  in SQL — the rule still exists exactly twice. The consequence is real and
+  stated rather than buried: a trip whose itinerary has not reached the server
+  has no shut days at all. Failing shut instead would shut a live trip against
+  the people who took the photographs. Uploading never requires a day to have a
+  date, and contributing to an undated day opens it (`record_day_unlock` has no
+  `trip_day is not null` guard any more — that guard was the hole).
+- **Every photograph read goes through one seat.** `may_read_trip_photos`
+  (`0011`) today answers exactly `is_trip_member`, and both the `photos` SELECT
+  policy and `r2-download-url` go through it. It exists so that when leaving
+  and being removed land, changing what a leaver may still see is a change to
+  one function body. Adding a second path to a photograph is the thing to
+  refuse in review.
+- **A tombstone is a candidate, not an instruction.** Deleting a `photos` row
+  writes its R2 keys to `photo_tombstones` (`0011`), which has RLS on and **no
+  policies at all** and deliberately **no foreign key on `trip_id`** — a
+  cascading FK would delete the very tombstones the cascade just wrote. A
+  sweeper must re-check that no `photos` row claims a key before deleting the
+  object; nothing sweeps yet.
+- **`tool/photo_pipe_probe.dart` is the third evidence layer, and it has never
+  been run.** Three real accounts — contributor, co-member, stranger — against
+  a *scratch* project and bucket, which is the only place an RLS refusal is
+  observable over the real stack (the local probe has no GoTrue or PostgREST;
+  the hosted smoke has one account). It is committed, not throwaway, and grows
+  a section per slice. It refuses to start against `SharedFactsConfig`'s hosted
+  URL or key — a guard in code, not in prose. Never CI: it needs a network, a
+  project and secrets. Run it by hand and paste its transcript into the PR.
+- **A `language sql` function body is validated when the function is created;
+  a `plpgsql` one is not.** This is what makes a later migration unable to drop
+  a column an earlier `create or replace function` reads: the repo's probe
+  applies every migration **twice**, and the second pass re-runs `0007`'s
+  `day_page_is_open` against a schema `0011` has already changed. That is why
+  `0011` retains `day_unlocks.day_date` as a nullable never-read column rather
+  than patching `0007` — piling `if exists` guards onto an already-applied
+  migration is the wrong direction, and the retention is symmetric with keeping
+  `photos.trip_day`.
 - **A presigned PUT bounds nothing unless the headers are signed.** aws4fetch
   leaves `content-type` and `content-length` out of the signature by default
   (its `UNSIGNABLE_HEADERS`), so the content-type allowlist was advisory and

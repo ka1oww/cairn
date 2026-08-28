@@ -16,7 +16,7 @@ which is a question only Postgres can answer.
 | --- | --- |
 | `supabase_env.sql` | The parts of a fresh Supabase project the migrations touch: the `anon`/`authenticated`/`service_role` roles, an `auth.users` table, and `auth.uid()`. Nothing else. |
 | `harness.py` | Applies the migrations and issues statements the way PostgREST does — `set local role authenticated` plus the JWT claims GUC, inside a transaction. |
-| `rls_probe.py` | The adversarial suite, grouped by the product decision each check defends. **It reports 113 passes from 112 `check(` lines**, and the difference is not a typo: one call sits inside a two-item `for` loop over a non-member and a member of a different trip, so it runs twice. Take the count from a run's own `---- N passed ----` line, never from grepping the source. It also reads `packages/cairn_model/lib/src/` directly — the invite vocabulary and the grace after a trip exist on both sides of the phone/server seam, and comparing them is the only way this file can notice one of the two drifting. The itinerary sections are the same idea one level up: the merge rule is written both here and in `lib/repositories/itinerary_sync.dart`, and what these checks pin is that the SQL half behaves the way the Dart half assumes. |
+| `rls_probe.py` | The adversarial suite, grouped by the product decision each check defends. **It reports 134 passes from 133 `check(` lines**, and the difference is not a typo: one call sits inside a two-item `for` loop over a non-member and a member of a different trip, so it runs twice. Take the count from a run's own `---- N passed ----` line, never from grepping the source. It also reads `packages/cairn_model/lib/src/` directly — the invite vocabulary and the grace after a trip exist on both sides of the phone/server seam, and comparing them is the only way this file can notice one of the two drifting. The itinerary sections are the same idea one level up: the merge rule is written both here and in `lib/repositories/itinerary_sync.dart`, and what these checks pin is that the SQL half behaves the way the Dart half assumes. Since `0011` the gate sections are that idea a third time: `day_page_is_open` is keyed on a day *number* and reads an undated day as walked, which is `lib/app_state/day_gate.dart`'s rule, and these checks are what keep the two spellings of it honest. |
 | `recursion_mechanism.py` | Checks *why* the recursion fix works, not just that it does. Needs a superuser connection: it creates a role and a database. |
 
 ## Running them
@@ -86,8 +86,14 @@ the name returned only on first authorization), R2, or `pg_cron`. Those need
 the real thing.
 
 They do not cover the edge functions either, but those are no longer untested:
-`r2-upload-url` is split so that every decision it makes lives in a
-`handler.ts` that imports nothing remote, and
-`supabase/functions/r2-upload-url/handler_test.ts` drives it offline with
-`deno test`. What that cannot reach is the same class of thing this directory
-cannot: the real PostgREST queries, and R2 itself.
+both `r2-upload-url` and `r2-download-url` are split so that every decision
+either makes lives in a `handler.ts` that imports nothing remote, and each has
+a `handler_test.ts` that drives it offline with `deno test`. What that cannot
+reach is the same class of thing this directory cannot: the real PostgREST
+queries, and R2 itself.
+
+The third layer, which reaches both, is `tool/photo_pipe_probe.dart`: three
+real accounts — a contributor, a co-member and a stranger — against a scratch
+project and a scratch bucket. It is the only place a refusal can be watched
+happening over the real stack, and **it has never been run**, because no
+scratch project exists yet.

@@ -73,8 +73,8 @@ def main():
                         values ('Japan', :u, 'Asia/Tokyo', current_date, current_date + 3)
                         returning id""", u=alice)[0][0])
     a.run("""insert into public.photos (trip_id, contributor_id, r2_object_key,
-                                        content_type, byte_size, trip_day)
-             values (:t, :u, 'k/1', 'image/jpeg', 10, current_date)""", t=trip, u=alice)
+                                        content_type, byte_size, day_number, trip_day)
+             values (:t, :u, 'k/1', 'image/jpeg', 10, 1, current_date)""", t=trip, u=alice)
 
     print("\n  with ownership doing the work:")
     status, rows = a.try_run("select user_id from public.trip_members where trip_id = :t", t=trip)
