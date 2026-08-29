@@ -1,0 +1,227 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": "München",
+      "stops": [
+        {
+          "text": "Marienplatz",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "- Marienplatz"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Marienplatz"
+        },
+        {
+          "text": "19:00 Hofbräuhaus",
+          "time": {
+            "hour": 19,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "- 19:00 Hofbräuhaus"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Hofbräuhaus"
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "bare-place-name",
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "München"
+      },
+      "dateCandidate": null
+    },
+    {
+      "index": 2,
+      "date": null,
+      "place": "Zürich",
+      "stops": [
+        {
+          "text": "Grossmünster",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 6,
+            "text": "- Grossmünster"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Grossmünster"
+        },
+        {
+          "text": "Fraumünster",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 7,
+            "text": "- Fraumünster"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Fraumünster"
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "bare-place-name",
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 5,
+        "text": "Zürich"
+      },
+      "dateCandidate": null
+    },
+    {
+      "index": 3,
+      "date": null,
+      "place": "Αθήνα",
+      "stops": [
+        {
+          "text": "Ακρόπολη",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 10,
+            "text": "- Ακρόπολη"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Ακρόπολη"
+        },
+        {
+          "text": "20:00 Ταβέρνα στην Πλάκα",
+          "time": {
+            "hour": 20,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 11,
+            "text": "- 20:00 Ταβέρνα στην Πλάκα"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Ταβέρνα στην Πλάκα"
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "bare-place-name",
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 9,
+        "text": "Αθήνα"
+      },
+      "dateCandidate": null
+    },
+    {
+      "index": 4,
+      "date": null,
+      "place": "Москва",
+      "stops": [
+        {
+          "text": "Красная площадь",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 14,
+            "text": "- Красная площадь"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Красная площадь"
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "bare-place-name",
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 13,
+        "text": "Москва"
+      },
+      "dateCandidate": null
+    },
+    {
+      "index": 5,
+      "date": null,
+      "place": "京都",
+      "stops": [
+        {
+          "text": "伏見稲荷大社",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 17,
+            "text": "- 伏見稲荷大社"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "伏見稲荷大社"
+        },
+        {
+          "text": "18:00 懐石",
+          "time": {
+            "hour": 18,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 18,
+            "text": "- 18:00 懐石"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "懐石"
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "bare-place-name",
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 16,
+        "text": "京都"
+      },
+      "dateCandidate": null
+    },
+    {
+      "index": 6,
+      "date": null,
+      "place": "서울",
+      "stops": [
+        {
+          "text": "경복궁",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 21,
+            "text": "- 경복궁"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "경복궁"
+        }
+      ],
+      "confidence": "medium",
+      "uncertainty": "bare-place-name",
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 20,
+        "text": "서울"
+      },
+      "dateCandidate": null
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "medium",
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
+}

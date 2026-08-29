@@ -711,6 +711,31 @@ Sharp edges worth knowing before touching this directory again:
 ## Packages
 
 - `packages/itinerary_parser/` — pure-Dart package (no Flutter dependency) that parses pasted free-text trip plans into structured days/stops. Test with `dart test` from inside that directory; see its `README.md` for the public API, confidence semantics, and documented parsing limitations.
+  - **The bare place-name day header is script-agnostic, and its narrowness is
+    bought twice.** `looksLikeProperNounHeader` (`src/line_classifier.dart`)
+    tested `^[A-Z][A-Za-z'.]*$` until 2026-08-30, so `München`, `Αθήνα`,
+    `Москва` and `京都` were not headers at all: `ParsedDay.place` came back
+    null for every day of the trip and nothing reported it. The rule now is a
+    word is either **cased** (opens `\p{Lu}`/`\p{Lt}`, tail any letter, mark,
+    `'` or `.` — so `KYOTO` and a decomposed `Zürich` are one word each) or
+    **caseless** (all `\p{Lo}`, the letters that have no capital to demand:
+    CJK, kana, hangul, Thai, Arabic, Hebrew, Indic). All the regexes carry
+    `unicode: true`, which is what makes the property escapes work and makes
+    the length bounds count code points rather than UTF-16 units. Two bounds
+    replace the capital the caseless branch cannot show, and both are
+    load-bearing: a caseless *word* is capped at 16 code points, because a
+    Japanese sentence is one "word" and word count stops bounding a line
+    written without spaces; and a line with **no capital anywhere** is capped
+    at 3 words rather than 5, because brevity is then the only evidence left.
+    A lowercase Cyrillic or Greek line is still prose — those scripts are
+    `\p{Ll}`, never `\p{Lo}`, so the caseless branch cannot leak into them.
+    The old `_allCapsWord` was strictly subsumed by the proper-noun shape and
+    is gone. Widening the alphabet further, or widening the punctuation a word
+    may carry, is the thing to refuse in review; `test/place_header_script_test.dart`
+    is half acceptance and half refusal for exactly that reason. The
+    `[A-Za-z]` groups still in `src/date_header.dart` are deliberate — they
+    capture candidate month and weekday words that are immediately looked up
+    in English-only tables, so widening them would change nothing.
 - `packages/trip_moments/` — pure-Dart, offline notification-timing library: it deals each person on a trip exactly one ping a day, as a collision-free permutation of slots over the party, reshuffled daily. See its `README.md` for the derivation and why it needs no server. Test with `dart test` from inside that directory.
   - **The party is an input, not an afterthought.** Each device derives the whole day's assignment for everyone, which is what makes the schedule collision-free offline. A derivation that hashed only the local member id (as an earlier version did) permits two people to land on the same minute and permits the party to cluster.
   - It derives its instants with multiplication and addition, not bitwise shifts, deliberately: Dart's `int` bitwise operators are 32-bit when compiled to JavaScript, so the shift form silently diverges on web while the arithmetic form is exact on every backend. `test/golden_values_test.dart` pins this -- do not "simplify" the arithmetic back to shifts. `tool/print_goldens.dart` documents the four-command VM-vs-dart2js diff that verifies it.

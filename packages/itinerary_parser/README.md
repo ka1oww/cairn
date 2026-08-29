@@ -191,6 +191,21 @@ building UI on top of this package.
   block and marks everything low confidence rather than guess which
   lines were meant as headers.
 
+- **A bare place header is judged by shape, in any script.** The word test
+  is Unicode-aware (`unicode: true` and property escapes, not widened
+  character ranges), so `München`, `Kraków`, `Αθήνα`, `Москва`, `京都`, `서울` and
+  `กรุงเทพ` all read as headers. A word counts when it opens with an
+  uppercase letter (`\p{Lu}`/`\p{Lt}`), or when it is written entirely in a
+  script that *has* no letter case (`\p{Lo}` — CJK, kana, hangul, Thai,
+  Arabic, Hebrew, the Indic scripts), where an uncapitalized word is what a
+  place name looks like. Two length bounds stand in for the capital a
+  caseless word cannot show: such a word may be at most 16 code points, since
+  a script written without spaces puts a whole sentence in one "word"; and a
+  line offering no capital anywhere may be at most 3 words rather than 5.
+  Lowercase Latin, Greek or Cyrillic prose is still refused — those letters
+  are `\p{Ll}`, not `\p{Lo}` — as are bullets, digits, times and long lines,
+  exactly as before.
+
 - **It cannot resolve a date that has no year and no `tripStartDate`.**
   `3 November` or `Nov 3` parse as a date-shaped header, but `date` stays
   null until you supply `tripStartDate` for the parser to infer the year
