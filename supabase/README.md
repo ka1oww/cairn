@@ -15,12 +15,13 @@ and what is on them ([the decision](../docs/decisions/2026-08-22-grill-round-one
 of those is worked out on each phone from the plan it holds, and moving any of
 them server-side would need its own decision.
 
-**A hosted project now exists and every migration here is applied to it**
-(`https://nswcgzhynclrrunekskh.supabase.co`, region `ap-southeast-1`). The app
-points at it by default — see
+**A hosted project now exists and migrations `0001` through `0010` are
+applied to it** (`https://nswcgzhynclrrunekskh.supabase.co`, region
+`ap-southeast-1`); `0011`, the photo transport delta, exists only here and in
+the local probe. The app points at it by default — see
 [Pointing the app at it](#pointing-the-app-at-it) — and
 [Verification](#verification-what-was-actually-run) at the bottom says what has
-actually been exercised against it and what has not. R2, the edge function and
+actually been exercised against it and what has not. R2, the edge functions and
 the real sign-in providers are still untouched.
 
 ## The model
