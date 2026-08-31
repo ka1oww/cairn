@@ -149,12 +149,7 @@ ParseResult _annotateWithAreas(
       AreaHint? hint;
       if (assignment != null && assignment.text != null) {
         final src = _areaSourceFromString(assignment.source);
-        // areaHeading stops carry area but are not tappable places
-        // note/mealLabel with no placeText have area = null
-        if (classified.kind == StopKind.note) {
-          hint = null;
-        } else if (isHeading) {
-          // Heading's own area is itself
+        if (isHeading) {
           hint = AreaHint(text: assignment.text!, source: src, setBy: s.sourceLine);
         } else {
           final setByLine = assignment.setByLine;
@@ -166,8 +161,6 @@ ParseResult _annotateWithAreas(
               : null;
           hint = AreaHint(text: assignment.text!, source: src, setBy: setBy);
         }
-        // If classified as note, drop area
-        if (classified.kind == StopKind.note) hint = null;
       }
 
       // For place/mealLabel, placeText from classifier; for heading/note, null
