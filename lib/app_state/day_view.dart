@@ -474,13 +474,17 @@ class DayActions {
         areaSource: area == null ? null : AreaSource.human,
       );
 
-  /// Corrects the whole run of stops one subheading stands over — every stop
-  /// of the day that currently reads [currentArea]. Correcting the heading is
-  /// how a person fixes a whole afternoon in one gesture, which is the only
-  /// reason the run is a unit at all.
+  /// Corrects the whole run of stops one subheading stands over — the
+  /// contiguous stops, starting at [position], that share that stop's area.
+  /// A run's identity is its position, not its name: a day that visits the
+  /// same-named area twice non-adjacently leaves the second occurrence
+  /// untouched, exactly as the confirm screen's [PasteFlow.setAreaRun] walks
+  /// forward from the tapped stop only to the next stop with a different
+  /// area. Correcting the heading is how a person fixes a whole afternoon in
+  /// one gesture, which is the only reason the run is a unit at all.
   Future<void> setAreaRun({
     required int dayNumber,
-    required String currentArea,
+    required int position,
     required String? area,
   }) async {
     final plan = _ref.read(savedItineraryProvider).value;
@@ -490,10 +494,14 @@ class DayActions {
       if (candidate.number == dayNumber) day = candidate;
     }
     if (day == null) return;
-    final positions = [
-      for (final (index, stop) in day.stops.indexed)
-        if (stop.area == currentArea) index,
-    ];
+    final index = position - 1;
+    if (index < 0 || index >= day.stops.length) return;
+    final was = day.stops[index].area;
+    final positions = <int>[];
+    for (var i = index; i < day.stops.length; i++) {
+      if (day.stops[i].area != was) break;
+      positions.add(i);
+    }
     if (positions.isEmpty) return;
     await _ref
         .read(tripRepositoryProvider)

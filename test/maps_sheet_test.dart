@@ -232,7 +232,7 @@ void main() {
     ]);
     await openTheDay(tester);
 
-    await tester.tap(find.byKey(const Key('area-heading-Cultural Mix')));
+    await tester.tap(find.byKey(const Key('area-heading-1-Cultural Mix')));
     await tester.pumpAndSettle();
     expect(find.text('Where is this, really?'), findsOneWidget);
     expect(
@@ -247,7 +247,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // The heading redraws, and the run now sends the person's answer.
-    expect(find.byKey(const Key('area-heading-Yanaka')), findsOneWidget);
+    expect(find.byKey(const Key('area-heading-1-Yanaka')), findsOneWidget);
     await tester.tap(find.byKey(const Key('stop-tap-2')));
     await tester.pump();
     expect(
@@ -261,6 +261,41 @@ void main() {
     expect(stored.take(2).map((s) => s.areaSource), ['human', 'human']);
     expect(stored.last.areaText, 'Ueno');
   });
+
+  testWidgets(
+    'correcting a heading leaves a same-named, non-adjacent run alone',
+    (tester) async {
+      await seed([
+        Stop(text: 'Shibuya Crossing', area: 'Shibuya', areaSource: AreaSource.parser),
+        Stop(text: 'Meiji Shrine', area: 'Harajuku', areaSource: AreaSource.parser),
+        Stop(text: 'Shibuya Sky at dusk', area: 'Shibuya', areaSource: AreaSource.parser),
+      ]);
+      await openTheDay(tester);
+
+      // Both headings render — a repeated area name is not a duplicate key.
+      expect(find.byKey(const Key('area-heading-1-Shibuya')), findsOneWidget);
+      expect(find.byKey(const Key('area-heading-3-Shibuya')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('area-heading-1-Shibuya')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('area-somewhere-else')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('area-field')),
+        'Shibuya Station Exit',
+      );
+      await tester.tap(find.byKey(const Key('area-save')));
+      await tester.pumpAndSettle();
+
+      // Only the morning run moved; the evening run stayed on 'Shibuya'.
+      final stored = await db.readItineraryStops();
+      expect(stored[0].areaText, 'Shibuya Station Exit');
+      expect(stored[0].areaSource, 'human');
+      expect(stored[1].areaText, 'Harajuku');
+      expect(stored[2].areaText, 'Shibuya');
+      expect(stored[2].areaSource, 'parser');
+    },
+  );
 
   testWidgets('the chosen maps app is the one that opens', (tester) async {
     await seed();

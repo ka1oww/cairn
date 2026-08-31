@@ -326,7 +326,11 @@ class _StopList extends StatelessWidget {
       children: [
         for (final stop in stops) ...[
           if (stop.areaHeadingBefore != null)
-            _AreaHeading(area: stop.areaHeadingBefore!, dayNumber: dayNumber),
+            _AreaHeading(
+              area: stop.areaHeadingBefore!,
+              dayNumber: dayNumber,
+              position: stop.position,
+            ),
           _StopRow(stop: stop, isOver: isOver, dayNumber: dayNumber),
         ],
       ],
@@ -341,22 +345,28 @@ class _StopList extends StatelessWidget {
 /// and that is the whole correction door: what is visibly wrong is one tap
 /// from being right for the rest of the trip.
 class _AreaHeading extends ConsumerWidget {
-  const _AreaHeading({required this.area, required this.dayNumber});
+  const _AreaHeading({
+    required this.area,
+    required this.dayNumber,
+    required this.position,
+  });
 
   final String area;
   final int dayNumber;
+  final int position;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return InkWell(
-      key: Key('area-heading-$area'),
+      key: Key('area-heading-$position-$area'),
       onTap: () => _correctArea(
         context,
         ref,
         dayNumber: dayNumber,
         area: area,
         wholeRun: true,
+        position: position,
       ),
       child: Padding(
         padding: const EdgeInsets.only(top: 18, bottom: 2),
@@ -644,7 +654,7 @@ Future<void> _correctArea(
   required int dayNumber,
   required String? area,
   required bool wholeRun,
-  int? position,
+  required int position,
 }) async {
   final theme = Theme.of(context);
   final plan = ref.read(savedItineraryProvider).value;
@@ -727,10 +737,10 @@ Future<void> _correctArea(
   if (wholeRun && area != null) {
     await actions.setAreaRun(
       dayNumber: dayNumber,
-      currentArea: area,
+      position: position,
       area: answer,
     );
-  } else if (position != null) {
+  } else {
     await actions.setStopArea(
       dayNumber: dayNumber,
       position: position,
