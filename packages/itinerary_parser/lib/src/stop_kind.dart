@@ -11,7 +11,8 @@ class ClassifiedStop {
   final StopKind kind;
   final String? placeText;
   final List<String> places;
-  const ClassifiedStop({required this.kind, this.placeText, required this.places});
+  const ClassifiedStop(
+      {required this.kind, this.placeText, required this.places});
 }
 
 /// Classifies a stop and extracts its sendable placeText.
@@ -26,7 +27,8 @@ ClassifiedStop classifyStop({
 }) {
   // 1. areaHeading — decided by engine
   if (isAreaHeading) {
-    return const ClassifiedStop(kind: StopKind.areaHeading, placeText: null, places: []);
+    return const ClassifiedStop(
+        kind: StopKind.areaHeading, placeText: null, places: []);
   }
 
   final cleanResult = cleanStopText(raw);
@@ -38,31 +40,38 @@ ClassifiedStop classifyStop({
     // Extract payload after label separator : or -
     final payload = _mealPayload(raw, clean);
     if (payload == null || payload.trim().isEmpty) {
-      return const ClassifiedStop(kind: StopKind.mealLabel, placeText: null, places: []);
+      return const ClassifiedStop(
+          kind: StopKind.mealLabel, placeText: null, places: []);
     }
     // Check if payload is just TBD/nothing
     final payloadTokens = areaTokens(payload);
     if (payloadTokens.isEmpty ||
-        (payloadTokens.length == 1 && {'tbd', 'tba', 'none', 'n/a'}.contains(payloadTokens.first))) {
-      return const ClassifiedStop(kind: StopKind.mealLabel, placeText: null, places: []);
+        (payloadTokens.length == 1 &&
+            {'tbd', 'tba', 'none', 'n/a'}.contains(payloadTokens.first))) {
+      return const ClassifiedStop(
+          kind: StopKind.mealLabel, placeText: null, places: []);
     }
     final places = placesOnLinePayload(payload);
-    return ClassifiedStop(kind: StopKind.mealLabel, placeText: payload.trim(), places: places);
+    return ClassifiedStop(
+        kind: StopKind.mealLabel, placeText: payload.trim(), places: places);
   }
 
   // 3. note — furniture-only, Wi-Fi blob, bare time/duration
   if (_isNote(raw, clean, ws)) {
-    return const ClassifiedStop(kind: StopKind.note, placeText: null, places: []);
+    return const ClassifiedStop(
+        kind: StopKind.note, placeText: null, places: []);
   }
 
   // 4. place
   // placeText: strip bullet/time/annotation but keep the venue words
   final placeText = _extractPlaceText(raw, clean);
   if (placeText == null || placeText.trim().isEmpty) {
-    return const ClassifiedStop(kind: StopKind.note, placeText: null, places: []);
+    return const ClassifiedStop(
+        kind: StopKind.note, placeText: null, places: []);
   }
   final places = placesOnLinePayload(placeText);
-  return ClassifiedStop(kind: StopKind.place, placeText: placeText, places: places);
+  return ClassifiedStop(
+      kind: StopKind.place, placeText: placeText, places: places);
 }
 
 String? _mealPayload(String raw, String clean) {
@@ -84,27 +93,37 @@ String? _mealPayload(String raw, String clean) {
 bool _isNote(String raw, String clean, List<String> ws) {
   if (clean.isEmpty) return true;
   // Bare time/duration line
-  if (RegExp(r'^\s*\d{1,2}[:.]\d{2}\s*(?:am|pm)?\s*$', caseSensitive: false).hasMatch(clean) ||
-      RegExp(r'^\s*\d+\s*(?:min|mins|minute|minutes|hr|hrs|hour|hours)\s*$', caseSensitive: false).hasMatch(clean)) {
+  if (RegExp(r'^\s*\d{1,2}[:.]\d{2}\s*(?:am|pm)?\s*$', caseSensitive: false)
+          .hasMatch(clean) ||
+      RegExp(r'^\s*\d+\s*(?:min|mins|minute|minutes|hr|hrs|hour|hours)\s*$',
+              caseSensitive: false)
+          .hasMatch(clean)) {
     return true;
   }
   // All-furniture check (using clean text)
-  final content = [for (final w in ws) if (!genericStopWords.contains(w)) w];
+  final content = [
+    for (final w in ws)
+      if (!genericStopWords.contains(w)) w
+  ];
   if (content.isNotEmpty &&
-      content.every((w) => furnitureWords.contains(w) || venueGenericWords.contains(w))) {
+      content.every(
+          (w) => furnitureWords.contains(w) || venueGenericWords.contains(w))) {
     return true;
   }
   // Wi-Fi / amenities blob without vocab word
-  if (RegExp(r'wifi|wi-fi|amenit|check-in|check-out', caseSensitive: false).hasMatch(raw)) {
+  if (RegExp(r'wifi|wi-fi|amenit|check-in|check-out', caseSensitive: false)
+      .hasMatch(raw)) {
     // If no vocab word in the line, it's junk
     // We can't check vocab here without passing it; use heuristic: if it
     // contains a venue word that's not furniture, keep it
     // For now: Wi-Fi lines are notes unless they also contain a place-like word
     // Simple: if raw has wifi and is longer than 30 chars with no obvious venue, mark note
-    final hasVenue = venueGenericWords.any((v) => RegExp(r'\b' + v + r'\b', caseSensitive: false).hasMatch(raw));
+    final hasVenue = venueGenericWords.any(
+        (v) => RegExp(r'\b' + v + r'\b', caseSensitive: false).hasMatch(raw));
     if (!hasVenue || clean.length > 40) {
       // Check if it's a pure amenities blob
-      if (RegExp(r'wifi|password|amenit', caseSensitive: false).hasMatch(clean)) {
+      if (RegExp(r'wifi|password|amenit', caseSensitive: false)
+          .hasMatch(clean)) {
         return true;
       }
     }
@@ -129,7 +148,11 @@ String? _extractPlaceText(String raw, String clean) {
 /// Splits a placeText into individual places. Mirrors scorer's run-breaking
 /// punctuation: / , + & ;
 List<String> placesOnLinePayload(String placeText) {
-  final parts = placeText.split(RegExp(r'[/,+&;]')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  final parts = placeText
+      .split(RegExp(r'[/,+&;]'))
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
   // Strip parenthetical annotations from each
   final cleaned = <String>[];
   for (final p in parts) {

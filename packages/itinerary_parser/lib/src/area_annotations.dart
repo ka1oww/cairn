@@ -61,9 +61,10 @@ String? inTail(String text) {
                 'de',
                 'du',
                 'des',
-              }.contains(w.toLowerCase())) continue;
-              if (w[0].toUpperCase() != w[0] ||
-                  w[0].toLowerCase() == w[0]) {
+              }.contains(w.toLowerCase())) {
+                continue;
+              }
+              if (w[0].toUpperCase() != w[0] || w[0].toLowerCase() == w[0]) {
                 ok = false;
                 break;
               }

@@ -11,7 +11,9 @@ Uri mapsSearchUri(MapsApp app, String query) {
   final encoded = Uri.encodeComponent(query);
   switch (app) {
     case MapsApp.google:
-      return Uri.parse('https://www.google.com/maps/search/?api=1&query=$encoded');
+      return Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$encoded',
+      );
     case MapsApp.apple:
       return Uri.parse('https://maps.apple.com/?q=$encoded');
     case MapsApp.waze:

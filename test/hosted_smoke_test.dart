@@ -110,9 +110,33 @@ void main() {
             (number: 2, dateIso: '2027-06-15', place: 'Bergen'),
           ],
           stops: const [
-            (dayNumber: 1, position: 0, text: 'Vigeland', timeIso: null, kind: null, areaText: null, areaSource: null),
-            (dayNumber: 1, position: 1, text: 'Opera', timeIso: '10:12', kind: null, areaText: null, areaSource: null),
-            (dayNumber: 2, position: 0, text: 'Fløibanen', timeIso: '09:00', kind: null, areaText: null, areaSource: null),
+            (
+              dayNumber: 1,
+              position: 0,
+              text: 'Vigeland',
+              timeIso: null,
+              kind: null,
+              areaText: null,
+              areaSource: null,
+            ),
+            (
+              dayNumber: 1,
+              position: 1,
+              text: 'Opera',
+              timeIso: '10:12',
+              kind: null,
+              areaText: null,
+              areaSource: null,
+            ),
+            (
+              dayNumber: 2,
+              position: 0,
+              text: 'Fløibanen',
+              timeIso: '09:00',
+              kind: null,
+              areaText: null,
+              areaSource: null,
+            ),
           ],
           setAsides: const [
             (

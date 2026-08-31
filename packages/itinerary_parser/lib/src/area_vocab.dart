@@ -13,6 +13,7 @@ final RegExp _wordRe = RegExp(r"[A-Za-z][A-Za-z'’‘’\-]*");
 /// Result of [buildAnchorVocab]: the vocabulary + debug info.
 class AnchorVocab {
   final Set<String> vocab;
+
   /// word -> (line numbers, kinds) for fixture comparison
   final Map<String, List<int>> contribLines;
   final Map<String, Set<String>> contribKinds;
@@ -22,7 +23,8 @@ class AnchorVocab {
 /// Header kind for day-boundary logic.
 String headerKind(String? text) {
   if (text == null) return 'none';
-  if (RegExp(r'^\s*(?:###\s*)?day\s*\d+\b', caseSensitive: false).hasMatch(text)) {
+  if (RegExp(r'^\s*(?:###\s*)?day\s*\d+\b', caseSensitive: false)
+      .hasMatch(text)) {
     return 'daynum';
   }
   if (RegExp(
@@ -59,7 +61,9 @@ AnchorVocab buildAnchorVocab(
     final capTokens = <String>{};
     for (final m in _wordRe.allMatches(stripDiacritics(srcText))) {
       final w = m.group(0)!;
-      if (w.isNotEmpty && w[0].toUpperCase() == w[0] && w[0].toLowerCase() != w[0]) {
+      if (w.isNotEmpty &&
+          w[0].toUpperCase() == w[0] &&
+          w[0].toLowerCase() != w[0]) {
         capTokens.addAll(areaTokens(w));
       }
     }
@@ -89,7 +93,9 @@ AnchorVocab buildAnchorVocab(
       if (t != null && t.isNotEmpty) {
         add(areaTokens(t), day.headerLine, 'title', t);
       }
-    } else if (kind == 'place' && day.headerText != null && day.headerText!.isNotEmpty) {
+    } else if (kind == 'place' &&
+        day.headerText != null &&
+        day.headerText!.isNotEmpty) {
       final t = day.headerText!.replaceAll(_urlRe, ' ');
       add(areaTokens(t), day.headerLine, 'placeheader', t);
     }
@@ -106,9 +112,18 @@ AnchorVocab buildAnchorVocab(
     }
     // (c) hotel name lines: <=9 words, capitalized words only
     if (hotelWordRegExp.hasMatch(stripped) && stripped.trim().isNotEmpty) {
-      final origWords = _wordRe.allMatches(stripDiacritics(stripped)).map((m) => m.group(0)!).toList();
+      final origWords = _wordRe
+          .allMatches(stripDiacritics(stripped))
+          .map((m) => m.group(0)!)
+          .toList();
       if (origWords.length <= 9) {
-        final caps = [for (final w in origWords) if (w.isNotEmpty && w[0].toUpperCase() == w[0] && w[0].toLowerCase() != w[0]) w];
+        final caps = [
+          for (final w in origWords)
+            if (w.isNotEmpty &&
+                w[0].toUpperCase() == w[0] &&
+                w[0].toLowerCase() != w[0])
+              w
+        ];
         final toks = [for (final w in caps) ...areaTokens(w)];
         add(toks, ln, 'hotel', stripped);
       }
@@ -117,11 +132,15 @@ AnchorVocab buildAnchorVocab(
     for (final m in RegExp(r'\(([^)]*)\)').allMatches(stripped)) {
       final p = m.group(1)!;
       final pw = areaTokens(p);
-      if (pw.length >= 1 &&
+      if (pw.isNotEmpty &&
           pw.length <= 3 &&
           !p.codeUnits.any((c) => c >= 48 && c <= 57)) {
-        final real = [for (final w in pw) if (!genericStopWords.contains(w) && !venueGenericWords.contains(w)) w];
-        if (real.length >= 1 && real.length <= 2) {
+        final real = [
+          for (final w in pw)
+            if (!genericStopWords.contains(w) && !venueGenericWords.contains(w))
+              w
+        ];
+        if (real.isNotEmpty && real.length <= 2) {
           add(real, ln, 'paren', p);
         }
       }

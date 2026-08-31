@@ -433,9 +433,8 @@ Set<String> areaWords(String s) => {
 
 /// Joined form: concatenation of area words — for hyphen-joined matching.
 String joinedAreaWords(String s) => areaTokens(s)
-    .where((w) =>
-        !genericStopWords.contains(w) &&
-        !venueGenericWords.contains(w))
+    .where(
+        (w) => !genericStopWords.contains(w) && !venueGenericWords.contains(w))
     .join();
 
 /// True when every content token is furniture/venue-generic/digit-bearing.
@@ -446,7 +445,8 @@ bool isFurniture(String cand) {
   ];
   if (ws.isEmpty) return true;
   if (cand.codeUnits.any((c) => c >= 48 && c <= 57)) return true;
-  return ws.every((w) => furnitureWords.contains(w) || venueGenericWords.contains(w));
+  return ws.every(
+      (w) => furnitureWords.contains(w) || venueGenericWords.contains(w));
 }
 
 /// Area verdict matching (§3.4): correct if subset/superset or joined equality.
@@ -472,7 +472,8 @@ String areaVerdict(String? assigned, List<String> accepts) {
 /// space-joined.
 String normalizedArea(String s) {
   final ws = areaTokens(s)
-      .where((w) => !genericStopWords.contains(w) && !venueGenericWords.contains(w))
+      .where((w) =>
+          !genericStopWords.contains(w) && !venueGenericWords.contains(w))
       .toList();
   // Deduplicate joined variant: if last token is the join of previous tokens, drop it
   // (the tokenizer appends joined form — for normalized we want the split form)

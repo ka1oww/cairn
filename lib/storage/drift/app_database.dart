@@ -79,6 +79,7 @@ class ItineraryStops extends Table {
 /// App-level preferences (one row, id 1). Local-only, never synced.
 class AppPreferences extends Table {
   IntColumn get id => integer()();
+
   /// google | apple | waze
   TextColumn get mapsApp => text().withDefault(const Constant('google'))();
 
@@ -742,9 +743,7 @@ class AppDatabase extends _$AppDatabase {
             position: stop.position,
             stopText: stop.text,
             timeIso: Value(stop.timeIso),
-            kind: stop.kind == null
-                ? const Value.absent()
-                : Value(stop.kind!),
+            kind: stop.kind == null ? const Value.absent() : Value(stop.kind!),
             areaText: Value(stop.areaText),
             areaSource: Value(stop.areaSource),
           ),

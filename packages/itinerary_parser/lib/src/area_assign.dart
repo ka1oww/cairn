@@ -13,7 +13,8 @@ class AreaStopInput {
   final String raw;
   final bool hasTime;
   final int lineNumber;
-  const AreaStopInput({required this.raw, required this.hasTime, required this.lineNumber});
+  const AreaStopInput(
+      {required this.raw, required this.hasTime, required this.lineNumber});
 }
 
 /// One day as seen by the assignment engine.
@@ -48,6 +49,7 @@ Map<int, AreaAssignment> anchorAssign(
     if (gazetteer != null) return gazetteer.contains(s);
     return false;
   }
+
   bool hasGaz() => gazetteerObj != null || gazetteer != null;
   final out = <int, AreaAssignment>{};
   String? running;
@@ -84,7 +86,10 @@ Map<int, AreaAssignment> anchorAssign(
           clean.isNotEmpty &&
           !isHotelLine &&
           !isTransitLeg) {
-        final content = [for (final w in ws) if (!genericStopWords.contains(w)) w];
+        final content = [
+          for (final w in ws)
+            if (!genericStopWords.contains(w)) w
+        ];
         if (content.isNotEmpty && content.length <= 5) {
           final leftover = [
             for (final w in ws)
@@ -122,9 +127,11 @@ Map<int, AreaAssignment> anchorAssign(
 
       // train-route destination (C7t)
       if (trainRule && assignedOwn == null) {
-        if (RegExp(r'^\s*(?:train\s+)?route\b', caseSensitive: false).hasMatch(clean)) {
+        if (RegExp(r'^\s*(?:train\s+)?route\b', caseSensitive: false)
+            .hasMatch(clean)) {
           final dests = <String>[];
-          for (final m in stationRegExp.allMatches(raw.replaceAll(RegExp(r'https?://\S+'), ' '))) {
+          for (final m in stationRegExp
+              .allMatches(raw.replaceAll(RegExp(r'https?://\S+'), ' '))) {
             final d = m.group(1)!;
             if (areaTokens(d).every((w) => vocab.contains(w))) {
               dests.add(d);
@@ -151,7 +158,8 @@ Map<int, AreaAssignment> anchorAssign(
       }
 
       String? assigned = assignedOwn ?? running;
-      String? source = assignedSource ?? (assigned != null ? 'runningHeading' : 'none');
+      String? source =
+          assignedSource ?? (assigned != null ? 'runningHeading' : 'none');
       int? setBy = assignedSetBy ?? runningSetBy;
       // For inlineLocality, source is inlineLocality even when via assignedOwn
       // For running fallback, source is runningHeading
@@ -165,9 +173,12 @@ Map<int, AreaAssignment> anchorAssign(
       // overrides: traveller annotation beats context
       var overridden = false;
       for (final ann in travellerAnnotations(raw)) {
-        if (ann.kind == 'declared' || areaTokens(ann.capture).any((w) => vocab.contains(w))) {
+        if (ann.kind == 'declared' ||
+            areaTokens(ann.capture).any((w) => vocab.contains(w))) {
           assigned = ann.capture;
-          source = ann.kind == 'declared' ? 'travellerDeclared' : 'travellerProximity';
+          source = ann.kind == 'declared'
+              ? 'travellerDeclared'
+              : 'travellerProximity';
           setBy = null; // own-line source
           overridden = true;
           break;
@@ -177,9 +188,11 @@ Map<int, AreaAssignment> anchorAssign(
         for (final p in parens) {
           final pws = [
             for (final w in areaTokens(p))
-              if (!genericStopWords.contains(w) && !venueGenericWords.contains(w)) w
+              if (!genericStopWords.contains(w) &&
+                  !venueGenericWords.contains(w))
+                w
           ];
-          if (pws.length >= 1 && pws.length <= 3 && gazContains(pws.join(' '))) {
+          if (pws.isNotEmpty && pws.length <= 3 && gazContains(pws.join(' '))) {
             assigned = pws.join(' ');
             source = 'travellerProximity';
             setBy = null;
@@ -191,18 +204,21 @@ Map<int, AreaAssignment> anchorAssign(
       // Normalize: if assigned is empty/furniture-like with no content, keep null run semantics
       // But scorer assigns the raw capture — we keep it.
 
-      out[s.lineNumber] = AreaAssignment(text: assigned, source: source!, setByLine: setBy);
+      out[s.lineNumber] =
+          AreaAssignment(text: assigned, source: source!, setByLine: setBy);
     }
   }
   return out;
 }
 
-String? _seedForDay(String? place, Set<String> vocab, Set<String>? gazetteer, AreaGazetteer? gazObj) {
+String? _seedForDay(String? place, Set<String> vocab, Set<String>? gazetteer,
+    AreaGazetteer? gazObj) {
   bool contains(String s) {
     if (gazObj != null) return gazObj.contains(s);
     if (gazetteer != null) return gazetteer.contains(s);
     return false;
   }
+
   bool hasGaz() => gazObj != null || gazetteer != null;
   if (place == null || isFurniture(place)) return null;
   final t = inTail(place);

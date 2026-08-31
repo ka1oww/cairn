@@ -71,7 +71,8 @@ ParseResult parseItinerary(
 
 List<String> _stripPasteFurniture(List<String> lines) {
   final phRe = RegExp(r'^\s*\d{1,2}/\d{1,2}/\d{2},\s*\d{1,2}:\d{2}\s*[AP]M\b');
-  final ufRe = RegExp(r'^\s*https?://\S+\s*(\d{1,3}/\d{1,3})?\s*$', caseSensitive: false);
+  final ufRe = RegExp(r'^\s*https?://\S+\s*(\d{1,3}/\d{1,3})?\s*$',
+      caseSensitive: false);
   var result = List<String>.from(lines);
   if (lines.where((l) => phRe.hasMatch(l)).length >= 3) {
     result = [for (final l in result) phRe.hasMatch(l) ? '' : l];
@@ -105,12 +106,16 @@ ParseResult _annotateWithAreas(
         place: d.place,
         stops: [
           for (final s in d.stops)
-            AreaStopInput(raw: s.sourceLine.text, hasTime: s.time != null, lineNumber: s.sourceLine.lineNumber),
+            AreaStopInput(
+                raw: s.sourceLine.text,
+                hasTime: s.time != null,
+                lineNumber: s.sourceLine.lineNumber),
         ],
       ),
   ];
 
-  final assignments = anchorAssign(plines, areaDays, vocab, trainRule: true, gazetteerObj: gazetteer);
+  final assignments = anchorAssign(plines, areaDays, vocab,
+      trainRule: true, gazetteerObj: gazetteer);
 
   // Map line numbers that were markers (areaHeading)
   final markerLines = <int>{};
@@ -150,7 +155,8 @@ ParseResult _annotateWithAreas(
       if (assignment != null && assignment.text != null) {
         final src = _areaSourceFromString(assignment.source);
         if (isHeading) {
-          hint = AreaHint(text: assignment.text!, source: src, setBy: s.sourceLine);
+          hint = AreaHint(
+              text: assignment.text!, source: src, setBy: s.sourceLine);
         } else {
           final setByLine = assignment.setByLine;
           final setBy = setByLine != null &&
@@ -314,7 +320,8 @@ _Classified _classifyLine(
 
   final urlResult = stripUrls(line.effective);
   if (urlResult.hadUrl &&
-      (isTriviallyEmpty(urlResult.textWithoutUrl) || isFolioAfterUrl(urlResult.textWithoutUrl))) {
+      (isTriviallyEmpty(urlResult.textWithoutUrl) ||
+          isFolioAfterUrl(urlResult.textWithoutUrl))) {
     return _Classified(_Kind.urlOnly, line, reason: UnplacedReason.urlOnly);
   }
   final cleaned = urlResult.hadUrl ? urlResult.textWithoutUrl : line.effective;
@@ -348,7 +355,8 @@ _Classified _classifyLine(
     if (dateMatch != null) {
       // Date-range header demotion: "Itinerary 11/30 - 12/17" trailing "12/17" is not a place
       if (dateMatch.trailingText != null &&
-          RegExp(r'^\d{1,2}/\d{1,2}(?:/\d{2,4})?$').hasMatch(dateMatch.trailingText!.trim())) {
+          RegExp(r'^\d{1,2}/\d{1,2}(?:/\d{2,4})?$')
+              .hasMatch(dateMatch.trailingText!.trim())) {
         return _Classified(
           _Kind.dateHeader,
           line,
@@ -385,7 +393,9 @@ bool _nextNonBlankLooksLikeListItem(List<_Line> lines, int fromIndex) {
     if (isBlank(eff) || isDecorativeSeparator(eff)) continue;
     if (startsWithBullet(eff) || extractTime(eff) != null) return true;
     // Wanderlog widening: travel-leg shape "< 1 hr, 10 min"
-    if (RegExp(r'^<?\s*\d[\d\s,.·]*\s*(days?|hrs?|hr|mins?|min)\b', caseSensitive: false).hasMatch(eff.trim())) {
+    if (RegExp(r'^<?\s*\d[\d\s,.·]*\s*(days?|hrs?|hr|mins?|min)\b',
+            caseSensitive: false)
+        .hasMatch(eff.trim())) {
       return true;
     }
     return false;

@@ -10,7 +10,13 @@ class AreaEditRow {
   final String? area;
   final String? source; // AreaSource.name | 'person'
   final bool corrected;
-  const AreaEditRow({required this.id, required this.kind, this.area, this.source, this.corrected = false});
+  const AreaEditRow({
+    required this.id,
+    required this.kind,
+    this.area,
+    this.source,
+    this.corrected = false,
+  });
 }
 
 /// Re-derives running areas for one day's ordered rows.
@@ -21,7 +27,11 @@ List<String?> rederiveRunningAreas(List<AreaEditRow> day) {
     if (row.kind == 'areaHeading') {
       running = row.area;
       out.add(row.area);
-    } else if (row.corrected || (row.source != null && row.source != 'runningHeading' && row.source != 'hotelPrefix' && row.source != 'trainDestination')) {
+    } else if (row.corrected ||
+        (row.source != null &&
+            row.source != 'runningHeading' &&
+            row.source != 'hotelPrefix' &&
+            row.source != 'trainDestination')) {
       out.add(row.area);
     } else {
       out.add(running);

@@ -231,7 +231,11 @@ class Stop {
 /// Individual places on a multi-place line.
 List<String> placesOnLine(Stop stop) {
   if (stop.placeText == null) return [];
-  final parts = stop.placeText!.split(RegExp(r'[/,+&;]')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  final parts = stop.placeText!
+      .split(RegExp(r'[/,+&;]'))
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
   final cleaned = <String>[];
   for (final p in parts) {
     var c = p.replaceAll(RegExp(r'\([^)]*\)'), '').trim();
