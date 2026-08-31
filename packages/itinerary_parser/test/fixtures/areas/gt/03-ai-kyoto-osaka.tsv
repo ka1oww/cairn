@@ -1,0 +1,28 @@
+# Ground truth: 03-ai-kyoto-osaka.txt (hand-written 2026-08-31)
+# Lines 1-11 of the corpus file are harness capture noise (permission warnings, model banner),
+# not itinerary; they are blanked before parsing and carry no ground truth.
+# Line 47 ("Move to Osaka") is transit, not a tappable place - excluded.
+17	kyoto|gion|shijo-karasuma|NONE	check-in; line names both candidate areas itself
+18	arashiyama|kyoto|NONE	Arashiyama Bamboo Grove + Tenryu-ji; names carry Arashiyama
+19	gion|kyoto	kaiseki dinner in Gion - generic, area required
+24	kyoto|fushimi|NONE	Fushimi Inari Taisha unique
+25	kyoto|NONE	Onigiri in Kyoto Station; name carries Kyoto
+26	kyoto|NONE	Kinkaku-ji + Ryoan-ji unique
+27	kyoto|pontocho|NONE	Pontocho Alley unique
+32	kyoto|NONE	Kiyomizu-dera canonical
+33	kyoto|NONE	Nishiki Market
+34	kyoto|NONE	Ginkaku-ji + Philosopher's Path unique
+35	NONE|kyoto	generic "traditional tea house" - no fixed place
+40	nara|NONE	Todai-ji + Nara Park; names carry Nara; kyoto/osaka would be wrong
+41	himeji|NONE	Himeji Castle unique; kyoto/osaka would be wrong
+42	kyoto|teramachi	dinner in Teramachi - Teramachi streets exist in other cities; area helps
+48	osaka|dotonbori|NONE	Dotonbori named
+49	osaka|NONE	Osaka Castle + Umeda Sky Building; names carry Osaka/Umeda
+50	osaka|shinsaibashi|NONE	Shinsaibashi named
+55	osaka|shinsekai|NONE	Shinsekai + Tsutenkaku named
+56	osaka|shinsekai	kushikatsu in Shinsekai - generic dish line, area required
+57	osaka|NONE	Kuromon Ichiba / Kaiyukan named
+58	NONE|osaka	generic dinner cruise
+63	osaka|namba|nipponbashi|NONE	Namba/Nipponbashi named
+64	NONE|osaka	generic "Osaka-style ramen"
+65	kansai|osaka|NONE	Kansai Airport unique

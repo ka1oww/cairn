@@ -1,6 +1,10 @@
+import 'area_assign.dart';
+import 'area_vocab.dart';
 import 'date_header.dart';
+import 'gazetteer.dart';
 import 'line_classifier.dart';
 import 'models.dart';
+import 'stop_kind.dart';
 import 'time_parser.dart';
 
 /// Parses [text] — one block of pasted, unstructured trip-plan text — into
@@ -32,9 +36,12 @@ ParseResult parseItinerary(
   String text, {
   DateTime? tripStartDate,
   bool monthFirstNumericDates = false,
+  AreaGazetteer? gazetteer,
 }) {
-  final rawLines =
+  var rawLines =
       text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+  // Paste-path furniture strip: blank provably repeated print furniture
+  rawLines = _stripPasteFurniture(rawLines);
   final lines = <_Line>[
     for (var i = 0; i < rawLines.length; i++)
       _Line(i + 1, rawLines[i], stripWhatsAppPrefix(rawLines[i]) ?? rawLines[i],
@@ -53,10 +60,169 @@ ParseResult parseItinerary(
         c.kind == _Kind.placeHeader,
   );
 
+  final ParseResult base;
   if (!headerFound) {
-    return _buildFallbackResult(classified);
+    base = _buildFallbackResult(classified);
+  } else {
+    base = _buildHeaderModeResult(classified, tripStartDate);
   }
-  return _buildHeaderModeResult(classified, tripStartDate);
+  return _annotateWithAreas(base, rawLines, gazetteer);
+}
+
+List<String> _stripPasteFurniture(List<String> lines) {
+  final phRe = RegExp(r'^\s*\d{1,2}/\d{1,2}/\d{2},\s*\d{1,2}:\d{2}\s*[AP]M\b');
+  final ufRe = RegExp(r'^\s*https?://\S+\s*(\d{1,3}/\d{1,3})?\s*$',
+      caseSensitive: false);
+  var result = List<String>.from(lines);
+  if (lines.where((l) => phRe.hasMatch(l)).length >= 3) {
+    result = [for (final l in result) phRe.hasMatch(l) ? '' : l];
+  }
+  if (lines.where((l) => ufRe.hasMatch(l)).length >= 3) {
+    result = [for (final l in result) ufRe.hasMatch(l) ? '' : l];
+  }
+  return result;
+}
+
+ParseResult _annotateWithAreas(
+    ParseResult base, List<String> plines, AreaGazetteer? gazetteer) {
+  if (base.days.isEmpty) return base;
+  // Build anchor vocab inputs
+  final dayInfos = [
+    for (final d in base.days)
+      ParsedDayInfo(
+        headerText: d.headerSourceLine?.text,
+        headerLine: d.headerSourceLine?.lineNumber ?? 0,
+        place: d.place,
+      ),
+  ];
+  final vocabResult = buildAnchorVocab(plines, dayInfos);
+  final vocab = vocabResult.vocab;
+
+  // Build assignment inputs
+  final areaDays = [
+    for (final d in base.days)
+      AreaDayInput(
+        headerText: d.headerSourceLine?.text,
+        place: d.place,
+        stops: [
+          for (final s in d.stops)
+            AreaStopInput(
+                raw: s.sourceLine.text,
+                hasTime: s.time != null,
+                lineNumber: s.sourceLine.lineNumber),
+        ],
+      ),
+  ];
+
+  final assignments = anchorAssign(plines, areaDays, vocab,
+      trainRule: true, gazetteerObj: gazetteer);
+
+  // Map line numbers that were markers (areaHeading)
+  final markerLines = <int>{};
+  for (final entry in assignments.entries) {
+    if (entry.value.source == 'runningHeading' ||
+        entry.value.source == 'hotelPrefix' ||
+        entry.value.source == 'trainDestination') {
+      // Check if this line's clean text was exactly the marker — i.e. the
+      // assignment set running to this line's candidate.
+      // We mark it as heading if the assignment's setBy == line number
+      // and the line is not a meal/venue line (handled in anchorAssign).
+      // Simpler: if source is one of the three and setBy == lineNumber,
+      // and the stop's raw doesn't contain a venue-like multi-place payload
+      // We use the engine's own signal: assignedOwn was set on that line.
+      // The engine sets running + assignedOwn on marker lines; we detect
+      // by checking if setBy == lineNumber.
+      if (entry.value.setByLine == entry.key) {
+        markerLines.add(entry.key);
+      }
+    }
+  }
+
+  // Rebuild days with annotated stops
+  final newDays = <ParsedDay>[];
+  for (final d in base.days) {
+    final newStops = <Stop>[];
+    for (final s in d.stops) {
+      final assignment = assignments[s.sourceLine.lineNumber];
+      final isHeading = markerLines.contains(s.sourceLine.lineNumber);
+      final classified = classifyStop(
+        raw: s.sourceLine.text,
+        isAreaHeading: isHeading,
+        hasTime: s.time != null,
+      );
+
+      AreaHint? hint;
+      if (assignment != null && assignment.text != null) {
+        final src = _areaSourceFromString(assignment.source);
+        if (isHeading) {
+          hint = AreaHint(
+              text: assignment.text!, source: src, setBy: s.sourceLine);
+        } else {
+          final setByLine = assignment.setByLine;
+          final setBy = setByLine != null &&
+                  setByLine != s.sourceLine.lineNumber &&
+                  setByLine > 0 &&
+                  setByLine <= plines.length
+              ? SourceLine(setByLine, plines[setByLine - 1])
+              : null;
+          hint = AreaHint(text: assignment.text!, source: src, setBy: setBy);
+        }
+      }
+
+      // For place/mealLabel, placeText from classifier; for heading/note, null
+      String? placeText = classified.placeText;
+      // But for place stops, ensure placeText is at least s.text stripped of bullet if classifier gave null
+      if (classified.kind == StopKind.place && placeText == null) {
+        placeText = s.text;
+      }
+
+      newStops.add(Stop(
+        text: s.text,
+        time: s.time,
+        sourceLine: s.sourceLine,
+        kind: classified.kind,
+        area: hint,
+        placeText: placeText,
+      ));
+    }
+    newDays.add(ParsedDay(
+      index: d.index,
+      date: d.date,
+      place: d.place,
+      stops: newStops,
+      confidence: d.confidence,
+      uncertainty: d.uncertainty,
+      headerWeekday: d.headerWeekday,
+      headerSourceLine: d.headerSourceLine,
+      dateCandidate: d.dateCandidate,
+    ));
+  }
+
+  return ParseResult(
+    days: newDays,
+    unplacedLines: base.unplacedLines,
+    overallConfidence: base.overallConfidence,
+    usedHeaderlessFallback: base.usedHeaderlessFallback,
+    firstAmbiguousNumericDate: base.firstAmbiguousNumericDate,
+  );
+}
+
+AreaSource _areaSourceFromString(String s) {
+  switch (s) {
+    case 'travellerDeclared':
+      return AreaSource.travellerDeclared;
+    case 'travellerProximity':
+      return AreaSource.travellerProximity;
+    case 'inlineLocality':
+      return AreaSource.inlineLocality;
+    case 'hotelPrefix':
+      return AreaSource.hotelPrefix;
+    case 'trainDestination':
+      return AreaSource.trainDestination;
+    case 'runningHeading':
+    default:
+      return AreaSource.runningHeading;
+  }
 }
 
 /// A thin, style-alternative entry point wrapping [parseItinerary]. Prefer
@@ -153,7 +319,9 @@ _Classified _classifyLine(
   }
 
   final urlResult = stripUrls(line.effective);
-  if (urlResult.hadUrl && isTriviallyEmpty(urlResult.textWithoutUrl)) {
+  if (urlResult.hadUrl &&
+      (isTriviallyEmpty(urlResult.textWithoutUrl) ||
+          isFolioAfterUrl(urlResult.textWithoutUrl))) {
     return _Classified(_Kind.urlOnly, line, reason: UnplacedReason.urlOnly);
   }
   final cleaned = urlResult.hadUrl ? urlResult.textWithoutUrl : line.effective;
@@ -185,6 +353,23 @@ _Classified _classifyLine(
     final dateMatch = tryParseDateHeader(cleaned.trim(),
         monthFirstNumericDates: monthFirstNumericDates);
     if (dateMatch != null) {
+      // Date-range header demotion: "Itinerary 11/30 - 12/17" trailing "12/17" is not a place
+      if (dateMatch.trailingText != null &&
+          RegExp(r'^\d{1,2}/\d{1,2}(?:/\d{2,4})?$')
+              .hasMatch(dateMatch.trailingText!.trim())) {
+        return _Classified(
+          _Kind.dateHeader,
+          line,
+          dateMatch: DateHeaderMatch(
+            day: dateMatch.day,
+            month: dateMatch.month,
+            year: dateMatch.year,
+            weekday: dateMatch.weekday,
+            trailingText: null,
+            numericAsWritten: dateMatch.numericAsWritten,
+          ),
+        );
+      }
       return _Classified(_Kind.dateHeader, line, dateMatch: dateMatch);
     }
 
@@ -206,7 +391,14 @@ bool _nextNonBlankLooksLikeListItem(List<_Line> lines, int fromIndex) {
   for (var j = fromIndex + 1; j < lines.length; j++) {
     final eff = lines[j].effective;
     if (isBlank(eff) || isDecorativeSeparator(eff)) continue;
-    return startsWithBullet(eff) || extractTime(eff) != null;
+    if (startsWithBullet(eff) || extractTime(eff) != null) return true;
+    // Wanderlog widening: travel-leg shape "< 1 hr, 10 min"
+    if (RegExp(r'^<?\s*\d[\d\s,.·]*\s*(days?|hrs?|hr|mins?|min)\b',
+            caseSensitive: false)
+        .hasMatch(eff.trim())) {
+      return true;
+    }
+    return false;
   }
   return false;
 }

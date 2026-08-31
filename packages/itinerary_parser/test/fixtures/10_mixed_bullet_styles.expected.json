@@ -12,7 +12,10 @@
           "sourceLine": {
             "lineNumber": 2,
             "text": "- Fushimi Inari"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Fushimi Inari"
         },
         {
           "text": "Kinkaku-ji",
@@ -21,7 +24,10 @@
           "sourceLine": {
             "lineNumber": 3,
             "text": "* Kinkaku-ji"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Kinkaku-ji"
         },
         {
           "text": "Kiyomizu-dera",
@@ -30,7 +36,10 @@
           "sourceLine": {
             "lineNumber": 4,
             "text": "• Kiyomizu-dera"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Kiyomizu-dera"
         },
         {
           "text": "Gion district walk",
@@ -39,7 +48,10 @@
           "sourceLine": {
             "lineNumber": 5,
             "text": "– Gion district walk"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Gion district walk"
         },
         {
           "text": "Nishiki Market",
@@ -48,7 +60,10 @@
           "sourceLine": {
             "lineNumber": 6,
             "text": "1. Nishiki Market"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Nishiki Market"
         },
         {
           "text": "Arashiyama bamboo grove",
@@ -57,7 +72,10 @@
           "sourceLine": {
             "lineNumber": 7,
             "text": "2) Arashiyama bamboo grove"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Arashiyama bamboo grove"
         },
         {
           "text": "Sagano scenic railway",
@@ -66,7 +84,10 @@
           "sourceLine": {
             "lineNumber": 8,
             "text": "(3) Sagano scenic railway"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Sagano scenic railway"
         },
         {
           "text": "Philosopher's Path",
@@ -75,7 +96,10 @@
           "sourceLine": {
             "lineNumber": 9,
             "text": "Philosopher's Path"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Philosopher's Path"
         }
       ],
       "confidence": "high",

@@ -1,0 +1,77 @@
+# Ground truth: 01-captain-tokyo.txt (hand-written 2026-08-31)
+# line<TAB>accepted areas (pipe-separated, lowercase; NONE = sending no area is fully correct)<TAB>note
+# Rows are PLACE stops only (lines a traveller would tap expecting a Maps result).
+# Area principle: the area in force per the document itself; real-world conflicts flagged in notes.
+3	ginza|tsukiji|tokyo	hotel line; captain labels it GINZA HOTEL, physically Tsukiji
+9	akihabara	Book Off chain - area needed; line has captain's typo "Akhiabara"
+10	akihabara	Animate chain (Nagoya branch also in this plan) - area critical
+11	akihabara	Kotobukiya has multiple branches
+12	akihabara	Mandarake has Shibuya/Nakano branches
+19	tokyo station|tokyo|NONE	line itself says "Located in Tokyo Station"
+25	ginza|NONE	Brand Off Ginza - name carries area
+27	ginza|NONE	Komehyo Ginza - name carries area; Komehyo Osu also in this plan
+29	ginza	the seven-shop row (UNIQLO, GU, WAKO, ITOYA, LOFT, GINZA SIX) - chains, area critical
+31	ginza	WORLDFLAG: Jack Road is actually in Nakano; document places it under Ginza
+35	ginza	street-food stalls
+37	ginza	street-food stalls
+43	akihabara	traveller wrote "(near Akihabara)"; Udon Maruka's famous branch is Kanda (adjacent) - checks out
+45	ginza|NONE	name carries "Ginza Onodera"
+47	ginza	traveller wrote "(near ginza)"
+49	ginza|NONE	Bongen Coffee is Ginza; GLITCH (alternative) is Jinbocho - conflicting line
+56	asakusa|NONE	name carries ASAKUSA
+58	asakusa|NONE	name carries Asakusa
+60	asakusa|NONE	Sensoji unique
+62	asakusa	Nishisandou arcade
+71	ueno|NONE	name carries Ueno
+73	ueno	Mizutani Camera; line says 3min from UENO station
+75	ueno|okachimachi	Gala Okachimachi
+77	ueno	Mode off is a chain - area critical
+83	ginza	seven-shop row again
+85	ginza	WORLDFLAG: Jack Road again (Nakano in reality)
+89	ginza	street food
+91	ginza	street food
+99	NONE|ginza	dinner sushi in Japanese script; day-2 context ends in Ginza; real location unverified
+101	asakusa	traveller wrote "(Near ASAKUSA STATION)"
+103	NONE|jinbocho	WORLDFLAG: GLITCH is in Jinbocho; assigning ginza would be wrong
+104	shibuya|NONE	SHIBUYA HOTEL line - name carries area
+110	harajuku|togo|NONE	Togo Shrine + Takeshita Street; Harajuku in reality
+112	harajuku|togo|takeshita	Brandy Melville Tokyo is Jingumae/Harajuku - chain, area needed
+124	shimokitazawa	desert snow - obscure thrift shop, area critical
+126	shimokitazawa	TreFacStyle is a chain - area critical
+128	shimokitazawa|NONE	name carries Shimokitazawa
+136	shibuya	BEAMS+ chain - area critical
+138	shibuya	STUSSY chain - STUSSY Nagoya also in this plan, area critical
+140	shibuya	Carhartt WIP chain
+142	shibuya	MEGA DON QUIJOTE chain - area critical
+144	shibuya	HONTEN CANDY APPLE; doc context Shibuya
+146	shibuya	GU chain - area critical
+148	shibuya|NONE	name carries Shibuya
+150	NONE|shibuya	7-Eleven generic - any area unnecessary
+152	shibuya	Chukasoba Kotetsu
+154	shibuya|harajuku	WORLDFLAG: SMOKEHOUSE (T.Y.Harbor group) is Harajuku
+156	shibuya|harajuku	REISSUE is near Meiji Shrine (Harajuku, inside Shibuya ward); "(Near Shrine)" as area = junk
+158	shimokitazawa	traveller wrote (SHIMOKITAZAWA) twice on the line
+161	gotemba|NONE	Gotemba Premium Outlet - name unique
+167	shibuya|NONE	name carries SHIBUYA
+177	nerima|tokyo|NONE	Warner Bros Studio Tour is Nerima; name unique
+188	shibuya|NONE	name carries Shibuya
+190	nerima|NONE	Harry Potter Restaurant is at the studio (Nerima); shibuya would be wrong
+192	shibuya|NONE	name carries Shibuya-
+194	shibuya	traveller wrote "(near Shibuya STN , go after harry potter)"
+195	nagoya|NONE	NAGOYA HOTEL line - name carries area
+207	nagoya|NONE	name carries NAGOYA
+213	nagoya|osu|NONE	Osu Shopping District
+215	nagoya|osu|NONE	name carries Osu
+217	nagoya|osu	2ND STREET chain - area critical
+219	nagoya|NONE	name carries Nagoya
+221	nagoya|osu	Tsukumo Watch
+227	nagoya	Maruya Honten - has multiple branches
+229	nagoya	MOUMOU TEI
+231	nagoya	Yamamotoya Honten - Nagoya chain
+236	nagoya|sakae	STUSSY - the plan also has STUSSY Shibuya; area CRITICAL
+238	nagoya|sakae|NONE	name carries Nagoya Sakae
+242	nagoya	ICHIRAN - the settled design's own chain example; area critical
+244	nagoya|NONE	name carries NAGOYA STN
+246	nagoya	MOUMOU TEI again
+254	asakusa|NONE	HOTEL AT ASAKUSA - name carries area
+266	harajuku|NONE	name carries HARAJUKU

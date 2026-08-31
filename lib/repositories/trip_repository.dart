@@ -122,6 +122,9 @@ class TripRepository {
               position: position,
               text: stop.text,
               timeIso: stop.time?.iso,
+              kind: null,
+              areaText: null,
+              areaSource: null,
             ),
       ],
       setAsides: [

@@ -12,7 +12,14 @@
           "sourceLine": {
             "lineNumber": 4,
             "text": "Land at Haneda, hotel in Shinjuku"
-          }
+          },
+          "kind": "place",
+          "area": {
+            "text": "Shinjuku",
+            "source": "inlineLocality",
+            "setBy": null
+          },
+          "placeText": "Land at Haneda, hotel in Shinjuku"
         },
         {
           "text": "Meiji Shrine walk",
@@ -21,7 +28,14 @@
           "sourceLine": {
             "lineNumber": 5,
             "text": "- Meiji Shrine walk"
-          }
+          },
+          "kind": "place",
+          "area": {
+            "text": "tokyo",
+            "source": "runningHeading",
+            "setBy": null
+          },
+          "placeText": "Meiji Shrine walk"
         }
       ],
       "confidence": "high",
@@ -55,7 +69,14 @@
           "sourceLine": {
             "lineNumber": 8,
             "text": "- TeamLab Planets 11am"
-          }
+          },
+          "kind": "place",
+          "area": {
+            "text": "tokyo",
+            "source": "runningHeading",
+            "setBy": null
+          },
+          "placeText": "TeamLab Planets 11am"
         },
         {
           "text": "Golden Gai at night",
@@ -64,7 +85,14 @@
           "sourceLine": {
             "lineNumber": 9,
             "text": "- Golden Gai at night"
-          }
+          },
+          "kind": "place",
+          "area": {
+            "text": "tokyo",
+            "source": "runningHeading",
+            "setBy": null
+          },
+          "placeText": "Golden Gai at night"
         }
       ],
       "confidence": "high",
@@ -88,7 +116,14 @@
           "sourceLine": {
             "lineNumber": 12,
             "text": "- Fushimi Inari"
-          }
+          },
+          "kind": "place",
+          "area": {
+            "text": "kyoto",
+            "source": "runningHeading",
+            "setBy": null
+          },
+          "placeText": "Fushimi Inari"
         },
         {
           "text": "10:12 train to Kyoto",
@@ -100,7 +135,14 @@
           "sourceLine": {
             "lineNumber": 13,
             "text": "- 10:12 train to Kyoto"
-          }
+          },
+          "kind": "place",
+          "area": {
+            "text": "kyoto",
+            "source": "runningHeading",
+            "setBy": null
+          },
+          "placeText": "train to Kyoto"
         }
       ],
       "confidence": "high",
@@ -131,7 +173,10 @@
           "sourceLine": {
             "lineNumber": 16,
             "text": "- Dotonbori"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Dotonbori"
         }
       ],
       "confidence": "high",
@@ -162,7 +207,10 @@
           "sourceLine": {
             "lineNumber": 19,
             "text": "- Fly home"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Fly home"
         }
       ],
       "confidence": "high",

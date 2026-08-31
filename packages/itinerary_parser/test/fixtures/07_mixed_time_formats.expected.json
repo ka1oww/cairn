@@ -15,7 +15,10 @@
           "sourceLine": {
             "lineNumber": 2,
             "text": "- 16:40 Arrive Narita Airport"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Arrive Narita Airport"
         },
         {
           "text": "Check in around 4.40 PM",
@@ -24,7 +27,10 @@
           "sourceLine": {
             "lineNumber": 3,
             "text": "- Check in around 4.40 PM"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Check in around 4.40 PM"
         },
         {
           "text": "0900 Tsukiji breakfast market",
@@ -36,7 +42,10 @@
           "sourceLine": {
             "lineNumber": 4,
             "text": "- 0900 Tsukiji breakfast market"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "0900 Tsukiji breakfast market"
         },
         {
           "text": "14:00-16:00 Free time at the hotel pool",
@@ -48,7 +57,10 @@
           "sourceLine": {
             "lineNumber": 5,
             "text": "- 14:00-16:00 Free time at the hotel pool"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "16:00 Free time at the hotel pool"
         }
       ],
       "confidence": "high",

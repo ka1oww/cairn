@@ -1,0 +1,2 @@
+art	([11, 12], ['paren', 'title'])
+local	([23, 25], ['paren', 'title'])

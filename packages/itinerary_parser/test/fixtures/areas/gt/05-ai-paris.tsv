@@ -1,0 +1,18 @@
+# Ground truth: 05-ai-paris.txt (hand-written 2026-08-31)
+# Everything is in/near Paris. Tips block (32-35) excluded as non-place.
+6	paris|NONE	Louvre unique
+7	paris|saint-germain	Le Relais de l'Entrecote - multiple branches (incl. abroad); area required
+8	paris|NONE	Musee d'Orsay unique
+9	paris|saint-germain|NONE	Brasserie Lipp famous single location
+12	paris|marais|beaubourg|NONE	Centre Pompidou unique
+13	marais|paris	Breizh Cafe - multiple branches even within Paris; Marais is the intended one
+14	marais|paris|NONE	Musee Picasso (Paris) + Carnavalet, both Marais
+15	marais|paris|NONE	Chez Janou single location
+18	paris|invalides|NONE	Invalides named in line
+19	paris|grands boulevards	Bouillon Chartier - 3 branches in Paris; Grands Boulevards is the historic one
+20	paris|NONE	Musee Rodin unique (Paris one canonical)
+21	paris|canal saint-martin|NONE	Canal Saint-Martin named
+24	le bourget|paris|NONE	line itself says Le Bourget
+25	paris|aligre|NONE	Marche d'Aligre named
+26	paris|NONE	Orangerie unique
+27	paris|latin quarter|NONE	Latin Quarter named

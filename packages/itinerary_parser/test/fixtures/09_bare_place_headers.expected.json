@@ -12,7 +12,10 @@
           "sourceLine": {
             "lineNumber": 2,
             "text": "- Fushimi Inari Taisha"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Fushimi Inari Taisha"
         },
         {
           "text": "Kinkaku-ji",
@@ -21,7 +24,10 @@
           "sourceLine": {
             "lineNumber": 3,
             "text": "- Kinkaku-ji"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Kinkaku-ji"
         },
         {
           "text": "18:00 Kaiseki dinner",
@@ -33,7 +39,10 @@
           "sourceLine": {
             "lineNumber": 4,
             "text": "- 18:00 Kaiseki dinner"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Kaiseki dinner"
         }
       ],
       "confidence": "medium",
@@ -57,7 +66,10 @@
           "sourceLine": {
             "lineNumber": 7,
             "text": "- Todai-ji Temple"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Todai-ji Temple"
         },
         {
           "text": "Feed the deer in the park",
@@ -66,7 +78,10 @@
           "sourceLine": {
             "lineNumber": 8,
             "text": "- Feed the deer in the park"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Feed the deer in the park"
         }
       ],
       "confidence": "medium",
@@ -90,7 +105,10 @@
           "sourceLine": {
             "lineNumber": 11,
             "text": "- Dotonbori"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Dotonbori"
         },
         {
           "text": "20:30 Umeda Sky Building",
@@ -102,7 +120,10 @@
           "sourceLine": {
             "lineNumber": 12,
             "text": "- 20:30 Umeda Sky Building"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Umeda Sky Building"
         }
       ],
       "confidence": "medium",

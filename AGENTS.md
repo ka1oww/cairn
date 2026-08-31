@@ -29,7 +29,7 @@ import what is written there, not here.
 - Drift's generated code (`lib/**/*.g.dart`) is not checked in (root
   `.gitignore`): run `dart run build_runner build` after checkout, before
   analyzing or testing the app.
-- Schema is at v8. A test that stands up an *old* schema by winding
+- Schema is at v9. A test that stands up an *old* schema by winding
   `user_version` back must also drop everything later versions added
   (`test/trip_id_test.dart`'s `windBackToV4` is the pattern) -- an upgrade that
   finds its own column already there fails outright, and the failure reads like
@@ -73,7 +73,14 @@ import what is written there, not here.
   its number — photos key on it — so the merge never renumbers and never
   re-dates an existing day. It speaks `ConfirmedDay`, not
   `cairn_model.TripDay`: saved plans carry open dates and have no clock yet
-  (the repository says why).
+  (the repository says why). Two more residents, the tap-to-Maps phase-1
+  scaffolding, are not yet called from anywhere above them: `area_edit.dart`
+  re-derives a day's running areas after an edit (a renamed area heading
+  re-flows every downstream stop still on `runningHeading`/`hotelPrefix`/
+  `trainDestination` that the person has not corrected), and
+  `maps_handoff.dart` composes the one Maps search query
+  (`searchText, area`, or bare `searchText` when there is no area) and the
+  three keyless app URLs (Google/Apple/Waze) it opens.
 - **The paste box survives the process, but only for an import.**
   `lib/app_state/plan_draft.dart` holds the whole rule and
   `plan_drafts` (one row, id 1, schema v7) holds the text. An import that
@@ -580,8 +587,8 @@ Sharp edges worth knowing before touching this directory again:
   exist before `trip_members` can reference it but the policies are written in
   terms of membership. Read that comment before reordering anything.
 - **A hosted project exists and migrations `0001`-`0010` are applied to it**
-  (`0011`, the photo transport delta, is written and locally probed but applied
-  nowhere else), and an
+  (`0011`, the photo transport delta, and `0012`, the tap-to-Maps area
+  columns, are written and locally probed but applied nowhere else), and an
   ordinary build points at it (`supabase/README.md` is the authority on the
   defines and on what the hosted project has and has not actually done). The
   adversarial checks still run somewhere else and must: `supabase/tests/`

@@ -574,6 +574,9 @@ class TripSync {
             position: stop.position,
             text: stop.text,
             timeIso: stop.timeIso,
+            kind: null,
+            areaText: null,
+            areaSource: null,
           ),
     ];
     final incomingAsides = [

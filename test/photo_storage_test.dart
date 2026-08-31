@@ -175,7 +175,17 @@ void main() {
     );
     await before.replaceItinerary(
       days: [(number: 1, dateIso: '2027-06-14', place: 'Tokyo')],
-      stops: [(dayNumber: 1, position: 0, text: 'Senso-ji', timeIso: null)],
+      stops: [
+        (
+          dayNumber: 1,
+          position: 0,
+          text: 'Senso-ji',
+          timeIso: null,
+          kind: null,
+          areaText: null,
+          areaSource: null,
+        ),
+      ],
       setAsides: [],
       nowUtcIso: '2027-06-14T09:00:00.000Z',
     );
@@ -188,6 +198,16 @@ void main() {
     await before.customStatement(
       'ALTER TABLE itinerary_days DROP COLUMN revised_at_utc_iso',
     );
+    await before.customStatement(
+      'ALTER TABLE itinerary_stops DROP COLUMN kind',
+    );
+    await before.customStatement(
+      'ALTER TABLE itinerary_stops DROP COLUMN area_text',
+    );
+    await before.customStatement(
+      'ALTER TABLE itinerary_stops DROP COLUMN area_source',
+    );
+    await before.customStatement('DROP TABLE app_preferences');
     await before.customStatement('PRAGMA user_version = 2');
     await before.close();
 

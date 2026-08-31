@@ -15,7 +15,10 @@
           "sourceLine": {
             "lineNumber": 2,
             "text": "- 9:00 伏見稲荷大社 (Fushimi Inari)"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "伏見稲荷大社"
         },
         {
           "text": "Déjeuner au marché de Nishiki",
@@ -24,7 +27,10 @@
           "sourceLine": {
             "lineNumber": 3,
             "text": "- Déjeuner au marché de Nishiki"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Déjeuner au marché de Nishiki"
         },
         {
           "text": "18:00 Dîner à Gion, réservation sous le nom Zhehang",
@@ -36,7 +42,10 @@
           "sourceLine": {
             "lineNumber": 4,
             "text": "- 18:00 Dîner à Gion, réservation sous le nom Zhehang"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Dîner à Gion, réservation sous le nom Zhehang"
         }
       ],
       "confidence": "high",

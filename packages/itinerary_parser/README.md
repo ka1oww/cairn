@@ -44,11 +44,12 @@ for (final line in result.unplacedLines) {
 ```
 
 That's the entire public API: one function, `parseItinerary`, and the
-result types it returns (`ParseResult`, `ParsedDay`, `Stop`, `SourceLine`,
-`UnplacedLine`, `UnplacedReason`, `ParsedTime`, `DateCandidate`, `Confidence`,
-`DayUncertainty`). `ItineraryParser.parse(...)` is a thin static-method
-alternative to `parseItinerary(...)` for callers who prefer that style;
-they behave identically.
+result types it returns (`ParseResult`, `ParsedDay`, `Stop`, `StopKind`,
+`AreaHint`, `AreaSource`, `SourceLine`, `UnplacedLine`, `UnplacedReason`,
+`ParsedTime`, `DateCandidate`, `Confidence`, `DayUncertainty`).
+`ItineraryParser.parse(...)` is a thin static-method alternative to
+`parseItinerary(...)` for callers who prefer that style; they behave
+identically.
 
 `tripStartDate` is optional. Passing it lets the parser turn `Day N`
 headers and year-less dates into real calendar dates. Without it, days
@@ -86,6 +87,26 @@ anywhere in the same comma-separated clause before the time (`maybe`,
 `ideally`, `tbc`, `tbd`, or a `~`), or `ish` / `?` / `or …` right after
 it, suppresses the time entirely. A hedge in a *different* clause does
 not: `Dinner at 7pm, maybe karaoke after` still stars the dinner.
+
+## Stop kind and area (tap-to-Maps, phase 1)
+
+Every stop carries a `StopKind` (`place`, `areaHeading`, `mealLabel`, or
+`note`) and, where the deterministic extractor could work one out, an
+`AreaHint` — the neighbourhood/area text in force for that stop, plus an
+`AreaSource` naming why (`travellerDeclared`, `travellerProximity`,
+`inlineLocality`, `runningHeading`, `hotelPrefix`, `trainDestination`, or
+`person`, the last reserved for an area the app's own editable-area seam
+set rather than the parser). `area` is null when nothing in the text lets
+the extractor say — sending nothing to a map is the correct behaviour
+then, not a bug. This is the same "ask, not guess" posture as the star
+rule and confidence: an area is only ever attached when the source text
+actually supports it. The extractor takes an optional `gazetteer`
+parameter (an `AreaGazetteer`); passing `null` is today's only supported
+mode.
+
+`placesOnLine(stop)` splits a stop's `placeText` on `/`, `,`, `+`, `&`,
+and `;` into the individual place names a multi-place line named, for a
+caller that wants to offer more than one Maps query per line.
 
 ## Confidence
 
@@ -227,6 +248,14 @@ building UI on top of this package.
 - **It does not translate or normalize text.** Stop text is kept exactly
   as pasted, including mixed languages and non-ASCII characters. It will
   not fix capitalization, spelling, or word order in what it keeps.
+
+- **The area extractor can attach the wrong running area.** It tracks one
+  "area in force" per day from headers and traveller wording, so a stop
+  that is actually a branch of a chain located outside that running area
+  (a coffee chain, a department store) can inherit the wrong
+  neighbourhood — this is a known, pinned limitation
+  (`test/area_ground_truth_test.dart`'s "known failures are documented"),
+  not something a caller should silently trust for every stop.
 
 - **Nothing is ever silently dropped, but "unplaced" isn't "wrong."**
   Every line the parser didn't turn into a header or a stop shows up in

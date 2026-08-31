@@ -1,0 +1,27 @@
+# Ground truth: 04-ai-seoul.txt (hand-written 2026-08-31)
+# Everything is in/near Seoul. Food-table rows (117-121) are recommendations, not stops - excluded.
+# Line 80/84/85 (generic shopping/checkout/head to airport) excluded as non-place.
+13	incheon|NONE	Incheon Airport unique
+14	NONE|seoul|hongdae|myeongdong	hotel check-in; line names candidate areas itself
+17	hongdae|seoul	dinner at "an izakaya" - fully generic, area required; line writes "suggested area: Hongdae or Hongik Univ. Station"
+18	hongdae|seoul|NONE	name carries Hongdae
+30	seoul|NONE	Gyeongbokgung unique
+34	bukchon|seoul|NONE	name carries Bukchon
+35	NONE|bukchon|seoul	generic "traditional Korean set menu"
+38	seoul|NONE	Jogyesa Temple - Jogyesa is unique enough
+39	insadong|seoul|NONE	name carries Insadong
+42	seoul|namsan|NONE	N Seoul Tower named
+43	NONE|seoul|namsan	optional tower dinner
+50	noryangjin|seoul|NONE	name carries Noryangjin
+51	NONE|noryangjin|seoul	generic "lunch nearby"
+54	seoul|NONE	Gwangjang Market named
+55	seoul|NONE	DDP unique
+58	myeongdong|seoul|NONE	name carries Myeongdong
+59	NONE|myeongdong|seoul	generic cosmetic shopping
+66	seoul|NONE	Deoksugung unique
+67	seoul|NONE	Changdeokgung unique
+68	bukchon|seoul|NONE	name carries Bukchon
+71	gangnam|seoul|NONE	name carries Gangnam
+72	gangnam|seoul|coex|NONE	Starfield Library (COEX) named
+73	seoul|jamsil|NONE	Lotte World Tower unique
+81	NONE|seoul	generic "coffee in a hanok cafe"
