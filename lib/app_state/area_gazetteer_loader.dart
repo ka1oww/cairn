@@ -35,6 +35,7 @@ import 'dart:convert';
 // not a file-system reach.
 import 'dart:io' show gzip;
 import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
