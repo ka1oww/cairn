@@ -188,6 +188,14 @@ void main() {
     await before.customStatement(
       'ALTER TABLE itinerary_days DROP COLUMN revised_at_utc_iso',
     );
+    await before.customStatement('ALTER TABLE itinerary_stops DROP COLUMN kind');
+    await before.customStatement(
+      'ALTER TABLE itinerary_stops DROP COLUMN area_text',
+    );
+    await before.customStatement(
+      'ALTER TABLE itinerary_stops DROP COLUMN area_source',
+    );
+    await before.customStatement('DROP TABLE app_preferences');
     await before.customStatement('PRAGMA user_version = 2');
     await before.close();
 
