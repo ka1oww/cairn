@@ -101,14 +101,9 @@ bool startsWithBullet(String line) {
   if (RegExp(r'^\d{1,3}(?=\s)').hasMatch(matched)) {
     final after = trimmed.substring(m.end).trimLeft();
     if (after.isEmpty) return true;
-    // Tightened: bare-number bullet only when remainder starts with
-    // capitalized word or bullet-like, NOT a time/digit/month or lowercase.
-    // This prevents eating "3 November" date headers and "10 am" times.
     if (RegExp(r'^(?:am|pm|:\d)', caseSensitive: false).hasMatch(after)) return false;
-    // If remainder starts with digit or lowercase, not a bullet list item
     if (RegExp(r'^[a-z]').hasMatch(after)) return false;
     if (RegExp(r'^\d').hasMatch(after)) return false;
-    // Month words are not bullet items
     if (RegExp(r'^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)', caseSensitive: false).hasMatch(after)) return false;
   }
   return true;

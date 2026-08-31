@@ -103,9 +103,8 @@ void main() {
       print('needs-area correct=$needsAreaCorrect wrong=$needsAreaWrong');
       print('doc01 correct=$doc01Correct wrong=$doc01Wrong doc05 wrong=$doc05Wrong');
 
-      // Pinned floors (plan §8.2, adjusted for port delta: 168 vs 170 is within
-      // measurement noise from tokenizer/diacritics differences; wrong/rowsOK hold).
-      expect(aggCorrect, greaterThanOrEqualTo(168), reason: 'aggregate correct floor');
+      // Pinned floors per plan §8.2 (C7t): 170/19/87.5%.
+      expect(aggCorrect, greaterThanOrEqualTo(170), reason: 'aggregate correct floor');
       expect(aggWrong, lessThanOrEqualTo(19), reason: 'aggregate wrong ceiling');
       expect(rowsOk, greaterThanOrEqualTo(87.5), reason: 'aggregate rowsOK floor');
       // Needs-area subset (74 rows where NONE absent)
