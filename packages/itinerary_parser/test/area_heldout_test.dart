@@ -55,7 +55,7 @@ void main() {
       // deliberately NO ceiling on `assigned` — a future rule that correctly
       // assigns `shibuya` to Shibuya Sky moves a row from noneOk to correct
       // and still passes. The floor punishes wrongness, never new coverage.
-      '08-captain-japan': (
+      '08-tokyo-heldout': (
         'Tokyo',
         const Floors(minRowsOk: 100.0, maxWrong: 0, minRowsOkCount: 25),
       ),

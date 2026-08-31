@@ -1,10 +1,10 @@
 # Held-out 08: Tokyo - captain-supplied held-out plan (sourced online), not in corpus. 25 rows.
-# Ground truth: 08-captain-japan.txt (5-day Tokyo plan PDF, pdftotext raw; hand-written 2026-08-31)
+# Ground truth: 08-tokyo-heldout.txt (5-day Tokyo plan PDF, pdftotext raw; hand-written 2026-08-31)
 # line<TAB>accepted areas (pipe-separated, lowercase; NONE = sending no area is fully correct)<TAB>note
 # Rows are PLACE stops only (lines a traveller would tap expecting a Maps result).
 # Labels were written BEFORE the parser was run on this document (held-out protocol).
-# Area principle: document-faithful, judged as a reasonable Tokyo local; harm criterion (would the
-# composed Maps query mislead?), per data/cairn-parser-areas/report.md section 1.
+# Area principle (the held-out labelling convention): document-faithful, judged as a reasonable
+# Tokyo local; harm criterion is whether the composed Maps query would mislead.
 # Excluded lines: 1/6/15/25/28 are DAY headers; 27 is the traveller's own question, not a tappable stop; 32 is blank.
 # 'tokyo' is accepted on Tokyo-proper rows whose venue name is distinctive (no chain stops exist in this doc);
 # it is NOT accepted for DisneySea (Urayasu, Chiba) or Narita (Chiba).
