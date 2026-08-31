@@ -477,9 +477,7 @@ Future<void> _chooseMapsApp(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
             child: Text(
               'Open places in',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontFamily: 'serif',
-              ),
+              style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'serif'),
             ),
           ),
           Padding(

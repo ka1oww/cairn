@@ -139,7 +139,11 @@ class _Day extends StatelessWidget {
     if (view.nextUp.stops.isEmpty)
       const _NothingPlanned()
     else
-      _StopList(stops: view.nextUp.stops, isOver: false, dayNumber: view.nextUp.number),
+      _StopList(
+        stops: view.nextUp.stops,
+        isOver: false,
+        dayNumber: view.nextUp.number,
+      ),
   ];
 
   List<Widget> _afterTheTrip(AfterTheTrip view) => [
@@ -160,7 +164,11 @@ class _Day extends StatelessWidget {
     if (view.lastDay.stops.isEmpty)
       const _NothingPlanned()
     else
-      _StopList(stops: view.lastDay.stops, isOver: true, dayNumber: view.lastDay.number),
+      _StopList(
+        stops: view.lastDay.stops,
+        isOver: true,
+        dayNumber: view.lastDay.number,
+      ),
   ];
 }
 
@@ -558,9 +566,7 @@ Future<void> _showPlacesSheet(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
             child: Text(
               stop.text,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontFamily: 'serif',
-              ),
+              style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'serif'),
             ),
           ),
           Padding(
@@ -704,8 +710,7 @@ Future<void> _correctArea(
               ListTile(
                 key: Key('area-choice-$other'),
                 title: Text(other),
-                onTap: () =>
-                    Navigator.of(sheet).pop(_AreaChoice.named(other)),
+                onTap: () => Navigator.of(sheet).pop(_AreaChoice.named(other)),
               ),
             ListTile(
               key: const Key('area-somewhere-else'),

@@ -698,8 +698,9 @@ class _AreaRow extends ConsumerWidget {
               icon: const Icon(Icons.close),
               color: theme.colorScheme.outline,
               tooltip: 'Search these stops without an area',
-              onPressed: () =>
-                  ref.read(pasteFlowProvider.notifier).setAreaRun(stop.id, null),
+              onPressed: () => ref
+                  .read(pasteFlowProvider.notifier)
+                  .setAreaRun(stop.id, null),
             ),
           ],
         ),

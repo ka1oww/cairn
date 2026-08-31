@@ -56,7 +56,8 @@ void main() {
                   areaSource: AreaSource.parser,
                 ),
                 Stop(
-                  text: 'Ginza Six, Uniqlo, Dover Street Market, Loft, '
+                  text:
+                      'Ginza Six, Uniqlo, Dover Street Market, Loft, '
                       'Mitsukoshi',
                   area: 'Ginza',
                   areaSource: AreaSource.parser,
@@ -89,10 +90,7 @@ void main() {
     await tester.tap(find.byKey(const Key('stop-tap-1')));
     await tester.pump();
 
-    expect(
-      opener.lastUri!.queryParameters['query'],
-      'Senso-ji, Asakusa',
-    );
+    expect(opener.lastUri!.queryParameters['query'], 'Senso-ji, Asakusa');
     expect(opener.lastUri!.host, 'www.google.com');
   });
 
@@ -266,9 +264,21 @@ void main() {
     'correcting a heading leaves a same-named, non-adjacent run alone',
     (tester) async {
       await seed([
-        Stop(text: 'Shibuya Crossing', area: 'Shibuya', areaSource: AreaSource.parser),
-        Stop(text: 'Meiji Shrine', area: 'Harajuku', areaSource: AreaSource.parser),
-        Stop(text: 'Shibuya Sky at dusk', area: 'Shibuya', areaSource: AreaSource.parser),
+        Stop(
+          text: 'Shibuya Crossing',
+          area: 'Shibuya',
+          areaSource: AreaSource.parser,
+        ),
+        Stop(
+          text: 'Meiji Shrine',
+          area: 'Harajuku',
+          areaSource: AreaSource.parser,
+        ),
+        Stop(
+          text: 'Shibuya Sky at dusk',
+          area: 'Shibuya',
+          areaSource: AreaSource.parser,
+        ),
       ]);
       await openTheDay(tester);
 

@@ -1262,19 +1262,19 @@ class AppDatabase extends _$AppDatabase {
           .map((row) => row?.mapsApp);
 
   Future<String?> readMapsApp() async {
-    final row =
-        await (select(
-          appPreferences,
-        )..where((t) => t.id.equals(_theOnePreferences))).getSingleOrNull();
+    final row = await (select(
+      appPreferences,
+    )..where((t) => t.id.equals(_theOnePreferences))).getSingleOrNull();
     return row?.mapsApp;
   }
 
-  Future<void> writeMapsApp(String app) => into(appPreferences).insertOnConflictUpdate(
-    AppPreferencesCompanion.insert(
-      id: const Value(_theOnePreferences),
-      mapsApp: Value(app),
-    ),
-  );
+  Future<void> writeMapsApp(String app) =>
+      into(appPreferences).insertOnConflictUpdate(
+        AppPreferencesCompanion.insert(
+          id: const Value(_theOnePreferences),
+          mapsApp: Value(app),
+        ),
+      );
 
   // ------------------------------------------------------- area corrections
 
@@ -1307,11 +1307,8 @@ class AppDatabase extends _$AppDatabase {
               areaSource: Value(areaSource),
             ),
           );
-      await (update(
-        itineraryDays,
-      )..where((t) => t.number.equals(dayNumber))).write(
-        ItineraryDaysCompanion(revisedAtUtcIso: Value(nowUtcIso)),
-      );
+      await (update(itineraryDays)..where((t) => t.number.equals(dayNumber)))
+          .write(ItineraryDaysCompanion(revisedAtUtcIso: Value(nowUtcIso)));
     });
   }
 

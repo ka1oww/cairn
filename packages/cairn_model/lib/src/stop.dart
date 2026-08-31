@@ -122,8 +122,7 @@ final class Stop {
   int get hashCode => Object.hash(text, time, kind, area, areaSource);
 
   @override
-  String toString() =>
-      'Stop(${time == null ? '' : '${time!.iso} '}$text'
+  String toString() => 'Stop(${time == null ? '' : '${time!.iso} '}$text'
       '${kind == StopKind.place ? '' : ' <${kind.name}>'}'
       '${area == null ? '' : ' [$area:${areaSource?.name}]'})';
 }

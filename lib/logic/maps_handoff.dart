@@ -98,8 +98,13 @@ const _mealWords = ['breakfast', 'brunch', 'lunch', 'dinner', 'supper'];
 /// "TBD" helps nobody — so it renders and does nothing, exactly like the
 /// traveller's own note. The parser reads these the same way; this is the
 /// display side of the same short list.
-bool isPlaceholderText(String text) =>
-    const {'tbd', 'tba', 'none', 'n/a', '?'}.contains(text.trim().toLowerCase());
+bool isPlaceholderText(String text) => const {
+  'tbd',
+  'tba',
+  'none',
+  'n/a',
+  '?',
+}.contains(text.trim().toLowerCase());
 
 /// The individual places on one line, in the order they were written.
 ///

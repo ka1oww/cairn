@@ -105,8 +105,12 @@ Widget bootstrapApp({
       sharedFactsStandingProvider.overrideWith((ref) => standings),
       tripRepositoryProvider.overrideWithValue(TripRepository(db)),
       planDraftRepositoryProvider.overrideWithValue(PlanDraftRepository(db)),
-      devicePrefsRepositoryProvider.overrideWithValue(DevicePrefsRepository(db)),
-      linkOpenerEdgeProvider.overrideWithValue(linkOpener ?? DeviceLinkOpener()),
+      devicePrefsRepositoryProvider.overrideWithValue(
+        DevicePrefsRepository(db),
+      ),
+      linkOpenerEdgeProvider.overrideWithValue(
+        linkOpener ?? DeviceLinkOpener(),
+      ),
       photoRepositoryProvider.overrideWithValue(photos ?? store),
       photoStoreProvider.overrideWithValue(store),
       membershipRepositoryProvider.overrideWithValue(membership ?? roster),
