@@ -57,8 +57,22 @@ const mergedPlan = {
       'place': 'Oslo',
       'revised_at': '2027-06-03T00:00:00+00:00',
       'stops': [
-        {'position': 0, 'stop_text': 'Vigeland', 'time_of_day': null},
-        {'position': 1, 'stop_text': 'Opera', 'time_of_day': '10:12:00'},
+        {
+          'position': 0,
+          'stop_text': 'Vigeland',
+          'time_of_day': null,
+          'kind': 'place',
+          'area_text': 'Frogner',
+          'area_source': 'human',
+        },
+        {
+          'position': 1,
+          'stop_text': 'Opera',
+          'time_of_day': '10:12:00',
+          'kind': 'place',
+          'area_text': null,
+          'area_source': null,
+        },
       ],
     },
     {
@@ -165,7 +179,13 @@ void main() {
             place: 'Oslo',
             revisedAt: DateTime.utc(2027, 6, 3),
             stops: const [
-              RemoteStop(position: 0, text: 'Vigeland'),
+              RemoteStop(
+                position: 0,
+                text: 'Vigeland',
+                kind: 'place',
+                areaText: 'Frogner',
+                areaSource: 'human',
+              ),
               RemoteStop(position: 1, text: 'Opera', timeIso: '10:12'),
             ],
           ),
@@ -202,6 +222,22 @@ void main() {
       final stops = (day['stops'] as List).cast<Map<String, dynamic>>();
       expect(stops.map((s) => s['stop_text']), ['Vigeland', 'Opera']);
       expect(stops.last['time_of_day'], '10:12');
+      // The tap-to-Maps columns, spelled as `sync_trip_itinerary` reads them
+      // since migration 0013. A stop carrying no area still sends all three
+      // keys: the SQL half coalesces a missing `kind` to 'place', but an
+      // area cannot be *cleared* on another phone by a key that is absent.
+      expect(stops.first['kind'], 'place');
+      expect(stops.first['area_text'], 'Frogner');
+      expect(stops.first['area_source'], 'human');
+      expect(stops.last['area_text'], isNull);
+      expect(stops.last.containsKey('area_source'), isTrue);
+      expect(
+        stops.last['kind'],
+        isNull,
+        reason:
+            "a stop the phone has no kind for sends null, and the function's "
+            "coalesce is what makes it 'place' in the table",
+      );
 
       final line = (body['p_pocket'] as List).single as Map<String, dynamic>;
       expect(line['source_line_number'], 9);
@@ -236,10 +272,56 @@ void main() {
         '10:12',
         reason: "Postgres spells a time HH:MM:SS; the phone keeps HH:MM",
       );
+      expect(merged.days.first.stops.first.areaText, 'Frogner');
+      expect(merged.days.first.stops.first.areaSource, 'human');
+      expect(
+        merged.days.first.stops.map((s) => s.carriesAreas),
+        [true, true],
+        reason:
+            'the function emits all three keys even when they are null, and '
+            "the key's presence is what says the server knows about areas",
+      );
       expect(merged.days.first.dateIso, '2027-06-14');
       expect(merged.days.last.dateIso, isNull);
       expect(merged.days.last.revisedAt, DateTime.utc(2027, 6, 2));
       expect(merged.setAside.single.text, 'book the cabin');
+    });
+
+    test('a server without migration 0013 says nothing, not "no area"', () async {
+      // The whole reason 0013 exists: until it is applied,
+      // `sync_trip_itinerary` returns the pre-0012 column set, so a stop
+      // comes back with no `area_text` key at all. That is "this server does
+      // not know", never "this stop has no area" -- reading it as the latter
+      // would null every hand-made correction on the phone.
+      const oldServer = {
+        'plan_revised_at': '2027-06-03T00:00:00+00:00',
+        'pocket_revised_at': '2027-06-03T00:00:00+00:00',
+        'days': [
+          {
+            'day_number': 1,
+            'day_date': '2027-06-14',
+            'place': 'Oslo',
+            'revised_at': '2027-06-03T00:00:00+00:00',
+            'stops': [
+              {'position': 0, 'stop_text': 'Vigeland', 'time_of_day': null},
+            ],
+          },
+        ],
+        'set_asides': <Map<String, Object?>>[],
+      };
+      final sync = facts(
+        MockClient((_) async => http.Response(jsonEncode(oldServer), 200)),
+      );
+
+      final merged = await sync.syncItinerary(
+        tripId: trip,
+        planRevisedAt: DateTime.utc(1970),
+        days: const [],
+        pocketRevisedAt: DateTime.utc(1970),
+        setAside: const [],
+      );
+
+      expect(merged.days.single.stops.single.carriesAreas, isFalse);
     });
   });
 
