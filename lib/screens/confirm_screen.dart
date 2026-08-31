@@ -34,6 +34,7 @@
 // *saved over*, so the button says so, a cancel that leaves the trip exactly
 // as it was sits beside it, and the re-paste is offered from here. Nothing
 // above the foot knows which mode it is in — the editing is the same editing.
+import 'package:cairn_model/cairn_model.dart' show AreaSource;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -575,6 +576,11 @@ class _DayChips extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         for (final (index, stop) in day.stops.indexed) ...[
+          // The area's own row, drawn once over each run of stops that share
+          // it — the same "one heading per run" the day page draws, here
+          // where the read-back is confirmed rather than after it is saved.
+          if (index == 0 || day.stops[index - 1].area != stop.area)
+            _AreaRow(day: day, stop: stop),
           _DropSlot(dayNumber: day.number, index: index),
           _StopChip(stop: stop, day: day),
         ],
@@ -582,6 +588,123 @@ class _DayChips extends StatelessWidget {
         const SizedBox(width: 4),
         _AddStopChip(day: day),
       ],
+    );
+  }
+}
+
+/// One run's area, above the chips it stands over.
+///
+/// A parser's guess whispers `suggested`; a row somebody has touched drops the
+/// whisper, because from then on it is theirs. Both touches — renaming it and
+/// clearing it — write [ReviewStop.areaSource] `human`, and nothing the parser
+/// does later overwrites that.
+///
+/// It is a full-width child of the chip [Wrap] on purpose: that is what makes
+/// it break the line without any of the chips' own drop-slot indices moving,
+/// so the areas can be drawn between the runs without touching the drag.
+class _AreaRow extends ConsumerWidget {
+  const _AreaRow({required this.day, required this.stop});
+
+  final ReviewDay day;
+
+  /// The first stop of the run — the one the notifier is told to correct
+  /// from, since a run is "this stop and every one after it that reads the
+  /// same".
+  final ReviewStop stop;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final area = stop.area;
+    if (area == null) {
+      return SizedBox(
+        width: double.infinity,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            key: Key('add-area-${day.number}-${stop.id}'),
+            onPressed: () async {
+              final typed = await _askForText(
+                context,
+                title: 'Add an area',
+                hint: 'Ginza',
+                action: 'Add',
+                fieldKey: const Key('add-area-input'),
+                saveKey: const Key('add-area-save'),
+              );
+              if (typed == null || typed.trim().isEmpty) return;
+              ref
+                  .read(pasteFlowProvider.notifier)
+                  .setAreaRun(stop.id, typed.trim());
+            },
+            child: const Text('+ Add an area'),
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      width: double.infinity,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 10, bottom: 2),
+        child: Row(
+          children: [
+            Text(
+              area,
+              key: Key('area-row-${day.number}-${stop.id}'),
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.1,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (stop.areaSource != AreaSource.human) ...[
+              const SizedBox(width: 6),
+              Text(
+                '\u00b7 suggested',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+            ],
+            const Spacer(),
+            IconButton(
+              key: Key('edit-area-${day.number}-${stop.id}'),
+              iconSize: 15,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.edit_outlined),
+              color: theme.colorScheme.primary,
+              tooltip: 'Rename this area',
+              onPressed: () async {
+                final typed = await _askForText(
+                  context,
+                  title: 'Where is this?',
+                  hint: 'Ginza',
+                  action: 'Save',
+                  initial: area,
+                  fieldKey: const Key('edit-area-input'),
+                  saveKey: const Key('edit-area-save'),
+                );
+                if (typed == null) return;
+                final trimmed = typed.trim();
+                ref
+                    .read(pasteFlowProvider.notifier)
+                    .setAreaRun(stop.id, trimmed.isEmpty ? null : trimmed);
+              },
+            ),
+            IconButton(
+              key: Key('clear-area-${day.number}-${stop.id}'),
+              iconSize: 15,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close),
+              color: theme.colorScheme.outline,
+              tooltip: 'Search these stops without an area',
+              onPressed: () => ref
+                  .read(pasteFlowProvider.notifier)
+                  .setAreaRun(stop.id, null),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

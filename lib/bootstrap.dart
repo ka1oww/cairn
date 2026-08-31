@@ -10,9 +10,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
 import 'app_state/camera_source.dart';
 import 'app_state/day_view.dart';
+import 'app_state/device_prefs.dart';
 import 'app_state/device_time_zone.dart';
 import 'app_state/file_picker_edge.dart';
 import 'app_state/import_flow.dart';
+import 'app_state/link_opener_edge.dart';
 import 'app_state/ping_schedule.dart';
 import 'app_state/plan_draft.dart';
 import 'app_state/text_recognition_edge.dart';
@@ -87,6 +89,7 @@ Widget bootstrapApp({
   SessionSource? sessions,
   String? memberId,
   Stream<SyncOutcome>? sharing,
+  LinkOpenerEdge? linkOpener,
 }) {
   final db = database ?? openAppDatabase();
   final store = PhotoStore(db);
@@ -102,6 +105,12 @@ Widget bootstrapApp({
       sharedFactsStandingProvider.overrideWith((ref) => standings),
       tripRepositoryProvider.overrideWithValue(TripRepository(db)),
       planDraftRepositoryProvider.overrideWithValue(PlanDraftRepository(db)),
+      devicePrefsRepositoryProvider.overrideWithValue(
+        DevicePrefsRepository(db),
+      ),
+      linkOpenerEdgeProvider.overrideWithValue(
+        linkOpener ?? DeviceLinkOpener(),
+      ),
       photoRepositoryProvider.overrideWithValue(photos ?? store),
       photoStoreProvider.overrideWithValue(store),
       membershipRepositoryProvider.overrideWithValue(membership ?? roster),

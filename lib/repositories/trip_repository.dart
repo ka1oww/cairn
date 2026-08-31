@@ -86,7 +86,15 @@ class TripRepository {
                 stops: [
                   for (final stop in stopRows)
                     if (stop.dayNumber == day.number)
-                      Stop(text: stop.stopText, time: _parseTime(stop.timeIso)),
+                      Stop(
+                        text: stop.stopText,
+                        time: _parseTime(stop.timeIso),
+                        kind: stopKindFromStored(stop.kind),
+                        area: stop.areaText,
+                        areaSource: stop.areaText == null
+                            ? null
+                            : areaSourceFromStored(stop.areaSource),
+                      ),
                 ],
               ),
           ],
@@ -100,6 +108,25 @@ class TripRepository {
           ],
         );
       });
+
+  /// Writes a person's area correction over [positions] of one day.
+  ///
+  /// The correction outranks the parser permanently — that is what
+  /// [AreaSource.human] means once stored — and it rides the sync cargo,
+  /// because the day it lands on is stamped with the instant of the edit.
+  Future<void> setStopAreas({
+    required int dayNumber,
+    required List<int> positions,
+    required String? area,
+    required AreaSource? areaSource,
+    DateTime? at,
+  }) => _db.setStopAreas(
+    dayNumber: dayNumber,
+    positions: positions,
+    areaText: area,
+    areaSource: area == null ? null : areaSource?.name,
+    nowUtcIso: (at ?? DateTime.now()).toUtc().toIso8601String(),
+  );
 
   /// Persists the confirmed itinerary, replacing whatever was saved before.
   ///
@@ -122,9 +149,9 @@ class TripRepository {
               position: position,
               text: stop.text,
               timeIso: stop.time?.iso,
-              kind: null,
-              areaText: null,
-              areaSource: null,
+              kind: stop.kind.name,
+              areaText: stop.area,
+              areaSource: stop.area == null ? null : stop.areaSource?.name,
             ),
       ],
       setAsides: [
@@ -155,3 +182,21 @@ class TripRepository {
     return ClockTime(int.parse(parts[0]), int.parse(parts[1]));
   }
 }
+
+/// Reads back what `kind` was stored as. A row written before v9 has no kind
+/// at all, and a plain place is the only honest reading of a line nobody
+/// classified — it is what a stop typed in the editor gets too.
+StopKind stopKindFromStored(String? stored) => switch (stored) {
+  'areaHeading' => StopKind.areaHeading,
+  'mealLabel' => StopKind.mealLabel,
+  'note' => StopKind.note,
+  _ => StopKind.place,
+};
+
+/// Reads back what `area_source` was stored as. An area with an unreadable
+/// source is the parser's: the tier that anything may overwrite.
+AreaSource areaSourceFromStored(String? stored) => switch (stored) {
+  'travellerOwn' => AreaSource.travellerOwn,
+  'human' => AreaSource.human,
+  _ => AreaSource.parser,
+};

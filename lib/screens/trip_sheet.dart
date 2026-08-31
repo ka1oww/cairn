@@ -29,9 +29,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app_state/device_prefs.dart';
 import '../app_state/paste_flow.dart';
 import '../app_state/trip_providers.dart';
 import '../app_state/trip_settings.dart';
+import '../logic/maps_handoff.dart';
 
 /// Slides the trip's sheet over whatever is behind it.
 Future<void> showTripSheet(BuildContext context) => showModalBottomSheet<void>(
@@ -224,6 +226,8 @@ class _Sheet extends ConsumerWidget {
                 },
               ),
             ],
+            const Divider(height: 32),
+            const _MapsAppEntry(),
 
             const SizedBox(height: 20),
             Text(
@@ -424,4 +428,79 @@ class _Code extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// Which maps app a tapped stop opens in.
+///
+/// It sits among the plan entries because it is shaped like them, but it is
+/// not a fact about the trip: the choice is this phone's alone and never
+/// leaves it. All three are keyless https searches, so a phone without the
+/// app opens the web page and picking Waze without Waze is safe by
+/// construction — there is nothing to detect and nothing to grey out.
+class _MapsAppEntry extends ConsumerWidget {
+  const _MapsAppEntry();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final chosen = ref.watch(mapsAppProvider).value ?? MapsApp.google;
+    return ListTile(
+      key: const Key('maps-app-entry'),
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.map_outlined),
+      title: const Text('Open places in'),
+      trailing: Text(
+        '${mapsAppName(chosen)} \u203a',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+      onTap: () => _chooseMapsApp(context, ref, chosen),
+    );
+  }
+}
+
+Future<void> _chooseMapsApp(
+  BuildContext context,
+  WidgetRef ref,
+  MapsApp chosen,
+) async {
+  final theme = Theme.of(context);
+  final choice = await showModalBottomSheet<MapsApp>(
+    context: context,
+    builder: (sheet) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: Text(
+              'Open places in',
+              style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'serif'),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(
+              'Every tap composes a search for the app you pick.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          for (final app in MapsApp.values)
+            ListTile(
+              key: Key('maps-app-${app.name}'),
+              title: Text(mapsAppName(app)),
+              trailing: app == chosen ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.of(sheet).pop(app),
+            ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    ),
+  );
+  if (choice == null) return;
+  await ref.read(devicePrefsRepositoryProvider).writeMapsApp(choice);
 }

@@ -1,5 +1,6 @@
 // APP STATE band (docs/architecture.md): Riverpod providers. One source of
 // truth per question; screens watch these and nothing below them.
+import 'package:cairn_model/cairn_model.dart' show AreaSource, StopKind;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../repositories/itinerary_sync.dart';
@@ -171,7 +172,21 @@ class PlanStop {
   /// `day_view.dart` for the star rule.
   final String? timeLabel;
 
-  const PlanStop({required this.text, this.timeLabel});
+  /// What the line is, decided by the parser at the paste and carried since.
+  final StopKind kind;
+
+  /// The area in force for this stop, and whose it is. Null is an answer: it
+  /// means a search goes out as the stop's own words alone.
+  final String? area;
+  final AreaSource? areaSource;
+
+  const PlanStop({
+    required this.text,
+    this.timeLabel,
+    this.kind = StopKind.place,
+    this.area,
+    this.areaSource,
+  });
 }
 
 TripPlan? _toPlan(ConfirmedItinerary? itinerary) {
@@ -196,7 +211,13 @@ TripPlan? _toPlan(ConfirmedItinerary? itinerary) {
           place: day.place,
           stops: [
             for (final stop in day.stops)
-              PlanStop(text: stop.text, timeLabel: stop.time?.iso),
+              PlanStop(
+                text: stop.text,
+                timeLabel: stop.time?.iso,
+                kind: stop.kind,
+                area: stop.area,
+                areaSource: stop.areaSource,
+              ),
           ],
         ),
     ],

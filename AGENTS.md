@@ -73,14 +73,42 @@ import what is written there, not here.
   its number — photos key on it — so the merge never renumbers and never
   re-dates an existing day. It speaks `ConfirmedDay`, not
   `cairn_model.TripDay`: saved plans carry open dates and have no clock yet
-  (the repository says why). Two more residents, the tap-to-Maps phase-1
-  scaffolding, are not yet called from anywhere above them: `area_edit.dart`
-  re-derives a day's running areas after an edit (a renamed area heading
-  re-flows every downstream stop still on `runningHeading`/`hotelPrefix`/
-  `trainDestination` that the person has not corrected), and
-  `maps_handoff.dart` composes the one Maps search query
-  (`searchText, area`, or bare `searchText` when there is no area) and the
-  three keyless app URLs (Google/Apple/Waze) it opens.
+  (the repository says why). Two more residents are the tap-to-Maps
+  rules. `maps_handoff.dart` is the whole display-and-URL rule, written
+  once: the query (`searchText, area`, or bare `searchText` when there is no
+  area), the three keyless app URLs (Google/Apple/Waze), the meal-label
+  split, the placeholder test, the places on a line and the badge threshold.
+  A second copy of any of them is the thing to refuse in review — the
+  screens compose nothing. `parsed_areas.dart` is the only mapping from the
+  parser's seven provenances to the domain's three
+  (`travellerOwn` > `human` > `parser`, which is also the priority order),
+  and both `paste_flow.dart` and `repaste_merge.dart` go through it.
+  `area_edit.dart` is main's phase-1 scaffolding and is still called from
+  nowhere: the frontend resolves a running area onto every stop's own
+  `area` instead of re-deriving it from headings, and correcting a run
+  rewrites each stop in it, so nothing needs the re-derivation. Delete it or
+  wire it, but do not grow a third rule beside it.
+- **A stop's area is a fact about the stop, and the person outranks the
+  parser.** Schema v9 stores `kind` / `area_text` / `area_source` on
+  `itinerary_stops`; `cairn_model`'s `Stop` carries them; the priority is the
+  traveller's own words in the plan (`travellerOwn`) over a correction made
+  on the phone (`human`) over anything the parser inferred (`parser`), and
+  nothing above `parsed_areas.dart` re-decides it. Four things worth knowing.
+  A correction **rides the sync cargo** like any other edit — it writes
+  through `TripRepository.setStopAreas`, which stamps the day's
+  `revisedAtUtcIso` and nothing else, because the day is the merge atom and
+  the plan's *shape* did not change. It **outlives a re-paste**:
+  `mergeRepaste` carries human areas plan-wide by the stop's own text, and
+  will not overwrite an area the new text itself declares. A pull from a
+  server that has not had migration `0012` applied must **not** null the
+  local areas — `RemoteStop.carriesAreas` is false when the row has no
+  `area_text` key at all, which means "does not know", never "says none";
+  deleting that distinction silently erases every correction on the phone.
+  And the handoff is **always a text search** — a query, never a stored pin,
+  never a coordinate, and never an API key: every URL is a keyless https
+  universal link composed by `maps_handoff.dart` and opened through
+  `LinkOpenerEdge`, which is what lets every widget test assert the URL
+  without a browser.
 - **The paste box survives the process, but only for an import.**
   `lib/app_state/plan_draft.dart` holds the whole rule and
   `plan_drafts` (one row, id 1, schema v7) holds the text. An import that

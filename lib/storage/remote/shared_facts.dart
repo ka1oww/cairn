@@ -203,7 +203,32 @@ class RemoteStop {
   /// never a column, here or in Postgres.
   final String? timeIso;
 
-  const RemoteStop({required this.position, required this.text, this.timeIso});
+  /// What the line is (`place` | `areaHeading` | `mealLabel` | `note`), the
+  /// area in force, and where that area came from. They travel because a
+  /// person's correction is a shared fact about the plan — the day it sits on
+  /// is the merge atom, exactly as for the words and the time.
+  final String? kind;
+  final String? areaText;
+  final String? areaSource;
+
+  /// Whether the answer carried the area columns *at all*.
+  ///
+  /// False is what a server that has not had migration `0012` applied looks
+  /// like: it does not know the field, which is a different thing from
+  /// saying there is no area. Only the second may clear a person's
+  /// correction, so the apply keeps what this phone holds when this is false.
+  /// Anything this phone *pushes* carries them by construction.
+  final bool carriesAreas;
+
+  const RemoteStop({
+    required this.position,
+    required this.text,
+    this.timeIso,
+    this.kind,
+    this.areaText,
+    this.areaSource,
+    this.carriesAreas = true,
+  });
 }
 
 /// A line the parser could not place, or one somebody took out of a day.

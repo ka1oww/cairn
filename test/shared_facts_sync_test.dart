@@ -1589,4 +1589,98 @@ void main() {
       expect(server.pushes, hasLength(1));
     });
   });
+
+  group('a server that does not know about areas yet', () {
+    Future<TripId> aTripWithAHumanCorrection(AppDatabase db) async {
+      final id = await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        plan([
+          confirmed(
+            1,
+            'Tokyo',
+            date: CalendarDate(2027, 6, 14),
+            stops: ['Senso-ji'],
+          ),
+        ]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      await TripRepository(db).setStopAreas(
+        dayNumber: 1,
+        positions: [0],
+        area: 'Asakusa',
+        areaSource: AreaSource.human,
+        at: DateTime.utc(2027, 6, 2),
+      );
+      return id;
+    }
+
+    test(
+      'a stop with no area columns at all leaves a local correction stand',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await aTripWithAHumanCorrection(db);
+        final server = FakeServer(trip: sharedTrip(id, const []))
+          ..holds = serverHolds([
+            RemoteDay(
+              number: 1,
+              dateIso: '2027-06-14',
+              place: 'Tokyo',
+              revisedAt: DateTime.utc(2027, 6, 3),
+              stops: const [
+                RemoteStop(position: 0, text: 'Senso-ji', carriesAreas: false),
+              ],
+            ),
+          ]);
+
+        final outcome = await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
+
+        expect(outcome.standing, SyncStanding.synced);
+        final stops = await db.readItineraryStops();
+        expect(stops.single.areaText, 'Asakusa');
+        expect(stops.single.areaSource, 'human');
+      },
+    );
+
+    test(
+      'a stop the server explicitly says has no area does clear the local one',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await aTripWithAHumanCorrection(db);
+        final server = FakeServer(trip: sharedTrip(id, const []))
+          ..holds = serverHolds([
+            RemoteDay(
+              number: 1,
+              dateIso: '2027-06-14',
+              place: 'Tokyo',
+              revisedAt: DateTime.utc(2027, 6, 3),
+              stops: const [
+                RemoteStop(
+                  position: 0,
+                  text: 'Senso-ji',
+                  areaText: null,
+                  areaSource: null,
+                ),
+              ],
+            ),
+          ]);
+
+        final outcome = await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
+
+        expect(outcome.standing, SyncStanding.synced);
+        final stops = await db.readItineraryStops();
+        expect(stops.single.areaText, isNull);
+        expect(stops.single.areaSource, isNull);
+      },
+    );
+  });
 }

@@ -126,6 +126,11 @@ class PostgrestSharedFacts implements SharedFacts {
                     'position': stop.position,
                     'stop_text': stop.text,
                     'time_of_day': stop.timeIso,
+                    // The tap-to-Maps columns (migration 0012). A server that
+                    // has not had it applied ignores the three extra keys.
+                    'kind': stop.kind,
+                    'area_text': stop.areaText,
+                    'area_source': stop.areaSource,
                   },
               ],
             },
@@ -326,6 +331,10 @@ class PostgrestSharedFacts implements SharedFacts {
                   // than in the seam keeps the wire's dialect in the band
                   // that speaks it.
                   timeIso: _clock(stop['time_of_day'] as String?),
+                  kind: stop['kind'] as String?,
+                  areaText: stop['area_text'] as String?,
+                  areaSource: stop['area_source'] as String?,
+                  carriesAreas: stop.containsKey('area_text'),
                 ),
             ],
           ),

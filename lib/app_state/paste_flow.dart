@@ -27,6 +27,7 @@ import 'package:cairn_model/cairn_model.dart' as model;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
+import '../logic/parsed_areas.dart';
 import '../logic/plan_text.dart';
 import '../logic/repaste_merge.dart' as merge;
 import '../repositories/trip_repository.dart';
@@ -91,7 +92,23 @@ class ReviewStop {
   final String text;
   final String? timeLabel;
 
-  const ReviewStop({required this.id, required this.text, this.timeLabel});
+  /// What the parser decided this line is. The editor draws an area heading
+  /// and a note differently from a place, and never re-decides which it is.
+  final model.StopKind kind;
+
+  /// The area in force, and whose it is. A person's edit here is
+  /// [model.AreaSource.human] and outranks the parser from then on.
+  final String? area;
+  final model.AreaSource? areaSource;
+
+  const ReviewStop({
+    required this.id,
+    required this.text,
+    this.timeLabel,
+    this.kind = model.StopKind.place,
+    this.area,
+    this.areaSource,
+  });
 
   bool get isStarred => timeLabel != null;
 }
@@ -396,11 +413,17 @@ class _DraftStop {
     required this.text,
     this.time,
     required this.sourceLineNumber,
+    this.kind = model.StopKind.place,
+    this.area,
+    this.areaSource,
   });
 
   final String id;
   String text;
   model.ClockTime? time;
+  model.StopKind kind;
+  String? area;
+  model.AreaSource? areaSource;
 
   /// Where this came from in the paste, or 0 for a stop the person typed.
   /// Carried so a stop set aside again lands back in the kept list with the
@@ -677,6 +700,37 @@ class PasteFlow extends Notifier<PasteFlowState> {
     _rebuildReview();
   }
 
+  /// Re-words the whole run of stops the area at [firstStopId] governs.
+  ///
+  /// A run is the stops from that one down to the next stop with a different
+  /// area — which is the run the editor drew under one subheading, so
+  /// correcting `Shinjuku` corrects everything the reader saw it standing
+  /// over and nothing else.
+  void setAreaRun(String firstStopId, String? area) {
+    final found = _findStop(firstStopId);
+    if (found == null) return;
+    final day = found.day;
+    final index = day.stops.indexWhere((s) => s.id == firstStopId);
+    if (index < 0) return;
+    final was = day.stops[index].area;
+    for (var i = index; i < day.stops.length; i++) {
+      if (day.stops[i].area != was) break;
+      day.stops[i].area = area;
+      day.stops[i].areaSource = area == null ? null : model.AreaSource.human;
+    }
+    _rebuildReview();
+  }
+
+  /// Sets one stop's area, and only that one. Null is an answer: it means
+  /// "search for the words alone", not "nobody has said yet".
+  void setStopArea(String stopId, String? area) {
+    final found = _findStop(stopId);
+    if (found == null) return;
+    found.stop.area = area;
+    found.stop.areaSource = area == null ? null : model.AreaSource.human;
+    _rebuildReview();
+  }
+
   // -- editing a stop ------------------------------------------------------
 
   void addStop(int dayNumber, String text) {
@@ -822,6 +876,9 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   text: stop.text,
                   time: _timeOf(stop.timeLabel),
                   sourceLineNumber: 0,
+                  kind: stop.kind,
+                  area: stop.area,
+                  areaSource: stop.areaSource,
                 ),
             ],
           ),
@@ -990,7 +1047,13 @@ class PasteFlow extends Notifier<PasteFlowState> {
             place: day.place,
             stops: [
               for (final stop in day.stops)
-                model.Stop(text: stop.text, time: stop.time),
+                model.Stop(
+                  text: stop.text,
+                  time: stop.time,
+                  kind: stop.kind,
+                  area: stop.area,
+                  areaSource: stop.areaSource,
+                ),
             ],
           ),
       ],
@@ -1233,6 +1296,11 @@ class PasteFlow extends Notifier<PasteFlowState> {
                     final t => model.ClockTime(t.hour, t.minute),
                   },
                   sourceLineNumber: stop.sourceLine.lineNumber,
+                  kind: stopKindOf(stop.kind),
+                  area: stop.area?.text,
+                  areaSource: stop.area == null
+                      ? null
+                      : areaSourceOf(stop.area!.source),
                 ),
             ],
           ),
@@ -1298,7 +1366,14 @@ class PasteFlow extends Notifier<PasteFlowState> {
       dateSuggestion: _suggestionFor(day),
       stops: [
         for (final stop in day.stops)
-          ReviewStop(id: stop.id, text: stop.text, timeLabel: stop.time?.iso),
+          ReviewStop(
+            id: stop.id,
+            text: stop.text,
+            timeLabel: stop.time?.iso,
+            kind: stop.kind,
+            area: stop.area,
+            areaSource: stop.areaSource,
+          ),
       ],
       confidence: doubt == null
           ? DayConfidence.high

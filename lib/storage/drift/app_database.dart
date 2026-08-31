@@ -620,7 +620,14 @@ class AppDatabase extends _$AppDatabase {
             stops: [
               for (final stop in storedStops)
                 if (stop.dayNumber == day.number)
-                  (stop.position, stop.stopText, stop.timeIso),
+                  (
+                    stop.position,
+                    stop.stopText,
+                    stop.timeIso,
+                    stop.kind,
+                    stop.areaText,
+                    stop.areaSource,
+                  ),
             ],
           ),
       };
@@ -633,7 +640,14 @@ class AppDatabase extends _$AppDatabase {
           stops: [
             for (final stop in stops)
               if (stop.dayNumber == day.number)
-                (stop.position, stop.text, stop.timeIso),
+                (
+                  stop.position,
+                  stop.text,
+                  stop.timeIso,
+                  stop.kind ?? 'place',
+                  stop.areaText,
+                  stop.areaSource,
+                ),
           ],
         );
         final unchanged = storedSignatures[day.number] == signature;
@@ -765,23 +779,16 @@ class AppDatabase extends _$AppDatabase {
   static String _daySignature({
     required String? dateIso,
     required String? place,
-    required List<(int, String, String?)> stops,
-    List<(int, String?, String?, String?)>? areaStops,
+    required List<(int, String, String?, String?, String?, String?)> stops,
   }) {
     final ordered = [...stops]..sort((a, b) => a.$1.compareTo(b.$1));
-    // When areaStops provided (v9), they are the same positions with kind/area/source
-    Map<int, (String?, String?, String?)>? areaMap;
-    if (areaStops != null) {
-      areaMap = {for (final (pos, k, a, s) in areaStops) pos: (k, a, s)};
-    }
     return [
       dateIso ?? '',
       place ?? '',
-      for (final (position, text, timeIso) in ordered)
-        if (areaMap == null)
-          '$position\u0000$text\u0000${timeIso ?? ''}'
-        else
-          '$position\u0000$text\u0000${timeIso ?? ''}\u0000${areaMap[position]?.$1 ?? ''}\u0000${areaMap[position]?.$2 ?? ''}\u0000${areaMap[position]?.$3 ?? ''}',
+      for (final (position, text, timeIso, kind, areaText, areaSource)
+          in ordered)
+        '$position\u0000$text\u0000${timeIso ?? ''}\u0000${kind ?? ''}'
+            '\u0000${areaText ?? ''}\u0000${areaSource ?? ''}',
     ].join('\u0001');
   }
 
@@ -1244,6 +1251,67 @@ class AppDatabase extends _$AppDatabase {
   Future<void> clearPlanDraft() =>
       (delete(planDrafts)..where((t) => t.id.equals(_theOneDraft))).go();
 
+  // ------------------------------------------------------ app preferences
+
+  /// The maps app a handoff opens in, as stored (`google` | `apple` | `waze`).
+  /// The row is created on first write, so an unset preference reads null and
+  /// the app's own default stands — nothing here decides what that is.
+  Stream<String?> watchMapsApp() =>
+      (select(appPreferences)..where((t) => t.id.equals(_theOnePreferences)))
+          .watchSingleOrNull()
+          .map((row) => row?.mapsApp);
+
+  Future<String?> readMapsApp() async {
+    final row = await (select(
+      appPreferences,
+    )..where((t) => t.id.equals(_theOnePreferences))).getSingleOrNull();
+    return row?.mapsApp;
+  }
+
+  Future<void> writeMapsApp(String app) =>
+      into(appPreferences).insertOnConflictUpdate(
+        AppPreferencesCompanion.insert(
+          id: const Value(_theOnePreferences),
+          mapsApp: Value(app),
+        ),
+      );
+
+  // ------------------------------------------------------- area corrections
+
+  /// Writes a person's area correction over one day's stops, and stamps the
+  /// day so the correction rides the sync cargo like any other edit.
+  ///
+  /// The stops are addressed by *position within the day*, which is how a
+  /// stop is identified everywhere below the paste flow. Passing a null
+  /// [areaText] clears the area — "send the bare words" is an answer a person
+  /// is allowed to give, and it is why the source travels with it rather than
+  /// being inferred from emptiness.
+  ///
+  /// Only the day's own clock moves: the plan's *shape* is untouched, so
+  /// `plan_revised_at` deliberately stays where it was.
+  Future<void> setStopAreas({
+    required int dayNumber,
+    required List<int> positions,
+    required String? areaText,
+    required String? areaSource,
+    required String nowUtcIso,
+  }) {
+    if (positions.isEmpty) return Future.value();
+    return transaction(() async {
+      await (update(itineraryStops)..where(
+            (t) => t.dayNumber.equals(dayNumber) & t.position.isIn(positions),
+          ))
+          .write(
+            ItineraryStopsCompanion(
+              areaText: Value(areaText),
+              areaSource: Value(areaSource),
+            ),
+          );
+      await (update(itineraryDays)..where((t) => t.number.equals(dayNumber)))
+          .write(ItineraryDaysCompanion(revisedAtUtcIso: Value(nowUtcIso)));
+    });
+  }
+
   /// Deletes the whole trip from this phone: the plan, the pool's rows, the
   /// roster, the codes and the trip itself.
   ///
@@ -1278,6 +1346,9 @@ const _theOneTrip = 1;
 
 /// The one row of [PlanDrafts]: a phone has one paste box.
 const _theOneDraft = 1;
+
+/// The one preferences row.
+const _theOnePreferences = 1;
 
 /// The write-side shape [AppDatabase.insertInviteCode] accepts.
 typedef InviteCodeRecord = ({

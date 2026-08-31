@@ -36,6 +36,8 @@
 import 'package:cairn_model/cairn_model.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
+import 'parsed_areas.dart';
+
 import '../repositories/trip_repository.dart';
 
 /// What the set-aside says about a stop the revised plan left out. Spelled
@@ -318,6 +320,67 @@ RepasteMergeResult mergeRepaste({
     );
   }
 
+  // A person's area correction outlives the words being re-pasted.
+  //
+  // Corrections are matched plan-wide by the stop's own text — the same
+  // case- and whitespace-insensitive reading the survival pass uses — so a
+  // stop that moved to another day keeps the area somebody gave it. Two
+  // things this deliberately will not do: it never overwrites an area the
+  // re-paste's own text declares (`(near Akihabara)` on the line is the
+  // traveller speaking now, and outranks a correction made before), and it
+  // never resurrects a correction onto a line the new text no longer says.
+  final correctedAreas = <String, Stop>{
+    for (final day in current)
+      for (final stop in day.stops)
+        if (stop.areaSource == AreaSource.human && stop.area != null)
+          _normalize(stop.text): stop,
+  };
+  if (correctedAreas.isNotEmpty) {
+    for (var i = 0; i < days.length; i++) {
+      final merged = days[i];
+      var changed = false;
+      final stops = <Stop>[];
+      for (final stop in merged.day.stops) {
+        final correction = correctedAreas[_normalize(stop.text)];
+        if (correction == null ||
+            stop.areaSource == AreaSource.travellerOwn ||
+            (stop.area == correction.area &&
+                stop.areaSource == correction.areaSource)) {
+          stops.add(stop);
+          continue;
+        }
+        changed = true;
+        stops.add(
+          Stop(
+            text: stop.text,
+            time: stop.time,
+            kind: stop.kind,
+            area: correction.area,
+            areaSource: correction.areaSource,
+          ),
+        );
+      }
+      if (!changed) continue;
+      days[i] = MergedDay(
+        day: ConfirmedDay(
+          number: merged.day.number,
+          date: merged.day.date,
+          place: merged.day.place,
+          stops: stops,
+        ),
+        origin: merged.origin,
+        // The words and the ordering are what "unchanged" is about — a day
+        // whose only difference is an area carried back onto it is still the
+        // day the photographs belong to.
+        unchanged: merged.unchanged,
+        dateCandidate: merged.dateCandidate,
+        confidence: merged.confidence,
+        uncertainty: merged.uncertainty,
+        headerWeekday: merged.headerWeekday,
+      );
+    }
+  }
+
   return RepasteMergeResult(days: days, setAside: setAside);
 }
 
@@ -380,6 +443,9 @@ List<Stop> _convertStops(List<ip.Stop> stops) => List.unmodifiable([
         null => null,
         final t => ClockTime(t.hour, t.minute),
       },
+      kind: stopKindOf(stop.kind),
+      area: stop.area?.text,
+      areaSource: stop.area == null ? null : areaSourceOf(stop.area!.source),
     ),
 ]);
 

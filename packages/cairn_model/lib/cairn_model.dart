@@ -14,7 +14,7 @@ export 'src/ids.dart' show MemberId, PhotoId, TripId;
 export 'src/invite_code.dart' show InviteCode;
 export 'src/member.dart' show Member;
 export 'src/photo_ref.dart' show PhotoOrigin, PhotoRef;
-export 'src/stop.dart' show Stop;
+export 'src/stop.dart' show AreaSource, Stop, StopKind;
 export 'src/trip.dart' show Trip;
 export 'src/trip_clock.dart' show TripClock;
 export 'src/trip_close.dart' show graceAfterATrip, tripClosesAt;
