@@ -128,24 +128,80 @@ String stripBullet(String line) {
 bool isFolioAfterUrl(String textWithoutUrl) =>
     RegExp(r'^\d{1,3}/\d{1,3}$').hasMatch(textWithoutUrl.trim());
 
-final RegExp _properNounWord = RegExp(r"^[A-Z][A-Za-z'.]*$");
-final RegExp _allCapsWord = RegExp(r'^[A-Z]{2,}$');
+// A word carrying a capital: any script that has letter case at all
+// (Latin, Greek, Cyrillic, Armenian, ...). The tail admits any letter so
+// `KYOTO`, `ΑΘΗΝΑ` and `McDonald` still read as one word, combining marks
+// so a decomposed `Zürich` is the same word as a composed `Zürich`,
+// and `'` / `.` exactly as the ASCII form did (`O'Brien`, `St.`).
+final RegExp _casedWord = RegExp(
+  r"^[\p{Lu}\p{Lt}][\p{L}\p{M}'.]*$",
+  unicode: true,
+);
 
-/// Heuristic for a bare place-name line acting as a day header (`Kyoto`
-/// with no `Day N` or date around it): every word capitalized like a
-/// proper noun, no digits, not bulleted, short.
+// A word in a script with no letter case at all — CJK, kana, hangul, Thai,
+// Arabic, Hebrew, the Indic scripts. `\p{Lo}` is exactly "letter, other":
+// a letter that has no uppercase form to demand. In these scripts an
+// uncapitalized word *is* what a place name looks like, so refusing one for
+// want of a capital refuses every heading the script can write.
+final RegExp _caselessWord = RegExp(
+  r'^[\p{Lo}\p{M}]+$',
+  unicode: true,
+);
+
+// True when the line carries a capital anywhere, i.e. some word offered
+// capitalization as evidence that it is a name rather than prose.
+final RegExp _anyCapital = RegExp(r'[\p{Lu}\p{Lt}]', unicode: true);
+
+// Any digit, in any script — `\d` is ASCII-only even under `unicode: true`.
+final RegExp _anyDigit = RegExp(r'\p{N}', unicode: true);
+
+/// The longest a caseless word may be and still read as a name.
+///
+/// Word *count* is what bounds a line's length in a spaced script, and it
+/// stops bounding anything in a script written without spaces: a whole
+/// Japanese sentence is one "word". Sixteen code points clears the longest
+/// place names those scripts actually write (`กรุงเทพมหานคร` is thirteen,
+/// `富士河口湖町` is six) and still cuts an unspaced sentence.
+const int _caselessWordCodePointLimit = 16;
+
+/// The most words a line may carry when it offers no capital anywhere.
+///
+/// Capitalization is the evidence the ASCII heuristic ran on. A line written
+/// entirely in a caseless script cannot offer it, so brevity is all that is
+/// left to tell `서울` from a sentence of short words, and the bound has to be
+/// tighter than the five a capitalized line gets.
+const int _caselessLineWordLimit = 3;
+
+bool _looksLikeProperNounWord(String word) {
+  if (_casedWord.hasMatch(word)) return true;
+  return _caselessWord.hasMatch(word) &&
+      word.runes.length <= _caselessWordCodePointLimit;
+}
+
+/// Heuristic for a bare place-name line acting as a day header (`Kyoto`,
+/// `München`, `京都`, with no `Day N` or date around it): every word is
+/// shaped like a proper noun, no digits, not bulleted, short.
+///
+/// Script-agnostic on purpose. The test used to be `[A-Z][A-Za-z'.]*`, which
+/// silently refused every heading written outside plain English letters —
+/// `München`, `Αθήνα`, `Москва`, `京都` were not place headers, so
+/// `ParsedDay.place` came back null for the whole trip and nothing said why.
+/// Widening the alphabet must not widen what counts as a heading, so the
+/// guards that make it narrow are unchanged and the caseless branch pays for
+/// the capital it cannot show with two length bounds instead.
 bool looksLikeProperNounHeader(String line) {
   final trimmed = line.trim();
   if (trimmed.isEmpty) return false;
   if (startsWithBullet(trimmed)) return false;
-  if (RegExp(r'\d').hasMatch(trimmed)) return false;
+  if (_anyDigit.hasMatch(trimmed)) return false;
   if (extractTime(trimmed) != null) return false;
   final words = trimmed.split(RegExp(r'\s+'));
   if (words.isEmpty || words.length > 5) return false;
+  if (!_anyCapital.hasMatch(trimmed) && words.length > _caselessLineWordLimit) {
+    return false;
+  }
   for (final w in words) {
-    if (!_properNounWord.hasMatch(w) && !_allCapsWord.hasMatch(w)) {
-      return false;
-    }
+    if (!_looksLikeProperNounWord(w)) return false;
   }
   return true;
 }
