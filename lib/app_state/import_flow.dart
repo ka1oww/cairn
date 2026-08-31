@@ -16,6 +16,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:plan_extraction/plan_extraction.dart';
 
+import 'area_gazetteer_loader.dart';
 import 'file_picker_edge.dart';
 import 'text_recognition_edge.dart';
 
@@ -298,6 +299,17 @@ class ImportFlow extends Notifier<ImportState> {
     bool viaOcrRoute = false,
   }) async {
     state = ImportReading(picked.fileName);
+    // The area gazetteer's one load (the tap-to-Maps plan §9), started here
+    // and nowhere else: an import is the only act slow enough to hide it,
+    // and it must never happen at launch or on the day/trail path. It is
+    // started rather than awaited so that it overlaps the extraction and
+    // costs the import only whatever is left of it, and it is awaited
+    // before the text reaches the box so that the parse that follows sees
+    // it. It cannot fail the import — a load that goes wrong leaves the
+    // gazetteer null, which is phase-1 behaviour (see the loader).
+    final gazetteerLoad = ref
+        .read(areaGazetteerProvider.notifier)
+        .ensureLoaded();
     try {
       // The one-tap route reads the bytes with recognition whatever they
       // claim to be: it is offered precisely because the extractor that
@@ -305,6 +317,7 @@ class ImportFlow extends Notifier<ImportState> {
       final result = viaOcrRoute
           ? await _recognize(picked)
           : await _read(picked);
+      await gazetteerLoad;
       return switch (result) {
         ExtractedText(:final text, :final notes) => _deliver(text, notes),
         ExtractionFailure(:final kind, :final explanation) when viaOcrRoute =>

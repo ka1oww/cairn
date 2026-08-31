@@ -88,7 +88,7 @@ anywhere in the same comma-separated clause before the time (`maybe`,
 it, suppresses the time entirely. A hedge in a *different* clause does
 not: `Dinner at 7pm, maybe karaoke after` still stars the dinner.
 
-## Stop kind and area (tap-to-Maps, phase 1)
+## Stop kind and area (tap-to-Maps)
 
 Every stop carries a `StopKind` (`place`, `areaHeading`, `mealLabel`, or
 `note`) and, where the deterministic extractor could work one out, an
@@ -100,9 +100,34 @@ set rather than the parser). `area` is null when nothing in the text lets
 the extractor say — sending nothing to a map is the correct behaviour
 then, not a bug. This is the same "ask, not guess" posture as the star
 rule and confidence: an area is only ever attached when the source text
-actually supports it. The extractor takes an optional `gazetteer`
-parameter (an `AreaGazetteer`); passing `null` is today's only supported
-mode.
+actually supports it.
+
+### The gazetteer (phase 2, the C10 validator)
+
+`parseItinerary` takes an optional `gazetteer` (an `AreaGazetteer`), and
+**`null` is a supported mode forever, not a stub**: with no gazetteer the
+extractor behaves exactly as phase 1 did, and the C7t ground-truth floors
+in `test/area_ground_truth_test.dart` are pinned without one precisely so
+that stays true. Given one, a candidate area drawn from a *vocabulary run*
+must also be a real place name before it may become an area — which is
+what stops a menu word ('UNAGI', 'UDON') being sent to a map. The
+traveller's own in-tail wording ('Art & Eats in Le Marais') is trusted
+without validation, because it is a statement rather than an inference.
+
+`SortedListAreaGazetteer` is the shipped implementation: a sorted name
+list searched by bisection, built from already-normalised text through
+`SortedListAreaGazetteer.fromAssetTexts`. **This package never reads a
+file or an asset** — inflating the bytes is the caller's business, which
+is what keeps it dependency-free. In Cairn the assets are built by
+`tool/build_area_gazetteer.dart` from the GeoNames dumps and read once,
+on import only, by `lib/app_state/area_gazetteer_loader.dart`.
+
+Names on both sides go through this package's own `areaTokens`, so the
+builder and the lookup share one normaliser. That matters more than it
+looks: the asset was frozen against Python's NFD in the measurement lab,
+so `area_words.dart`'s decomposition map has to spell the same
+macrons, breves and carons the dumps carry, or a name is built one way
+and looked up another and simply never matches.
 
 `placesOnLine(stop)` splits a stop's `placeText` on `/`, `,`, `+`, `&`,
 and `;` into the individual place names a multi-place line named, for a

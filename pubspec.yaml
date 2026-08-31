@@ -106,3 +106,13 @@ flutter:
         - asset: assets/fonts/AtkinsonHyperlegible-Regular.ttf
         - asset: assets/fonts/AtkinsonHyperlegible-Bold.ttf
           weight: 700
+
+  # The area gazetteer (tap-to-Maps phase 2). Built by
+  # tool/build_area_gazetteer.dart from the GeoNames dumps, which are
+  # downloaded by hand and never committed — only these compact assets are.
+  # They are read ON IMPORT ONLY, off the UI thread, and never at launch or
+  # on the day/trail path: lib/app_state/area_gazetteer_loader.dart is the
+  # whole rule. GeoNames data is CC-BY 4.0 and each asset carries its own
+  # attribution header; the app repeats it in lib/acknowledgements.dart.
+  assets:
+    - assets/area_gazetteer/

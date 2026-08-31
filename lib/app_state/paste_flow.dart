@@ -31,6 +31,7 @@ import '../logic/parsed_areas.dart';
 import '../logic/plan_text.dart';
 import '../logic/repaste_merge.dart' as merge;
 import '../repositories/trip_repository.dart';
+import 'area_gazetteer_loader.dart';
 import 'date_labels.dart';
 import 'day_view.dart';
 import 'ping_schedule.dart';
@@ -1146,6 +1147,12 @@ class PasteFlow extends Notifier<PasteFlowState> {
       _text,
       tripStartDate: _tripStartHint,
       monthFirstNumericDates: _monthFirst,
+      // The C10 validator, when there is one to validate against. It is
+      // null until an import has loaded it (area_gazetteer_loader.dart holds
+      // the whole rule), and null is not a degraded case to guard against:
+      // it is phase-1 behaviour exactly, which is what a plan typed by hand
+      // has always got and what the parser's C7t floors are pinned to.
+      gazetteer: ref.read(areaGazetteerProvider),
     );
     _nothingRead = result.usedHeaderlessFallback || result.days.isEmpty;
     _monthFirstExample = _exampleFrom(result.firstAmbiguousNumericDate);

@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:cairn/app_state/area_gazetteer_loader.dart';
 import 'package:cairn/app_state/file_picker_edge.dart';
 import 'package:cairn/app_state/import_flow.dart';
 import 'package:cairn/app_state/text_recognition_edge.dart';
@@ -83,6 +84,7 @@ void main() {
         database: db,
         today: _defaultToday,
         picker: picker,
+        gazetteer: (compressed) async => buildAreaGazetteer(compressed),
         extraction:
             extraction ?? (extractor, file) async => extractor.extract(file),
         textRecognition: recognition,

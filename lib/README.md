@@ -40,7 +40,7 @@ re-paste's merge rule (`logic/repaste_merge.dart`) and the plan-as-text
 rendering it reads back (`logic/plan_text.dart`) have to be readable and
 testable on their own.
 
-Two files sit outside the bands, deliberately:
+Three files sit outside the bands, deliberately:
 
 - **`bootstrap.dart`** is the composition root. Something has to build the
   stack in dependency order — open the database, wrap it in the repository,
@@ -57,6 +57,10 @@ Two files sit outside the bands, deliberately:
   order, not logic: it resolves who this phone is signed in as *before* it
   builds the app, so nothing is ever credited to the offline stand-in and then
   re-credited (the file's own header says why).
+- **`acknowledgements.dart`** is plain data — third-party attribution text,
+  no Flutter, nothing decided from it — so it sits beside `bootstrap.dart`
+  and `main.dart` rather than inside any band. `screens/trip_sheet.dart`
+  renders it.
 
 ## Where the framework bends the map, written down
 

@@ -13,6 +13,7 @@ import 'app_state/day_view.dart';
 import 'app_state/device_prefs.dart';
 import 'app_state/device_time_zone.dart';
 import 'app_state/file_picker_edge.dart';
+import 'app_state/area_gazetteer_loader.dart';
 import 'app_state/import_flow.dart';
 import 'app_state/link_opener_edge.dart';
 import 'app_state/ping_schedule.dart';
@@ -70,6 +71,13 @@ import 'storage/remote/shared_facts.dart';
 /// session, reads the id off it and hands both in; a test hands in neither
 /// and gets [NoSession] and the local stand-in, which is the same pair.
 ///
+/// [gazetteer] is the same seam once more, for the area gazetteer's one
+/// load: the app passes nothing and gets `Isolate.run`, and a test injects
+/// the direct call. A test that pumps an import and leaves this unbound
+/// hangs silently at teardown, exactly as an unbound [extraction] does —
+/// the import awaits the load before it fills the box, so a real isolate
+/// under the fake clock never resolves (see area_gazetteer_loader.dart).
+///
 /// [sharing] is how a test says where the plan stands with the server without
 /// a server: the app binds the real sync's own [TripSync.standings], and a
 /// test hands in a stream of its own. Passing nothing means nothing is ever
@@ -85,6 +93,7 @@ Widget bootstrapApp({
   MembershipRepository? membership,
   FilePickerEdge? picker,
   ExtractionRunner? extraction,
+  GazetteerRunner? gazetteer,
   TextRecognitionEdge? textRecognition,
   SessionSource? sessions,
   String? memberId,
@@ -122,6 +131,8 @@ Widget bootstrapApp({
       if (picker != null) filePickerEdgeProvider.overrideWithValue(picker),
       if (extraction != null)
         extractionRunnerProvider.overrideWithValue(extraction),
+      if (gazetteer != null)
+        gazetteerRunnerProvider.overrideWithValue(gazetteer),
       if (textRecognition != null)
         textRecognitionEdgeProvider.overrideWithValue(textRecognition),
       if (memberId != null) localMemberIdProvider.overrideWithValue(memberId),

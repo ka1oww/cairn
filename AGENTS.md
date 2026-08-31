@@ -753,6 +753,41 @@ Sharp edges worth knowing before touching this directory again:
 ## Packages
 
 - `packages/itinerary_parser/` — pure-Dart package (no Flutter dependency) that parses pasted free-text trip plans into structured days/stops. Test with `dart test` from inside that directory; see its `README.md` for the public API, confidence semantics, and documented parsing limitations.
+  - **The area gazetteer is a validator, and `null` is a supported mode
+    forever.** `parseItinerary(gazetteer:)` is phase 2 of tap-to-Maps: given
+    one, an area drawn from a *vocabulary run* must also be a real place name
+    before it may be attached, which is what kills the menu words a run alone
+    admits ('UNAGI', 'UDON'); the traveller's own in-tail wording is trusted
+    unvalidated, because it is a statement rather than an inference. Given
+    none, the extractor is phase-1 exactly — the C7t floors in
+    `test/area_ground_truth_test.dart` are pinned **without** a gazetteer and
+    must stay that way, and the C10 floors beside them are the same corpus
+    scored **with** the committed assets. Four things worth knowing before
+    touching it. The package **never reads a file or an asset** —
+    `SortedListAreaGazetteer.fromAssetTexts` takes text somebody else
+    inflated, which is what keeps it dependency-free. The assets are built by
+    `tool/build_area_gazetteer.dart` from GeoNames dumps (~80 MB per country,
+    downloaded by hand, never committed; only the ~0.4 MB of built asset is),
+    and **every rule in that builder is a measured one** — the feature-code
+    set, the name-columns-only choice (alternate names measurably inject
+    junk), and the hamlet filter (drop plain-settlement P rows under 500
+    population; keep PPLX, PPLA*, PPLC and all class A regardless), so
+    changing any of them is a re-measurement, not a tidy-up. Both sides
+    normalise through this package's own `areaTokens`, and the asset was
+    frozen against Python's NFD in the measurement lab, so
+    `area_words.dart`'s decomposition map must spell the same macrons,
+    breves and carons the dumps carry — a mismatch there builds a name one
+    way, looks it up another, and silently never matches. And **when it
+    loads is the decision**: `lib/app_state/area_gazetteer_loader.dart`
+    reads it on import only, off the UI thread through
+    `gazetteerRunnerProvider` (the `extractionRunnerProvider` pattern —
+    `Isolate.run` in the app, an injected direct call in tests, because a
+    real isolate under the fake clock hangs silently), once per launch,
+    never at launch and never on the day/trail path. Every failure there is
+    swallowed on purpose: a missing or corrupt asset leaves the gazetteer
+    null, which is a plan read the phase-1 way, never a failed import.
+    `test/area_gazetteer_test.dart` pins all of that, because every wrong
+    answer to "when" is silent.
   - **The bare place-name day header is script-agnostic, and its narrowness is
     bought twice.** `looksLikeProperNounHeader` (`src/line_classifier.dart`)
     tested `^[A-Z][A-Za-z'.]*$` until 2026-08-30, so `München`, `Αθήνα`,
