@@ -94,3 +94,15 @@ dependency_overrides:
 
 flutter:
   uses-material-design: true
+
+  # The house system's text face (docs/design/README.md, "House system"):
+  # Atkinson Hyperlegible carries all running text. Bundled from Google Fonts'
+  # OFL-licensed release (assets/fonts/OFL-AtkinsonHyperlegible.txt); the
+  # container's tab bar is its first consumer (lib/screens/house_style.dart).
+  # Young Serif (display) is not bundled yet — nothing built sets display type.
+  fonts:
+    - family: Atkinson Hyperlegible
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegible-Regular.ttf
+        - asset: assets/fonts/AtkinsonHyperlegible-Bold.ttf
+          weight: 700

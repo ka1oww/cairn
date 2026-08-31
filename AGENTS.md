@@ -402,6 +402,20 @@ import what is written there, not here.
   belongs there — the OCR render-scale arithmetic and the reading-order
   geometry above are the whole of it today, and recognition quality still is
   not testable anywhere.
+- **The house skin's tokens are written once, in
+  `lib/screens/house_style.dart`** — a transcription of
+  `docs/design/README.md`'s House system block; a second spelling of any
+  house colour is the thing to refuse in review. The container's tab bar is
+  skinned to frame 5b (the drawn "tab bar of record" in
+  `docs/design/2026-08-22-handoff.zip`), minus the Book tab and camera
+  shutter it drew: the captain kept the built three-tab Today-Trail-Pool
+  shape (2026-08-28), and a Book tab waits for a built Book — absent, not
+  disabled, per the container's own comment. The bar's icons are 2px
+  round-capped stroke paths on a 24 grid drawn in `trip_shell.dart` (Trail
+  and Pool trace 5b's SVGs; Today's flag is the same vocabulary), not
+  Material glyphs. Atkinson Hyperlegible (OFL) is bundled in
+  `assets/fonts/`; Young Serif is not yet — nothing built sets display
+  type. `test/tab_bar_style_test.dart` pins the tokens and states.
 - **Capture is a route, not a tab.** The only way in is the day page's one
   call to action, and only an open or a late window offers it. The camera is
   behind `CameraSource` (`lib/app_state/camera_source.dart`): a real back

@@ -359,7 +359,21 @@ void main() {
     expect(find.byKey(const Key('tab-today')), findsOneWidget);
     expect(find.byKey(const Key('tab-trail')), findsOneWidget);
     expect(find.byKey(const Key('tab-pool')), findsOneWidget);
-    expect(find.byType(NavigationDestination), findsNWidgets(3));
+    // Every tab is keyed `tab-<name>`; counting them is what pins "no
+    // fourth" without naming a widget type the skin is free to change.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('tab-bar')),
+        matching: find.byWidgetPredicate((widget) {
+          final key = widget.key;
+          return key is ValueKey<String> &&
+              key.value.startsWith('tab-') &&
+              key.value != 'tab-bar' &&
+              !key.value.endsWith('-dot');
+        }),
+      ),
+      findsNWidgets(3),
+    );
   });
 
   testWidgets('the way back to the plan hangs off the trip, not off a day', (
