@@ -5,6 +5,13 @@ abstract interface class LinkOpenerEdge {
   Future<bool> open(Uri uri);
 }
 
+// All three handoffs are keyless https universal links (google.com/maps/search,
+// maps.apple.com/?q=, waze.com/ul?q=). Universal links need no
+// LSApplicationQueriesSchemes and no canLaunchUrl check: iOS hands the https
+// URL to the installed app if present, otherwise opens the web page. The
+// plist entries for comgooglemaps/comgooglemapsios/waze are kept for a
+// future canLaunchUrl-based "is installed?" check (e.g. to grey an option),
+// not for the current open() path, which deliberately avoids custom schemes.
 class DeviceLinkOpener implements LinkOpenerEdge {
   @override
   Future<bool> open(Uri uri) async {
