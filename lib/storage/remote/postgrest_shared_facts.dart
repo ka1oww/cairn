@@ -126,7 +126,7 @@ class PostgrestSharedFacts implements SharedFacts {
                     'position': stop.position,
                     'stop_text': stop.text,
                     'time_of_day': stop.timeIso,
-                    // The tap-to-Maps columns (migration 0012). A server that
+                    // The tap-to-Maps columns (migration 0013). A server that
                     // has not had it applied ignores the three extra keys.
                     'kind': stop.kind,
                     'area_text': stop.areaText,

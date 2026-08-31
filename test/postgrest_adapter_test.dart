@@ -287,42 +287,45 @@ void main() {
       expect(merged.setAside.single.text, 'book the cabin');
     });
 
-    test('a server without migration 0013 says nothing, not "no area"', () async {
-      // The whole reason 0013 exists: until it is applied,
-      // `sync_trip_itinerary` returns the pre-0012 column set, so a stop
-      // comes back with no `area_text` key at all. That is "this server does
-      // not know", never "this stop has no area" -- reading it as the latter
-      // would null every hand-made correction on the phone.
-      const oldServer = {
-        'plan_revised_at': '2027-06-03T00:00:00+00:00',
-        'pocket_revised_at': '2027-06-03T00:00:00+00:00',
-        'days': [
-          {
-            'day_number': 1,
-            'day_date': '2027-06-14',
-            'place': 'Oslo',
-            'revised_at': '2027-06-03T00:00:00+00:00',
-            'stops': [
-              {'position': 0, 'stop_text': 'Vigeland', 'time_of_day': null},
-            ],
-          },
-        ],
-        'set_asides': <Map<String, Object?>>[],
-      };
-      final sync = facts(
-        MockClient((_) async => http.Response(jsonEncode(oldServer), 200)),
-      );
+    test(
+      'a server without migration 0013 says nothing, not "no area"',
+      () async {
+        // The whole reason 0013 exists: until it is applied,
+        // `sync_trip_itinerary` returns the pre-0012 column set, so a stop
+        // comes back with no `area_text` key at all. That is "this server does
+        // not know", never "this stop has no area" -- reading it as the latter
+        // would null every hand-made correction on the phone.
+        const oldServer = {
+          'plan_revised_at': '2027-06-03T00:00:00+00:00',
+          'pocket_revised_at': '2027-06-03T00:00:00+00:00',
+          'days': [
+            {
+              'day_number': 1,
+              'day_date': '2027-06-14',
+              'place': 'Oslo',
+              'revised_at': '2027-06-03T00:00:00+00:00',
+              'stops': [
+                {'position': 0, 'stop_text': 'Vigeland', 'time_of_day': null},
+              ],
+            },
+          ],
+          'set_asides': <Map<String, Object?>>[],
+        };
+        final sync = facts(
+          MockClient((_) async => http.Response(jsonEncode(oldServer), 200)),
+        );
 
-      final merged = await sync.syncItinerary(
-        tripId: trip,
-        planRevisedAt: DateTime.utc(1970),
-        days: const [],
-        pocketRevisedAt: DateTime.utc(1970),
-        setAside: const [],
-      );
+        final merged = await sync.syncItinerary(
+          tripId: trip,
+          planRevisedAt: DateTime.utc(1970),
+          days: const [],
+          pocketRevisedAt: DateTime.utc(1970),
+          setAside: const [],
+        );
 
-      expect(merged.days.single.stops.single.carriesAreas, isFalse);
-    });
+        expect(merged.days.single.stops.single.carriesAreas, isFalse);
+      },
+    );
   });
 
   group('the trip row and the roster', () {
