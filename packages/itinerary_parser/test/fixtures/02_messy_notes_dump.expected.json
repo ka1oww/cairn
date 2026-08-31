@@ -12,7 +12,10 @@
           "sourceLine": {
             "lineNumber": 4,
             "text": "-fushimi inari early before crowds"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "fushimi inari early before crowds"
         },
         {
           "text": "lunch @ nishiki market",
@@ -21,7 +24,10 @@
           "sourceLine": {
             "lineNumber": 5,
             "text": "- lunch @ nishiki market"
-          }
+          },
+          "kind": "mealLabel",
+          "area": null,
+          "placeText": "@ nishiki market"
         },
         {
           "text": "kiyomizu dera in the afternoon, maybe 4pm?",
@@ -30,7 +36,10 @@
           "sourceLine": {
             "lineNumber": 6,
             "text": "kiyomizu dera in the afternoon, maybe 4pm?"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "kiyomizu dera in the afternoon, maybe 4pm?"
         }
       ],
       "confidence": "high",
@@ -54,7 +63,10 @@
           "sourceLine": {
             "lineNumber": 10,
             "text": "osaka castle"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "osaka castle"
         },
         {
           "text": "dotonbori at night 7pm",
@@ -66,7 +78,10 @@
           "sourceLine": {
             "lineNumber": 11,
             "text": "- dotonbori at night 7pm"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "dotonbori at night 7pm"
         },
         {
           "text": "don't forget to check hotel wifi password",
@@ -75,7 +90,10 @@
           "sourceLine": {
             "lineNumber": 12,
             "text": "don't forget to check hotel wifi password"
-          }
+          },
+          "kind": "note",
+          "area": null,
+          "placeText": null
         }
       ],
       "confidence": "high",

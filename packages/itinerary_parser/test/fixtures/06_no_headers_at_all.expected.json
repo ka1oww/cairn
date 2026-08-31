@@ -12,7 +12,10 @@
           "sourceLine": {
             "lineNumber": 1,
             "text": "Fushimi Inari Shrine early morning"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Fushimi Inari Shrine early morning"
         },
         {
           "text": "Bamboo grove in Arashiyama",
@@ -21,7 +24,14 @@
           "sourceLine": {
             "lineNumber": 2,
             "text": "Bamboo grove in Arashiyama"
-          }
+          },
+          "kind": "place",
+          "area": {
+            "text": "Arashiyama",
+            "source": "inlineLocality",
+            "setBy": null
+          },
+          "placeText": "Bamboo grove in Arashiyama"
         },
         {
           "text": "Lunch somewhere near the station",
@@ -30,7 +40,10 @@
           "sourceLine": {
             "lineNumber": 3,
             "text": "Lunch somewhere near the station"
-          }
+          },
+          "kind": "mealLabel",
+          "area": null,
+          "placeText": "somewhere near the station"
         }
       ],
       "confidence": "low",
@@ -51,7 +64,10 @@
           "sourceLine": {
             "lineNumber": 5,
             "text": "Osaka Castle"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Osaka Castle"
         },
         {
           "text": "Dotonbori for dinner",
@@ -60,7 +76,10 @@
           "sourceLine": {
             "lineNumber": 6,
             "text": "Dotonbori for dinner"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Dotonbori for dinner"
         },
         {
           "text": "Maybe catch the Glico sign at night",
@@ -69,7 +88,10 @@
           "sourceLine": {
             "lineNumber": 7,
             "text": "Maybe catch the Glico sign at night"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Maybe catch the Glico sign at night"
         }
       ],
       "confidence": "low",

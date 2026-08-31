@@ -90,19 +90,42 @@ DayNumberMatch? tryParseDayNumberHeader(String line) {
 }
 
 final RegExp _bulletPrefix = RegExp(
-  r'^(?:[-*•–—]|\(\d{1,3}\)|\d{1,3}[.)])\s*',
+  r'^(?:[-*•–—]|\(\d{1,3}\)|\d{1,3}[.)]|\d{1,3}(?=\s))\s*',
 );
 
-bool startsWithBullet(String line) => _bulletPrefix.hasMatch(line.trim());
+bool startsWithBullet(String line) {
+  final trimmed = line.trim();
+  final m = _bulletPrefix.firstMatch(trimmed);
+  if (m == null) return false;
+  final matched = m.group(0)!;
+  if (RegExp(r'^\d{1,3}(?=\s)').hasMatch(matched)) {
+    final after = trimmed.substring(m.end).trimLeft();
+    if (after.isEmpty) return true;
+    // Tightened: bare-number bullet only when remainder starts with
+    // capitalized word or bullet-like, NOT a time/digit/month or lowercase.
+    // This prevents eating "3 November" date headers and "10 am" times.
+    if (RegExp(r'^(?:am|pm|:\d)', caseSensitive: false).hasMatch(after)) return false;
+    // If remainder starts with digit or lowercase, not a bullet list item
+    if (RegExp(r'^[a-z]').hasMatch(after)) return false;
+    if (RegExp(r'^\d').hasMatch(after)) return false;
+    // Month words are not bullet items
+    if (RegExp(r'^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)', caseSensitive: false).hasMatch(after)) return false;
+  }
+  return true;
+}
 
 /// Strips exactly one leading bullet marker (`-`, `*`, `•`, `1.`, `1)`,
 /// `(1)`, ...) and the whitespace following it, if present.
 String stripBullet(String line) {
   final trimmed = line.trim();
-  final m = _bulletPrefix.firstMatch(trimmed);
-  if (m == null) return trimmed;
+  if (!startsWithBullet(trimmed)) return trimmed;
+  final m = _bulletPrefix.firstMatch(trimmed)!;
   return trimmed.substring(m.end).trim();
 }
+
+/// Folio-after-URL guard: after stripping URL, remainder like "4/24" is urlOnly.
+bool isFolioAfterUrl(String textWithoutUrl) =>
+    RegExp(r'^\d{1,3}/\d{1,3}$').hasMatch(textWithoutUrl.trim());
 
 final RegExp _properNounWord = RegExp(r"^[A-Z][A-Za-z'.]*$");
 final RegExp _allCapsWord = RegExp(r'^[A-Z]{2,}$');

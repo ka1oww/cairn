@@ -12,7 +12,10 @@
           "sourceLine": {
             "lineNumber": 2,
             "text": "- Check in to hotel"
-          }
+          },
+          "kind": "note",
+          "area": null,
+          "placeText": null
         },
         {
           "text": "Explore old town",
@@ -21,7 +24,10 @@
           "sourceLine": {
             "lineNumber": 3,
             "text": "- Explore old town"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Explore old town"
         },
         {
           "text": "19:00 Dinner at izakaya",
@@ -33,7 +39,10 @@
           "sourceLine": {
             "lineNumber": 4,
             "text": "- 19:00 Dinner at izakaya"
-          }
+          },
+          "kind": "mealLabel",
+          "area": null,
+          "placeText": "Dinner at izakaya"
         }
       ],
       "confidence": "high",
@@ -57,7 +66,10 @@
           "sourceLine": {
             "lineNumber": 7,
             "text": "- Day trip to Nara"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Day trip to Nara"
         },
         {
           "text": "14:00 Feed the deer",
@@ -69,7 +81,10 @@
           "sourceLine": {
             "lineNumber": 8,
             "text": "- 14:00 Feed the deer"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Feed the deer"
         },
         {
           "text": "Return to Kyoto",
@@ -78,7 +93,10 @@
           "sourceLine": {
             "lineNumber": 9,
             "text": "- Return to Kyoto"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Return to Kyoto"
         }
       ],
       "confidence": "high",

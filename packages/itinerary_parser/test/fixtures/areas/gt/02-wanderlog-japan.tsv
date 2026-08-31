@@ -1,0 +1,104 @@
+# Ground truth: 02-wanderlog-japan.txt (hand-written 2026-08-31)
+# The 100 numbered stops (traveller-tappable). NONE = sending no area is fully correct
+# (stop is globally unique or its own text carries the area). NONE absent = area genuinely
+# needed for disambiguation.
+33	singapore|NONE	Changi unique
+51	narita|tokyo|NONE	airport unique; fukuoka (this day's Wanderlog city) would be wrong
+69	tokyo|NONE	Tokyo Station unique; fukuoka would be wrong
+80	hakata|fukuoka|NONE	is itself an area
+89	hakata|fukuoka|NONE	hotel; pdftotext glued "HakataTaihaku"
+113	hakata|fukuoka|NONE	name carries HAKATA
+121	fukuoka|hakata|nakasu|NONE	name carries Fukuoka
+128	fukuoka|NONE	Ohori Park - Ohori parks exist elsewhere; area helps
+145	hakata|fukuoka|NONE	hotel
+152	hakata|fukuoka|NONE	name carries Fukuoka Hakata
+167	takachiho|NONE	day-tour 3h from Fukuoka; fukuoka would be wrong
+181	aso|kumamoto|NONE	Mount Aso unique; fukuoka would be wrong
+204	hakata|fukuoka|NONE	hotel
+211	hakata|fukuoka|NONE	hotel
+219	itoshima|fukuoka	Shiraito Waterfall #1 - CRITICAL: a second, different Shiraito Waterfall (Karuizawa) is in this same trip; area required
+227	itoshima|fukuoka	Sakurai Futamigaura
+240	itoshima|fukuoka|NONE	name unique-ish (Couple Stones)
+261	hakata|fukuoka|NONE	hotel
+268	hakata|fukuoka|NONE	name carries Hakata
+276	fukuoka|hakata	Gundam statue - other Gundam statues exist (Yokohama, Odaiba); area required
+283	fukuoka|hakata|nakasu	food stall
+289	fukuoka|hakata|nagahama	fish market
+296	fukuoka|hakata|NONE	BOSS E ZO FUKUOKA - name carries it (line has a mid-dot, dropped by skeleton extraction)
+304	fukutsu|fukuoka	Miyajidake Shrine
+322	hakata|fukuoka|NONE	hotel
+346	kyoto|NONE	Tsumugi hotel (Kyoto)
+365	kyoto|NONE	Nishiki Market - famous, but Nishiki elsewhere too; NONE acceptable
+383	kyoto|NONE	Daigo-ji unique
+403	kyoto|higashiyama|NONE	Ninenzaka unique
+424	kyoto|NONE	Kiyomizu-dera (Kyoto's is canonical)
+439	gion|kyoto	gion ichiho - small shop, area required
+453	gion|kyoto|NONE	Gion Corner unique
+481	kyoto|NONE	hotel
+497	kameoka|kyoto|arashiyama|NONE	boat ride start
+507	kameoka|kyoto|arashiyama|NONE	boat ride end
+529	arashiyama|kyoto	Arashiyama Yoshimura - soba restaurant, area required
+539	arashiyama|kyoto|NONE	Togetsukyo Bridge unique
+570	kyoto|arashiyama|NONE	Otagi Nenbutsuji unique
+603	kibune|kyoto|NONE	Kifune Shrine unique
+611	kibune|kyoto	Kibune River (dinner) - generic name, area required
+632	kyoto|NONE	hotel
+647	kyoto|NONE	hotel
+666	kyoto|NONE	Kyoto Station unique
+674	miyazu|kyoto|NONE	Amanohashidate unique (northern Kyoto pref)
+693	kyoto|NONE	CICON bar (NOHGA Kyoto); NOHGA hotels also in Tokyo - kyoto helps
+719	kyoto|NONE	hotel
+741	toyama|NONE	hotel name carries Toyama
+762	toyama|NONE	name carries Toyama
+781	takaoka|toyama|amaharashi|NONE	name unique
+795	takaoka|toyama|amaharashi|NONE	name unique
+838	takaoka|toyama|NONE	is itself an area
+857	toyama|NONE	hotel
+874	shogawa|toyama|NONE	Shogawa Gorge
+883	shogawa|toyama|NONE	Shogawa Yuran cruise
+903	shogawa|toyama|tonami|NONE	name carries Shogawa
+928	inami|nanto|toyama|NONE	Zuisenji - Zuisenji also in Kamakura! area helps but name+inami unique enough; keep NONE with caution
+945	toyama	Kansui Park - Kansui parks exist elsewhere; area required
+971	toyama|NONE	hotel
+1006	nagano	HOTEL COURTLAND - hotels of this name exist elsewhere (US); area required
+1025	hakuba|happo|NONE	name carries Hakuba Happo
+1045	hakuba|happo|NONE	name carries Hakuba Happo-One
+1076	hakuba|nagano	Oide Park - generic name, area required
+1093	hakuba|NONE	name carries HAKUBA
+1110	hakuba|nagano	Matsukawa Bridge - Matsukawa is a common toponym; area required
+1131	hakuba|omachi|aoki|nagano|NONE	ao LAKESIDE CAFE - fairly unique name
+1138	omachi|hakuba|nagano|aoki|NONE	Lake Aoki - lakes named Aoki exist elsewhere; area helps
+1170	hakuba|happo|NONE	name carries Hakuba Happo
+1187	nagano	HOTEL COURTLAND again
+1239	nagano	HOTEL COURTLAND again
+1246	karuizawa|NONE	is itself an area
+1284	karuizawa|nagano	Shiraito Waterfall #2 - CRITICAL: distinct from the Itoshima one on Dec 3, and from the famous Shizuoka one; area required
+1304	karuizawa|NONE	Kumoba Pond unique
+1320	karuizawa|NONE	name carries Karuizawa
+1335	karuizawa|NONE	name carries Karuizawa; note "Ginza" inside this name is a trap for word rules
+1361	nagano	HOTEL COURTLAND
+1367	nagano|NONE	name carries Nagano
+1380	nagano|yamanouchi|NONE	Jigokudani Monkey Park - Jigokudani valleys exist elsewhere (Hakodate); nagano helps
+1391	togakushi|nagano|NONE	name unique
+1408	nagano	HOTEL COURTLAND
+1444	shinjuku|kabukicho|tokyo	hotel whose Japanese name pdftotext ate (only "Wi-Fi" remains) - area required
+1466	todoroki|setagaya|tokyo|NONE	Todoroki Ravine unique in Tokyo
+1486	shibuya|tokyo|NONE	name carries Shibuya
+1493	shibuya|tokyo|NONE	name carries Shibuya
+1518	shinjuku|kabukicho|tokyo	eaten hotel line again
+1525	fuji|kawaguchiko|NONE	Mount Fuji unique
+1587	shinjuku|kabukicho|tokyo	eaten hotel line again
+1594	kamakura|NONE	is itself an area
+1614	kamakura	Sasuke Inari Shrine - many Inari shrines; area required
+1632	kamakura|NONE	Kotoku-in unique
+1650	shichirigahama|kamakura	bills - a chain (Tokyo/Yokohama/Fukuoka); area required (name carries Shichirigahama in parens)
+1666	kamakura|shichirigahama|enoshima|NONE	Kamakurakoko-mae Station unique
+1681	enoshima|fujisawa|kamakura|NONE	name carries Enoshima
+1688	enoshima|fujisawa|kamakura|NONE	name carries Enoshima
+1763	shinjuku|kabukicho|tokyo	eaten hotel line again
+1780	shinjuku|tokyo|NONE	name carries Shinjuku
+1794	kabukicho|shinjuku|tokyo|NONE	is itself an area
+1808	shinjuku|tokyo|NONE	name carries Shinjuku
+1816	tokyo|NONE	Tokyo Tower unique
+1831	shinjuku|kabukicho|tokyo	eaten hotel line again
+1838	narita|tokyo|NONE	airport unique

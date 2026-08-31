@@ -15,7 +15,10 @@
           "sourceLine": {
             "lineNumber": 3,
             "text": "[03/11/2026, 09:15] Mum: - 9am Osaka Castle"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "[03/11/2026, 09:15] Mum: - 9am Osaka Castle"
         },
         {
           "text": "lunch near Dotonbori",
@@ -24,7 +27,10 @@
           "sourceLine": {
             "lineNumber": 4,
             "text": "[03/11/2026, 09:16] Mum: - lunch near Dotonbori"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "[03/11/2026, 09:16] Mum: - lunch near Dotonbori"
         },
         {
           "text": "sounds good, I'll book the 16:40 train",
@@ -36,7 +42,10 @@
           "sourceLine": {
             "lineNumber": 6,
             "text": "[03/11/2026, 09:20] Dad: sounds good, I'll book the 16:40 train"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "[03/11/2026, 09:20] Dad: sounds good, I'll book the 16:40 train"
         },
         {
           "text": "great, see everyone at breakfast",
@@ -45,7 +54,10 @@
           "sourceLine": {
             "lineNumber": 7,
             "text": "[03/11/2026, 09:21] Mum: great, see everyone at breakfast"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "[03/11/2026, 09:21] Mum: great, see everyone at breakfast"
         }
       ],
       "confidence": "high",

@@ -12,7 +12,10 @@
           "sourceLine": {
             "lineNumber": 1,
             "text": "Trip stuff"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Trip stuff"
         }
       ],
       "confidence": "low",

@@ -140,6 +140,54 @@ class ParsedTime {
   String toString() => toIso();
 }
 
+/// What a stop *is* for tap-to-Maps.
+enum StopKind {
+  place,
+  areaHeading,
+  mealLabel,
+  note,
+}
+
+/// Provenance of an area assignment.
+enum AreaSource {
+  travellerDeclared,
+  travellerProximity,
+  inlineLocality,
+  runningHeading,
+  hotelPrefix,
+  trainDestination,
+  person,
+}
+
+/// An area hint attached to a stop — the area in force plus who decided it.
+class AreaHint {
+  final String text;
+  final AreaSource source;
+  final SourceLine? setBy;
+  const AreaHint({required this.text, required this.source, this.setBy});
+
+  String get normalized => text.toLowerCase().trim();
+
+  Map<String, dynamic> toJson() => {
+        'text': text,
+        'source': source.name,
+        'setBy': setBy?.toJson(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AreaHint &&
+      other.text == text &&
+      other.source == source &&
+      other.setBy == setBy;
+
+  @override
+  int get hashCode => Object.hash(text, source, setBy);
+
+  @override
+  String toString() => 'AreaHint($text, ${source.name})';
+}
+
 /// One activity within a day.
 ///
 /// [text] is the stop line with its bullet marker (if any) stripped, but
@@ -150,8 +198,18 @@ class Stop {
   final String text;
   final ParsedTime? time;
   final SourceLine sourceLine;
+  final StopKind kind;
+  final AreaHint? area;
+  final String? placeText;
 
-  const Stop({required this.text, this.time, required this.sourceLine});
+  const Stop({
+    required this.text,
+    this.time,
+    required this.sourceLine,
+    this.kind = StopKind.place,
+    this.area,
+    this.placeText,
+  });
 
   /// True exactly when [time] is present. This is the star rule.
   bool get isStarred => time != null;
@@ -161,10 +219,28 @@ class Stop {
         'time': time?.toJson(),
         'isStarred': isStarred,
         'sourceLine': sourceLine.toJson(),
+        'kind': kind.name,
+        'area': area?.toJson(),
+        'placeText': placeText,
       };
 
   @override
   String toString() => 'Stop(${time != null ? '${time!.toIso()} ' : ''}$text)';
+}
+
+/// Individual places on a multi-place line.
+List<String> placesOnLine(Stop stop) {
+  if (stop.placeText == null) return [];
+  final parts = stop.placeText!.split(RegExp(r'[/,+&;]')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  final cleaned = <String>[];
+  for (final p in parts) {
+    var c = p.replaceAll(RegExp(r'\([^)]*\)'), '').trim();
+    c = c.replaceAll(RegExp(r'\s+'), ' ').trim();
+    c = c.replaceAll(RegExp(r'^[:\-–—\s]+|[:\-–—\s]+$'), '').trim();
+    if (c.isNotEmpty) cleaned.add(c);
+  }
+  if (cleaned.isEmpty) return [stop.placeText!.trim()];
+  return cleaned;
 }
 
 /// A date the parser *recognized in a day's header but did not bind* to the

@@ -175,7 +175,7 @@ void main() {
     );
     await before.replaceItinerary(
       days: [(number: 1, dateIso: '2027-06-14', place: 'Tokyo')],
-      stops: [(dayNumber: 1, position: 0, text: 'Senso-ji', timeIso: null)],
+      stops: [(dayNumber: 1, position: 0, text: 'Senso-ji', timeIso: null, kind: null, areaText: null, areaSource: null)],
       setAsides: [],
       nowUtcIso: '2027-06-14T09:00:00.000Z',
     );

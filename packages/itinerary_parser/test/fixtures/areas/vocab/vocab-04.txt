@@ -1,0 +1,3 @@
+hongdae	([14, 17], ['annotation', 'hotel'])
+october	([1, 96], ['paren', 'title'])
+seoul	([1, 27, 42], ['paren', 'title'])

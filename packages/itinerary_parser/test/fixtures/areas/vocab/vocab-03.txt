@@ -1,0 +1,4 @@
+himeji	([39, 41], ['paren', 'title'])
+kyoto	([12, 16, 23, 25, 31], ['paren', 'station', 'title'])
+nara	([39, 40], ['paren', 'title'])
+osaka	([12, 46, 54], ['title'])

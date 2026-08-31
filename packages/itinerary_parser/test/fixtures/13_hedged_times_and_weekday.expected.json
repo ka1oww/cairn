@@ -15,7 +15,10 @@
           "sourceLine": {
             "lineNumber": 2,
             "text": "- 09:00 Tsukiji market"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Tsukiji market"
         },
         {
           "text": "teamLab maybe 2pm?",
@@ -24,7 +27,10 @@
           "sourceLine": {
             "lineNumber": 3,
             "text": "- teamLab maybe 2pm?"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "teamLab maybe 2pm?"
         },
         {
           "text": "dinner around 7pm",
@@ -33,7 +39,10 @@
           "sourceLine": {
             "lineNumber": 4,
             "text": "- dinner around 7pm"
-          }
+          },
+          "kind": "mealLabel",
+          "area": null,
+          "placeText": "around 7pm"
         }
       ],
       "confidence": "high",
@@ -60,7 +69,10 @@
           "sourceLine": {
             "lineNumber": 7,
             "text": "- Train to Kyoto 10:12"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Train to Kyoto 10:12"
         },
         {
           "text": "Fushimi Inari ~4pm",
@@ -69,7 +81,10 @@
           "sourceLine": {
             "lineNumber": 8,
             "text": "- Fushimi Inari ~4pm"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Fushimi Inari ~4pm"
         },
         {
           "text": "Gion at dusk, 7pm-ish",
@@ -78,7 +93,10 @@
           "sourceLine": {
             "lineNumber": 9,
             "text": "- Gion at dusk, 7pm-ish"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Gion at dusk, 7pm-ish"
         }
       ],
       "confidence": "medium",

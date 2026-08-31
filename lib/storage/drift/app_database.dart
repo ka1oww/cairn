@@ -64,6 +64,26 @@ class ItineraryStops extends Table {
 
   /// `HH:MM` (`cairn_model.ClockTime.iso`), or null for an untimed stop.
   TextColumn get timeIso => text().nullable()();
+
+  /// What the stop is: place / areaHeading / mealLabel / note.
+  TextColumn get kind => text().withDefault(const Constant('place'))();
+
+  /// Area in force for this stop, or null = send nothing (rule 3).
+  TextColumn get areaText => text().nullable()();
+
+  /// Provenance: travellerDeclared / travellerProximity / inlineLocality /
+  /// runningHeading / hotelPrefix / trainDestination / person.
+  TextColumn get areaSource => text().nullable()();
+}
+
+/// App-level preferences (one row, id 1). Local-only, never synced.
+class AppPreferences extends Table {
+  IntColumn get id => integer()();
+  /// google | apple | waze
+  TextColumn get mapsApp => text().withDefault(const Constant('google'))();
+
+  @override
+  Set<Column> get primaryKey => {id};
 }
 
 /// A pasted line the parser set aside instead of placing — kept with its
@@ -382,6 +402,7 @@ class PlanDrafts extends Table {
     TripInviteCodes,
     SyncStates,
     PlanDrafts,
+    AppPreferences,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -393,7 +414,7 @@ class AppDatabase extends _$AppDatabase {
   final TripId Function() mint;
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -519,6 +540,20 @@ class AppDatabase extends _$AppDatabase {
         // capture a photo has ever shipped, so a photo already on a phone is
         // a developer's, and enqueueing it against a hosted project it never
         // agreed to reach would be a push nobody asked for.
+      }
+      if (from < 9) {
+        // Area columns on stops + app preferences (tap-to-Maps phase 1).
+        // No backfill possible: a plan saved before v9 has no raw text to
+        // re-derive areas from, so its stops upgrade with area null (rule 3).
+        // Defensive: wind-back tests may leave columns in place.
+        for (final col in [itineraryStops.kind, itineraryStops.areaText, itineraryStops.areaSource]) {
+          try {
+            await m.addColumn(itineraryStops, col);
+          } catch (_) {}
+        }
+        try {
+          await m.createTable(appPreferences);
+        } catch (_) {}
       }
     },
   );
@@ -732,13 +767,22 @@ class AppDatabase extends _$AppDatabase {
     required String? dateIso,
     required String? place,
     required List<(int, String, String?)> stops,
+    List<(int, String?, String?, String?)>? areaStops,
   }) {
     final ordered = [...stops]..sort((a, b) => a.$1.compareTo(b.$1));
+    // When areaStops provided (v9), they are the same positions with kind/area/source
+    Map<int, (String?, String?, String?)>? areaMap;
+    if (areaStops != null) {
+      areaMap = {for (final (pos, k, a, s) in areaStops) pos: (k, a, s)};
+    }
     return [
       dateIso ?? '',
       place ?? '',
       for (final (position, text, timeIso) in ordered)
-        '$position\u0000$text\u0000${timeIso ?? ''}',
+        if (areaMap == null)
+          '$position\u0000$text\u0000${timeIso ?? ''}'
+        else
+          '$position\u0000$text\u0000${timeIso ?? ''}\u0000${areaMap[position]?.$1 ?? ''}\u0000${areaMap[position]?.$2 ?? ''}\u0000${areaMap[position]?.$3 ?? ''}',
     ].join('\u0001');
   }
 
@@ -1283,6 +1327,9 @@ typedef ItineraryStopRecord = ({
   int position,
   String text,
   String? timeIso,
+  String? kind,
+  String? areaText,
+  String? areaSource,
 });
 typedef ItinerarySetAsideRecord = ({
   int position,

@@ -12,7 +12,10 @@
           "sourceLine": {
             "lineNumber": 2,
             "text": "- Arrive at Kansai airport"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Arrive at Kansai airport"
         },
         {
           "text": "18:00 check in to hotel",
@@ -24,7 +27,10 @@
           "sourceLine": {
             "lineNumber": 3,
             "text": "- 18:00 check in to hotel"
-          }
+          },
+          "kind": "note",
+          "area": null,
+          "placeText": null
         }
       ],
       "confidence": "medium",
@@ -51,7 +57,10 @@
           "sourceLine": {
             "lineNumber": 6,
             "text": "- 9:00 Fushimi Inari"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Fushimi Inari"
         },
         {
           "text": "Explore Gion in the evening",
@@ -60,7 +69,10 @@
           "sourceLine": {
             "lineNumber": 7,
             "text": "- Explore Gion in the evening"
-          }
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Explore Gion in the evening"
         }
       ],
       "confidence": "medium",
