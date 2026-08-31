@@ -545,15 +545,10 @@ class AppDatabase extends _$AppDatabase {
         // Area columns on stops + app preferences (tap-to-Maps phase 1).
         // No backfill possible: a plan saved before v9 has no raw text to
         // re-derive areas from, so its stops upgrade with area null (rule 3).
-        // Defensive: wind-back tests may leave columns in place.
-        for (final col in [itineraryStops.kind, itineraryStops.areaText, itineraryStops.areaSource]) {
-          try {
-            await m.addColumn(itineraryStops, col);
-          } catch (_) {}
-        }
-        try {
-          await m.createTable(appPreferences);
-        } catch (_) {}
+        await m.addColumn(itineraryStops, itineraryStops.kind);
+        await m.addColumn(itineraryStops, itineraryStops.areaText);
+        await m.addColumn(itineraryStops, itineraryStops.areaSource);
+        await m.createTable(appPreferences);
       }
     },
   );
@@ -747,6 +742,11 @@ class AppDatabase extends _$AppDatabase {
             position: stop.position,
             stopText: stop.text,
             timeIso: Value(stop.timeIso),
+            kind: stop.kind == null
+                ? const Value.absent()
+                : Value(stop.kind!),
+            areaText: Value(stop.areaText),
+            areaSource: Value(stop.areaSource),
           ),
       ]);
       b.insertAll(itinerarySetAsides, [
