@@ -1,232 +1,133 @@
-// LOGIC band (docs/architecture.md): pure decision cores — no Flutter/Riverpod/IO.
-// The Maps handoff: which lines are places, and which search they open.
-// See plan report §4 and screens.html.
+// LOGIC band (docs/architecture.md): pure decision cores — no Flutter, no
+// Riverpod, no IO.
+//
+// The Maps handoff: what a tapped line searches for, and the one keyless URL
+// that search opens. Everything here is a function of a stop's *stored* words
+// and its *stored* area; nothing re-decides what a line is. `StopKind` and the
+// area are settled by `itinerary_parser` at the paste and carried
+// (`cairn_model.Stop`), because two classifiers drift.
+//
+// Three rules the composer will not break:
+//   1. The handoff is always a text search. No stored pin, no coordinates, no
+//      place id — the app has never looked a place up and must not pretend to.
+//   2. An area is appended only when there is one. A miss sends the stop's own
+//      words alone rather than a guessed neighbourhood (rule 3 of the plan).
+//   3. A meal label is shown and never sent: `Lunch: Ichiran` searches for
+//      `Ichiran`, because "Lunch" is not part of any restaurant's name.
+library;
 
-const _maxQueryLen = 200;
+/// The maps app a search opens in. All three are keyless https links, so
+/// nothing here needs an API key, a project or a billing account.
+enum MapsApp { google, apple, waze }
 
-enum MapsApp { googleMaps, appleMaps, waze }
+/// Longest query any of the three apps is handed. Well past the longest real
+/// stop line; the cap exists so a pathological paste cannot build a URL no
+/// app will accept.
+const int maxQueryLength = 200;
 
-enum StopLineKind { place, inert }
+/// Above this many characters a multi-place row is drawn truncated with an
+/// "N places" badge instead of in full. Length decides, never place count:
+/// `Ueno Park and the museums` is two places and reads fine as written.
+const int multiPlaceTruncationThreshold = 48;
 
-class ClassifiedStop {
-  final StopLineKind kind;
-  final String? mealLabel;
-  final String query;
-  final List<String> places;
-
-  const ClassifiedStop({
-    required this.kind,
-    this.mealLabel,
-    required this.query,
-    required this.places,
-  });
+/// The one composition rule: the stop's sendable words, then the area.
+///
+/// Returns null when there is nothing to search for — an inert line, or a
+/// meal label with no restaurant on it.
+String? mapsQueryFor({required String? searchText, required String? area}) {
+  final text = searchText?.trim();
+  if (text == null || text.isEmpty) return null;
+  final where = area?.trim();
+  final query = (where == null || where.isEmpty) ? text : '$text, $where';
+  return _cap(query);
 }
 
-/// Regex lifted for cross-test pinning: traveller's `(near X)` / `(X area)` / `@ X`.
-/// The parser package's extractor duplicates this; a cross-test keeps them honest.
-final RegExp travellerAreaPattern = RegExp(
-  r'(?:\(\s*near\s+(.+?)\s*\)|\(\s*(.+?)\s+area\s*\)|\@\s*(.+?))\s*$',
-  caseSensitive: false,
-);
-
-String? extractTravellerArea(String text) {
-  final m = travellerAreaPattern.firstMatch(text.trim());
-  if (m == null) return null;
-  for (var i = 1; i <= 3; i++) {
-    final g = m.group(i);
-    if (g != null && g.trim().isNotEmpty) return g.trim();
-  }
-  return null;
-}
-
-String stripTravellerArea(String text) {
-  final m = travellerAreaPattern.firstMatch(text.trim());
-  if (m == null) return text.trim();
-  // Remove the matched suffix.
-  final start = m.start;
-  return text.substring(0, start).trim();
-}
-
-const _mealLabels = ['lunch', 'dinner', 'breakfast', 'brunch', 'supper'];
-
-({String? mealLabel, String remainder}) _stripMealLabel(String text) {
-  final trimmed = text.trimLeft();
-  for (final label in _mealLabels) {
-    if (trimmed.length >= label.length &&
-        trimmed.substring(0, label.length).toLowerCase() == label) {
-      final after = trimmed.substring(label.length).trimLeft();
-      if (after.isEmpty) {
-        return (mealLabel: _capitalize(label), remainder: '');
-      }
-      if (after.startsWith(':') || after.startsWith('-')) {
-        return (
-          mealLabel: _capitalize(label),
-          remainder: after.substring(1).trimLeft(),
-        );
-      }
-      // Bare meal label followed by nothing? handled above.
-    }
-  }
-  return (mealLabel: null, remainder: text.trim());
-}
-
-String _capitalize(String s) => s[0].toUpperCase() + s.substring(1).toLowerCase();
-
-// Inert detection
-bool _isInertRemainder(String r) {
-  if (r.trim().isEmpty) return true;
-  final low = r.trim().toLowerCase();
-  if (low == 'tbd' || low == 'tbc' || low == 'free time' || low == 'rest') {
-    return true;
-  }
-  // Bare URL
-  if (RegExp(r'^https?://\S+$', caseSensitive: false).hasMatch(r.trim())) {
-    return true;
-  }
-  // No letters (incl CJK). If no letter/digit CJK, inert.
-  // Check if contains any letter (A-Z) or CJK (U+4E00-9FFF, Hiragana, Katakana, Hangul)
-  final hasLetter = RegExp(r'[A-Za-z\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF]').hasMatch(r);
-  if (!hasLetter) return true;
-  // Wi-Fi / booking reference shapes — conservative fence
-  final wifiPattern = RegExp(
-    r'wi[\s-]*fi|password|pass\s*\d|booking\s*ref',
-    caseSensitive: false,
-  );
-  // Only inert if line is short and looks like amenity blob? Use heuristic:
-  // If contains wifi/password and no strong place signal, treat as inert.
-  // Plan says "Wi-Fi blobs" are inert. Use broader: if contains wi-fi/password, inert.
-  if (wifiPattern.hasMatch(r)) return true;
-  return false;
-}
-
-List<String> _splitPlaces(String query) {
-  // Split on 、 , / · & and " and " only when conditions hold.
-  // Conditions: >=2 segments, each <=6 words, none purely numeric.
-  final pattern = RegExp(r'\s*[、,/\·&]\s*|\s+and\s+', caseSensitive: false);
-  // Quick check: does split yield >=2?
-  final raw = query.split(pattern);
-  if (raw.length < 2) return [query];
-  // Filter out segments that empty after trim
-  final segments = [for (final s in raw) s.trim()].where((s) => s.isNotEmpty).toList();
-  if (segments.length < 2) return [query];
-  for (final seg in segments) {
-    final words = seg.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-    if (words.length > 6) return [query];
-    if (words.isEmpty) return [query];
-    // Purely numeric segment?
-    if (RegExp(r'^\d+$').hasMatch(seg)) return [query];
-  }
-  // Guard for " and " splits: both sides must start with capital or CJK
-  // If split was on " and ", require both sides start with capital or CJK.
-  // We check if query contains " and " and any segment starts lowercase -> no split.
-  if (RegExp(r'\s+and\s+', caseSensitive: false).hasMatch(query)) {
-    for (final seg in segments) {
-      final first = seg.trim().characters.isEmpty ? '' : seg.trim()[0];
-      if (first.isEmpty) return [query];
-      final isCapOrCjk = RegExp(r'[A-Z\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF]').hasMatch(first);
-      if (!isCapOrCjk) return [query];
-    }
-  }
-  return segments;
-}
-
-extension _Chars on String {
-  Iterable<String> get characters => split('');
-}
-
-ClassifiedStop classifyStopLine(String text) {
-  final trimmed = text.trim();
-  if (trimmed.isEmpty) {
-    return const ClassifiedStop(kind: StopLineKind.inert, query: '', places: []);
-  }
-
-  // Extract meal label
-  final meal = _stripMealLabel(trimmed);
-  final mealLabel = meal.mealLabel;
-  var remainder = meal.remainder;
-
-  // Extract traveller area off remainder (so query doesn't include it)
-  var travellerArea = extractTravellerArea(remainder);
-  if (travellerArea != null) {
-    remainder = stripTravellerArea(remainder);
-  }
-
-  // After stripping, check inert
-  if (_isInertRemainder(remainder)) {
-    // If meal label existed but remainder inert, whole row inert
-    // But still keep mealLabel for rendering
-    return ClassifiedStop(
-      kind: StopLineKind.inert,
-      mealLabel: mealLabel,
-      query: remainder,
-      places: [],
-    );
-  }
-
-  // Remainder is place query
-  final query = remainder.trim();
-  if (query.isEmpty) {
-    return ClassifiedStop(kind: StopLineKind.inert, mealLabel: mealLabel, query: '', places: []);
-  }
-  final places = _splitPlaces(query);
-  return ClassifiedStop(
-    kind: StopLineKind.place,
-    mealLabel: mealLabel,
-    query: _capQuery(query),
-    places: places.map(_capQuery).toList(),
-  );
-}
-
-String _capQuery(String q) {
-  final trimmed = q.trim();
-  if (trimmed.length > _maxQueryLen) return trimmed.substring(0, _maxQueryLen).trim();
-  return trimmed;
-}
-
-// ----- URL composition -----
-
-Uri? mapsSearchUri({
-  required ClassifiedStop stop,
-  String? area,
-  MapsApp app = MapsApp.googleMaps,
-}) {
-  if (stop.kind == StopLineKind.inert) return null;
-  final rawQuery = stop.query.trim();
-  if (rawQuery.isEmpty) return null;
-  final effectiveArea = area?.trim();
-  final query = (effectiveArea != null && effectiveArea.isNotEmpty) ? '$rawQuery, $effectiveArea' : rawQuery;
-  final capped = query.length > _maxQueryLen ? query.substring(0, _maxQueryLen).trim() : query;
-  return _buildUri(capped, app);
-}
-
-Uri areaSearchUri({required String area, MapsApp app = MapsApp.googleMaps}) {
-  final capped = area.trim().length > _maxQueryLen ? area.trim().substring(0, _maxQueryLen) : area.trim();
-  return _buildUri(capped, app);
-}
-
-Uri placeSearchUri({required String place, String? area, MapsApp app = MapsApp.googleMaps}) {
-  final p = place.trim();
-  final a = area?.trim();
-  final q = (a != null && a.isNotEmpty) ? '$p, $a' : p;
-  final capped = q.length > _maxQueryLen ? q.substring(0, _maxQueryLen).trim() : q;
-  return _buildUri(capped, app);
-}
-
-Uri _buildUri(String query, MapsApp app) {
+/// The keyless universal link for [query] in [app].
+Uri mapsSearchUri(MapsApp app, String query) {
+  final capped = _cap(query);
   switch (app) {
-    case MapsApp.googleMaps:
-      return Uri.https('www.google.com', '/maps/search/', {'api': '1', 'query': query});
-    case MapsApp.appleMaps:
-      return Uri.https('maps.apple.com', '/', {'q': query});
+    case MapsApp.google:
+      return Uri.https('www.google.com', '/maps/search/', {
+        'api': '1',
+        'query': capped,
+      });
+    case MapsApp.apple:
+      return Uri.https('maps.apple.com', '/', {'q': capped});
     case MapsApp.waze:
-      return Uri.https('waze.com', '/ul', {'q': query});
+      return Uri.https('waze.com', '/ul', {'q': capped});
   }
 }
 
-// Length-based truncation helper for multi-place row display.
-// Returns true when should truncate + show badge.
-bool shouldTruncateMultiPlace(String text, {int threshold = 48}) {
-  return text.length > threshold;
+String _cap(String query) {
+  final trimmed = query.trim();
+  return trimmed.length <= maxQueryLength
+      ? trimmed
+      : trimmed.substring(0, maxQueryLength).trim();
 }
 
-int placeCount(ClassifiedStop stop) => stop.places.length;
+/// The label a meal line shows, and the words after it.
+///
+/// `Lunch: Ichiran` is `(label: 'Lunch', rest: 'Ichiran')`; a bare `Lunch`
+/// has no rest at all. The split is deliberately narrow — a leading meal word
+/// followed by `:` or `-` — because the parser has already decided this line
+/// *is* a meal label, and all that is left is where the label stops.
+({String? label, String? rest}) mealLabelSplit(String text) {
+  final trimmed = text.trim();
+  for (final word in _mealWords) {
+    if (trimmed.length < word.length) continue;
+    if (trimmed.substring(0, word.length).toLowerCase() != word) continue;
+    final after = trimmed.substring(word.length).trimLeft();
+    final label = trimmed.substring(0, word.length);
+    if (after.isEmpty) return (label: label, rest: null);
+    if (after.startsWith(':') ||
+        after.startsWith('-') ||
+        after.startsWith('—')) {
+      final rest = after.substring(1).trim();
+      return (label: label, rest: rest.isEmpty ? null : rest);
+    }
+    return (label: label, rest: after);
+  }
+  return (label: null, rest: trimmed.isEmpty ? null : trimmed);
+}
+
+const _mealWords = ['breakfast', 'brunch', 'lunch', 'dinner', 'supper'];
+
+/// Whether a line stands in for a place nobody has chosen yet.
+///
+/// `Lunch: TBD` is a plan saying "we'll decide", and searching a maps app for
+/// "TBD" helps nobody — so it renders and does nothing, exactly like the
+/// traveller's own note. The parser reads these the same way; this is the
+/// display side of the same short list.
+bool isPlaceholderText(String text) =>
+    const {'tbd', 'tba', 'none', 'n/a', '?'}.contains(text.trim().toLowerCase());
+
+/// The individual places on one line, in the order they were written.
+///
+/// A single-place line comes back as a one-element list, which is what makes
+/// "is this multi-place?" a length check rather than a second parse. The
+/// separators are the ones people actually type between place names; a
+/// segment that is empty, purely numeric, or long enough to be prose stops
+/// the split, because splitting prose invents places that are not there.
+List<String> placesOn(String text) {
+  final whole = text.trim();
+  if (whole.isEmpty) return const [];
+  final parts = whole
+      .split(RegExp(r'\s*[、,/·+&;]\s*|\s+and\s+', caseSensitive: false))
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty)
+      .toList();
+  if (parts.length < 2) return [whole];
+  for (final part in parts) {
+    if (RegExp(r'^\d+$').hasMatch(part)) return [whole];
+    if (part.split(RegExp(r'\s+')).length > 6) return [whole];
+  }
+  return parts;
+}
+
+/// Whether a multi-place row is drawn truncated with an "N places" badge.
+///
+/// Length-based, per the captain's decision: a row that fits is drawn as
+/// written whatever it lists, and the badge only ever appears on a row that
+/// genuinely names more than one place.
+bool showsPlaceCountBadge(String text, List<String> places) =>
+    places.length > 1 && text.trim().length > multiPlaceTruncationThreshold;

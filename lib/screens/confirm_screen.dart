@@ -34,6 +34,7 @@
 // *saved over*, so the button says so, a cancel that leaves the trip exactly
 // as it was sits beside it, and the re-paste is offered from here. Nothing
 // above the foot knows which mode it is in — the editing is the same editing.
+import 'package:cairn_model/cairn_model.dart' show AreaSource;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -255,20 +256,13 @@ class _DayNumber extends StatelessWidget {
 
 /// The confident read: the full card, chips in itinerary order, a star and
 /// time badge exactly where there is a time. Every part of it is touchable.
-class _FullDayCard extends ConsumerWidget {
+class _FullDayCard extends StatelessWidget {
   const _FullDayCard({required this.day});
 
   final ReviewDay day;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Group stops by area for rendering area rows (plan §6.3)
-    final groups = <String?, List<ReviewStop>>{};
-    final order = <String?>[];
-    for (final s in day.stops) {
-      if (!groups.containsKey(s.area)) { groups[s.area] = []; order.add(s.area); }
-      groups[s.area]!.add(s);
-    }
+  Widget build(BuildContext context) {
     return _DayDropZone(
       dayNumber: day.number,
       child: Card(
@@ -280,74 +274,13 @@ class _FullDayCard extends ConsumerWidget {
             children: [
               _DayHeaderRow(day: day),
               const SizedBox(height: 8),
-              for (final area in order) ...[
-                _AreaRow(day: day, area: area, stops: groups[area]!),
-                _ChipsFor(stops: groups[area]!, day: day),
-              ],
-              if (day.stops.isEmpty || (!groups.containsKey(null) && order.isNotEmpty))
-                // ghost add area where first run area-less
-                _AreaRow(day: day, area: null, stops: const []),
+              _DayChips(day: day),
             ],
           ),
         ),
       ),
     );
   }
-}
-
-class _AreaRow extends ConsumerWidget {
-  const _AreaRow({required this.day, required this.area, required this.stops});
-  final ReviewDay day;
-  final String? area;
-  final List<ReviewStop> stops;
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    if (area == null) {
-      return InkWell(
-        key: Key('add-area-${day.number}'),
-        onTap: () async {
-          final text = await _askForText(context, title: 'Add an area', hint: 'Ginza', action: 'Add', fieldKey: const Key('add-area-input'), saveKey: const Key('add-area-save'));
-          if (text != null && text.trim().isNotEmpty) {
-            final first = stops.isNotEmpty ? stops.first.id : (day.stops.isNotEmpty ? day.stops.first.id : null);
-            if (first != null) ref.read(pasteFlowProvider.notifier).setAreaRun(first, text.trim());
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Text('＋ Add an area', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
-        ),
-      );
-    }
-    final isHuman = stops.isNotEmpty && stops.first.areaSource == AreaSourceInfo.human;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Text(area!, style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-          if (!isHuman) ...[
-            const SizedBox(width: 6),
-            Text('· suggested', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline)),
-          ],
-          const Spacer(),
-          InkWell(key: Key('edit-area-${day.number}-$area'), onTap: () async {
-            final text = await _askForText(context, title: 'Edit area', hint: 'Ginza', action: 'Save', initial: area!, fieldKey: const Key('edit-area-input'), saveKey: const Key('edit-area-save'));
-            if (text != null) ref.read(pasteFlowProvider.notifier).setAreaRun(stops.first.id, text.trim().isEmpty ? null : text.trim());
-          }, child: Icon(Icons.edit_outlined, size: 14, color: theme.colorScheme.primary)),
-          const SizedBox(width: 12),
-          InkWell(key: Key('clear-area-${day.number}-$area'), onTap: () => ref.read(pasteFlowProvider.notifier).setAreaRun(stops.first.id, null), child: Icon(Icons.close, size: 14, color: theme.colorScheme.outline)),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChipsFor extends StatelessWidget {
-  const _ChipsFor({required this.stops, required this.day});
-  final List<ReviewStop> stops;
-  final ReviewDay day;
-  @override
-  Widget build(BuildContext context) => _DayChips(day: ReviewDay(number: day.number, title: day.title, stops: stops, confidence: day.confidence, dateLabel: day.dateLabel));
 }
 
 /// A clean day when other days need the eye: collapsed to one line, so
@@ -643,6 +576,11 @@ class _DayChips extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         for (final (index, stop) in day.stops.indexed) ...[
+          // The area's own row, drawn once over each run of stops that share
+          // it — the same "one heading per run" the day page draws, here
+          // where the read-back is confirmed rather than after it is saved.
+          if (index == 0 || day.stops[index - 1].area != stop.area)
+            _AreaRow(day: day, stop: stop),
           _DropSlot(dayNumber: day.number, index: index),
           _StopChip(stop: stop, day: day),
         ],
@@ -650,6 +588,122 @@ class _DayChips extends StatelessWidget {
         const SizedBox(width: 4),
         _AddStopChip(day: day),
       ],
+    );
+  }
+}
+
+/// One run's area, above the chips it stands over.
+///
+/// A parser's guess whispers `suggested`; a row somebody has touched drops the
+/// whisper, because from then on it is theirs. Both touches — renaming it and
+/// clearing it — write [ReviewStop.areaSource] `human`, and nothing the parser
+/// does later overwrites that.
+///
+/// It is a full-width child of the chip [Wrap] on purpose: that is what makes
+/// it break the line without any of the chips' own drop-slot indices moving,
+/// so the areas can be drawn between the runs without touching the drag.
+class _AreaRow extends ConsumerWidget {
+  const _AreaRow({required this.day, required this.stop});
+
+  final ReviewDay day;
+
+  /// The first stop of the run — the one the notifier is told to correct
+  /// from, since a run is "this stop and every one after it that reads the
+  /// same".
+  final ReviewStop stop;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final area = stop.area;
+    if (area == null) {
+      return SizedBox(
+        width: double.infinity,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            key: Key('add-area-${day.number}-${stop.id}'),
+            onPressed: () async {
+              final typed = await _askForText(
+                context,
+                title: 'Add an area',
+                hint: 'Ginza',
+                action: 'Add',
+                fieldKey: const Key('add-area-input'),
+                saveKey: const Key('add-area-save'),
+              );
+              if (typed == null || typed.trim().isEmpty) return;
+              ref
+                  .read(pasteFlowProvider.notifier)
+                  .setAreaRun(stop.id, typed.trim());
+            },
+            child: const Text('+ Add an area'),
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      width: double.infinity,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 10, bottom: 2),
+        child: Row(
+          children: [
+            Text(
+              area,
+              key: Key('area-row-${day.number}-${stop.id}'),
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.1,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (stop.areaSource != AreaSource.human) ...[
+              const SizedBox(width: 6),
+              Text(
+                '\u00b7 suggested',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+            ],
+            const Spacer(),
+            IconButton(
+              key: Key('edit-area-${day.number}-${stop.id}'),
+              iconSize: 15,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.edit_outlined),
+              color: theme.colorScheme.primary,
+              tooltip: 'Rename this area',
+              onPressed: () async {
+                final typed = await _askForText(
+                  context,
+                  title: 'Where is this?',
+                  hint: 'Ginza',
+                  action: 'Save',
+                  initial: area,
+                  fieldKey: const Key('edit-area-input'),
+                  saveKey: const Key('edit-area-save'),
+                );
+                if (typed == null) return;
+                final trimmed = typed.trim();
+                ref
+                    .read(pasteFlowProvider.notifier)
+                    .setAreaRun(stop.id, trimmed.isEmpty ? null : trimmed);
+              },
+            ),
+            IconButton(
+              key: Key('clear-area-${day.number}-${stop.id}'),
+              iconSize: 15,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close),
+              color: theme.colorScheme.outline,
+              tooltip: 'Search these stops without an area',
+              onPressed: () =>
+                  ref.read(pasteFlowProvider.notifier).setAreaRun(stop.id, null),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

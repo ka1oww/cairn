@@ -1,152 +1,161 @@
-import 'package:flutter_test/flutter_test.dart';
+// The Maps handoff's pure half: what a tapped line searches for, and the
+// keyless URL that search opens.
+//
+// Nothing here classifies a line — `itinerary_parser` does that at the paste
+// and `cairn_model.Stop.kind` carries it — so what is pinned below is the
+// composition, the meal-label split, the multi-place split and the length
+// rule the day page draws its badge from.
 import 'package:cairn/logic/maps_handoff.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('classifyStopLine', () {
-    test('meal label with place', () {
-      final c = classifyStopLine('LUNCH: Ichiran');
-      expect(c.mealLabel, 'Lunch');
-      expect(c.query, 'Ichiran');
-      expect(c.kind, StopLineKind.place);
-      expect(c.places, ['Ichiran']);
+  group('the query', () {
+    test('a stop with an area sends both, joined with a comma', () {
+      expect(
+        mapsQueryFor(searchText: 'Nintendo Tokyo (Parco)', area: 'Shibuya'),
+        'Nintendo Tokyo (Parco), Shibuya',
+      );
     });
 
-    test('meal label alone is inert', () {
-      final c = classifyStopLine('LUNCH: TBD');
-      expect(c.mealLabel, 'Lunch');
-      expect(c.kind, StopLineKind.inert);
+    test('no area sends the words alone — never a guessed one', () {
+      expect(mapsQueryFor(searchText: 'Senso-ji', area: null), 'Senso-ji');
+      expect(mapsQueryFor(searchText: 'Senso-ji', area: '  '), 'Senso-ji');
     });
 
-    test('bare meal label is inert', () {
-      expect(classifyStopLine('DINNER').kind, StopLineKind.inert);
+    test('nothing to search for is null, not an empty search', () {
+      expect(mapsQueryFor(searchText: null, area: 'Ginza'), isNull);
+      expect(mapsQueryFor(searchText: '   ', area: 'Ginza'), isNull);
     });
 
-    test('TBD, URL, wifi are inert', () {
-      expect(classifyStopLine('TBD').kind, StopLineKind.inert);
-      expect(classifyStopLine('https://example.com').kind, StopLineKind.inert);
-      expect(classifyStopLine('Hotel Wi-Fi: SakuraInn-5G · pass 8811').kind, StopLineKind.inert);
-    });
-
-    test('multi-place split on commas', () {
-      final c = classifyStopLine('Ginza Six, Uniqlo, Dover Street Market, Loft, Mitsukoshi');
-      expect(c.places.length, 5);
-      expect(c.query, 'Ginza Six, Uniqlo, Dover Street Market, Loft, Mitsukoshi');
-    });
-
-    test('ja delimiter', () {
-      final c = classifyStopLine('A、B、C');
-      expect(c.places.length, 3);
-    });
-
-    test('and guard both sides must look name-like', () {
-      expect(classifyStopLine('Fish and chips at Magpie').places.length, 1);
-      expect(classifyStopLine('Ginza and Shibuya').places.length, 2);
-    });
-
-    test('numeric segment prevents split', () {
-      expect(classifyStopLine('Room 101, 202').places.length, 1);
-    });
-
-    test('segment >6 words prevents split', () {
-      expect(classifyStopLine('This is a very long place name indeed here, Short').places.length, 1);
-    });
-
-    test('traveller near-X lifted off query', () {
-      final c = classifyStopLine('Itoya (near Ginza)');
-      expect(c.query, 'Itoya');
-      expect(extractTravellerArea('Itoya (near Ginza)'), 'Ginza');
-    });
-
-    test('extract @ X and area form', () {
-      expect(extractTravellerArea('Cafe @ Shibuya'), 'Shibuya');
-      expect(extractTravellerArea('Shop (Ginza area)'), 'Ginza');
+    test('a pathological line is capped rather than refused', () {
+      final query = mapsQueryFor(searchText: 'A' * 300, area: 'Ginza')!;
+      expect(query.length, maxQueryLength);
     });
   });
 
-  group('URL composer', () {
-    test('google template', () {
-      final c = classifyStopLine('Nintendo Tokyo (Parco)');
-      final uri = mapsSearchUri(stop: c, area: 'Shibuya', app: MapsApp.googleMaps)!;
+  group('the three apps', () {
+    test('Google Maps', () {
+      final uri = mapsSearchUri(MapsApp.google, 'Nintendo Tokyo, Shibuya');
       expect(uri.host, 'www.google.com');
       expect(uri.path, '/maps/search/');
-      expect(uri.queryParameters['query'], 'Nintendo Tokyo (Parco), Shibuya');
       expect(uri.queryParameters['api'], '1');
+      expect(uri.queryParameters['query'], 'Nintendo Tokyo, Shibuya');
     });
 
-    test('apple template', () {
-      final c = classifyStopLine('Nintendo Tokyo');
-      final uri = mapsSearchUri(stop: c, area: 'Shibuya', app: MapsApp.appleMaps)!;
+    test('Apple Maps', () {
+      final uri = mapsSearchUri(MapsApp.apple, 'Nintendo Tokyo, Shibuya');
       expect(uri.host, 'maps.apple.com');
       expect(uri.queryParameters['q'], 'Nintendo Tokyo, Shibuya');
     });
 
-    test('waze template', () {
-      final c = classifyStopLine('Nintendo Tokyo');
-      final uri = mapsSearchUri(stop: c, area: 'Shibuya', app: MapsApp.waze)!;
+    test('Waze', () {
+      final uri = mapsSearchUri(MapsApp.waze, 'Nintendo Tokyo, Shibuya');
       expect(uri.host, 'waze.com');
       expect(uri.path, '/ul');
       expect(uri.queryParameters['q'], 'Nintendo Tokyo, Shibuya');
     });
 
-    test('null area ⇒ bare words', () {
-      final c = classifyStopLine('Senso-ji');
-      final uri = mapsSearchUri(stop: c, area: null)!;
-      expect(uri.queryParameters.values.first, isNot(contains(',')));
+    test('all three are keyless https links', () {
+      for (final app in MapsApp.values) {
+        final uri = mapsSearchUri(app, 'Senso-ji');
+        expect(uri.scheme, 'https');
+        expect(uri.query.toLowerCase(), isNot(contains('key=')));
+      }
     });
 
-    test('inert ⇒ null', () {
-      final c = classifyStopLine('Hotel Wi-Fi: foo');
-      expect(mapsSearchUri(stop: c), isNull);
-    });
-
-    test('meal label stripped from uri', () {
-      final c = classifyStopLine('DINNER: Gonpachi Nishi-Azabu');
-      final uri = mapsSearchUri(stop: c, area: 'Roppongi')!;
-      expect(uri.queryParameters['query'], isNot(contains('DINNER')));
-      expect(uri.queryParameters['query'], 'Gonpachi Nishi-Azabu, Roppongi');
-    });
-
-    test('encoding CJK and emoji', () {
-      final c = classifyStopLine('明治神宮');
-      final uri = mapsSearchUri(stop: c, area: '原宿')!;
+    test('a query is encoded, and survives the round trip', () {
+      final uri = mapsSearchUri(MapsApp.google, '明治神宮, 原宿');
       expect(uri.toString(), contains('%'));
-      // round-trip decode
-      expect(Uri.decodeComponent(uri.query), contains('明治神宮'));
-    });
-
-    test('200 char cap', () {
-      final long = 'A' * 300;
-      final c = classifyStopLine(long);
-      final uri = mapsSearchUri(stop: c)!;
-      expect(uri.queryParameters['query']!.length, lessThanOrEqualTo(200));
-    });
-
-    test('areaSearchUri', () {
-      final uri = areaSearchUri(area: 'Ginza', app: MapsApp.googleMaps);
-      expect(uri.queryParameters['query'], 'Ginza');
-    });
-
-    test('placeSearchUri with area', () {
-      final uri = placeSearchUri(place: 'Uniqlo', area: 'Ginza');
-      expect(uri.queryParameters['query'], 'Uniqlo, Ginza');
+      expect(uri.queryParameters['query'], '明治神宮, 原宿');
     });
   });
 
-  group('truncation rule', () {
-    test('short multi-place not truncated', () {
-      expect(shouldTruncateMultiPlace('Ginza Six, Uniqlo'), isFalse);
+  group('the meal label', () {
+    test('is split off, and only the rest is searched for', () {
+      final meal = mealLabelSplit('Lunch: Ichiran');
+      expect(meal.label, 'Lunch');
+      expect(meal.rest, 'Ichiran');
+      expect(
+        mapsQueryFor(searchText: meal.rest, area: 'Roppongi'),
+        'Ichiran, Roppongi',
+      );
     });
 
-    test('long multi-place truncated and badge only for multi-place', () {
-      final long = 'Ginza Six, Uniqlo, Dover Street Market, Loft, Mitsukoshi, Extra Shop';
-      expect(shouldTruncateMultiPlace(long), isTrue);
-      final c = classifyStopLine(long);
-      expect(c.places.length, greaterThan(1));
+    test('reads a dash as well as a colon, and keeps the words as written', () {
+      expect(mealLabelSplit('DINNER - Gonpachi').label, 'DINNER');
+      expect(mealLabelSplit('DINNER - Gonpachi').rest, 'Gonpachi');
     });
 
-    test('threshold = 48 default', () {
-      expect(shouldTruncateMultiPlace('a' * 48), isFalse);
-      expect(shouldTruncateMultiPlace('a' * 49), isTrue);
+    test('a bare label has nothing after it', () {
+      expect(mealLabelSplit('Dinner').rest, isNull);
+    });
+
+    test('a line that is not a meal label keeps all its words', () {
+      final meal = mealLabelSplit('Senso-ji at opening');
+      expect(meal.label, isNull);
+      expect(meal.rest, 'Senso-ji at opening');
+    });
+
+    test('a place nobody has picked yet is a placeholder', () {
+      expect(isPlaceholderText('TBD'), isTrue);
+      expect(isPlaceholderText('  tba '), isTrue);
+      expect(isPlaceholderText('Ichiran'), isFalse);
+    });
+  });
+
+  group('the places on a line', () {
+    test('an ordinary stop is one place', () {
+      expect(placesOn('Senso-ji at opening'), ['Senso-ji at opening']);
+    });
+
+    test('a list of shops is every shop', () {
+      expect(placesOn('Ginza Six, Uniqlo, Loft'), [
+        'Ginza Six',
+        'Uniqlo',
+        'Loft',
+      ]);
+    });
+
+    test('reads the delimiters people actually type', () {
+      expect(placesOn('A、B、C').length, 3);
+      expect(placesOn('Nezu Shrine / SCAI the Bathhouse').length, 2);
+      expect(placesOn('Ueno Park and the museums').length, 2);
+    });
+
+    test('prose is not split into places that are not there', () {
+      expect(placesOn('Room 101, 202'), ['Room 101, 202']);
+      expect(
+        placesOn('This is a very long place name indeed here, Short').length,
+        1,
+      );
+    });
+  });
+
+  group('the badge', () {
+    test('is only ever drawn on a row that names more than one place', () {
+      final long = 'A single place with a very long name indeed, honestly yes';
+      expect(long.length, greaterThan(multiPlaceTruncationThreshold));
+      expect(showsPlaceCountBadge(long, placesOn(long)), isFalse);
+    });
+
+    test('length decides, so a short list is drawn as written', () {
+      const row = 'Ginza Six, Uniqlo';
+      expect(showsPlaceCountBadge(row, placesOn(row)), isFalse);
+    });
+
+    test('a long list is drawn short with its count', () {
+      const row = 'Ginza Six, Uniqlo, Dover Street Market, Loft, Mitsukoshi';
+      expect(row.length, greaterThan(multiPlaceTruncationThreshold));
+      expect(showsPlaceCountBadge(row, placesOn(row)), isTrue);
+      expect(placesOn(row).length, 5);
+    });
+
+    test('the threshold is the boundary, not a rounding', () {
+      final at = '${'a' * 44}, bb';
+      expect(at.length, multiPlaceTruncationThreshold);
+      expect(showsPlaceCountBadge(at, placesOn(at)), isFalse);
+      final over = '${'a' * 45}, bb';
+      expect(showsPlaceCountBadge(over, placesOn(over)), isTrue);
     });
   });
 }

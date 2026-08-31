@@ -1,4 +1,3 @@
-// ignore_for_file: deprecated_member_use, use_build_context_synchronously
 // SCREENS band (docs/architecture.md): knows app state and nothing below it.
 // No repository, no store, no SQL, no parser — the view models come from
 // app_state/day_view.dart.
@@ -31,7 +30,6 @@ import '../app_state/capture_flow.dart';
 import '../app_state/day_view.dart';
 import '../app_state/maps_handoff_flow.dart';
 import '../app_state/trip_providers.dart';
-import '../logic/maps_handoff.dart';
 import 'capture_screen.dart';
 
 class DayPage extends ConsumerWidget {
@@ -308,9 +306,14 @@ class _Identity extends StatelessWidget {
   }
 }
 
-/// The day's plan: every stop, in the order it was pasted.
+/// The day's plan: every stop, in the order it was pasted, under the areas
+/// they are in.
 class _StopList extends StatelessWidget {
-  const _StopList({required this.stops, required this.isOver, required this.dayNumber});
+  const _StopList({
+    required this.stops,
+    required this.isOver,
+    required this.dayNumber,
+  });
 
   final List<DayStop> stops;
   final bool isOver;
@@ -322,7 +325,8 @@ class _StopList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final stop in stops) ...[
-          if (stop.areaHeadingBefore != null) _AreaHeading(area: stop.areaHeadingBefore!, dayNumber: dayNumber, isOver: isOver),
+          if (stop.areaHeadingBefore != null)
+            _AreaHeading(area: stop.areaHeadingBefore!, dayNumber: dayNumber),
           _StopRow(stop: stop, isOver: isOver, dayNumber: dayNumber),
         ],
       ],
@@ -330,19 +334,30 @@ class _StopList extends StatelessWidget {
   }
 }
 
+/// The running area, drawn where it changes.
+///
+/// Quiet on purpose — the same voice as the day's own eyebrow — because it is
+/// what Cairn worked out rather than what the traveller wrote. It is tappable,
+/// and that is the whole correction door: what is visibly wrong is one tap
+/// from being right for the rest of the trip.
 class _AreaHeading extends ConsumerWidget {
-  const _AreaHeading({required this.area, required this.dayNumber, required this.isOver});
+  const _AreaHeading({required this.area, required this.dayNumber});
+
   final String area;
   final int dayNumber;
-  final bool isOver;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    // Try to find day number from context: we pass via ancestor? Simpler: handle via callback with area string.
-    // For subheading tap we need day number; we get it from enclosing _StopList? For now use 0 if unknown.
     return InkWell(
       key: Key('area-heading-$area'),
-      onTap: () => _showAreaCorrectionSheet(context, ref, area: area, dayNumber: dayNumber, isRun: true),
+      onTap: () => _correctArea(
+        context,
+        ref,
+        dayNumber: dayNumber,
+        area: area,
+        wholeRun: true,
+      ),
       child: Padding(
         padding: const EdgeInsets.only(top: 18, bottom: 2),
         child: Text(
@@ -358,9 +373,13 @@ class _AreaHeading extends ConsumerWidget {
   }
 }
 
+/// `LUNCH` on a meal line: structure, not a place. It shows, and it is never
+/// part of what a tap searches for.
 class _MealLabel extends StatelessWidget {
   const _MealLabel(this.label);
+
   final String label;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -381,26 +400,33 @@ class _MealLabel extends StatelessWidget {
 /// the whole app**, which is what makes it mean something: a starred stop is
 /// one the plan pinned to a clock, and an unstarred stop shows no time even
 /// where the source line hedged one.
+///
+/// A row that opens a maps search carries a small arrow, and a row that does
+/// not simply has none: an inert line is drawn exactly like any other, never
+/// greyed and never restyled, because it is the traveller's own words and
+/// nothing is wrong with it.
 class _StopRow extends ConsumerWidget {
-  const _StopRow({required this.stop, required this.isOver, this.dayNumber});
+  const _StopRow({
+    required this.stop,
+    required this.isOver,
+    required this.dayNumber,
+  });
 
   final DayStop stop;
   final bool isOver;
-  final int? dayNumber;
+  final int dayNumber;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
-    final isPlace = stop.kind == StopLineKind.place;
-    final display = _displayFor(stop);
-    final showBadge = stop.places.length > 1 && shouldTruncateMultiPlace(stop.text);
-    final content = Container(
+    final badged = stop.showsPlaceCount;
+    final row = Container(
       key: Key('stop-${stop.position}'),
       padding: const EdgeInsets.symmetric(vertical: 13),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: theme.dividerColor, width: 0.7),
+          top: BorderSide(color: theme.colorScheme.outline, width: 0.7),
         ),
       ),
       child: Row(
@@ -409,6 +435,8 @@ class _StopRow extends ConsumerWidget {
           SizedBox(
             width: 26,
             child: stop.isStarred
+                // Past tense, the star loses its fill: surface 3i, which
+                // holds no opinion about a starred stop that was missed.
                 ? Icon(
                     isOver ? Icons.star_border : Icons.star,
                     size: 18,
@@ -416,48 +444,47 @@ class _StopRow extends ConsumerWidget {
                   )
                 : Text(
                     stop.position.toString().padLeft(2, '0'),
-                    style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                    style: theme.textTheme.labelSmall?.copyWith(color: muted),
                   ),
           ),
           const SizedBox(width: 10),
+          if (stop.mealLabel != null) ...[
+            _MealLabel(stop.mealLabel!),
+            const SizedBox(width: 8),
+          ],
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (stop.mealLabel != null) ...[
-                      _MealLabel(stop.mealLabel!),
-                      const SizedBox(width: 6),
-                    ],
-                    Expanded(
-                      child: Text(
-                        display,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          fontWeight: stop.isStarred && !isOver ? FontWeight.bold : FontWeight.normal,
-                          color: isOver ? muted : null,
-                        ),
-                      ),
-                    ),
-                    if (showBadge) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: Text('${stop.places.length} places', style: theme.textTheme.labelSmall),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
+            child: Text(
+              badged ? '${stop.places.first} …' : stop.text,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: stop.isStarred && !isOver
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                color: isOver ? muted : null,
+              ),
             ),
           ),
-          if (isPlace) ...[
+          if (badged) ...[
             const SizedBox(width: 6),
-            Icon(Icons.north_east, size: 13, color: theme.colorScheme.outlineVariant),
+            Container(
+              key: Key('places-badge-${stop.position}'),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Text(
+                '${stop.places.length} places',
+                style: theme.textTheme.labelSmall?.copyWith(color: muted),
+              ),
+            ),
+          ],
+          if (stop.opensMaps) ...[
+            const SizedBox(width: 6),
+            Icon(
+              Icons.north_east,
+              size: 13,
+              color: theme.colorScheme.outlineVariant,
+            ),
           ],
           if (stop.timeLabel != null) ...[
             const SizedBox(width: 10),
@@ -470,209 +497,314 @@ class _StopRow extends ConsumerWidget {
         ],
       ),
     );
-    if (!isPlace) return content;
+    if (!stop.opensMaps) return row;
     return InkWell(
       key: Key('stop-tap-${stop.position}'),
-      onTap: () => ref.read(mapsHandoffProvider).openStop(stop),
-      onLongPress: () => _showPlacesSheet(context, ref, stop),
-      child: content,
+      onTap: () => _openStop(ref, stop),
+      onLongPress: () => _showPlacesSheet(context, ref, stop, dayNumber),
+      child: row,
     );
   }
-
-  String _displayFor(DayStop s) {
-    // Meal label stripped already rendered separately; show query part
-    // For multi-place truncation, shorten
-    if (s.places.length > 1 && shouldTruncateMultiPlace(s.text)) {
-      final first = s.places.first;
-      return '$first …';
-    }
-    // Show text minus meal label if present? Use classifier query for display text?
-    // Keep raw text sans meal label duplication: classify to get remainder
-    final c = classifyStopLine(s.text);
-    if (c.mealLabel != null && c.query.isNotEmpty) return c.query;
-    return s.text;
-  }
 }
 
-Future<void> _showPlacesSheet(BuildContext context, WidgetRef ref, DayStop stop) async {
+/// What a short tap sends.
+///
+/// One free keyless maps URL carries exactly one search, so a row that stands
+/// for a list of shops cannot open all of them. A row drawn with the "N
+/// places" badge opens the district instead — the honest useful answer — and
+/// the long press is where each shop is offered. Every other row sends its own
+/// words, plus the area in force if there is one.
+Future<bool> _openStop(WidgetRef ref, DayStop stop) {
+  final handoff = ref.read(mapsHandoffProvider);
+  if (stop.showsPlaceCount && stop.area != null) {
+    return handoff.openArea(stop.area!);
+  }
+  return handoff.openStop(stop);
+}
+
+/// The long press: every place on the line, then the district, then the door
+/// to correcting the area.
+Future<void> _showPlacesSheet(
+  BuildContext context,
+  WidgetRef ref,
+  DayStop stop,
+  int dayNumber,
+) async {
   final theme = Theme.of(context);
   final handoff = ref.read(mapsHandoffProvider);
-  await showModalBottomSheet<void>(
+  final searchText = stop.searchText;
+  if (searchText == null) return;
+  final sub = stop.area != null
+      ? 'Each opens a Maps search in ${stop.area}.'
+      : 'No area is written for this stop.';
+  final correct = await showModalBottomSheet<bool>(
     context: context,
-    builder: (ctx) => SafeArea(
+    builder: (sheet) => SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-            child: Text(stop.text, style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'serif')),
-          ),
-          if (stop.area != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text('Each opens a Maps search in ${stop.area}.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            )
-          else if (stop.adjacentAreas.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text('No area is written for this stop.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ),
-          for (final place in stop.places.isEmpty ? [stop.text] : stop.places)
-            ListTile(
-              key: Key('place-$place'),
-              leading: const Icon(Icons.place_outlined),
-              title: Text(place),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                handoff.openPlace(place, area: stop.area);
-              },
-            ),
-          if (stop.area != null) ...[
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.map_outlined),
-              title: Text('Just show me ${stop.area}'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                handoff.openArea(stop.area!);
-              },
-            ),
-          ] else if (stop.adjacentAreas.isNotEmpty) ...[
-            const Divider(height: 1),
-            ListTile(
-              title: const Text('Search it as written'),
-              leading: const Icon(Icons.search),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                handoff.openPlace(stop.places.isNotEmpty ? stop.places.first : stop.text, area: null);
-              },
-            ),
-            const Divider(height: 1),
-            for (final a in stop.adjacentAreas)
-              ListTile(
-                leading: const Icon(Icons.near_me_outlined),
-                title: Text('nearest to $a'),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  handoff.openPlace(stop.places.isNotEmpty ? stop.places.first : stop.text, area: a);
-                },
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: Text(
+              stop.text,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontFamily: 'serif',
               ),
-          ],
-          ListTile(
-            leading: const Icon(Icons.edit_outlined),
-            title: Text(stop.area == null ? 'Give it an area' : 'The area is wrong'),
-            onTap: () {
-              Navigator.of(ctx).pop();
-              _showAreaCorrectionSheet(context, ref, area: stop.area ?? '', dayNumber: 0, isRun: false, stop: stop);
-            },
-          ),
-          const SizedBox(height: 12),
-        ],
-      ),
-    ),
-  );
-}
-
-Future<void> _showAreaCorrectionSheet(BuildContext context, WidgetRef ref,
-    {required String area, required int dayNumber, required bool isRun, DayStop? stop}) async {
-  final theme = Theme.of(context);
-  final actions = ref.read(dayActionsProvider);
-  // Collect all distinct areas in plan
-  final plan = ref.read(savedItineraryProvider).value;
-  final allAreas = <String>{};
-  if (plan != null) {
-    for (final d in plan.days) {
-      for (final s in d.stops) {
-        if (s.area != null) allAreas.add(s.area!);
-      }
-    }
-  }
-  final choice = await showModalBottomSheet<String>(
-    context: context,
-    builder: (ctx) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
-            child: Text('Where is this, really?', style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'serif')),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-            child: Text(isRun ? 'Every stop under this heading will search there.' : 'Search this stop there.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          ),
-          for (final a in allAreas)
-            RadioListTile<String>(
-              title: Text(a),
-              value: a,
-              groupValue: area,
-              onChanged: (v) => Navigator.of(ctx).pop(v),
+            child: Text(
+              sub,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ListTile(
-            leading: const Icon(Icons.edit_outlined),
-            title: const Text('Somewhere else…'),
-            onTap: () => Navigator.of(ctx).pop('__else__'),
           ),
+          if (stop.places.length > 1)
+            for (final place in stop.places)
+              ListTile(
+                key: Key('place-$place'),
+                leading: const Icon(Icons.place_outlined),
+                title: Text(place),
+                onTap: () {
+                  Navigator.of(sheet).pop(false);
+                  handoff.openPlace(place, area: stop.area);
+                },
+              )
+          else
+            ListTile(
+              key: const Key('place-as-written'),
+              leading: const Icon(Icons.place_outlined),
+              title: const Text('Search it as written'),
+              onTap: () {
+                Navigator.of(sheet).pop(false);
+                handoff.openSearch(searchText: searchText, area: stop.area);
+              },
+            ),
+          const Divider(height: 1),
+          if (stop.area != null)
+            ListTile(
+              key: Key('just-show-me-${stop.area}'),
+              leading: const Icon(Icons.map_outlined),
+              title: Text('Just show me ${stop.area}'),
+              onTap: () {
+                Navigator.of(sheet).pop(false);
+                handoff.openArea(stop.area!);
+              },
+            )
+          else
+            // The neighbours' areas, offered as search hints. The wording
+            // promises a search *near* somewhere and never that the place is
+            // there — nothing here has ever looked a place up.
+            for (final area in stop.adjacentAreas)
+              ListTile(
+                key: Key('nearest-to-$area'),
+                leading: const Icon(Icons.near_me_outlined),
+                title: Text('nearest to $area'),
+                onTap: () {
+                  Navigator.of(sheet).pop(false);
+                  handoff.openSearch(searchText: searchText, area: area);
+                },
+              ),
           ListTile(
-            leading: const Icon(Icons.block),
-            title: const Text('No area — just search the words'),
-            onTap: () => Navigator.of(ctx).pop('__none__'),
+            key: const Key('correct-this-stop'),
+            leading: const Icon(Icons.edit_outlined),
+            title: Text(
+              stop.area == null ? 'Give it an area' : 'The area is wrong',
+            ),
+            onTap: () => Navigator.of(sheet).pop(true),
           ),
           const SizedBox(height: 12),
         ],
       ),
     ),
   );
-  if (choice == null) return;
-  if (choice == '__else__') {
-    final typed = await showDialog<String>(
-      context: context,
-      builder: (dctx) {
-        final c = TextEditingController();
-        return AlertDialog(
-          title: const Text('Area'),
-          content: TextField(controller: c, autofocus: true, decoration: const InputDecoration(hintText: 'Ginza')),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(dctx).pop(), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.of(dctx).pop(c.text.trim()), child: const Text('Save')),
+  if (correct != true || !context.mounted) return;
+  await _correctArea(
+    context,
+    ref,
+    dayNumber: dayNumber,
+    area: stop.area,
+    wholeRun: false,
+    position: stop.position,
+  );
+}
+
+/// The correction picker: every area already in the plan, somewhere else, or
+/// honest nothing.
+///
+/// [wholeRun] is the difference between tapping a heading and tapping one
+/// stop's "the area is wrong" — the heading stands over a run, and correcting
+/// it corrects the run.
+Future<void> _correctArea(
+  BuildContext context,
+  WidgetRef ref, {
+  required int dayNumber,
+  required String? area,
+  required bool wholeRun,
+  int? position,
+}) async {
+  final theme = Theme.of(context);
+  final plan = ref.read(savedItineraryProvider).value;
+  final known = <String>{
+    for (final day in plan?.days ?? const [])
+      for (final stop in day.stops)
+        if (stop.area != null) stop.area!,
+  }..remove(area);
+
+  final choice = await showModalBottomSheet<_AreaChoice>(
+    context: context,
+    builder: (sheet) => SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: Text(
+                'Where is this, really?',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontFamily: 'serif',
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                wholeRun
+                    ? 'Every stop under this heading will search there.'
+                    : 'This stop alone will search there.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (area != null)
+              ListTile(
+                key: Key('area-standing-$area'),
+                title: Text(area),
+                subtitle: const Text('what the plan said'),
+                trailing: const Icon(Icons.check),
+                onTap: () => Navigator.of(sheet).pop(),
+              ),
+            for (final other in known)
+              ListTile(
+                key: Key('area-choice-$other'),
+                title: Text(other),
+                onTap: () =>
+                    Navigator.of(sheet).pop(_AreaChoice.named(other)),
+              ),
+            ListTile(
+              key: const Key('area-somewhere-else'),
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Somewhere else…'),
+              onTap: () => Navigator.of(sheet).pop(const _AreaChoice.typed()),
+            ),
+            ListTile(
+              key: const Key('area-none'),
+              leading: const Icon(Icons.block),
+              title: const Text('No area — just search the words'),
+              onTap: () => Navigator.of(sheet).pop(const _AreaChoice.none()),
+            ),
+            const SizedBox(height: 12),
           ],
-        );
-      },
+        ),
+      ),
+    ),
+  );
+  if (choice == null || !context.mounted) return;
+
+  var answer = choice.area;
+  if (choice.isTyped) {
+    answer = await _askForAnArea(context, area);
+    if (answer == null) return;
+  }
+
+  final actions = ref.read(dayActionsProvider);
+  if (wholeRun && area != null) {
+    await actions.setAreaRun(
+      dayNumber: dayNumber,
+      currentArea: area,
+      area: answer,
     );
-    if (typed == null || typed.isEmpty) return;
-    if (isRun) {
-      await actions.setAreaRun(dayNumber: dayNumber, currentArea: area, newArea: typed);
-    } else if (stop != null) {
-      await actions.setStopArea(dayNumber: dayNumber == 0 ? _inferDayNumber(plan, stop) : dayNumber, position: stop.position, area: typed);
-    }
-    return;
-  }
-  if (choice == '__none__') {
-    if (isRun) {
-      await actions.setAreaRun(dayNumber: dayNumber, currentArea: area, newArea: null);
-    } else if (stop != null) {
-      await actions.setStopArea(dayNumber: dayNumber == 0 ? _inferDayNumber(plan, stop) : dayNumber, position: stop.position, area: null);
-    }
-    return;
-  }
-  // chosen existing area
-  if (isRun) {
-    await actions.setAreaRun(dayNumber: dayNumber, currentArea: area, newArea: choice);
-  } else if (stop != null) {
-    await actions.setStopArea(dayNumber: dayNumber == 0 ? _inferDayNumber(plan, stop) : dayNumber, position: stop.position, area: choice);
+  } else if (position != null) {
+    await actions.setStopArea(
+      dayNumber: dayNumber,
+      position: position,
+      area: answer,
+    );
   }
 }
 
-int _inferDayNumber(dynamic plan, DayStop stop) {
-  if (plan == null) return 1;
-  for (final d in plan.days) {
-    for (final s in d.stops) {
-      if (s.text == stop.text) return d.number as int;
-    }
+Future<String?> _askForAnArea(BuildContext context, String? area) async {
+  final typed = await showDialog<String>(
+    context: context,
+    builder: (dialog) => _AreaDialog(area: area),
+  );
+  if (typed == null || typed.isEmpty) return null;
+  return typed;
+}
+
+/// The one-field "where is this?" dialog. It owns its controller, because a
+/// dialog's future completes at the pop and the field is still on screen for
+/// the dismissal frames after it -- disposing at the await is disposing a
+/// controller still being read.
+class _AreaDialog extends StatefulWidget {
+  const _AreaDialog({required this.area});
+
+  final String? area;
+
+  @override
+  State<_AreaDialog> createState() => _AreaDialogState();
+}
+
+class _AreaDialogState extends State<_AreaDialog> {
+  late final TextEditingController _field = TextEditingController(
+    text: widget.area ?? '',
+  );
+
+  @override
+  void dispose() {
+    _field.dispose();
+    super.dispose();
   }
-  return 1;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Where is this?'),
+    content: TextField(
+      key: const Key('area-field'),
+      controller: _field,
+      autofocus: true,
+      decoration: const InputDecoration(hintText: 'Yanaka'),
+      onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        key: const Key('area-save'),
+        onPressed: () => Navigator.of(context).pop(_field.text.trim()),
+        child: const Text('Save'),
+      ),
+    ],
+  );
+}
+
+/// What came back from the picker: an area, no area at all, or "let me type
+/// one". Null is not one of them — that is the person closing the sheet.
+class _AreaChoice {
+  const _AreaChoice.named(this.area) : isTyped = false;
+  const _AreaChoice.none() : area = null, isTyped = false;
+  const _AreaChoice.typed() : area = null, isTyped = true;
+
+  final String? area;
+  final bool isTyped;
 }
 
 class _Time extends StatelessWidget {

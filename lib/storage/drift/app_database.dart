@@ -71,8 +71,8 @@ class ItineraryStops extends Table {
   /// Area in force for this stop, or null = send nothing (rule 3).
   TextColumn get areaText => text().nullable()();
 
-  /// Provenance: `traveller-own` | `human` | `parser`, or null when
-  /// [areaText] is null.
+  /// Provenance: travellerDeclared / travellerProximity / inlineLocality /
+  /// runningHeading / hotelPrefix / trainDestination / person.
   TextColumn get areaSource => text().nullable()();
 }
 
@@ -80,8 +80,8 @@ class ItineraryStops extends Table {
 class AppPreferences extends Table {
   IntColumn get id => integer()();
 
-  /// `googleMaps` | `appleMaps` | `waze`, or null for the default.
-  TextColumn get mapsApp => text().nullable()();
+  /// google | apple | waze
+  TextColumn get mapsApp => text().withDefault(const Constant('google'))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -436,8 +436,6 @@ class AppDatabase extends _$AppDatabase {
         // included, so this branch is finished — falling through would
         // try to create it twice.
         await m.createAll();
-        photosBornCurrent = true;
-        syncStatesBornCurrent = true;
         return;
       }
       if (from < 3) {
@@ -626,6 +624,7 @@ class AppDatabase extends _$AppDatabase {
                     stop.position,
                     stop.stopText,
                     stop.timeIso,
+                    stop.kind,
                     stop.areaText,
                     stop.areaSource,
                   ),
@@ -641,7 +640,14 @@ class AppDatabase extends _$AppDatabase {
           stops: [
             for (final stop in stops)
               if (stop.dayNumber == day.number)
-                (stop.position, stop.text, stop.timeIso, stop.areaText, stop.areaSource),
+                (
+                  stop.position,
+                  stop.text,
+                  stop.timeIso,
+                  stop.kind ?? 'place',
+                  stop.areaText,
+                  stop.areaSource,
+                ),
           ],
         );
         final unchanged = storedSignatures[day.number] == signature;
@@ -773,14 +779,16 @@ class AppDatabase extends _$AppDatabase {
   static String _daySignature({
     required String? dateIso,
     required String? place,
-    required List<(int, String, String?, String?, String?)> stops,
+    required List<(int, String, String?, String?, String?, String?)> stops,
   }) {
     final ordered = [...stops]..sort((a, b) => a.$1.compareTo(b.$1));
     return [
       dateIso ?? '',
       place ?? '',
-      for (final (position, text, timeIso, areaText, areaSource) in ordered)
-        '$position\u0000$text\u0000${timeIso ?? ''}\u0000${areaText ?? ''}\u0000${areaSource ?? ''}',
+      for (final (position, text, timeIso, kind, areaText, areaSource)
+          in ordered)
+        '$position\u0000$text\u0000${timeIso ?? ''}\u0000${kind ?? ''}'
+            '\u0000${areaText ?? ''}\u0000${areaSource ?? ''}',
     ].join('\u0001');
   }
 
@@ -1243,43 +1251,67 @@ class AppDatabase extends _$AppDatabase {
   Future<void> clearPlanDraft() =>
       (delete(planDrafts)..where((t) => t.id.equals(_theOneDraft))).go();
 
-  // ---------------------------------------------------------- device prefs
+  // ------------------------------------------------------ app preferences
+
+  /// The maps app a handoff opens in, as stored (`google` | `apple` | `waze`).
+  /// The row is created on first write, so an unset preference reads null and
+  /// the app's own default stands — nothing here decides what that is.
+  Stream<String?> watchMapsApp() =>
+      (select(appPreferences)..where((t) => t.id.equals(_theOnePreferences)))
+          .watchSingleOrNull()
+          .map((row) => row?.mapsApp);
 
   Future<String?> readMapsApp() async {
-    final row = await (select(
-      appPreferences,
-    )..where((t) => t.id.equals(_theOneTrip))).getSingleOrNull();
+    final row =
+        await (select(
+          appPreferences,
+        )..where((t) => t.id.equals(_theOnePreferences))).getSingleOrNull();
     return row?.mapsApp;
   }
 
-  Future<void> writeMapsApp(String? app) async {
-    await into(appPreferences).insertOnConflictUpdate(
-      AppPreferencesCompanion.insert(id: const Value(_theOneTrip), mapsApp: Value(app)),
-    );
-  }
+  Future<void> writeMapsApp(String app) => into(appPreferences).insertOnConflictUpdate(
+    AppPreferencesCompanion.insert(
+      id: const Value(_theOnePreferences),
+      mapsApp: Value(app),
+    ),
+  );
 
+  // ------------------------------------------------------- area corrections
+
+  /// Writes a person's area correction over one day's stops, and stamps the
+  /// day so the correction rides the sync cargo like any other edit.
+  ///
+  /// The stops are addressed by *position within the day*, which is how a
+  /// stop is identified everywhere below the paste flow. Passing a null
+  /// [areaText] clears the area — "send the bare words" is an answer a person
+  /// is allowed to give, and it is why the source travels with it rather than
+  /// being inferred from emptiness.
+  ///
+  /// Only the day's own clock moves: the plan's *shape* is untouched, so
+  /// `plan_revised_at` deliberately stays where it was.
   Future<void> setStopAreas({
     required int dayNumber,
     required List<int> positions,
-    String? area,
-    String? areaSource,
+    required String? areaText,
+    required String? areaSource,
     required String nowUtcIso,
   }) {
+    if (positions.isEmpty) return Future.value();
     return transaction(() async {
-      for (final pos in positions) {
-        await (update(itineraryStops)
-              ..where((t) => t.dayNumber.equals(dayNumber) & t.position.equals(pos)))
-            .write(ItineraryStopsCompanion(areaText: Value(area), areaSource: Value(areaSource)));
-      }
-      // stamp day clock if any change
-      final day = await (select(itineraryDays)..where((t) => t.number.equals(dayNumber))).getSingleOrNull();
-      if (day != null) {
-        await (update(itineraryDays)..where((t) => t.number.equals(dayNumber)))
-            .write(ItineraryDaysCompanion(revisedAtUtcIso: Value(nowUtcIso)));
-      }
-      final sync = await _syncStateRow();
-      // shape unchanged — don't move plan clock
-      await _writeSyncState(SyncStatesCompanion(planRevisedAtUtcIso: Value(sync.planRevisedAtUtcIso)));
+      await (update(itineraryStops)..where(
+            (t) => t.dayNumber.equals(dayNumber) & t.position.isIn(positions),
+          ))
+          .write(
+            ItineraryStopsCompanion(
+              areaText: Value(areaText),
+              areaSource: Value(areaSource),
+            ),
+          );
+      await (update(
+        itineraryDays,
+      )..where((t) => t.number.equals(dayNumber))).write(
+        ItineraryDaysCompanion(revisedAtUtcIso: Value(nowUtcIso)),
+      );
     });
   }
 
@@ -1317,6 +1349,9 @@ const _theOneTrip = 1;
 
 /// The one row of [PlanDrafts]: a phone has one paste box.
 const _theOneDraft = 1;
+
+/// The one preferences row.
+const _theOnePreferences = 1;
 
 /// The write-side shape [AppDatabase.insertInviteCode] accepts.
 typedef InviteCodeRecord = ({

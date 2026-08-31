@@ -58,6 +58,10 @@
 			</array>
 		</dict>
 	</dict>
+	<!-- Not needed to open a maps app: every handoff is a plain https
+	     universal link, which iOS routes to an installed app on its own.
+	     These are declared for a future "is it installed?" check through
+	     canLaunchUrl, which is the only thing that requires them. -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>comgooglemaps</string>

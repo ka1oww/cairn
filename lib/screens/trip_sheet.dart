@@ -1,4 +1,3 @@
-// ignore_for_file: deprecated_member_use, use_build_context_synchronously
 // SCREENS band (docs/architecture.md): knows app state and nothing below it.
 // No repository, no store, no SQL — every line here comes from
 // app_state/trip_settings.dart.
@@ -228,7 +227,7 @@ class _Sheet extends ConsumerWidget {
               ),
             ],
             const Divider(height: 32),
-            _MapsAppEntry(),
+            const _MapsAppEntry(),
 
             const SizedBox(height: 20),
             Text(
@@ -431,42 +430,79 @@ class _Code extends ConsumerWidget {
   }
 }
 
+/// Which maps app a tapped stop opens in.
+///
+/// It sits among the plan entries because it is shaped like them, but it is
+/// not a fact about the trip: the choice is this phone's alone and never
+/// leaves it. All three are keyless https searches, so a phone without the
+/// app opens the web page and picking Waze without Waze is safe by
+/// construction — there is nothing to detect and nothing to grey out.
 class _MapsAppEntry extends ConsumerWidget {
   const _MapsAppEntry();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pref = ref.watch(mapsAppPrefProvider).value ?? MapsApp.googleMaps;
-    final label = switch (pref) { MapsApp.googleMaps => 'Google Maps', MapsApp.appleMaps => 'Apple Maps', MapsApp.waze => 'Waze' };
+    final theme = Theme.of(context);
+    final chosen = ref.watch(mapsAppProvider).value ?? MapsApp.google;
     return ListTile(
       key: const Key('maps-app-entry'),
+      contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.map_outlined),
       title: const Text('Open places in'),
-      trailing: Text('$label ›', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      onTap: () => _showMapsAppSheet(context, ref, pref),
+      trailing: Text(
+        '${mapsAppName(chosen)} \u203a',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+      onTap: () => _chooseMapsApp(context, ref, chosen),
     );
   }
 }
 
-Future<void> _showMapsAppSheet(BuildContext context, WidgetRef ref, MapsApp current) async {
+Future<void> _chooseMapsApp(
+  BuildContext context,
+  WidgetRef ref,
+  MapsApp chosen,
+) async {
   final theme = Theme.of(context);
   final choice = await showModalBottomSheet<MapsApp>(
     context: context,
-    builder: (ctx) => SafeArea(
+    builder: (sheet) => SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(padding: const EdgeInsets.fromLTRB(20, 14, 20, 4), child: Text('Open places in', style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'serif'))),
-          Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 8), child: Text('Every tap composes a search for the app you pick.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant))),
-          RadioListTile<MapsApp>(title: const Text('Google Maps'), value: MapsApp.googleMaps, groupValue: current, onChanged: (v) => Navigator.of(ctx).pop(v)),
-          RadioListTile<MapsApp>(title: const Text('Apple Maps'), value: MapsApp.appleMaps, groupValue: current, onChanged: (v) => Navigator.of(ctx).pop(v)),
-          RadioListTile<MapsApp>(title: const Text('Waze'), value: MapsApp.waze, groupValue: current, onChanged: (v) => Navigator.of(ctx).pop(v)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: Text(
+              'Open places in',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontFamily: 'serif',
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(
+              'Every tap composes a search for the app you pick.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          for (final app in MapsApp.values)
+            ListTile(
+              key: Key('maps-app-${app.name}'),
+              title: Text(mapsAppName(app)),
+              trailing: app == chosen ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.of(sheet).pop(app),
+            ),
           const SizedBox(height: 12),
         ],
       ),
     ),
   );
-  if (choice != null) {
-    await ref.read(devicePrefsRepositoryProvider).writeMapsApp(mapsAppToString(choice));
-  }
+  if (choice == null) return;
+  await ref.read(devicePrefsRepositoryProvider).writeMapsApp(choice);
 }

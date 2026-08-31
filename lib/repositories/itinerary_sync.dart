@@ -536,7 +536,8 @@ class TripSync {
                     position: stop.position,
                     text: stop.stopText,
                     timeIso: stop.timeIso,
-                    area: stop.areaText,
+                    kind: stop.kind,
+                    areaText: stop.areaText,
                     areaSource: stop.areaSource,
                   ),
             ],
@@ -568,18 +569,40 @@ class TripSync {
           revisedAtUtcIso: day.revisedAt.toUtc().toIso8601String(),
         ),
     ];
+    // A server without migration 0012 answers with no area columns at all.
+    // That is "this server does not know", not "this server says none", so
+    // what this phone holds stands rather than being wiped by a round trip.
+    final localAreas = {
+      for (final stop in localStops)
+        (stop.dayNumber, stop.position): (
+          stop.kind,
+          stop.areaText,
+          stop.areaSource,
+        ),
+    };
     final incomingStops = [
       for (final day in merged.days)
         for (final stop in day.stops)
-          (
-            dayNumber: day.number,
-            position: stop.position,
-            text: stop.text,
-            timeIso: stop.timeIso,
-            kind: null,
-            areaText: stop.area,
-            areaSource: stop.areaSource,
-          ),
+          if (stop.carriesAreas)
+            (
+              dayNumber: day.number,
+              position: stop.position,
+              text: stop.text,
+              timeIso: stop.timeIso,
+              kind: stop.kind,
+              areaText: stop.areaText,
+              areaSource: stop.areaSource,
+            )
+          else
+            (
+              dayNumber: day.number,
+              position: stop.position,
+              text: stop.text,
+              timeIso: stop.timeIso,
+              kind: localAreas[(day.number, stop.position)]?.$1,
+              areaText: localAreas[(day.number, stop.position)]?.$2,
+              areaSource: localAreas[(day.number, stop.position)]?.$3,
+            ),
     ];
     final incomingAsides = [
       for (final line in merged.setAside)
@@ -651,7 +674,8 @@ class TripSync {
           (
             [stop.dayNumber, stop.position],
             '${stop.dayNumber}|${stop.position}|${stop.stopText}'
-                '|${stop.timeIso}|${stop.areaText}|${stop.areaSource}',
+                '|${stop.timeIso}|${stop.kind}|${stop.areaText}'
+                '|${stop.areaSource}',
           ),
       ]),
       '--',
@@ -678,7 +702,8 @@ class TripSync {
         for (final stop in incomingStops)
           (
             [stop.dayNumber, stop.position],
-            '${stop.dayNumber}|${stop.position}|${stop.text}|${stop.timeIso}|${stop.areaText}|${stop.areaSource}',
+            '${stop.dayNumber}|${stop.position}|${stop.text}|${stop.timeIso}'
+                '|${stop.kind}|${stop.areaText}|${stop.areaSource}',
           ),
       ]),
       '--',

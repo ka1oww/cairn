@@ -89,8 +89,11 @@ class TripRepository {
                       Stop(
                         text: stop.stopText,
                         time: _parseTime(stop.timeIso),
+                        kind: stopKindFromStored(stop.kind),
                         area: stop.areaText,
-                        areaSource: _decodeAreaSource(stop.areaSource),
+                        areaSource: stop.areaText == null
+                            ? null
+                            : areaSourceFromStored(stop.areaSource),
                       ),
                 ],
               ),
@@ -106,25 +109,30 @@ class TripRepository {
         );
       });
 
+  /// Writes a person's area correction over [positions] of one day.
+  ///
+  /// The correction outranks the parser permanently — that is what
+  /// [AreaSource.human] means once stored — and it rides the sync cargo,
+  /// because the day it lands on is stamped with the instant of the edit.
+  Future<void> setStopAreas({
+    required int dayNumber,
+    required List<int> positions,
+    required String? area,
+    required AreaSource? areaSource,
+    DateTime? at,
+  }) => _db.setStopAreas(
+    dayNumber: dayNumber,
+    positions: positions,
+    areaText: area,
+    areaSource: area == null ? null : areaSource?.name,
+    nowUtcIso: (at ?? DateTime.now()).toUtc().toIso8601String(),
+  );
+
   /// Persists the confirmed itinerary, replacing whatever was saved before.
   ///
   /// [at] is the instant a *changed* day is stamped with — the merge clock
   /// the shared copy is reconciled on. The store decides which days that is;
   /// this layer only supplies the reading of now, so a test can pin it.
-  Future<void> setStopAreas({
-    required int dayNumber,
-    required List<int> positions,
-    String? area,
-    AreaSource? areaSource,
-  }) =>
-      _db.setStopAreas(
-        dayNumber: dayNumber,
-        positions: positions,
-        area: area,
-        areaSource: _encodeAreaSource(areaSource),
-        nowUtcIso: DateTime.now().toUtc().toIso8601String(),
-      );
-
   Future<void> saveItinerary(ConfirmedItinerary itinerary, {DateTime? at}) {
     var asidePosition = 0;
     return _db.replaceItinerary(
@@ -141,9 +149,9 @@ class TripRepository {
               position: position,
               text: stop.text,
               timeIso: stop.time?.iso,
-              kind: null,
+              kind: stop.kind.name,
               areaText: stop.area,
-              areaSource: _encodeAreaSource(stop.areaSource),
+              areaSource: stop.area == null ? null : stop.areaSource?.name,
             ),
       ],
       setAsides: [
@@ -173,18 +181,22 @@ class TripRepository {
     final parts = iso.split(':');
     return ClockTime(int.parse(parts[0]), int.parse(parts[1]));
   }
-
-  static String? _encodeAreaSource(AreaSource? source) => switch (source) {
-    null => null,
-    AreaSource.travellerOwn => 'traveller-own',
-    AreaSource.human => 'human',
-    AreaSource.parser => 'parser',
-  };
-
-  static AreaSource? _decodeAreaSource(String? raw) => switch (raw) {
-    'traveller-own' => AreaSource.travellerOwn,
-    'human' => AreaSource.human,
-    'parser' => AreaSource.parser,
-    _ => null,
-  };
 }
+
+/// Reads back what `kind` was stored as. A row written before v9 has no kind
+/// at all, and a plain place is the only honest reading of a line nobody
+/// classified — it is what a stop typed in the editor gets too.
+StopKind stopKindFromStored(String? stored) => switch (stored) {
+  'areaHeading' => StopKind.areaHeading,
+  'mealLabel' => StopKind.mealLabel,
+  'note' => StopKind.note,
+  _ => StopKind.place,
+};
+
+/// Reads back what `area_source` was stored as. An area with an unreadable
+/// source is the parser's: the tier that anything may overwrite.
+AreaSource areaSourceFromStored(String? stored) => switch (stored) {
+  'travellerOwn' => AreaSource.travellerOwn,
+  'human' => AreaSource.human,
+  _ => AreaSource.parser,
+};

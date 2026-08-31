@@ -1,5 +1,44 @@
 import 'clock_time.dart';
 
+/// What a stop *is*, for the tap-to-Maps handoff.
+///
+/// This is the domain-side reading of `itinerary_parser`'s `StopKind`, and it
+/// is decided exactly once — by the parser, at the paste — then carried. The
+/// app never re-derives it from [Stop.text]: a second classifier is the thing
+/// to refuse in review.
+enum StopKind {
+  /// Somewhere a person could be sent: the line opens a Maps search.
+  place,
+
+  /// A line that sets the running area for the stops under it.
+  areaHeading,
+
+  /// `Lunch: Ichiran` — the label shows, and only the payload is sent.
+  mealLabel,
+
+  /// The traveller's own note. It renders, and it is inert.
+  note,
+}
+
+/// Where [Stop.area] came from, as three tiers of authority.
+///
+/// The order is the priority the trip's areas are decided by:
+/// [travellerOwn] > [human] > [parser] > nothing. `itinerary_parser` names
+/// seven provenances; they fold into these three at the paste boundary
+/// (`lib/app_state/paste_flow.dart`), because what the app has to know is who
+/// may overwrite whom, not which heuristic fired.
+enum AreaSource {
+  /// The person's own `(near Akihabara)` on the pasted line itself, or an
+  /// inline locality they wrote. The parser reads it; the person said it.
+  travellerOwn,
+
+  /// Confirmed, corrected, added or cleared by a person in the app.
+  human,
+
+  /// Assigned by the running-area extractor, unreviewed.
+  parser,
+}
+
 /// A place on a day, as the itinerary describes it.
 ///
 /// A stop is what someone wrote in the plan they pasted in, kept as they wrote
@@ -13,18 +52,6 @@ import 'clock_time.dart';
 /// the verbatim `SourceLine` each stop came from, and the `Confidence` it
 /// assigns — is evidence about the *parse*, and stays in the parser with the
 /// confirmation screen that reads it.
-/// Where [Stop.area] came from.
-enum AreaSource {
-  /// The person's own `(near Akihabara)` on the pasted line itself.
-  travellerOwn,
-
-  /// Confirmed, corrected, added or cleared by a person in the app.
-  human,
-
-  /// Assigned by the running-area extractor, unreviewed.
-  parser,
-}
-
 final class Stop {
   /// The stop line as written, with any bullet marker stripped but nothing
   /// else rewritten. `itinerary_parser` never normalises this and neither
@@ -34,14 +61,25 @@ final class Stop {
   /// The clock time on the stop's line, if it had one.
   final ClockTime? time;
 
+  /// What the line is. Defaults to [StopKind.place] so a stop somebody typed
+  /// in the editor is tappable without anything having to say so.
+  final StopKind kind;
+
   /// The area in force for this stop — what a Maps search appends.
-  /// Null means "send the stop's own words alone".
+  /// Null means "send the stop's own words alone" (rule 3: a miss sends
+  /// nothing rather than guessing).
   final String? area;
 
   /// Where [area] came from. Null exactly when [area] is null.
   final AreaSource? areaSource;
 
-  Stop({required this.text, this.time, this.area, this.areaSource}) {
+  Stop({
+    required this.text,
+    this.time,
+    this.kind = StopKind.place,
+    this.area,
+    this.areaSource,
+  }) {
     if (text.trim().isEmpty) {
       throw ArgumentError.value(text, 'text', 'a stop must have text');
     }
@@ -76,14 +114,16 @@ final class Stop {
       other is Stop &&
       other.text == text &&
       other.time == time &&
+      other.kind == kind &&
       other.area == area &&
       other.areaSource == areaSource;
 
   @override
-  int get hashCode => Object.hash(text, time, area, areaSource);
+  int get hashCode => Object.hash(text, time, kind, area, areaSource);
 
   @override
   String toString() =>
       'Stop(${time == null ? '' : '${time!.iso} '}$text'
+      '${kind == StopKind.place ? '' : ' <${kind.name}>'}'
       '${area == null ? '' : ' [$area:${areaSource?.name}]'})';
 }

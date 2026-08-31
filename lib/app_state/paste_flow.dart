@@ -27,10 +27,10 @@ import 'package:cairn_model/cairn_model.dart' as model;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
+import '../logic/parsed_areas.dart';
 import '../logic/plan_text.dart';
 import '../logic/repaste_merge.dart' as merge;
 import '../repositories/trip_repository.dart';
-import 'area_extractor.dart';
 import 'date_labels.dart';
 import 'day_view.dart';
 import 'ping_schedule.dart';
@@ -91,15 +91,27 @@ class ReviewStop {
   final String id;
   final String text;
   final String? timeLabel;
-  final String? area;
-  final AreaSourceInfo? areaSource;
 
-  const ReviewStop({required this.id, required this.text, this.timeLabel, this.area, this.areaSource});
+  /// What the parser decided this line is. The editor draws an area heading
+  /// and a note differently from a place, and never re-decides which it is.
+  final model.StopKind kind;
+
+  /// The area in force, and whose it is. A person's edit here is
+  /// [model.AreaSource.human] and outranks the parser from then on.
+  final String? area;
+  final model.AreaSource? areaSource;
+
+  const ReviewStop({
+    required this.id,
+    required this.text,
+    this.timeLabel,
+    this.kind = model.StopKind.place,
+    this.area,
+    this.areaSource,
+  });
 
   bool get isStarred => timeLabel != null;
 }
-
-enum AreaSourceInfo { travellerOwn, human, parser }
 
 /// A date this day's own title named, worked up into everything the date
 /// sheet draws — `"Tokyo, 14 June" · 14 June · Sunday · day 1`.
@@ -401,6 +413,7 @@ class _DraftStop {
     required this.text,
     this.time,
     required this.sourceLineNumber,
+    this.kind = model.StopKind.place,
     this.area,
     this.areaSource,
   });
@@ -408,8 +421,9 @@ class _DraftStop {
   final String id;
   String text;
   model.ClockTime? time;
+  model.StopKind kind;
   String? area;
-  AreaSourceInfo? areaSource;
+  model.AreaSource? areaSource;
 
   /// Where this came from in the paste, or 0 for a stop the person typed.
   /// Carried so a stop set aside again lands back in the kept list with the
@@ -686,27 +700,34 @@ class PasteFlow extends Notifier<PasteFlowState> {
     _rebuildReview();
   }
 
+  /// Re-words the whole run of stops the area at [firstStopId] governs.
+  ///
+  /// A run is the stops from that one down to the next stop with a different
+  /// area — which is the run the editor drew under one subheading, so
+  /// correcting `Shinjuku` corrects everything the reader saw it standing
+  /// over and nothing else.
   void setAreaRun(String firstStopId, String? area) {
     final found = _findStop(firstStopId);
     if (found == null) return;
     final day = found.day;
-    final idx = day.stops.indexWhere((s) => s.id == firstStopId);
-    if (idx < 0) return;
-    // run = consecutive stops sharing same area value as first
-    final cur = day.stops[idx].area;
-    for (var i = idx; i < day.stops.length; i++) {
-      if (day.stops[i].area != cur) break;
+    final index = day.stops.indexWhere((s) => s.id == firstStopId);
+    if (index < 0) return;
+    final was = day.stops[index].area;
+    for (var i = index; i < day.stops.length; i++) {
+      if (day.stops[i].area != was) break;
       day.stops[i].area = area;
-      day.stops[i].areaSource = area == null ? null : AreaSourceInfo.human;
+      day.stops[i].areaSource = area == null ? null : model.AreaSource.human;
     }
     _rebuildReview();
   }
 
+  /// Sets one stop's area, and only that one. Null is an answer: it means
+  /// "search for the words alone", not "nobody has said yet".
   void setStopArea(String stopId, String? area) {
     final found = _findStop(stopId);
     if (found == null) return;
     found.stop.area = area;
-    found.stop.areaSource = area == null ? null : AreaSourceInfo.human;
+    found.stop.areaSource = area == null ? null : model.AreaSource.human;
     _rebuildReview();
   }
 
@@ -855,12 +876,9 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   text: stop.text,
                   time: _timeOf(stop.timeLabel),
                   sourceLineNumber: 0,
+                  kind: stop.kind,
                   area: stop.area,
-                  areaSource: stop.areaSource == null ? null : switch (stop.areaSource!) {
-                    model.AreaSource.travellerOwn => AreaSourceInfo.travellerOwn,
-                    model.AreaSource.human => AreaSourceInfo.human,
-                    model.AreaSource.parser => AreaSourceInfo.parser,
-                  },
+                  areaSource: stop.areaSource,
                 ),
             ],
           ),
@@ -1032,12 +1050,9 @@ class PasteFlow extends Notifier<PasteFlowState> {
                 model.Stop(
                   text: stop.text,
                   time: stop.time,
+                  kind: stop.kind,
                   area: stop.area,
-                  areaSource: stop.areaSource == null ? null : switch (stop.areaSource!) {
-                    AreaSourceInfo.travellerOwn => model.AreaSource.travellerOwn,
-                    AreaSourceInfo.human => model.AreaSource.human,
-                    AreaSourceInfo.parser => model.AreaSource.parser,
-                  },
+                  areaSource: stop.areaSource,
                 ),
             ],
           ),
@@ -1259,11 +1274,10 @@ class PasteFlow extends Notifier<PasteFlowState> {
 
   void _reparse() {
     final result = _parseText();
-    final areas = assignRunningAreas(result);
     _nextId = 0;
     _draft = _Draft(
       days: [
-        for (final (di, day) in result.days.indexed)
+        for (final day in result.days)
           _DraftDay(
             number: day.index,
             place: day.place,
@@ -1273,7 +1287,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
             uncertainty: day.uncertainty,
             headerWeekday: day.headerWeekday,
             stops: [
-              for (final (si, stop) in day.stops.indexed)
+              for (final stop in day.stops)
                 _DraftStop(
                   id: _mintId('stop'),
                   text: stop.text,
@@ -1282,10 +1296,11 @@ class PasteFlow extends Notifier<PasteFlowState> {
                     final t => model.ClockTime(t.hour, t.minute),
                   },
                   sourceLineNumber: stop.sourceLine.lineNumber,
-                  area: areas.length > di && areas[di].length > si ? areas[di][si].area : null,
-                  areaSource: areas.length > di && areas[di].length > si && areas[di][si].area != null
-                      ? (areas[di][si].travellerOwn ? AreaSourceInfo.travellerOwn : AreaSourceInfo.parser)
-                      : null,
+                  kind: stopKindOf(stop.kind),
+                  area: stop.area?.text,
+                  areaSource: stop.area == null
+                      ? null
+                      : areaSourceOf(stop.area!.source),
                 ),
             ],
           ),
@@ -1351,7 +1366,14 @@ class PasteFlow extends Notifier<PasteFlowState> {
       dateSuggestion: _suggestionFor(day),
       stops: [
         for (final stop in day.stops)
-          ReviewStop(id: stop.id, text: stop.text, timeLabel: stop.time?.iso),
+          ReviewStop(
+            id: stop.id,
+            text: stop.text,
+            timeLabel: stop.time?.iso,
+            kind: stop.kind,
+            area: stop.area,
+            areaSource: stop.areaSource,
+          ),
       ],
       confidence: doubt == null
           ? DayConfidence.high

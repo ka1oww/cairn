@@ -36,6 +36,8 @@
 import 'package:cairn_model/cairn_model.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
+import 'parsed_areas.dart';
+
 import '../repositories/trip_repository.dart';
 
 /// What the set-aside says about a stop the revised plan left out. Spelled
@@ -318,34 +320,64 @@ RepasteMergeResult mergeRepaste({
     );
   }
 
-  // Carry human areas: plan-wide normalize match keeps human area
-  final humanByNorm = <String, Stop>{};
-  for (final d in current) {
-    for (final s in d.stops) {
-      if (s.areaSource == AreaSource.human && s.area != null) {
-        humanByNorm[_normalize(s.text)] = s;
-      }
-    }
-  }
-  if (humanByNorm.isNotEmpty) {
-    for (final md in days) {
-      for (var i = 0; i < md.day.stops.length; i++) {
-        final s = md.day.stops[i];
-        // travellerOwn outranks human: if s already has travellerOwn, skip
-        if (s.areaSource == AreaSource.travellerOwn) continue;
-        final h = humanByNorm[_normalize(s.text)];
-        if (h != null) {
-          // overlay human area onto this stop (replace)
-          final newStops = List<Stop>.from(md.day.stops);
-          newStops[i] = Stop(text: s.text, time: s.time, area: h.area, areaSource: h.areaSource);
-          // need to reflect in md.day — create new ConfirmedDay
-          // Since md.day is immutable, rebuild (only for this display; actual storage will be via paste_flow which merges?)
-          // For now patch the list element via replacement of ConfirmedDay? Simpler: mutate via hack — create new MergedDay wrapping new ConfirmedDay.
-          // We'll replace days entry in place.
-          final idx = days.indexOf(md);
-          days[idx] = MergedDay(day: ConfirmedDay(number: md.day.number, date: md.day.date, place: md.day.place, stops: List.unmodifiable(newStops)), origin: md.origin, unchanged: false, dateCandidate: md.dateCandidate, confidence: md.confidence, uncertainty: md.uncertainty, headerWeekday: md.headerWeekday);
+  // A person's area correction outlives the words being re-pasted.
+  //
+  // Corrections are matched plan-wide by the stop's own text — the same
+  // case- and whitespace-insensitive reading the survival pass uses — so a
+  // stop that moved to another day keeps the area somebody gave it. Two
+  // things this deliberately will not do: it never overwrites an area the
+  // re-paste's own text declares (`(near Akihabara)` on the line is the
+  // traveller speaking now, and outranks a correction made before), and it
+  // never resurrects a correction onto a line the new text no longer says.
+  final correctedAreas = <String, Stop>{
+    for (final day in current)
+      for (final stop in day.stops)
+        if (stop.areaSource == AreaSource.human && stop.area != null)
+          _normalize(stop.text): stop,
+  };
+  if (correctedAreas.isNotEmpty) {
+    for (var i = 0; i < days.length; i++) {
+      final merged = days[i];
+      var changed = false;
+      final stops = <Stop>[];
+      for (final stop in merged.day.stops) {
+        final correction = correctedAreas[_normalize(stop.text)];
+        if (correction == null ||
+            stop.areaSource == AreaSource.travellerOwn ||
+            (stop.area == correction.area &&
+                stop.areaSource == correction.areaSource)) {
+          stops.add(stop);
+          continue;
         }
+        changed = true;
+        stops.add(
+          Stop(
+            text: stop.text,
+            time: stop.time,
+            kind: stop.kind,
+            area: correction.area,
+            areaSource: correction.areaSource,
+          ),
+        );
       }
+      if (!changed) continue;
+      days[i] = MergedDay(
+        day: ConfirmedDay(
+          number: merged.day.number,
+          date: merged.day.date,
+          place: merged.day.place,
+          stops: stops,
+        ),
+        origin: merged.origin,
+        // The words and the ordering are what "unchanged" is about — a day
+        // whose only difference is an area carried back onto it is still the
+        // day the photographs belong to.
+        unchanged: merged.unchanged,
+        dateCandidate: merged.dateCandidate,
+        confidence: merged.confidence,
+        uncertainty: merged.uncertainty,
+        headerWeekday: merged.headerWeekday,
+      );
     }
   }
 
@@ -411,6 +443,9 @@ List<Stop> _convertStops(List<ip.Stop> stops) => List.unmodifiable([
         null => null,
         final t => ClockTime(t.hour, t.minute),
       },
+      kind: stopKindOf(stop.kind),
+      area: stop.area?.text,
+      areaSource: stop.area == null ? null : areaSourceOf(stop.area!.source),
     ),
 ]);
 

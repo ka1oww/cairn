@@ -20,7 +20,7 @@
 // The list is the plan, in order, as pasted.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:cairn_model/cairn_model.dart' show AreaSource;
+import 'package:cairn_model/cairn_model.dart' show AreaSource, StopKind;
 
 import '../logic/maps_handoff.dart';
 import 'date_labels.dart';
@@ -51,20 +51,45 @@ class DayStop {
   /// `16:40`, or null when the stop is not starred.
   final String? timeLabel;
 
-  final StopLineKind kind;
+  /// What the line is, as the parser decided it at the paste. The page never
+  /// re-decides: a second classifier is the thing to refuse in review.
+  final StopKind kind;
+
+  /// `Lunch` on `Lunch: Ichiran` — shown, and never sent to a maps app,
+  /// because no restaurant is called that.
   final String? mealLabel;
+
+  /// The words a tap searches for: the line with its meal label taken off.
+  /// Null when there is nothing to search for, which is what makes a row
+  /// inert.
+  final String? searchText;
+
+  /// The area a search appends, and whose it is. Null means the search goes
+  /// out as the stop's own words alone.
   final String? area;
   final AreaSource? areaSource;
+
+  /// The individual places this line names, in the order written. One element
+  /// for an ordinary stop.
   final List<String> places;
+
+  /// The area subheading drawn *above* this stop, or null when the stop is
+  /// under the same area as the one before it.
   final String? areaHeadingBefore;
+
+  /// The areas of the nearest stops either side of this one, for a stop that
+  /// has none of its own. The long-press sheet offers them worded
+  /// "nearest to X" — a hint about where to look, never a claim that the
+  /// place is there.
   final List<String> adjacentAreas;
 
   const DayStop({
     required this.position,
     required this.text,
     this.timeLabel,
-    this.kind = StopLineKind.place,
+    this.kind = StopKind.place,
     this.mealLabel,
+    this.searchText,
     this.area,
     this.areaSource,
     this.places = const [],
@@ -73,6 +98,14 @@ class DayStop {
   });
 
   bool get isStarred => timeLabel != null;
+
+  /// Whether tapping this row opens a maps search. A note the traveller wrote
+  /// renders and does nothing; so does a meal label with no restaurant on it.
+  bool get opensMaps => searchText != null && kind != StopKind.note;
+
+  /// Whether the row is drawn short with an "N places" badge. Length decides,
+  /// so a row that fits is drawn as written however many places it names.
+  bool get showsPlaceCount => showsPlaceCountBadge(text, places);
 }
 
 /// What the day page renders for one date. Four shapes, each drawn.
@@ -325,34 +358,36 @@ DayView? dayViewForPlanDay(TripPlan? plan, int number, DateTime today) {
 
 PlannedDay _planned(TripPlan plan, PlanDay day, {required bool isOver}) {
   final date = day.date;
-  // Precompute headings and adjacent areas
-  final stopCount = day.stops.length;
-  final headings = List<String?>.filled(stopCount, null);
-  String? prevArea;
-  for (var i = 0; i < stopCount; i++) {
-    final a = day.stops[i].area;
-    if (a != null && a != prevArea) {
-      headings[i] = a;
-    }
-    prevArea = a;
+  final stops = day.stops;
+
+  // The subheading is drawn where the area *changes*, so a run of stops in
+  // one place is headed once rather than repeated down the day.
+  String? standing;
+  final headings = <String?>[];
+  for (final stop in stops) {
+    headings.add(stop.area == standing ? null : stop.area);
+    standing = stop.area;
   }
-  // adjacent areas per stop (nearest preceding and following non-null)
-  List<List<String>> adjacents = List.generate(stopCount, (_) => []);
-  // collect all distinct areas in day order for speed
-  for (var i = 0; i < stopCount; i++) {
-    if (day.stops[i].area != null) continue; // only for area-less stops
-    String? prev;
-    for (var j = i - 1; j >= 0; j--) {
-      if (day.stops[j].area != null) { prev = day.stops[j].area; break; }
+
+  // For a stop with no area of its own: the nearest area either side of it,
+  // nearer first. These are offered as search hints ("nearest to Shibuya"),
+  // which is why the closer one leads and why a duplicate is dropped.
+  List<String> adjacentTo(int index) {
+    String? before;
+    for (var i = index - 1; i >= 0; i--) {
+      if (stops[i].area != null) {
+        before = stops[i].area;
+        break;
+      }
     }
-    String? next;
-    for (var j = i + 1; j < stopCount; j++) {
-      if (day.stops[j].area != null) { next = day.stops[j].area; break; }
+    String? after;
+    for (var i = index + 1; i < stops.length; i++) {
+      if (stops[i].area != null) {
+        after = stops[i].area;
+        break;
+      }
     }
-    final list = <String>[];
-    if (prev != null) list.add(prev);
-    if (next != null && next != prev) list.add(next);
-    adjacents[i] = list;
+    return [?before, if (after != null && after != before) after];
   }
 
   return PlannedDay(
@@ -365,53 +400,110 @@ PlannedDay _planned(TripPlan plan, PlanDay day, {required bool isOver}) {
     ),
     dateLabel: date == null ? null : dayMonthLabel(date),
     stops: [
-      for (final (index, stop) in day.stops.indexed)
-        (() {
-          final c = classifyStopLine(stop.text);
-          return DayStop(
-            position: index + 1,
-            text: stop.text,
-            timeLabel: stop.timeLabel,
-            kind: c.kind,
-            mealLabel: c.mealLabel,
-            area: stop.area,
-            areaSource: stop.areaSource,
-            places: c.places,
-            areaHeadingBefore: headings[index],
-            adjacentAreas: adjacents[index],
-          );
-        })(),
+      for (final (index, stop) in stops.indexed)
+        _dayStop(
+          stop,
+          position: index + 1,
+          heading: headings[index],
+          adjacent: stop.area == null ? adjacentTo(index) : const [],
+        ),
     ],
     isOver: isOver,
   );
 }
 
-final dayActionsProvider = Provider<DayActions>(DayActions.new);
+DayStop _dayStop(
+  PlanStop stop, {
+  required int position,
+  required String? heading,
+  required List<String> adjacent,
+}) {
+  // A meal label is split off here and nowhere else: the label is the part
+  // that shows, the rest is the part that is searched for.
+  final meal = stop.kind == StopKind.mealLabel
+      ? mealLabelSplit(stop.text)
+      : (label: null, rest: stop.text.trim());
+  final rest = meal.rest;
+  // Three ways a row has nothing to search for: the traveller's own note, a
+  // heading that is not itself a stop, and a line standing in for a place
+  // nobody has picked yet. All three render, and all three are inert.
+  final searchText =
+      stop.kind == StopKind.note ||
+          stop.kind == StopKind.areaHeading ||
+          rest == null ||
+          isPlaceholderText(rest)
+      ? null
+      : rest;
+  return DayStop(
+    position: position,
+    // The label is drawn on its own, so the row's words are what is left of
+    // the line once it is taken off.
+    text: rest ?? stop.text,
+    timeLabel: stop.timeLabel,
+    kind: stop.kind,
+    mealLabel: meal.label,
+    searchText: searchText,
+    area: stop.area,
+    areaSource: stop.areaSource,
+    places: searchText == null ? const [] : placesOn(searchText),
+    areaHeadingBefore: heading,
+    adjacentAreas: adjacent,
+  );
+}
 
+/// What a person's tap on an area subheading, or on a stop's own area, does.
+///
+/// Both write through [TripRepository.setStopAreas], so a correction is
+/// stored, stamps its day, and rides the sync cargo like any other edit.
 class DayActions {
   DayActions(this._ref);
   final Ref _ref;
 
-  Future<void> setStopArea({required int dayNumber, required int position, String? area}) async {
-    final repo = _ref.read(tripRepositoryProvider);
-    await repo.setStopAreas(dayNumber: dayNumber, positions: [position - 1], area: area, areaSource: area == null ? null : AreaSource.human);
-  }
+  /// Corrects one stop's area. [position] is the 1-based number the page
+  /// draws; the store counts from zero.
+  Future<void> setStopArea({
+    required int dayNumber,
+    required int position,
+    required String? area,
+  }) => _ref
+      .read(tripRepositoryProvider)
+      .setStopAreas(
+        dayNumber: dayNumber,
+        positions: [position - 1],
+        area: area,
+        areaSource: area == null ? null : AreaSource.human,
+      );
 
-  Future<void> setAreaRun({required int dayNumber, required String currentArea, String? newArea}) async {
+  /// Corrects the whole run of stops one subheading stands over — every stop
+  /// of the day that currently reads [currentArea]. Correcting the heading is
+  /// how a person fixes a whole afternoon in one gesture, which is the only
+  /// reason the run is a unit at all.
+  Future<void> setAreaRun({
+    required int dayNumber,
+    required String currentArea,
+    required String? area,
+  }) async {
     final plan = _ref.read(savedItineraryProvider).value;
     if (plan == null) return;
-    final day = plan.days.where((d) => d.number == dayNumber).firstOrNull;
-    if (day == null) return;
-    final positions = <int>[];
-    for (var i = 0; i < day.stops.length; i++) {
-      if (day.stops[i].area == currentArea) positions.add(i);
+    PlanDay? day;
+    for (final candidate in plan.days) {
+      if (candidate.number == dayNumber) day = candidate;
     }
+    if (day == null) return;
+    final positions = [
+      for (final (index, stop) in day.stops.indexed)
+        if (stop.area == currentArea) index,
+    ];
     if (positions.isEmpty) return;
-    final repo = _ref.read(tripRepositoryProvider);
-    await repo.setStopAreas(dayNumber: dayNumber, positions: positions, area: newArea, areaSource: newArea == null ? null : AreaSource.human);
+    await _ref
+        .read(tripRepositoryProvider)
+        .setStopAreas(
+          dayNumber: dayNumber,
+          positions: positions,
+          area: area,
+          areaSource: area == null ? null : AreaSource.human,
+        );
   }
 }
 
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
-}
+final dayActionsProvider = Provider<DayActions>(DayActions.new);
