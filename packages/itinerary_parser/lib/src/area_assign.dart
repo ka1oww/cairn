@@ -105,10 +105,9 @@ Map<int, AreaAssignment> anchorAssign(
         }
       }
 
-      // hotel-prefix rule — strip leading bullet/number like "1 " first
+      // hotel-prefix rule
       if (assignedOwn == null && !s.hasTime) {
-        final stripped = raw.replaceAll(RegExp(r'^\s*\d+[\s.)]+\s*'), ' ').trimLeft();
-        final m = hotelPrefixRegExp.firstMatch(stripped.isEmpty ? raw : stripped);
+        final m = hotelPrefixRegExp.firstMatch(raw);
         if (m != null) {
           final pw = areaTokens(m.group(1)!);
           if (pw.isNotEmpty && pw.every((w) => vocab.contains(w))) {
