@@ -197,8 +197,7 @@ bool looksLikeProperNounHeader(String line) {
   if (extractTime(trimmed) != null) return false;
   final words = trimmed.split(RegExp(r'\s+'));
   if (words.isEmpty || words.length > 5) return false;
-  if (!_anyCapital.hasMatch(trimmed) &&
-      words.length > _caselessLineWordLimit) {
+  if (!_anyCapital.hasMatch(trimmed) && words.length > _caselessLineWordLimit) {
     return false;
   }
   for (final w in words) {
