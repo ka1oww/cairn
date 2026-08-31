@@ -17,6 +17,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:cairn/app_state/area_gazetteer_loader.dart';
 import 'package:cairn/app_state/file_picker_edge.dart';
 import 'package:cairn/bootstrap.dart';
 import 'package:cairn/storage/drift/app_database.dart';
@@ -62,6 +63,7 @@ void main() {
         database: db,
         today: _defaultToday,
         picker: FakeFilePicker(picks),
+        gazetteer: (compressed) async => buildAreaGazetteer(compressed),
         extraction: (extractor, file) async => extractor.extract(file),
       ),
     );

@@ -221,13 +221,11 @@ String? _seedForDay(String? place, Set<String> vocab, Set<String>? gazetteer,
 
   bool hasGaz() => gazObj != null || gazetteer != null;
   if (place == null || isFurniture(place)) return null;
+  // The in-tail grammar is the traveller's own words ("Art & Eats in Le
+  // Marais") and is trusted without gazetteer validation — the scorer's
+  // `seed_for` validates only the vocabulary-run candidate below.
   final t = inTail(place);
-  if (t != null) {
-    if (hasGaz() && !contains(areaTokens(t).join(' '))) {
-      return null;
-    }
-    return t;
-  }
+  if (t != null) return t;
   final cands = vocabRuns(place, vocab);
   if (cands.length != 1) return null;
   if (hasGaz() && !contains(areaTokens(cands.first).join(' '))) {

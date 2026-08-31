@@ -29,6 +29,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../acknowledgements.dart';
 import '../app_state/device_prefs.dart';
 import '../app_state/paste_flow.dart';
 import '../app_state/trip_providers.dart';
@@ -242,6 +243,22 @@ class _Sheet extends ConsumerWidget {
                 key: const Key('trip-delete'),
                 onPressed: () => _delete(context, ref),
                 child: const Text('Delete this trip'),
+              ),
+
+            // Attribution for the third-party data in the bundle. It is at
+            // the foot of the one sheet the app already has, because a
+            // CC-BY obligation has to be visible to the person and this is
+            // the only surface that is about the app rather than about a
+            // day. The words are `lib/acknowledgements.dart`'s; this only
+            // places them.
+            const Divider(height: 32),
+            for (final ack in acknowledgements)
+              Text(
+                ack.line,
+                key: const Key('trip-acknowledgement'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
           ],
         ),

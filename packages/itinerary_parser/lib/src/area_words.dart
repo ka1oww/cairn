@@ -396,6 +396,40 @@ const Map<String, String> _decomposeMap = {
   'Ü': 'U\u0308',
   'Ñ': 'N\u0303',
   'Ç': 'C\u0327',
+  'ý': 'y\u0301',
+  'ÿ': 'y\u0308',
+  'Ý': 'Y\u0301',
+  // Latin Extended-A forms the GeoNames dumps and romanised itineraries
+  // carry: macrons (Hepburn — Ōsaka, Kyūshū), breves (McCune–Reischauer —
+  // Sŏul), and the common carons. Python's NFD (the scorer, and the lab
+  // measurement the gazetteer asset was frozen against) strips all of
+  // these; the committed asset and the runtime lookups must agree.
+  'ā': 'a\u0304',
+  'ă': 'a\u0306',
+  'ē': 'e\u0304',
+  'ĕ': 'e\u0306',
+  'ī': 'i\u0304',
+  'ĭ': 'i\u0306',
+  'ō': 'o\u0304',
+  'ŏ': 'o\u0306',
+  'ū': 'u\u0304',
+  'ŭ': 'u\u0306',
+  'Ā': 'A\u0304',
+  'Ă': 'A\u0306',
+  'Ē': 'E\u0304',
+  'Ĕ': 'E\u0306',
+  'Ī': 'I\u0304',
+  'Ĭ': 'I\u0306',
+  'Ō': 'O\u0304',
+  'Ŏ': 'O\u0306',
+  'Ū': 'U\u0304',
+  'Ŭ': 'U\u0306',
+  'š': 's\u030c',
+  'Š': 'S\u030c',
+  'ž': 'z\u030c',
+  'Ž': 'Z\u030c',
+  'č': 'c\u030c',
+  'Č': 'C\u030c',
 };
 
 final RegExp _wordRegExp = RegExp(r"[A-Za-z][A-Za-z'’‘’-]*");
