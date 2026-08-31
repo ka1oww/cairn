@@ -903,6 +903,63 @@ def main():
           "and a pure pull is ordered the same way, not by the text of the number",
           repr(returned))
 
+    # ---- the tap-to-Maps areas ride the same cargo (0012 columns, 0013 sync) --
+    #
+    # 0012 added the columns; until 0013 the function inserted and returned the
+    # old column set, so an area corrected on one phone was stripped on push
+    # and absent on pull -- a correction that never left the phone that made
+    # it. The columns being present in the table is not the property; the
+    # round trip is.
+    print("\n== a corrected area travels between phones ==")
+    T4 = "2027-06-04T00:00:00Z"
+    corrected = {
+        "day_number": 1, "day_date": None, "place": "Oslo", "revised_at": T4,
+        "stops": [
+            {"position": 0, "stop_text": "Vigeland", "time_of_day": None,
+             "kind": "place", "area_text": "Frogner", "area_source": "human"},
+            {"position": 1, "stop_text": "lunch", "time_of_day": None,
+             "kind": "meal", "area_text": None, "area_source": None},
+        ],
+    }
+    status, plan = sync(b, norway, T4, [corrected])
+    stops = numbered(plan)[1]["stops"]
+    check(status == "ok"
+          and [(s["kind"], s["area_text"], s["area_source"]) for s in stops]
+              == [("place", "Frogner", "human"), ("meal", None, None)],
+          "a pushed area comes back off the same round trip, source and all",
+          repr(stops))
+
+    # Carol never touched the plan: what she pulls is the only evidence the
+    # correction actually crossed between two phones.
+    status, plan = sync(c, norway, "-infinity", [])
+    stops = numbered(plan)[1]["stops"]
+    check([(s["kind"], s["area_text"]) for s in stops]
+          == [("place", "Frogner"), ("meal", None)],
+          "and another member's pure pull carries it, which is the whole point",
+          repr(stops))
+
+    # Every key is emitted even when the value is null. `RemoteStop.carriesAreas`
+    # reads the key's *absence* as "this server does not know about areas" and
+    # leaves a local correction standing; a function that dropped the null key
+    # would make clearing an area impossible from any other phone.
+    check(all({"kind", "area_text", "area_source"} <= set(s) for s in stops),
+          "a stop with no area still carries all three keys, spelled null",
+          repr(sorted(stops[1])))
+
+    # A phone built before 0012 sends no `kind` at all. The column is
+    # `not null default 'place'`, and an insert list naming the column defeats
+    # that default, so the function says it instead.
+    old_phone = {
+        "day_number": 2, "day_date": None, "place": "Bergen", "revised_at": T4,
+        "stops": [{"position": 0, "stop_text": "Bryggen", "time_of_day": None}],
+    }
+    status, plan = sync(b, norway, T4, [corrected, old_phone])
+    stops = numbered(plan)[2]["stops"]
+    check(status == "ok" and stops[0]["kind"] == "place"
+          and stops[0]["area_text"] is None,
+          "a push from a phone that predates the columns still stores a kind",
+          repr(stops))
+
     print("\n== the set-aside pocket is one atom, and emptying it still counts ==")
     onsen = [{"position": 0, "source_line_number": 9,
               "line_text": "book the cabin", "explanation": "no day named"}]

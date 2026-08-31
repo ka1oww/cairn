@@ -15,10 +15,11 @@ and what is on them ([the decision](../docs/decisions/2026-08-22-grill-round-one
 of those is worked out on each phone from the plan it holds, and moving any of
 them server-side would need its own decision.
 
-**A hosted project now exists and migrations `0001` through `0010` are
-applied to it** (`https://nswcgzhynclrrunekskh.supabase.co`, region
-`ap-southeast-1`); `0011`, the photo transport delta, and `0012`, the
-tap-to-Maps area columns, exist only here and in the local probe. The app
+**A hosted project now exists and migrations `0001` through `0010`, plus
+`0012`, are applied to it** (`https://nswcgzhynclrrunekskh.supabase.co`,
+region `ap-southeast-1`; `0012`, the tap-to-Maps area columns, was applied on
+31 August 2026). `0011`, the photo transport delta, and `0013`, which teaches
+`sync_trip_itinerary` those columns, exist only here and in the local probe. The app
 points at it by default — see
 [Pointing the app at it](#pointing-the-app-at-it) — and
 [Verification](#verification-what-was-actually-run) at the bottom says what has
@@ -40,7 +41,7 @@ the real sign-in providers are still untouched.
 | `day_page_photos` | Which photos went into a composed page, and in what order. Ordered by `ordinal`, not seated in a 1-to-4 slot. |
 | `trip_itineraries` | One row per trip, holding the plan's two clocks: when its *shape* last moved, and when the set-aside pocket last did. Not columns on `trips`, because a phone holds a plan revision before the trip's shared row exists. See [The itinerary](#the-itinerary-a-shared-fact-merged-per-day). |
 | `trip_itinerary_days` | One row per day of the plan: its number, its date if the person has resolved one, its place, and **the instant it was last changed and by whom**. That instant is the merge atom. |
-| `trip_itinerary_stops` | The stops under a day, in the day's own order. Deliberately carries **no clock and no starred flag**: a stop cannot win or lose a merge independently of its day, and a stop is starred exactly when it has a time. `0012` (written, not yet applied) adds `kind`, `area_text` and `area_source` for tap-to-Maps phase 1; `sync_trip_itinerary` does not read or write them yet. |
+| `trip_itinerary_stops` | The stops under a day, in the day's own order. Deliberately carries **no clock and no starred flag**: a stop cannot win or lose a merge independently of its day, and a stop is starred exactly when it has a time. `0012` (applied to the hosted project 2026-08-31) adds `kind`, `area_text` and `area_source` for tap-to-Maps phase 1, and `0013` (written, pending alongside `0011`) is what makes `sync_trip_itinerary` insert and return them — until it is applied a hand-made area correction is stripped on push and absent on pull, so it never leaves the phone that made it. |
 | `trip_itinerary_set_asides` | The lines the parser could not place, and the ones somebody took out of a day. Nothing a person pasted is ever deleted, so the pocket travels with the plan. One atom, one clock. |
 | `trip_roster` (view) | Not a table: `trip_members` joined to `profiles`, so a phone reads every co-member and their name in one statement. `security_invoker`, so the member's own RLS decides what it returns. It hands over `joined_at` and **never a trip day number** — which day an instant falls on is a function of the itinerary and the trip clock, and that is the phone's arithmetic. |
 
@@ -884,8 +885,9 @@ throwaway Postgres; see that directory's README. It has been run green on two
 independently built clusters — 17.10 and a Homebrew 17.11 — so the results are
 not an artefact of one machine's setup.
 
-- All eleven migrations apply cleanly, and apply again cleanly on a second run.
-- 145 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- All thirteen migrations apply cleanly, and apply again cleanly on a second
+  run.
+- 149 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
@@ -926,10 +928,12 @@ not an artefact of one machine's setup.
   back — confirming that table ownership, not test-harness privilege, is what
   makes the helper functions safe.
 
-**What the hosted project has actually done** (2026-08-26). Migrations `0001`
-through `0010` are applied to it; **neither `0011` nor `0012` is** — the photo
-transport delta and the tap-to-Maps area columns exist only here and in the
-local probe. The following ran against it for real, from the app's
+**What the hosted project has actually done** (2026-08-26; migration state
+current to 2026-08-31). Migrations `0001` through `0010` are applied to it, and
+so is `0012`, the tap-to-Maps area columns (applied 2026-08-31); **neither
+`0011` nor `0013` is** — the photo transport delta, and the
+`sync_trip_itinerary` recreation that carries the area columns over the wire,
+exist only here and in the local probe. The following ran against it for real, from the app's
 own code: an anonymous sign-in through GoTrue; `handle_new_user` minting the
 profile; a `trips` insert with the phone-minted id; `handle_new_trip` seeding
 `trip_members`; the `trip_roster` view; and `sync_trip_itinerary` in both

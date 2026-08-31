@@ -569,7 +569,7 @@ class TripSync {
           revisedAtUtcIso: day.revisedAt.toUtc().toIso8601String(),
         ),
     ];
-    // A server without migration 0012 answers with no area columns at all.
+    // A server without migration 0013 answers with no area columns at all.
     // That is "this server does not know", not "this server says none", so
     // what this phone holds stands rather than being wiped by a round trip.
     final localAreas = {

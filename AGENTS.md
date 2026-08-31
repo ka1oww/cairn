@@ -100,7 +100,7 @@ import what is written there, not here.
   the plan's *shape* did not change. It **outlives a re-paste**:
   `mergeRepaste` carries human areas plan-wide by the stop's own text, and
   will not overwrite an area the new text itself declares. A pull from a
-  server that has not had migration `0012` applied must **not** null the
+  server that has not had migrations `0012`/`0013` applied must **not** null the
   local areas — `RemoteStop.carriesAreas` is false when the row has no
   `area_text` key at all, which means "does not know", never "says none";
   deleting that distinction silently erases every correction on the phone.
@@ -628,9 +628,12 @@ Sharp edges worth knowing before touching this directory again:
   defers its own RLS policies to `0004_trip_members.sql`, because `trips` must
   exist before `trip_members` can reference it but the policies are written in
   terms of membership. Read that comment before reordering anything.
-- **A hosted project exists and migrations `0001`-`0010` are applied to it**
-  (`0011`, the photo transport delta, and `0012`, the tap-to-Maps area
-  columns, are written and locally probed but applied nowhere else), and an
+- **A hosted project exists and migrations `0001`-`0010` and `0012` are
+  applied to it** (`0012`, the tap-to-Maps area columns, on 2026-08-31;
+  `0011`, the photo transport delta, and `0013`, which teaches
+  `sync_trip_itinerary` those columns, are written and locally probed but
+  applied nowhere else — until `0013` runs, an area correction is stripped on
+  push and absent on pull, so it never leaves the phone that made it), and an
   ordinary build points at it (`supabase/README.md` is the authority on the
   defines and on what the hosted project has and has not actually done). The
   adversarial checks still run somewhere else and must: `supabase/tests/`

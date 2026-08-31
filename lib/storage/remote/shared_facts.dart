@@ -213,7 +213,7 @@ class RemoteStop {
 
   /// Whether the answer carried the area columns *at all*.
   ///
-  /// False is what a server that has not had migration `0012` applied looks
+  /// False is what a server that has not had migration `0013` applied looks
   /// like: it does not know the field, which is a different thing from
   /// saying there is no area. Only the second may clear a person's
   /// correction, so the apply keeps what this phone holds when this is false.
