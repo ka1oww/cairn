@@ -536,6 +536,8 @@ class TripSync {
                     position: stop.position,
                     text: stop.stopText,
                     timeIso: stop.timeIso,
+                    area: stop.areaText,
+                    areaSource: stop.areaSource,
                   ),
             ],
           ),
@@ -575,8 +577,8 @@ class TripSync {
             text: stop.text,
             timeIso: stop.timeIso,
             kind: null,
-            areaText: null,
-            areaSource: null,
+            areaText: stop.area,
+            areaSource: stop.areaSource,
           ),
     ];
     final incomingAsides = [
@@ -649,7 +651,7 @@ class TripSync {
           (
             [stop.dayNumber, stop.position],
             '${stop.dayNumber}|${stop.position}|${stop.stopText}'
-                '|${stop.timeIso}',
+                '|${stop.timeIso}|${stop.areaText}|${stop.areaSource}',
           ),
       ]),
       '--',
@@ -676,7 +678,7 @@ class TripSync {
         for (final stop in incomingStops)
           (
             [stop.dayNumber, stop.position],
-            '${stop.dayNumber}|${stop.position}|${stop.text}|${stop.timeIso}',
+            '${stop.dayNumber}|${stop.position}|${stop.text}|${stop.timeIso}|${stop.areaText}|${stop.areaSource}',
           ),
       ]),
       '--',

@@ -255,13 +255,20 @@ class _DayNumber extends StatelessWidget {
 
 /// The confident read: the full card, chips in itinerary order, a star and
 /// time badge exactly where there is a time. Every part of it is touchable.
-class _FullDayCard extends StatelessWidget {
+class _FullDayCard extends ConsumerWidget {
   const _FullDayCard({required this.day});
 
   final ReviewDay day;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Group stops by area for rendering area rows (plan §6.3)
+    final groups = <String?, List<ReviewStop>>{};
+    final order = <String?>[];
+    for (final s in day.stops) {
+      if (!groups.containsKey(s.area)) { groups[s.area] = []; order.add(s.area); }
+      groups[s.area]!.add(s);
+    }
     return _DayDropZone(
       dayNumber: day.number,
       child: Card(
@@ -273,13 +280,74 @@ class _FullDayCard extends StatelessWidget {
             children: [
               _DayHeaderRow(day: day),
               const SizedBox(height: 8),
-              _DayChips(day: day),
+              for (final area in order) ...[
+                _AreaRow(day: day, area: area, stops: groups[area]!),
+                _ChipsFor(stops: groups[area]!, day: day),
+              ],
+              if (day.stops.isEmpty || (!groups.containsKey(null) && order.isNotEmpty))
+                // ghost add area where first run area-less
+                _AreaRow(day: day, area: null, stops: const []),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+class _AreaRow extends ConsumerWidget {
+  const _AreaRow({required this.day, required this.area, required this.stops});
+  final ReviewDay day;
+  final String? area;
+  final List<ReviewStop> stops;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    if (area == null) {
+      return InkWell(
+        key: Key('add-area-${day.number}'),
+        onTap: () async {
+          final text = await _askForText(context, title: 'Add an area', hint: 'Ginza', action: 'Add', fieldKey: const Key('add-area-input'), saveKey: const Key('add-area-save'));
+          if (text != null && text.trim().isNotEmpty) {
+            final first = stops.isNotEmpty ? stops.first.id : (day.stops.isNotEmpty ? day.stops.first.id : null);
+            if (first != null) ref.read(pasteFlowProvider.notifier).setAreaRun(first, text.trim());
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Text('＋ Add an area', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
+        ),
+      );
+    }
+    final isHuman = stops.isNotEmpty && stops.first.areaSource == AreaSourceInfo.human;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Text(area!, style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+          if (!isHuman) ...[
+            const SizedBox(width: 6),
+            Text('· suggested', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline)),
+          ],
+          const Spacer(),
+          InkWell(key: Key('edit-area-${day.number}-$area'), onTap: () async {
+            final text = await _askForText(context, title: 'Edit area', hint: 'Ginza', action: 'Save', initial: area!, fieldKey: const Key('edit-area-input'), saveKey: const Key('edit-area-save'));
+            if (text != null) ref.read(pasteFlowProvider.notifier).setAreaRun(stops.first.id, text.trim().isEmpty ? null : text.trim());
+          }, child: Icon(Icons.edit_outlined, size: 14, color: theme.colorScheme.primary)),
+          const SizedBox(width: 12),
+          InkWell(key: Key('clear-area-${day.number}-$area'), onTap: () => ref.read(pasteFlowProvider.notifier).setAreaRun(stops.first.id, null), child: Icon(Icons.close, size: 14, color: theme.colorScheme.outline)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChipsFor extends StatelessWidget {
+  const _ChipsFor({required this.stops, required this.day});
+  final List<ReviewStop> stops;
+  final ReviewDay day;
+  @override
+  Widget build(BuildContext context) => _DayChips(day: ReviewDay(number: day.number, title: day.title, stops: stops, confidence: day.confidence, dateLabel: day.dateLabel));
 }
 
 /// A clean day when other days need the eye: collapsed to one line, so

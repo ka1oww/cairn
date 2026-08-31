@@ -86,7 +86,12 @@ class TripRepository {
                 stops: [
                   for (final stop in stopRows)
                     if (stop.dayNumber == day.number)
-                      Stop(text: stop.stopText, time: _parseTime(stop.timeIso)),
+                      Stop(
+                        text: stop.stopText,
+                        time: _parseTime(stop.timeIso),
+                        area: stop.areaText,
+                        areaSource: _decodeAreaSource(stop.areaSource),
+                      ),
                 ],
               ),
           ],
@@ -106,6 +111,20 @@ class TripRepository {
   /// [at] is the instant a *changed* day is stamped with — the merge clock
   /// the shared copy is reconciled on. The store decides which days that is;
   /// this layer only supplies the reading of now, so a test can pin it.
+  Future<void> setStopAreas({
+    required int dayNumber,
+    required List<int> positions,
+    String? area,
+    AreaSource? areaSource,
+  }) =>
+      _db.setStopAreas(
+        dayNumber: dayNumber,
+        positions: positions,
+        area: area,
+        areaSource: _encodeAreaSource(areaSource),
+        nowUtcIso: DateTime.now().toUtc().toIso8601String(),
+      );
+
   Future<void> saveItinerary(ConfirmedItinerary itinerary, {DateTime? at}) {
     var asidePosition = 0;
     return _db.replaceItinerary(
@@ -123,8 +142,8 @@ class TripRepository {
               text: stop.text,
               timeIso: stop.time?.iso,
               kind: null,
-              areaText: null,
-              areaSource: null,
+              areaText: stop.area,
+              areaSource: _encodeAreaSource(stop.areaSource),
             ),
       ],
       setAsides: [
@@ -154,4 +173,18 @@ class TripRepository {
     final parts = iso.split(':');
     return ClockTime(int.parse(parts[0]), int.parse(parts[1]));
   }
+
+  static String? _encodeAreaSource(AreaSource? source) => switch (source) {
+    null => null,
+    AreaSource.travellerOwn => 'traveller-own',
+    AreaSource.human => 'human',
+    AreaSource.parser => 'parser',
+  };
+
+  static AreaSource? _decodeAreaSource(String? raw) => switch (raw) {
+    'traveller-own' => AreaSource.travellerOwn,
+    'human' => AreaSource.human,
+    'parser' => AreaSource.parser,
+    _ => null,
+  };
 }

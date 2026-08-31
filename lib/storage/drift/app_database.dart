@@ -71,8 +71,8 @@ class ItineraryStops extends Table {
   /// Area in force for this stop, or null = send nothing (rule 3).
   TextColumn get areaText => text().nullable()();
 
-  /// Provenance: travellerDeclared / travellerProximity / inlineLocality /
-  /// runningHeading / hotelPrefix / trainDestination / person.
+  /// Provenance: `traveller-own` | `human` | `parser`, or null when
+  /// [areaText] is null.
   TextColumn get areaSource => text().nullable()();
 }
 
@@ -80,8 +80,8 @@ class ItineraryStops extends Table {
 class AppPreferences extends Table {
   IntColumn get id => integer()();
 
-  /// google | apple | waze
-  TextColumn get mapsApp => text().withDefault(const Constant('google'))();
+  /// `googleMaps` | `appleMaps` | `waze`.
+  TextColumn get mapsApp => text().withDefault(const Constant('googleMaps'))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -436,6 +436,8 @@ class AppDatabase extends _$AppDatabase {
         // included, so this branch is finished — falling through would
         // try to create it twice.
         await m.createAll();
+        photosBornCurrent = true;
+        syncStatesBornCurrent = true;
         return;
       }
       if (from < 3) {
@@ -620,7 +622,13 @@ class AppDatabase extends _$AppDatabase {
             stops: [
               for (final stop in storedStops)
                 if (stop.dayNumber == day.number)
-                  (stop.position, stop.stopText, stop.timeIso),
+                  (
+                    stop.position,
+                    stop.stopText,
+                    stop.timeIso,
+                    stop.areaText,
+                    stop.areaSource,
+                  ),
             ],
           ),
       };
@@ -633,7 +641,7 @@ class AppDatabase extends _$AppDatabase {
           stops: [
             for (final stop in stops)
               if (stop.dayNumber == day.number)
-                (stop.position, stop.text, stop.timeIso),
+                (stop.position, stop.text, stop.timeIso, stop.areaText, stop.areaSource),
           ],
         );
         final unchanged = storedSignatures[day.number] == signature;
@@ -765,23 +773,14 @@ class AppDatabase extends _$AppDatabase {
   static String _daySignature({
     required String? dateIso,
     required String? place,
-    required List<(int, String, String?)> stops,
-    List<(int, String?, String?, String?)>? areaStops,
+    required List<(int, String, String?, String?, String?)> stops,
   }) {
     final ordered = [...stops]..sort((a, b) => a.$1.compareTo(b.$1));
-    // When areaStops provided (v9), they are the same positions with kind/area/source
-    Map<int, (String?, String?, String?)>? areaMap;
-    if (areaStops != null) {
-      areaMap = {for (final (pos, k, a, s) in areaStops) pos: (k, a, s)};
-    }
     return [
       dateIso ?? '',
       place ?? '',
-      for (final (position, text, timeIso) in ordered)
-        if (areaMap == null)
-          '$position\u0000$text\u0000${timeIso ?? ''}'
-        else
-          '$position\u0000$text\u0000${timeIso ?? ''}\u0000${areaMap[position]?.$1 ?? ''}\u0000${areaMap[position]?.$2 ?? ''}\u0000${areaMap[position]?.$3 ?? ''}',
+      for (final (position, text, timeIso, areaText, areaSource) in ordered)
+        '$position\u0000$text\u0000${timeIso ?? ''}\u0000${areaText ?? ''}\u0000${areaSource ?? ''}',
     ].join('\u0001');
   }
 
@@ -1243,6 +1242,46 @@ class AppDatabase extends _$AppDatabase {
   /// Forgets the pending import: accepted, emptied, or gone with its trip.
   Future<void> clearPlanDraft() =>
       (delete(planDrafts)..where((t) => t.id.equals(_theOneDraft))).go();
+
+  // ---------------------------------------------------------- device prefs
+
+  Future<String?> readMapsApp() async {
+    final row = await (select(
+      appPreferences,
+    )..where((t) => t.id.equals(_theOneTrip))).getSingleOrNull();
+    return row?.mapsApp;
+  }
+
+  Future<void> writeMapsApp(String? app) async {
+    await into(appPreferences).insertOnConflictUpdate(
+      AppPreferencesCompanion.insert(id: const Value(_theOneTrip), mapsApp: Value(app)),
+    );
+  }
+
+  Future<void> setStopAreas({
+    required int dayNumber,
+    required List<int> positions,
+    String? area,
+    String? areaSource,
+    required String nowUtcIso,
+  }) {
+    return transaction(() async {
+      for (final pos in positions) {
+        await (update(itineraryStops)
+              ..where((t) => t.dayNumber.equals(dayNumber) & t.position.equals(pos)))
+            .write(ItineraryStopsCompanion(areaText: Value(area), areaSource: Value(areaSource)));
+      }
+      // stamp day clock if any change
+      final day = await (select(itineraryDays)..where((t) => t.number.equals(dayNumber))).getSingleOrNull();
+      if (day != null) {
+        await (update(itineraryDays)..where((t) => t.number.equals(dayNumber)))
+            .write(ItineraryDaysCompanion(revisedAtUtcIso: Value(nowUtcIso)));
+      }
+      final sync = await _syncStateRow();
+      // shape unchanged — don't move plan clock
+      await _writeSyncState(SyncStatesCompanion(planRevisedAtUtcIso: Value(sync.planRevisedAtUtcIso)));
+    });
+  }
 
   /// Deletes the whole trip from this phone: the plan, the pool's rows, the
   /// roster, the codes and the trip itself.

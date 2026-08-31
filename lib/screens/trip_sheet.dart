@@ -29,9 +29,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app_state/device_prefs.dart';
 import '../app_state/paste_flow.dart';
 import '../app_state/trip_providers.dart';
 import '../app_state/trip_settings.dart';
+import '../logic/maps_handoff.dart';
 
 /// Slides the trip's sheet over whatever is behind it.
 Future<void> showTripSheet(BuildContext context) => showModalBottomSheet<void>(
@@ -224,6 +226,8 @@ class _Sheet extends ConsumerWidget {
                 },
               ),
             ],
+            const Divider(height: 32),
+            _MapsAppEntry(),
 
             const SizedBox(height: 20),
             Text(
@@ -423,5 +427,45 @@ class _Code extends ConsumerWidget {
           ),
       ],
     );
+  }
+}
+
+class _MapsAppEntry extends ConsumerWidget {
+  const _MapsAppEntry();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pref = ref.watch(mapsAppPrefProvider).value ?? MapsApp.googleMaps;
+    final label = switch (pref) { MapsApp.googleMaps => 'Google Maps', MapsApp.appleMaps => 'Apple Maps', MapsApp.waze => 'Waze' };
+    return ListTile(
+      key: const Key('maps-app-entry'),
+      leading: const Icon(Icons.map_outlined),
+      title: const Text('Open places in'),
+      trailing: Text('$label ›', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      onTap: () => _showMapsAppSheet(context, ref, pref),
+    );
+  }
+}
+
+Future<void> _showMapsAppSheet(BuildContext context, WidgetRef ref, MapsApp current) async {
+  final theme = Theme.of(context);
+  final choice = await showModalBottomSheet<MapsApp>(
+    context: context,
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(padding: const EdgeInsets.fromLTRB(20, 14, 20, 4), child: Text('Open places in', style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'serif'))),
+          Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 8), child: Text('Every tap composes a search for the app you pick.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant))),
+          RadioListTile<MapsApp>(title: const Text('Google Maps'), value: MapsApp.googleMaps, groupValue: current, onChanged: (v) => Navigator.of(ctx).pop(v)),
+          RadioListTile<MapsApp>(title: const Text('Apple Maps'), value: MapsApp.appleMaps, groupValue: current, onChanged: (v) => Navigator.of(ctx).pop(v)),
+          RadioListTile<MapsApp>(title: const Text('Waze'), value: MapsApp.waze, groupValue: current, onChanged: (v) => Navigator.of(ctx).pop(v)),
+          const SizedBox(height: 12),
+        ],
+      ),
+    ),
+  );
+  if (choice != null) {
+    await ref.read(devicePrefsRepositoryProvider).writeMapsApp(mapsAppToString(choice));
   }
 }

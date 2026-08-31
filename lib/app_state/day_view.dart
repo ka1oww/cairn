@@ -20,6 +20,9 @@
 // The list is the plan, in order, as pasted.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:cairn_model/cairn_model.dart' show AreaSource;
+
+import '../logic/maps_handoff.dart';
 import 'date_labels.dart';
 import 'trip_lifecycle.dart';
 import 'trip_providers.dart';
@@ -48,7 +51,26 @@ class DayStop {
   /// `16:40`, or null when the stop is not starred.
   final String? timeLabel;
 
-  const DayStop({required this.position, required this.text, this.timeLabel});
+  final StopLineKind kind;
+  final String? mealLabel;
+  final String? area;
+  final AreaSource? areaSource;
+  final List<String> places;
+  final String? areaHeadingBefore;
+  final List<String> adjacentAreas;
+
+  const DayStop({
+    required this.position,
+    required this.text,
+    this.timeLabel,
+    this.kind = StopLineKind.place,
+    this.mealLabel,
+    this.area,
+    this.areaSource,
+    this.places = const [],
+    this.areaHeadingBefore,
+    this.adjacentAreas = const [],
+  });
 
   bool get isStarred => timeLabel != null;
 }
@@ -303,6 +325,36 @@ DayView? dayViewForPlanDay(TripPlan? plan, int number, DateTime today) {
 
 PlannedDay _planned(TripPlan plan, PlanDay day, {required bool isOver}) {
   final date = day.date;
+  // Precompute headings and adjacent areas
+  final stopCount = day.stops.length;
+  final headings = List<String?>.filled(stopCount, null);
+  String? prevArea;
+  for (var i = 0; i < stopCount; i++) {
+    final a = day.stops[i].area;
+    if (a != null && a != prevArea) {
+      headings[i] = a;
+    }
+    prevArea = a;
+  }
+  // adjacent areas per stop (nearest preceding and following non-null)
+  List<List<String>> adjacents = List.generate(stopCount, (_) => []);
+  // collect all distinct areas in day order for speed
+  for (var i = 0; i < stopCount; i++) {
+    if (day.stops[i].area != null) continue; // only for area-less stops
+    String? prev;
+    for (var j = i - 1; j >= 0; j--) {
+      if (day.stops[j].area != null) { prev = day.stops[j].area; break; }
+    }
+    String? next;
+    for (var j = i + 1; j < stopCount; j++) {
+      if (day.stops[j].area != null) { next = day.stops[j].area; break; }
+    }
+    final list = <String>[];
+    if (prev != null) list.add(prev);
+    if (next != null && next != prev) list.add(next);
+    adjacents[i] = list;
+  }
+
   return PlannedDay(
     number: day.number,
     dayCount: plan.days.length,
@@ -314,12 +366,52 @@ PlannedDay _planned(TripPlan plan, PlanDay day, {required bool isOver}) {
     dateLabel: date == null ? null : dayMonthLabel(date),
     stops: [
       for (final (index, stop) in day.stops.indexed)
-        DayStop(
-          position: index + 1,
-          text: stop.text,
-          timeLabel: stop.timeLabel,
-        ),
+        (() {
+          final c = classifyStopLine(stop.text);
+          return DayStop(
+            position: index + 1,
+            text: stop.text,
+            timeLabel: stop.timeLabel,
+            kind: c.kind,
+            mealLabel: c.mealLabel,
+            area: stop.area,
+            areaSource: stop.areaSource,
+            places: c.places,
+            areaHeadingBefore: headings[index],
+            adjacentAreas: adjacents[index],
+          );
+        })(),
     ],
     isOver: isOver,
   );
+}
+
+final dayActionsProvider = Provider<DayActions>(DayActions.new);
+
+class DayActions {
+  DayActions(this._ref);
+  final Ref _ref;
+
+  Future<void> setStopArea({required int dayNumber, required int position, String? area}) async {
+    final repo = _ref.read(tripRepositoryProvider);
+    await repo.setStopAreas(dayNumber: dayNumber, positions: [position - 1], area: area, areaSource: area == null ? null : AreaSource.human);
+  }
+
+  Future<void> setAreaRun({required int dayNumber, required String currentArea, String? newArea}) async {
+    final plan = _ref.read(savedItineraryProvider).value;
+    if (plan == null) return;
+    final day = plan.days.where((d) => d.number == dayNumber).firstOrNull;
+    if (day == null) return;
+    final positions = <int>[];
+    for (var i = 0; i < day.stops.length; i++) {
+      if (day.stops[i].area == currentArea) positions.add(i);
+    }
+    if (positions.isEmpty) return;
+    final repo = _ref.read(tripRepositoryProvider);
+    await repo.setStopAreas(dayNumber: dayNumber, positions: positions, area: newArea, areaSource: newArea == null ? null : AreaSource.human);
+  }
+}
+
+extension _FirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
 }

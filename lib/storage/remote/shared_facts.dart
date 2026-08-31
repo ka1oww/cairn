@@ -202,8 +202,10 @@ class RemoteStop {
   /// this is present — the rule lives in `cairn_model.Stop.isStarred` and is
   /// never a column, here or in Postgres.
   final String? timeIso;
+  final String? area;
+  final String? areaSource;
 
-  const RemoteStop({required this.position, required this.text, this.timeIso});
+  const RemoteStop({required this.position, required this.text, this.timeIso, this.area, this.areaSource});
 }
 
 /// A line the parser could not place, or one somebody took out of a day.

@@ -318,6 +318,37 @@ RepasteMergeResult mergeRepaste({
     );
   }
 
+  // Carry human areas: plan-wide normalize match keeps human area
+  final humanByNorm = <String, Stop>{};
+  for (final d in current) {
+    for (final s in d.stops) {
+      if (s.areaSource == AreaSource.human && s.area != null) {
+        humanByNorm[_normalize(s.text)] = s;
+      }
+    }
+  }
+  if (humanByNorm.isNotEmpty) {
+    for (final md in days) {
+      for (var i = 0; i < md.day.stops.length; i++) {
+        final s = md.day.stops[i];
+        // travellerOwn outranks human: if s already has travellerOwn, skip
+        if (s.areaSource == AreaSource.travellerOwn) continue;
+        final h = humanByNorm[_normalize(s.text)];
+        if (h != null) {
+          // overlay human area onto this stop (replace)
+          final newStops = List<Stop>.from(md.day.stops);
+          newStops[i] = Stop(text: s.text, time: s.time, area: h.area, areaSource: h.areaSource);
+          // need to reflect in md.day — create new ConfirmedDay
+          // Since md.day is immutable, rebuild (only for this display; actual storage will be via paste_flow which merges?)
+          // For now patch the list element via replacement of ConfirmedDay? Simpler: mutate via hack — create new MergedDay wrapping new ConfirmedDay.
+          // We'll replace days entry in place.
+          final idx = days.indexOf(md);
+          days[idx] = MergedDay(day: ConfirmedDay(number: md.day.number, date: md.day.date, place: md.day.place, stops: List.unmodifiable(newStops)), origin: md.origin, unchanged: false, dateCandidate: md.dateCandidate, confidence: md.confidence, uncertainty: md.uncertainty, headerWeekday: md.headerWeekday);
+        }
+      }
+    }
+  }
+
   return RepasteMergeResult(days: days, setAside: setAside);
 }
 

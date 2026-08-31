@@ -30,6 +30,7 @@ import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 import '../logic/plan_text.dart';
 import '../logic/repaste_merge.dart' as merge;
 import '../repositories/trip_repository.dart';
+import 'area_extractor.dart';
 import 'date_labels.dart';
 import 'day_view.dart';
 import 'ping_schedule.dart';
@@ -90,11 +91,15 @@ class ReviewStop {
   final String id;
   final String text;
   final String? timeLabel;
+  final String? area;
+  final AreaSourceInfo? areaSource;
 
-  const ReviewStop({required this.id, required this.text, this.timeLabel});
+  const ReviewStop({required this.id, required this.text, this.timeLabel, this.area, this.areaSource});
 
   bool get isStarred => timeLabel != null;
 }
+
+enum AreaSourceInfo { travellerOwn, human, parser }
 
 /// A date this day's own title named, worked up into everything the date
 /// sheet draws — `"Tokyo, 14 June" · 14 June · Sunday · day 1`.
@@ -396,11 +401,15 @@ class _DraftStop {
     required this.text,
     this.time,
     required this.sourceLineNumber,
+    this.area,
+    this.areaSource,
   });
 
   final String id;
   String text;
   model.ClockTime? time;
+  String? area;
+  AreaSourceInfo? areaSource;
 
   /// Where this came from in the paste, or 0 for a stop the person typed.
   /// Carried so a stop set aside again lands back in the kept list with the
@@ -677,6 +686,30 @@ class PasteFlow extends Notifier<PasteFlowState> {
     _rebuildReview();
   }
 
+  void setAreaRun(String firstStopId, String? area) {
+    final found = _findStop(firstStopId);
+    if (found == null) return;
+    final day = found.day;
+    final idx = day.stops.indexWhere((s) => s.id == firstStopId);
+    if (idx < 0) return;
+    // run = consecutive stops sharing same area value as first
+    final cur = day.stops[idx].area;
+    for (var i = idx; i < day.stops.length; i++) {
+      if (day.stops[i].area != cur) break;
+      day.stops[i].area = area;
+      day.stops[i].areaSource = area == null ? null : AreaSourceInfo.human;
+    }
+    _rebuildReview();
+  }
+
+  void setStopArea(String stopId, String? area) {
+    final found = _findStop(stopId);
+    if (found == null) return;
+    found.stop.area = area;
+    found.stop.areaSource = area == null ? null : AreaSourceInfo.human;
+    _rebuildReview();
+  }
+
   // -- editing a stop ------------------------------------------------------
 
   void addStop(int dayNumber, String text) {
@@ -822,6 +855,12 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   text: stop.text,
                   time: _timeOf(stop.timeLabel),
                   sourceLineNumber: 0,
+                  area: stop.area,
+                  areaSource: stop.areaSource == null ? null : switch (stop.areaSource!) {
+                    model.AreaSource.travellerOwn => AreaSourceInfo.travellerOwn,
+                    model.AreaSource.human => AreaSourceInfo.human,
+                    model.AreaSource.parser => AreaSourceInfo.parser,
+                  },
                 ),
             ],
           ),
@@ -990,7 +1029,16 @@ class PasteFlow extends Notifier<PasteFlowState> {
             place: day.place,
             stops: [
               for (final stop in day.stops)
-                model.Stop(text: stop.text, time: stop.time),
+                model.Stop(
+                  text: stop.text,
+                  time: stop.time,
+                  area: stop.area,
+                  areaSource: stop.areaSource == null ? null : switch (stop.areaSource!) {
+                    AreaSourceInfo.travellerOwn => model.AreaSource.travellerOwn,
+                    AreaSourceInfo.human => model.AreaSource.human,
+                    AreaSourceInfo.parser => model.AreaSource.parser,
+                  },
+                ),
             ],
           ),
       ],
@@ -1211,10 +1259,11 @@ class PasteFlow extends Notifier<PasteFlowState> {
 
   void _reparse() {
     final result = _parseText();
+    final areas = assignRunningAreas(result);
     _nextId = 0;
     _draft = _Draft(
       days: [
-        for (final day in result.days)
+        for (final (di, day) in result.days.indexed)
           _DraftDay(
             number: day.index,
             place: day.place,
@@ -1224,7 +1273,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
             uncertainty: day.uncertainty,
             headerWeekday: day.headerWeekday,
             stops: [
-              for (final stop in day.stops)
+              for (final (si, stop) in day.stops.indexed)
                 _DraftStop(
                   id: _mintId('stop'),
                   text: stop.text,
@@ -1233,6 +1282,10 @@ class PasteFlow extends Notifier<PasteFlowState> {
                     final t => model.ClockTime(t.hour, t.minute),
                   },
                   sourceLineNumber: stop.sourceLine.lineNumber,
+                  area: areas.length > di && areas[di].length > si ? areas[di][si].area : null,
+                  areaSource: areas.length > di && areas[di].length > si && areas[di][si].area != null
+                      ? (areas[di][si].travellerOwn ? AreaSourceInfo.travellerOwn : AreaSourceInfo.parser)
+                      : null,
                 ),
             ],
           ),

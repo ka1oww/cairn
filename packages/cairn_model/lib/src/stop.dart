@@ -13,6 +13,18 @@ import 'clock_time.dart';
 /// the verbatim `SourceLine` each stop came from, and the `Confidence` it
 /// assigns — is evidence about the *parse*, and stays in the parser with the
 /// confirmation screen that reads it.
+/// Where [Stop.area] came from.
+enum AreaSource {
+  /// The person's own `(near Akihabara)` on the pasted line itself.
+  travellerOwn,
+
+  /// Confirmed, corrected, added or cleared by a person in the app.
+  human,
+
+  /// Assigned by the running-area extractor, unreviewed.
+  parser,
+}
+
 final class Stop {
   /// The stop line as written, with any bullet marker stripped but nothing
   /// else rewritten. `itinerary_parser` never normalises this and neither
@@ -22,9 +34,30 @@ final class Stop {
   /// The clock time on the stop's line, if it had one.
   final ClockTime? time;
 
-  Stop({required this.text, this.time}) {
+  /// The area in force for this stop — what a Maps search appends.
+  /// Null means "send the stop's own words alone".
+  final String? area;
+
+  /// Where [area] came from. Null exactly when [area] is null.
+  final AreaSource? areaSource;
+
+  Stop({required this.text, this.time, this.area, this.areaSource}) {
     if (text.trim().isEmpty) {
       throw ArgumentError.value(text, 'text', 'a stop must have text');
+    }
+    if (area == null && areaSource != null) {
+      throw ArgumentError.value(
+        areaSource,
+        'areaSource',
+        'areaSource must be null when area is null',
+      );
+    }
+    if (area != null && areaSource == null) {
+      throw ArgumentError.value(
+        area,
+        'area',
+        'areaSource must be present when area is present',
+      );
     }
   }
 
@@ -40,11 +73,17 @@ final class Stop {
 
   @override
   bool operator ==(Object other) =>
-      other is Stop && other.text == text && other.time == time;
+      other is Stop &&
+      other.text == text &&
+      other.time == time &&
+      other.area == area &&
+      other.areaSource == areaSource;
 
   @override
-  int get hashCode => Object.hash(text, time);
+  int get hashCode => Object.hash(text, time, area, areaSource);
 
   @override
-  String toString() => 'Stop(${time == null ? '' : '${time!.iso} '}$text)';
+  String toString() =>
+      'Stop(${time == null ? '' : '${time!.iso} '}$text'
+      '${area == null ? '' : ' [$area:${areaSource?.name}]'})';
 }

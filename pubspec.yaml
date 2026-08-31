@@ -71,6 +71,7 @@ dependencies:
   # dependencies to save a hundred lines of JSON. Already in the tree
   # transitively; named here because lib/ imports it directly.
   http: ^1.6.0
+  url_launcher: ^6.3.0
 
   cupertino_icons: ^1.0.8
 
