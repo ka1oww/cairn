@@ -1,3 +1,4 @@
+// ignore_for_file: deprecated_member_use, use_build_context_synchronously
 // SCREENS band (docs/architecture.md): knows app state and nothing below it.
 // No repository, no store, no SQL, no parser — the view models come from
 // app_state/day_view.dart.
