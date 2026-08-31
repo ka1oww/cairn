@@ -80,8 +80,8 @@ class ItineraryStops extends Table {
 class AppPreferences extends Table {
   IntColumn get id => integer()();
 
-  /// `googleMaps` | `appleMaps` | `waze`.
-  TextColumn get mapsApp => text().withDefault(const Constant('googleMaps'))();
+  /// `googleMaps` | `appleMaps` | `waze`, or null for the default.
+  TextColumn get mapsApp => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

@@ -28,7 +28,7 @@ void main() {
     await db.setStopAreas(dayNumber: 1, positions: [0], area: 'Yanaka', areaSource: 'human', nowUtcIso: DateTime.utc(2027, 6, 14, 10).toIso8601String());
 
     final rows = await db.readItineraryStops();
-    expect(rows.single.area, 'Yanaka');
+    expect(rows.single.areaText, 'Yanaka');
     expect(rows.single.areaSource, 'human');
 
     // Verify via repository read-back
@@ -61,7 +61,7 @@ void main() {
     final after = (await db.readItineraryDays()).single.revisedAtUtcIso;
     expect(after, isNot(equals(before)));
     final rows = await db.readItineraryStops();
-    expect(rows.every((r) => r.area == 'Ueno'), isTrue);
+    expect(rows.every((r) => r.areaText == 'Ueno'), isTrue);
   });
 
   test('clearing area writes nulls', () async {
@@ -73,11 +73,11 @@ void main() {
     ));
     await db.setStopAreas(dayNumber: 1, positions: [0], area: null, areaSource: null, nowUtcIso: DateTime.now().toUtc().toIso8601String());
     final rows = await db.readItineraryStops();
-    expect(rows.single.area, isNull);
+    expect(rows.single.areaText, isNull);
     expect(rows.single.areaSource, isNull);
   });
 
-  test('DevicePrefs maps app round-trip', () async {
+  test('AppPreferences maps app round-trip', () async {
     expect(await db.readMapsApp(), isNull);
     await db.writeMapsApp('waze');
     expect(await db.readMapsApp(), 'waze');
