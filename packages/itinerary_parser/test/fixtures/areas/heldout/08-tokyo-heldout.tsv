@@ -1,0 +1,35 @@
+# Held-out 08: Tokyo - captain-supplied held-out plan (sourced online), not in corpus. 25 rows.
+# Ground truth: 08-tokyo-heldout.txt (5-day Tokyo plan PDF, pdftotext raw; hand-written 2026-08-31)
+# line<TAB>accepted areas (pipe-separated, lowercase; NONE = sending no area is fully correct)<TAB>note
+# Rows are PLACE stops only (lines a traveller would tap expecting a Maps result).
+# Labels were written BEFORE the parser was run on this document (held-out protocol).
+# Area principle (the held-out labelling convention): document-faithful, judged as a reasonable
+# Tokyo local; harm criterion is whether the composed Maps query would mislead.
+# Excluded lines: 1/6/15/25/28 are DAY headers; 27 is the traveller's own question, not a tappable stop; 32 is blank.
+# 'tokyo' is accepted on Tokyo-proper rows whose venue name is distinctive (no chain stops exist in this doc);
+# it is NOT accepted for DisneySea (Urayasu, Chiba) or Narita (Chiba).
+2	hamamatsucho|NONE	arrival leg; destination is the hotel and its own text says Hamamatsucho; Narita T2 is the origin, not the stop's area
+3	hamamatsucho|shiba|shibakoen|daimon|minato|tokyo|NONE	Zojo-ji: unique famous temple by Tokyo Tower, short walk from the hotel
+4	atago|toranomon|kamiyacho|minato|tokyo|NONE	Atago Jinja: Atago shrines also exist in Kyoto/Fukuoka/Sendai, but Tokyo's is the prominent one and in-trip proximity resolves the bare name; borderline NONE
+5	shinbashi|shimbashi|tokyo|NONE	the stop IS an area; document spells Shinbashi (std romanization Shimbashi)
+7	tsukiji|tokyo|NONE	destination Tsukiji Outer Market; name carries its area
+8	asakusa|taito|tokyo|NONE	Senso-ji unique
+9	asakusa|taito|tokyo|NONE	Nakamise Shopping Street: the famous one leads to Senso-ji
+10	asakusa|sumida|tokyo|NONE	Sumida River Walk: the named footbridge Asakusa-Mizumachi
+11	ueno|taito|tokyo|NONE	Ueno Park unique
+12	ueno|okachimachi|taito|tokyo|NONE	Ameyoko = Ameya-Yokocho market, Ueno
+13	toyosu|koto|tokyo|NONE	teamLab Planets is in Toyosu (the sibling Borderless is Azabudai; the name distinguishes)
+14	odaiba|daiba|tokyo|NONE	the stop IS an area; chatty parenthetical rides the line
+16	harajuku|yoyogi|shibuya|tokyo|NONE	Meiji Jingu unique; Yoyogi/Harajuku, Shibuya ward
+17	harajuku|tokyo|NONE	Harajuku + Takeshita: both words name the same area
+18	shibuya|tokyo|NONE	the stop IS an area
+19	shibuya|tokyo|NONE	name carries area
+20	shibuya|tokyo|NONE	Shibuya Sky unique; name carries area
+21	setagaya|gotokuji|tokyo|NONE	Gotoku-ji (lucky-cat temple) is in SETAGAYA; the parenthetical "depending on time at Shibuya" names a DIFFERENT area - shibuya assigned here is wrong (the doc's one trap row)
+22	shinjuku|tokyo|NONE	the stop IS an area ('City' is a generic word)
+23	kabukicho|shinjuku|tokyo|NONE	Kabukicho IS an area, inside Shinjuku
+24	shinjuku|nishi-shinjuku|tokyo|NONE	Omoide Yokocho unique, Shinjuku station west exit
+26	maihama|urayasu|chiba|NONE	Tokyo DisneySea is in Urayasu, Chiba; unique name; 'tokyo' not accepted as an area despite the name
+29	chiyoda|tokyo|NONE	Imperial Palace: Kyoto Imperial Palace ambiguity exists, but in-trip Tokyo proximity resolves; tokyo is the canonical disambiguator
+30	ginza|tokyo|NONE	name carries area
+31	narita|chiba|NONE	departure leg; the stop is Narita T2, unambiguous; hamamatsucho (the origin hotel) not accepted
