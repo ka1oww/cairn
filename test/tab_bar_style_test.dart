@@ -115,8 +115,10 @@ void main() {
     await tester.tap(find.byKey(const Key('tab-pool')));
     await tester.pumpAndSettle();
 
-    expect((tabContainer(tester, 'pool').decoration as BoxDecoration?)?.color,
-        houseWash);
+    expect(
+      (tabContainer(tester, 'pool').decoration as BoxDecoration?)?.color,
+      houseWash,
+    );
     expect(find.byKey(const Key('tab-pool-dot')), findsOneWidget);
     expect(tabContainer(tester, 'today').decoration, isNull);
     expect(find.byKey(const Key('tab-today-dot')), findsNothing);
@@ -124,8 +126,9 @@ void main() {
     expect(tabLabel(tester, 'Today').style?.color, houseMuted);
   });
 
-  testWidgets('labels are set in the house text face at 5b\'s size',
-      (tester) async {
+  testWidgets('labels are set in the house text face at 5b\'s size', (
+    tester,
+  ) async {
     await arrive(tester);
 
     for (final label in ['Today', 'Trail', 'Pool']) {
