@@ -19,9 +19,9 @@ them server-side would need its own decision.
 `0012` and `0014`, are applied to it**
 (`https://nswcgzhynclrrunekskh.supabase.co`, region `ap-southeast-1`; `0012`,
 the tap-to-Maps area columns, was applied on 31 August 2026, and `0014`, flat
-member renames, on 1 September — but see the caveat under
-[Verification](#verification-what-was-actually-run): `0014` gained its
-closed-trip guard *after* that apply and has to be re-run). `0011`, the photo
+member renames, on 1 September — first as written, then re-applied the same day
+once review added the closed-trip refusal, so the hosted function bodies match
+this repo). `0011`, the photo
 transport delta, and
 `0013`, which teaches `sync_trip_itinerary` those columns, exist only here and
 in the local probe. The app
@@ -937,14 +937,23 @@ not an artefact of one machine's setup.
 
 **What the hosted project has actually done** (2026-08-26; migration state
 current to 2026-09-01). Migrations `0001` through `0010`, `0012` and `0014`
-are applied to it — but the copy of `0014` that ran there predates its
-closed-trip refusal, its allowlist guard and the starter half of that refusal,
-so **`0014` must be applied again before the hosted project matches this
-repo**. It is written to be re-run: every statement in it is
-`create or replace`, `drop … if exists` or `add column if not exists`, and
-`sync_trip_name` keeps its signature, so a second run replaces the function in
-place rather than leaving two. Until then anybody on a hosted trip can rename
-it after it has closed, and the phone is the only thing refusing.
+are applied to it. `0014` ran twice: once as first written, and again on
+1 September once review added the closed-trip refusal, the allowlist guard and
+the starter half of that refusal. The second run was the *function, trigger and
+policy* half of the migration only — extracted from
+`create or replace function public.guard_member_trip_rename()` to the end of
+the file, so the `alter table` and the `name_revised_at` backfill did not
+re-run — executed over an explicit percent-encoded pooler `--db-url` in a
+scratch directory, never `supabase link`. Read back afterwards:
+`guard_member_trip_rename` now asks `trip_closes_at` *before* its
+`is_trip_starter` early return and compares `to_jsonb(new)` against
+`to_jsonb(old)`; `sync_trip_name` asks it too and is still a single overload;
+`trips` still carries exactly five policies with `trips_update_starter` and
+`trips_delete_starter` unchanged at `created_by = auth.uid()`; and
+`trip_members` still has no `role` column. Every application-table count was
+identical before and after (0 trips, 0 members, 0 photos, 0 invites, 0
+itinerary rows, 24 profiles, 24 `auth.users`) — the patch carried no
+`insert`, `update` or `delete` against any table.
 **Neither `0011` nor `0013` is applied** — the photo transport
 delta, and the
 `sync_trip_itinerary` recreation that carries the area columns over the wire,

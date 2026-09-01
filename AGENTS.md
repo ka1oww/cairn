@@ -639,9 +639,9 @@ Sharp edges worth knowing before touching this directory again:
   terms of membership. Read that comment before reordering anything.
 - **A hosted project exists and migrations `0001`-`0010`, `0012` and `0014`
   are applied to it** (`0012`, the tap-to-Maps area columns, on 2026-08-31;
-  `0014`, the flat member rename, on 2026-09-01 — but the copy that ran there
-  predates `0014`'s closed-trip refusal and allowlist guard, so it has to be
-  applied again, which it is written to survive;
+  `0014`, the flat member rename, on 2026-09-01, re-applied the same day —
+  function, trigger and policy half only — once review added its closed-trip
+  refusal and allowlist guard, so the hosted bodies match the repo;
   `0011`, the photo transport delta, and `0013`, which teaches
   `sync_trip_itinerary` those columns, are written and locally probed but
   applied nowhere else — until `0013` runs, an area correction is stripped on
