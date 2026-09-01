@@ -999,6 +999,28 @@ and the one anonymous account unambiguously linked to it (including its
 profile and auth session children). Six other anonymous accounts created on
 27 August had no link to that trip and were deliberately left untouched.
 
+**That removal was read back independently on 1 September**, over the same kind
+of explicit percent-encoded pooler `--db-url` in a scratch directory (never
+`supabase link`), in a session pinned `default_transaction_read_only = on` so
+nothing but `select` could run. Aggregate counts only, and every one of them as
+claimed above: the target trip holds **zero** rows in `trips`,
+`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`,
+`trip_itinerary_set_asides`, `trip_members`, `trip_invites`, `photos`,
+`day_unlocks` and `day_pages`; the one deleted anonymous account is gone from
+`auth.users`, `public.profiles`, `auth.sessions` and `auth.identities` alike,
+and is named by no `trip_members` row and no `trips.created_by`; the other
+**six** anonymous accounts created on 27 August 2026 are still there with their
+**six** profiles and **zero** trip links; and the project as a whole holds 24
+`auth.users`, 24 profiles and no trip, member, invite, itinerary or photo rows
+at all. The same read-back confirms the migration state — `0001`-`0010`, `0012`
+and `0014` recorded, **`0011` and `0013` absent** — and, more usefully than the
+prose above, that the hosted `guard_member_trip_rename` and `sync_trip_name`
+bodies are **identical to this repo's `0014`** once whitespace is normalised
+(same length, same md5), with the guard's `trip_closes_at` check sitting before
+its `is_trip_starter` early return, `trips` carrying exactly five policies with
+`trips_update_starter` and `trips_delete_starter` still at
+`created_by = auth.uid()`, and `trip_members` still having no `role` column.
+
 **What it still does not prove.** The environment in `tests/supabase_env.sql`
 is a reconstruction of the parts a migration sees, not a Supabase clone; it is
 still what the adversarial checks above run against, because a single anonymous
