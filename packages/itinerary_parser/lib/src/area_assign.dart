@@ -141,10 +141,10 @@ Map<int, AreaAssignment> anchorAssign(
           final d = m.group(1)!;
           final dws = areaTokens(d);
           final isAnchorArea = dws.every((w) => vocab.contains(w));
-          final isGazetteerArea = hasGaz() &&
-              gazContains(
-                  dws.where((w) => !genericStopWords.contains(w)).join(' '));
-          if (dws.isNotEmpty && (isAnchorArea || isGazetteerArea)) {
+          final isGazetteerArea =
+              hasGaz() && _destinationInGazetteer(dws, gazContains);
+          if (dws.isNotEmpty &&
+              ((isTrainRoute && isAnchorArea) || isGazetteerArea)) {
             dests.add(d);
           }
         }
@@ -234,6 +234,27 @@ Map<int, AreaAssignment> anchorAssign(
     }
   }
   return out;
+}
+
+bool _destinationInGazetteer(
+  List<String> dws,
+  bool Function(String normalizedName) contains,
+) {
+  final filtered = [
+    for (final w in dws)
+      if (!genericStopWords.contains(w)) w
+  ];
+  if (filtered.isEmpty) return false;
+  final candidates = <String>{filtered.join(' ')};
+  if (filtered.length >= 2) {
+    final last = filtered.last;
+    final withoutLast = filtered.sublist(0, filtered.length - 1);
+    if (withoutLast.join() == last) {
+      candidates.add(withoutLast.join(' '));
+      candidates.add(last);
+    }
+  }
+  return candidates.any(contains);
 }
 
 String? _gazetteerAreaInStop(

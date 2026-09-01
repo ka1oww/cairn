@@ -32,4 +32,38 @@ void main() {
     expect(result.days.single.stops[2].area?.text, 'NERIMA');
     expect(result.days.single.stops[2].area?.source, AreaSource.runningHeading);
   });
+
+  test(
+      'a vocab-only destination on a route continuation does not set the '
+      'running area', () {
+    const plan = 'Trip to Shibuya\nDay 1 - Shibuya\n'
+        'Route: TOKYO STN -> UENO STN\n'
+        '- 10:00 ASAKUSA STN\n'
+        '- Ramen dinner\n'
+        'Day 2 - Asakusa';
+
+    final withGaz = parseItinerary(
+      plan,
+      gazetteer: SortedListAreaGazetteer(['shibuya']),
+    );
+    expect(withGaz.days.first.stops[2].area?.text, 'shibuya');
+
+    final withoutGaz = parseItinerary(plan);
+    expect(withoutGaz.days.first.stops[2].area?.text, 'shibuya');
+  });
+
+  test(
+      'a hyphenated destination matches a gazetteer entry spelled without '
+      'the hyphen', () {
+    final result = parseItinerary(
+      'Trip to Shibuya\nDay 1 - Shibuya\n'
+      'Route: SHIBUYA STN -> IKEBUKURO STN\n'
+      'KOTAKE-MUKAIHARA STN\n'
+      '- Studio lunch',
+      gazetteer: SortedListAreaGazetteer(['kotakemukaihara', 'shibuya']),
+    );
+
+    expect(result.days.single.stops[2].area?.text, 'KOTAKE-MUKAIHARA');
+    expect(result.days.single.stops[2].area?.source, AreaSource.runningHeading);
+  });
 }
