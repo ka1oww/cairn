@@ -948,7 +948,8 @@ the starter half of that refusal.
 
 **That second run had to be hand-driven, and it leaves a trap worth stating
 before anything else.** `db push` skips a migration it has already recorded
-(see [Setting up a new project](#setting-up-a-new-project-from-scratch), step
+(see [Applying this to a fresh Supabase
+project](#applying-this-to-a-fresh-supabase-project), step
 4), and the hosted `supabase_migrations.schema_migrations` row for `0014`
 still holds the *first* version's eleven statements — checked, not assumed:
 none of them mentions `trip_closes_at` or `to_jsonb`. So the hosted function

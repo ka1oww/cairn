@@ -446,7 +446,7 @@
   <span class="chip">partial</span><h4>Postgres schema + RLS</h4>
   <p><b>Membership is the root of every access check.</b> profiles · trips (the one shared clock)
   · trip_members · trip_invites · photos · day_unlocks · photo_tombstones · day_pages · the itinerary's four ·
-  <code>may_read_trip_photos</code> · <code>day_page_is_open</code> · <code>redeem_trip_invite</code> · <code>sync_trip_itinerary</code> · <code>trip_roster</code>.
+  <code>may_read_trip_photos</code> · <code>day_page_is_open</code> · <code>redeem_trip_invite</code> · <code>sync_trip_name</code> · <code>sync_trip_itinerary</code> · <code>trip_roster</code>.
   Verified by a 167-probe local suite; member rename is reconciled, while starter succession and the delete-photo gate remain.</p>
 </div>
 <div class="node partial" style="left:670px;top:1340px;width:230px">
@@ -566,8 +566,9 @@
       the real camera path works.</li>
       <li><b>No download path.</b> Only uploads exist. The requirements are written down — which is
       exactly why the blank is the most dangerous one on the map.</li>
-      <li><b>Sync &amp; conflict policy is settled for the itinerary and the roster</b> &mdash;
-      last write wins, per day, no conflict UI and no CRDT, which costs what last-write-wins
+      <li><b>Sync &amp; conflict policy is settled for the itinerary, the roster and the trip's name</b> &mdash;
+      last write wins, per day (and on the name's own <code>name_revised_at</code> clock),
+      no conflict UI and no CRDT, which costs what last-write-wins
       always costs: a phone with a fast clock wins edits it should lose. For photos it is
       still undecided beyond three written notes, and nothing reconciles rows against R2
       objects in either direction.</li>

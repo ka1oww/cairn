@@ -55,8 +55,10 @@ class FakeServer implements SharedFacts {
   final namePushes = <RemoteTripName>[];
 
   @override
-  Future<SharedFactsSession?> session() async =>
-      SharedFactsSession(accessToken: 'token', userId: trip?.startedBy ?? MemberId('me'));
+  Future<SharedFactsSession?> session() async => SharedFactsSession(
+    accessToken: 'token',
+    userId: trip?.startedBy ?? MemberId('me'),
+  );
 
   @override
   Future<RemoteTrip?> readTrip(TripId tripId) async => trip;

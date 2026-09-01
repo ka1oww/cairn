@@ -113,9 +113,13 @@ across is that roster, so the stub member is gone; it holds one person on a
 phone nobody has signed into. The **itinerary and the roster are now shared
 facts** (grill round one §2): the schema holds them, and `TripSync`
 (`lib/repositories/itinerary_sync.dart`) reconciles them last-write-wins per
-day, over a first slice of the Supabase adapter that speaks PostgREST. That
-whole path is now **live**: a hosted project exists with migrations `0001`
-through `0010` applied, an ordinary build points at it by default, and the phone signs in as a
+day, over a first slice of the Supabase adapter that speaks PostgREST. The
+trip's **name** rides the same seam since the captain's rename ruling, on a
+clock of its own (`name_revised_at` through `sync_trip_name`, migration
+`0014`) rather than on any day's. That whole path is now **live**: a hosted
+project exists with the schema applied to it (`supabase/README.md` is the
+authority on exactly which migrations have run), an ordinary build points at
+it by default, and the phone signs in as a
 GoTrue anonymous account — the stand-in until Sign in with Apple lands
 (`supabase/README.md`). The pool is still
 local: nobody else's bytes arrive until Phase 2. **A trip now ends** as well as
@@ -211,7 +215,8 @@ lives nowhere else:
   above to be built — and `photo_sync.dart`, the outbox's driver, is now its
   deliberate sibling rather than a lodger inside it: those two files are the
   only ones that hold both backends at once. `itinerary_sync.dart`
-  reads the plan and the roster out of Drift, pushes them through the adapter,
+  reads the plan, the roster and the trip's name out of Drift, pushes them
+  through the adapter,
   applies what comes back, and reports a standing rather than an error —
   dormant, no trip, awaiting the trip row, offline, refused, archived,
   synced. **Offline means the local copy is untouched and authoritative**, which is the whole
@@ -357,7 +362,7 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Repositories** | partial — one repository over the itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store. The membership seam (`membership_repository.dart`) has the same two halves for the same reason — `MembershipRepository`, the read interface the trip's surfaces and the ping's party are written against and the only way a test can stand a party of eight up, and `MembershipStore`, the Drift implementation that also owns starting the trip, renaming it, minting and revoking codes and deleting it. The remote side has begun: `TripSync` (`itinerary_sync.dart`) reconciles the two shared facts — the itinerary and the roster — against Supabase, and nothing above it knows it exists, because it makes the store every screen already reads agree with the other phones. The rest of what is listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
+| **Repositories** | partial — one repository over the itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store. The membership seam (`membership_repository.dart`) has the same two halves for the same reason — `MembershipRepository`, the read interface the trip's surfaces and the ping's party are written against and the only way a test can stand a party of eight up, and `MembershipStore`, the Drift implementation that also owns starting the trip, renaming it, minting and revoking codes and deleting it. The remote side has begun: `TripSync` (`itinerary_sync.dart`) reconciles the shared facts — the itinerary, the roster, and the trip's name on its own `name_revised_at` clock — against Supabase, and nothing above it knows it exists, because it makes the store every screen already reads agree with the other phones. The rest of what is listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
 
 ### Storage
 
@@ -499,7 +504,10 @@ a "change one, change all" edge:
     `photos_insert_trip_member`, the latter backed by a trigger that forbids
     a photo being repointed at another trip — and both halves shut the plan
     — `TripSync._reconcile` and `sync_trip_itinerary` — because eight phones
-    means one wrong clock. What the close does not take, on either side, is a
+    means one wrong clock. The trip's *name* shuts the same way since the
+    rename ruling: `canRenameTrip` refuses on a read-only standing, and
+    `guard_member_trip_rename` asks `trip_closes_at` whenever the name moves,
+    before it lets even the starter past. What the close does not take, on either side, is a
     person's hold on their own photograph. See
     `docs/decisions/2026-08-26-the-ending.md`.
 
@@ -540,9 +548,10 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   place an RLS refusal has ever been watchable — and it is unrun for the same
   reason. Written-and-unrun is a smaller blank than not-built, and it is still
   the map's most dangerous one.
-- **Sync and conflict policy is settled for the itinerary and the roster, and
-  undecided for everything else.** The two shared facts reconcile
-  last-write-wins per day with no conflict UI and no CRDT — a deliberate
+- **Sync and conflict policy is settled for the itinerary, the roster and the
+  trip's name, and undecided for everything else.** Those shared facts
+  reconcile last-write-wins per day — and the name on its own
+  `name_revised_at` clock — with no conflict UI and no CRDT — a deliberate
   choice, and it costs what last-write-wins always costs: a phone with a fast
   clock wins edits it should lose. Of the photos' three written notes, the
   outbox ordering is now built (the push half, `photo_sync.dart`; the caption
