@@ -637,11 +637,22 @@ Sharp edges worth knowing before touching this directory again:
   defers its own RLS policies to `0004_trip_members.sql`, because `trips` must
   exist before `trip_members` can reference it but the policies are written in
   terms of membership. Read that comment before reordering anything.
+- **Editing a migration the hosted project has already recorded changes
+  nothing on the hosted project, and nothing says so.** `db push` skips a
+  version already in `supabase_migrations.schema_migrations`, and that row
+  keeps the statements as they were when it ran — hosted's `0014` row still
+  holds the first version's eleven, none mentioning `trip_closes_at`. So an
+  amendment is either the next numbered file (the direction `0011` took
+  rather than patching `0007`) or a deliberate explicit patch over an
+  `--db-url`, written down in `supabase/README.md`'s Verification section.
+  `0014` is the one time this repo has taken the second road; a green
+  `db push` is not evidence the hosted bodies match the files.
 - **A hosted project exists and migrations `0001`-`0010`, `0012` and `0014`
   are applied to it** (`0012`, the tap-to-Maps area columns, on 2026-08-31;
   `0014`, the flat member rename, on 2026-09-01, re-applied the same day —
   function, trigger and policy half only — once review added its closed-trip
-  refusal and allowlist guard, so the hosted bodies match the repo;
+  refusal and allowlist guard, so the hosted bodies match the repo — patched
+  in place rather than re-pushed, per the bullet above;
   `0011`, the photo transport delta, and `0013`, which teaches
   `sync_trip_itinerary` those columns, are written and locally probed but
   applied nowhere else — until `0013` runs, an area correction is stripped on

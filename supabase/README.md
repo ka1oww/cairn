@@ -516,7 +516,12 @@ is the credit.
    file, tracked in the `supabase_migrations` schema so re-running is
    idempotent — `db push` skips migrations it has already recorded, and
    each file's own `create table if not exists`/`drop policy if exists`
-   guards make a manual re-run safe too.
+   guards make a manual re-run safe too. **That skip cuts both ways**: a
+   migration whose *file* changes after the project recorded it is not
+   replayed, and nothing warns. Amend by adding the next numbered file, or
+   run the changed statements explicitly and write down that you did —
+   [Verification](#verification-what-was-actually-run) records the one time
+   this repo has had to.
 5. **Dashboard steps that are not expressible in SQL**, all one-time:
    - **Enable Sign in with Apple**: Authentication -> Providers -> Apple.
      Requires a Services ID, a Sign in with Apple key, and your app's
@@ -939,7 +944,23 @@ not an artefact of one machine's setup.
 current to 2026-09-01). Migrations `0001` through `0010`, `0012` and `0014`
 are applied to it. `0014` ran twice: once as first written, and again on
 1 September once review added the closed-trip refusal, the allowlist guard and
-the starter half of that refusal. The second run was the *function, trigger and
+the starter half of that refusal.
+
+**That second run had to be hand-driven, and it leaves a trap worth stating
+before anything else.** `db push` skips a migration it has already recorded
+(see [Setting up a new project](#setting-up-a-new-project-from-scratch), step
+4), and the hosted `supabase_migrations.schema_migrations` row for `0014`
+still holds the *first* version's eleven statements — checked, not assumed:
+none of them mentions `trip_closes_at` or `to_jsonb`. So the hosted function
+bodies match this repo only because the amended DDL was executed explicitly,
+and a later `db push` will report the project up to date while `0014`'s file
+and the hosted bodies say different things. **The standing rule, then: once a
+migration is recorded on hosted, do not amend it and expect `db push` to
+notice.** Either add the next numbered file — the direction `0011` already
+took rather than patching `0007`, and the one to prefer — or repeat a
+deliberate explicit patch like this one, and record it here.
+
+The second run was the *function, trigger and
 policy* half of the migration only — extracted from
 `create or replace function public.guard_member_trip_rename()` to the end of
 the file, so the `alter table` and the `name_revised_at` backfill did not
