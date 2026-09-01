@@ -3,6 +3,10 @@
 -- retime or otherwise rewrite the container, and only the starter may delete
 -- it. The split is enforced twice below: RLS admits a member to the UPDATE,
 -- and the trigger bounds that member's write to (name, name_revised_at).
+--
+-- Flat, and still refused once the trip has closed: what a trip was called is
+-- part of what it closed as, so both the trigger and `sync_trip_name` ask
+-- `trip_closes_at` before letting a rename through.
 
 alter table public.trips
   add column if not exists name_revised_at timestamptz;
@@ -24,6 +28,8 @@ language plpgsql
 security invoker
 set search_path = public, pg_temp
 as $$
+declare
+  v_closes_at timestamptz;
 begin
   -- Migrations and service-role maintenance continue to bypass client RLS
   -- and must not acquire a narrower power through this trigger.
@@ -42,16 +48,31 @@ begin
       using errcode = 'insufficient_privilege';
   end if;
 
-  if new.id is distinct from old.id
-     or new.created_by is distinct from old.created_by
-     or new.timezone is distinct from old.timezone
-     or new.country is distinct from old.country
-     or new.city is distinct from old.city
-     or new.start_date is distinct from old.start_date
-     or new.end_date is distinct from old.end_date
-     or new.ping_window_start is distinct from old.ping_window_start
-     or new.ping_window_end is distinct from old.ping_window_end
-     or new.created_at is distinct from old.created_at then
+  -- A closed trip is the record, and what it was called is part of what it
+  -- closed as (`cairn_model`'s `canRenameTrip`). Written twice for the same
+  -- reason `sync_trip_itinerary` and `photos_insert_trip_member` are: the
+  -- phone refuses first (`TripSync._reconcile` returns `SyncStanding.archived`
+  -- before reaching the network) and this is the half that holds when one of
+  -- eight phones has a wrong clock. Null is "a trip this caller cannot see",
+  -- which membership above has already ruled out, and is never read as
+  -- "never closes".
+  v_closes_at := public.trip_closes_at(old.id);
+  if v_closes_at is not null and now() >= v_closes_at then
+    raise exception 'this trip has closed'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  -- An allowlist, not a denylist, and the direction is the whole point: a
+  -- later migration that adds a column to `trips` has no reason to remember
+  -- this guard, and an enumerated list of protected columns would hand that
+  -- new column to every member silently. Comparing the rows with the three
+  -- writable keys removed fails closed instead. `updated_at` is among them
+  -- because `trips_touch_updated_at` overwrites it after this trigger runs
+  -- (triggers of one timing fire in name order, and `trips_guard_member_rename`
+  -- sorts first), so a member cannot author it whatever they send.
+  if to_jsonb(new) - 'name' - 'name_revised_at' - 'updated_at'
+       is distinct from
+     to_jsonb(old) - 'name' - 'name_revised_at' - 'updated_at' then
     raise exception 'a member may rename a trip but may not rewrite its clock or ownership'
       using errcode = 'insufficient_privilege';
   end if;
@@ -97,10 +118,21 @@ set search_path = public, pg_temp
 as $$
 declare
   v_answer jsonb;
+  v_closes_at timestamptz;
 begin
   if not public.is_trip_member(p_trip_id, auth.uid()) then
     raise exception 'not a member of this trip'
       using errcode = 'insufficient_privilege';
+  end if;
+
+  -- Refused before the UPDATE, so a closed trip's name is unchanged and not
+  -- merely un-returned. The trigger refuses an ordinary member the same way,
+  -- but it lets the starter through on the path 0004 already gave them, and
+  -- this function is the one rename door the app knocks on -- so the close is
+  -- asked here as well, and a starter cannot rename the record either.
+  v_closes_at := public.trip_closes_at(p_trip_id);
+  if v_closes_at is not null and now() >= v_closes_at then
+    raise exception 'this trip has closed';
   end if;
 
   update public.trips

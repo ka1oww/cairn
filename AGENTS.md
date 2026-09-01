@@ -306,7 +306,12 @@ import what is written there, not here.
   and maps it back to null locally. Names now carry their own
   `name_revised_at` clock through `sync_trip_name`, and any current member may
   rename while the starter-only protection over every other trip-row column
-  stays intact (`0014_member_trip_rename.sql`). **One gate remains and only one**:
+  stays intact (`0014_member_trip_rename.sql`) — bounded on both sides:
+  `guard_member_trip_rename` is an *allowlist* over `to_jsonb(new)`, so a
+  column a later migration adds to `trips` is refused rather than silently
+  handed to every member, and a closed trip refuses a rename from anybody,
+  starter included, which is the read-only record rule written twice like
+  every other write path. **One gate remains and only one**:
   a plan with no resolved first or last date, because those columns are
   `not null` and inventing a date is the guess the paste flow exists to
   refuse. And **`TripSync.standings` is the only thing above the seam that
@@ -629,8 +634,11 @@ Sharp edges worth knowing before touching this directory again:
   defers its own RLS policies to `0004_trip_members.sql`, because `trips` must
   exist before `trip_members` can reference it but the policies are written in
   terms of membership. Read that comment before reordering anything.
-- **A hosted project exists and migrations `0001`-`0010` and `0012` are
-  applied to it** (`0012`, the tap-to-Maps area columns, on 2026-08-31;
+- **A hosted project exists and migrations `0001`-`0010`, `0012` and `0014`
+  are applied to it** (`0012`, the tap-to-Maps area columns, on 2026-08-31;
+  `0014`, the flat member rename, on 2026-09-01 — but the copy that ran there
+  predates `0014`'s closed-trip refusal and allowlist guard, so it has to be
+  applied again, which it is written to survive;
   `0011`, the photo transport delta, and `0013`, which teaches
   `sync_trip_itinerary` those columns, are written and locally probed but
   applied nowhere else — until `0013` runs, an area correction is stripped on

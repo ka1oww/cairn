@@ -44,7 +44,10 @@ silently re-times everyone's pings.
 Migration `0014_member_trip_rename.sql` brings the server up to this decision:
 current members get a name-only update path and `name_revised_at` resolves
 offline renames. The starter's broader update and delete policies are
-unchanged.
+unchanged, and so is the ending: a closed trip refuses a rename from anybody,
+starter included, because what a trip was called is part of what it closed as
+(`canRenameTrip` takes a `TripStanding` for exactly this, and both the trigger
+and `sync_trip_name` ask `trip_closes_at`).
 
 **Why.** These look like one permission and are not remotely the same act.
 Renaming is reversible, visible to everyone, and harmless - making somebody wait

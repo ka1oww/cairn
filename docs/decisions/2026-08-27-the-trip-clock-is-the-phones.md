@@ -107,7 +107,10 @@ now follows the phone's flat `canRenameTrip`: any current member may rename,
 while the starter-only powers over the rest of the trip row and deletion are
 unchanged. A name carries its own `name_revised_at` clock and
 `sync_trip_name` applies the same offline last-write-wins shape as itinerary
-days: strictly newer wins and the server returns the winner. Clearing a name
+days: strictly newer wins and the server returns the winner. Flat is not
+unbounded: a closed trip takes no rename at all, refused on the server the way
+a closed trip's plan and pool already are, so the record keeps the name it
+closed under. Clearing a name
 travels as `This trip` because the server column is non-null, then maps back to
 null on the phone. The old ratchet and its stale-server cost are retired;
 `test/shared_facts_sync_test.dart` and the RLS probe pin both halves.

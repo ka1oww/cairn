@@ -186,6 +186,91 @@ def main():
     check(db.run("select count(*) from public.trips where id = :t", t=disposable)[0][0] == 0,
           "and the starter's existing delete power is unchanged")
 
+    # ------------------------------- and through the door the app actually uses
+    #
+    # Everything above drives `update public.trips` directly, which the app
+    # never does: `PostgrestSharedFacts.syncTripName` posts to
+    # `/rest/v1/rpc/sync_trip_name`. A column that exists but is not reachable
+    # through the function is the state `0012` shipped in, and reading the
+    # schema cannot see it -- so the merge rule is asserted on the round trip,
+    # exactly as the itinerary's is.
+    print("\n== the rename round trip, through sync_trip_name ==")
+
+    def rename(who, trip, name, at):
+        """('ok', the name that won) or ('err', message)."""
+        status, rows = who.try_run(
+            "select public.sync_trip_name(:t, :n, :at::timestamptz)",
+            t=trip, n=name, at=at)
+        if status != "ok":
+            return status, rows
+        payload = rows[0][0]
+        return status, json.loads(payload) if isinstance(payload, str) else payload
+
+    def now_plus(minutes):
+        return db.run("select (now() + make_interval(mins => :m))::text", m=minutes)[0][0]
+
+    def trip_name(trip):
+        return db.run("select name from public.trips where id = :t", t=trip)[0][0]
+
+    fresh_at = now_plus(10)
+    status, answer = rename(c, japan, "Japan, the second time", fresh_at)
+    check(status == "ok" and answer["name"] == "Japan, the second time"
+          and trip_name(japan) == "Japan, the second time",
+          "a member who did not start the trip renames it through the RPC",
+          repr(answer)[:100])
+
+    status, answer = rename(c, japan, "Typed on a phone with a slow clock", now_plus(5))
+    check(status == "ok" and answer["name"] == "Japan, the second time"
+          and trip_name(japan) == "Japan, the second time",
+          "a stale revision loses and is handed the name that won -- strictly newer wins",
+          repr(answer)[:100])
+
+    status, answer = rename(c, japan, "Japan, again", now_plus(20))
+    check(status == "ok" and trip_name(japan) == "Japan, again",
+          "while a newer revision from the same phone lands", repr(answer)[:100])
+
+    status, rows = rename(b, japan, "Not Bob's trip", now_plus(30))
+    check(status == "err" and "not a member" in str(rows)
+          and trip_name(japan) == "Japan, again",
+          "a non-member calling the function directly is refused, and nothing moved",
+          repr(rows)[:100])
+
+    # A trip of its own, closed, so the refusal is the close and nothing else:
+    # Carol is a member of it and Alice started it, and both are refused.
+    closed = str(a.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Last summer', :u, 'Asia/Tokyo', current_date - 44, current_date - 40)
+           returning id""", u=alice)[0][0])
+    a.run("insert into public.trip_members (trip_id, user_id) values (:t, :u)",
+          t=closed, u=carol)
+    status, rows = rename(c, closed, "Renamed after the fact", now_plus(10))
+    check(status == "err" and "closed" in str(rows) and trip_name(closed) == "Last summer",
+          "a member cannot rename a closed trip -- what it was called is part of the record",
+          repr(rows)[:100])
+    status, rows = rename(a, closed, "Renamed by the starter", now_plus(10))
+    check(status == "err" and "closed" in str(rows) and trip_name(closed) == "Last summer",
+          "and neither can the person who started it", repr(rows)[:100])
+    status, rows = c.try_run(
+        """update public.trips set name = 'Round the function',
+               name_revised_at = now() + interval '11 minutes' where id = :t""",
+        t=closed)
+    check(status == "err" and trip_name(closed) == "Last summer",
+          "nor round the function, straight into the table", repr(rows)[:100])
+    a.run("delete from public.trips where id = :t", t=closed)
+
+    # The guard is an allowlist, so a column a later migration adds to `trips`
+    # is refused without that migration having to remember this trigger.
+    db.run("alter table public.trips add column probe_future_column text")
+    status, rows = c.try_run(
+        """update public.trips set probe_future_column = 'mine now',
+               name_revised_at = now() + interval '40 minutes' where id = :t""",
+        t=japan)
+    check(status == "err" and db.run(
+        "select probe_future_column from public.trips where id = :t", t=japan)[0][0] is None,
+        "a column nobody has taught the guard about is refused, not handed over",
+        repr(rows)[:100])
+    db.run("alter table public.trips drop column probe_future_column")
+
     # ------------------------------------------- ...except the starter's removal
     print("\n== the one asymmetry: the person who started the trip can remove someone ==")
     c.try_run("delete from public.trip_members where trip_id = :t and user_id = :u", t=japan, u=alice)

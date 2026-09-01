@@ -19,7 +19,10 @@ them server-side would need its own decision.
 `0012` and `0014`, are applied to it**
 (`https://nswcgzhynclrrunekskh.supabase.co`, region `ap-southeast-1`; `0012`,
 the tap-to-Maps area columns, was applied on 31 August 2026, and `0014`, flat
-member renames, on 1 September). `0011`, the photo transport delta, and
+member renames, on 1 September — but see the caveat under
+[Verification](#verification-what-was-actually-run): `0014` gained its
+closed-trip guard *after* that apply and has to be re-run). `0011`, the photo
+transport delta, and
 `0013`, which teaches `sync_trip_itinerary` those columns, exist only here and
 in the local probe. The app
 points at it by default — see
@@ -890,7 +893,7 @@ not an artefact of one machine's setup.
 
 - All fourteen migrations apply cleanly, and apply again cleanly on a second
   run.
-- 157 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 165 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
@@ -933,7 +936,13 @@ not an artefact of one machine's setup.
 
 **What the hosted project has actually done** (2026-08-26; migration state
 current to 2026-09-01). Migrations `0001` through `0010`, `0012` and `0014`
-are applied to it; **neither `0011` nor `0013` is** — the photo transport
+are applied to it — but the copy of `0014` that ran there predates its
+closed-trip refusal and its allowlist guard, so **`0014` must be applied again
+before the hosted project matches this repo**. It is written to be re-run:
+every statement in it is `create or replace`, `drop … if exists` or
+`add column if not exists`. Until then a member can rename a hosted trip after
+it has closed, and the phone is the only thing refusing.
+**Neither `0011` nor `0013` is applied** — the photo transport
 delta, and the
 `sync_trip_itinerary` recreation that carries the area columns over the wire,
 exist only here and in the local probe. The following ran against it for real, from the app's
