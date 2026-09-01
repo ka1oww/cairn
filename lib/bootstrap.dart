@@ -222,9 +222,9 @@ const _tripTimeZoneOfThisPhone = DeviceTimeZone();
 /// The name is deliberately **not** among them any more. `trips.name` is
 /// `not null`, so an unnamed trip is published under
 /// [unnamedTripPlaceholder] — the same word the app already shows over a trip
-/// nobody has named — and the sync refuses to adopt it back, so nothing here
-/// invents a name. A plan that never leaves the phone because nobody typed a
-/// title is the worse of the two lies.
+/// nobody has named — and the name sync maps it back to local null, so nothing
+/// here invents a name. A plan that never leaves the phone because nobody
+/// typed a title is the worse of the two lies.
 TripRowSource tripRowFor(TimeZoneEdge clock) => (pending) async {
   final first = pending.firstDateIso;
   final last = pending.lastDateIso;
@@ -237,6 +237,7 @@ TripRowSource tripRowFor(TimeZoneEdge clock) => (pending) async {
     id: pending.tripId,
     name: pending.name ?? unnamedTripPlaceholder,
     createdBy: pending.startedBy,
+    nameRevisedAt: pending.nameRevisedAt,
     timeZone: zone,
     startDateIso: first,
     endDateIso: last,

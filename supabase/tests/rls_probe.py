@@ -142,6 +142,50 @@ def main():
     check(status == "ok" and rows is None,
           "and no UPDATE policy at all, so any rewrite matches zero rows")
 
+    # --------------------------------------------------------- naming is flat
+    print("\n== any current member may rename, and only rename, the trip ==")
+    renamed_at = db.run("select now() + interval '1 minute'")[0][0]
+    status, rows = c.try_run(
+        """update public.trips
+           set name = 'Japan together', name_revised_at = :at
+           where id = :t""",
+        t=japan, at=renamed_at)
+    check(status == "ok" and db.run(
+        "select name from public.trips where id = :t", t=japan)[0][0] == "Japan together",
+        "a member who did not create the trip can rename it", repr(rows)[:80])
+
+    b.try_run(
+        """update public.trips
+           set name = 'Not Bob''s trip', name_revised_at = now() + interval '2 minutes'
+           where id = :t""",
+        t=japan)
+    check(db.run("select name from public.trips where id = :t", t=japan)[0][0]
+          == "Japan together",
+          "a person who is not a member cannot rename it")
+
+    before_zone = db.run("select timezone from public.trips where id = :t", t=japan)[0][0]
+    status, rows = c.try_run(
+        """update public.trips
+           set timezone = 'Asia/Seoul', name_revised_at = now() + interval '3 minutes'
+           where id = :t""",
+        t=japan)
+    check(status == "err" and db.run(
+        "select timezone from public.trips where id = :t", t=japan)[0][0] == before_zone,
+        "the member rename path cannot retime the trip", repr(rows)[:100])
+
+    disposable = str(a.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Disposable', :u, 'Asia/Tokyo', current_date, current_date + 1)
+           returning id""", u=alice)[0][0])
+    a.run("insert into public.trip_members (trip_id, user_id) values (:t, :u)",
+          t=disposable, u=carol)
+    c.try_run("delete from public.trips where id = :t", t=disposable)
+    check(db.run("select count(*) from public.trips where id = :t", t=disposable)[0][0] == 1,
+          "a non-starter member still cannot delete the trip")
+    a.run("delete from public.trips where id = :t", t=disposable)
+    check(db.run("select count(*) from public.trips where id = :t", t=disposable)[0][0] == 0,
+          "and the starter's existing delete power is unchanged")
+
     # ------------------------------------------- ...except the starter's removal
     print("\n== the one asymmetry: the person who started the trip can remove someone ==")
     c.try_run("delete from public.trip_members where trip_id = :t and user_id = :u", t=japan, u=alice)
@@ -537,6 +581,25 @@ def main():
         "insert into public.trip_invites (trip_id, code, created_by) values (:t, 'cedar willow 27', :u)",
         t=japan, u=carol)
     check(status == "ok", "any member can mint one -- inviting is flat", repr(rows)[:80])
+    c.run(
+        "insert into public.trip_invites (trip_id, code, created_by) values (:t, 'puffin quartz 63', :u)",
+        t=japan, u=carol)
+    b.try_run("delete from public.trip_invites where code = 'puffin quartz 63'")
+    check(db.run("select count(*) from public.trip_invites where code = 'puffin quartz 63'")[0][0]
+          == 1, "a stranger still cannot revoke a member's code")
+    c.run("delete from public.trip_invites where code = 'puffin quartz 63'")
+    check(db.run("select count(*) from public.trip_invites where code = 'puffin quartz 63'")[0][0]
+          == 0, "the member who minted a code can still revoke it")
+    b.run("insert into public.trip_members (trip_id, user_id) values (:t, :u)",
+          t=iceland, u=carol)
+    c.run(
+        "insert into public.trip_invites (trip_id, code, created_by) values (:t, 'puffin quartz 64', :u)",
+        t=iceland, u=carol)
+    b.run("delete from public.trip_invites where code = 'puffin quartz 64'")
+    check(db.run("select count(*) from public.trip_invites where code = 'puffin quartz 64'")[0][0]
+          == 0, "the starter can still revoke a member's code")
+    c.run("delete from public.trip_members where trip_id = :t and user_id = :u",
+          t=iceland, u=carol)
     before = db.run("select use_count from public.trip_invites where code = 'otter maple 42'")[0][0]
     c.run("select public.redeem_trip_invite('otter maple 42')")
     after = db.run("select use_count from public.trip_invites where code = 'otter maple 42'")[0][0]

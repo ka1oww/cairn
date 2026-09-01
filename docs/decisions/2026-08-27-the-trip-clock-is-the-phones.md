@@ -88,7 +88,7 @@ answered here; it is the captain's, and nothing in this change forecloses it.
 
 **Yes.** An unnamed trip is published under `unnamedTripPlaceholder` —
 `This trip`, the same words the app already shows over a trip nobody has
-named — and **the sync refuses to adopt that word back as a name.**
+named — and **the sync maps that wire word back to local null.**
 
 The alternative was to hold the whole itinerary off the server until somebody
 typed a title, which is the same silent-forever failure in a second costume,
@@ -97,22 +97,20 @@ called *This trip*" and "your plan is shared when it is not" — the first is
 visible, local to one string, and corrected the moment anybody renames the
 trip. The second is the defect.
 
-The refusal-to-adopt is load-bearing and was found by writing the test. The
-roster reconcile pulls `name` down from the shared row; nothing has ever
-pushed a rename *up*. So the moment the push started working, a rename typed
-on this phone would have been silently reverted on the next reconcile — a
-regression created by fixing the bug. The rule is now a one-way ratchet: adopt
-the shared name only when this phone holds none, and never adopt the
-placeholder. `test/shared_facts_sync_test.dart` pins it.
+The original implementation used a one-way ratchet because nothing pushed a
+rename up: it adopted a shared name only into an unnamed phone and never
+adopted the placeholder. That prevented an immediate reversion, but left the
+server stale.
 
-**The known cost, stated plainly:** the server's copy of the name goes stale.
-A trip renamed on this phone is still `This trip` on the server and on anyone
-else's. Pushing the rename needs a *name* clock — a third merge rule, where
-the design deliberately has two — and it collides with something already
-unreconciled: `trips_update_starter` lets only the trip's creator update the
-row, while the phone's own `canRenameTrip` is flat, so any member may rename.
-Which of those two is right is a decision, not an implementation detail, so
-it is escalated rather than guessed at. The roadmap already carries it.
+**Captain's ruling, 1 September 2026: “sure let them rename it.”** The server
+now follows the phone's flat `canRenameTrip`: any current member may rename,
+while the starter-only powers over the rest of the trip row and deletion are
+unchanged. A name carries its own `name_revised_at` clock and
+`sync_trip_name` applies the same offline last-write-wins shape as itinerary
+days: strictly newer wins and the server returns the winner. Clearing a name
+travels as `This trip` because the server column is non-null, then maps back to
+null on the phone. The old ratchet and its stale-server cost are retired;
+`test/shared_facts_sync_test.dart` and the RLS probe pin both halves.
 
 ## Decision three: the app says where the plan is
 

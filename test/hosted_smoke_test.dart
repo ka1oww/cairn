@@ -102,7 +102,7 @@ void main() {
           starterDisplayName: 'Smoke',
         );
         tripId = startedTrip.value;
-        await first.renameTrip('Hosted smoke');
+        await first.renameTrip('Hosted smoke', at: DateTime.now().toUtc());
         await first.replaceItinerary(
           nowUtcIso: DateTime.now().toUtc().toIso8601String(),
           days: const [

@@ -110,7 +110,11 @@ InviteDraw _drawAtRandom() {
 /// The trip with a store behind it: the read interface above, plus every
 /// write the trip's own surfaces make.
 class MembershipStore implements MembershipRepository {
-  MembershipStore(this._db, {this.draw = _drawAtRandom});
+  MembershipStore(
+    this._db, {
+    this.draw = _drawAtRandom,
+    this.now = DateTime.now,
+  });
 
   final AppDatabase _db;
 
@@ -118,6 +122,10 @@ class MembershipStore implements MembershipRepository {
   /// three numbers into a code and refuses to invent them — so the draw
   /// happens here, the way a photo id is minted here.
   final InviteDraw Function() draw;
+
+  /// The authoring clock for a rename. Injected because the name is an
+  /// offline last-write-wins fact and tests must be able to pin its revision.
+  final DateTime Function() now;
 
   @override
   Stream<TripMembership?> watchMembership() =>
@@ -191,7 +199,10 @@ class MembershipStore implements MembershipRepository {
   /// is checked above this layer, where the roster is known.
   Future<void> rename(String? name) {
     final trimmed = name?.trim();
-    return _db.renameTrip(trimmed == null || trimmed.isEmpty ? null : trimmed);
+    return _db.renameTrip(
+      trimmed == null || trimmed.isEmpty ? null : trimmed,
+      at: now(),
+    );
   }
 
   /// Mints one code for this trip and hands it back.

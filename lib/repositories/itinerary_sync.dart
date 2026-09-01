@@ -140,6 +140,7 @@ Duration _deviceOffset() => DateTime.now().timeZoneOffset;
 class PendingTripRow {
   final TripId tripId;
   final String? name;
+  final DateTime nameRevisedAt;
   final MemberId startedBy;
 
   /// The plan's first *resolved* date, or null when every day's date is still
@@ -153,6 +154,7 @@ class PendingTripRow {
   const PendingTripRow({
     required this.tripId,
     this.name,
+    required this.nameRevisedAt,
     required this.startedBy,
     this.firstDateIso,
     this.lastDateIso,
@@ -175,7 +177,7 @@ typedef TripRowSource = Future<RemoteTripDraft?> Function(PendingTripRow);
 /// here so the two cannot drift), which is why publishing it invents nothing:
 /// the app was already saying it out loud.
 ///
-/// [TripSync._applyRoster] refuses to adopt it, so a trip nobody has named
+/// [TripSync._reconcileName] maps it back to null, so a trip nobody has named
 /// does not come back from the server *named*.
 const unnamedTripPlaceholder = 'This trip';
 
@@ -346,6 +348,7 @@ class TripSync {
         final made = await _createSharedTrip(trip, tripId);
         if (made != null) return made;
       } else {
+        await _reconcileName(shared, trip);
         await _applyRoster(shared, trip);
       }
       return await _reconcileItinerary(tripId, shared);
@@ -395,6 +398,7 @@ class TripSync {
       PendingTripRow(
         tripId: tripId,
         name: trip.name,
+        nameRevisedAt: DateTime.parse(trip.nameRevisedAtUtcIso).toUtc(),
         startedBy: MemberId(trip.startedByMemberId),
         firstDateIso: resolved.isEmpty ? null : resolved.first,
         lastDateIso: lastDay?.toIso8601String().substring(0, 10),
@@ -409,6 +413,42 @@ class TripSync {
     await facts.createTrip(draft);
     await database.markSynced(tripRowSyncedAtUtcIso: _stamp());
     return null;
+  }
+
+  /// Reconciles the trip's name by its own last-write-wins clock.
+  ///
+  /// The rule has the same two necessary copies as the itinerary merge: the
+  /// server refuses a stale offered revision, and the phone applies the
+  /// winner the server returns. A clearing rename travels as
+  /// [unnamedTripPlaceholder], because `trips.name` is not nullable; it maps
+  /// back to null before the local write so the placeholder never becomes a
+  /// name the person typed.
+  Future<void> _reconcileName(RemoteTrip shared, TripFact local) async {
+    final localAt = DateTime.parse(local.nameRevisedAtUtcIso).toUtc();
+    var winner = RemoteTripName(
+      name: shared.name ?? unnamedTripPlaceholder,
+      revisedAt: shared.nameRevisedAt.toUtc(),
+    );
+
+    if (localAt.isAfter(winner.revisedAt)) {
+      winner = await facts.syncTripName(
+        tripId: shared.id,
+        name: local.name ?? unnamedTripPlaceholder,
+        revisedAt: localAt,
+      );
+    }
+
+    final localCargo = local.name ?? unnamedTripPlaceholder;
+    final serverWins =
+        winner.revisedAt.isAfter(localAt) ||
+        (winner.revisedAt.isAtSameMomentAs(localAt) &&
+            winner.name != localCargo);
+    if (serverWins) {
+      await database.applySharedTripName(
+        name: winner.name == unnamedTripPlaceholder ? null : winner.name,
+        revisedAt: winner.revisedAt,
+      );
+    }
   }
 
   /// Writes the party the server named over this phone's copy.
@@ -454,45 +494,17 @@ class TripSync {
         ),
     ];
 
-    // **The name is the one shared fact this apply does not take back.**
-    //
-    // Nothing pushes a rename. `_createSharedTrip` writes `trips.name` once,
-    // at creation, and there is no second call — so pulling the name is a
-    // one-way ratchet: rename the trip here and the very next reconcile puts
-    // the old word back, silently, in front of the person who just typed the
-    // new one. That was invisible while the sync never ran at all (the
-    // defect this file's clock work fixed) and would have been the first
-    // thing anyone saw once it did.
-    //
-    // So the rule is: **adopt a name only when this phone holds none**, and
-    // never adopt [unnamedTripPlaceholder], which is not a name. A phone that
-    // has been told what the trip is called by somebody else still learns it;
-    // a name typed here is never overwritten by one nobody can push.
-    //
-    // The cost is real and is named rather than hidden: the server's copy of
-    // the name goes stale after a rename. Nothing reads it back today — no
-    // second phone can join a trip yet — and closing it properly needs the
-    // name to carry a clock and a push path, which is a decision about
-    // `trips_update_starter` (starter-only on the server, flat on the phone)
-    // that this change deliberately does not make.
-    final adoptName =
-        local.name == null &&
-        shared.name != null &&
-        shared.name != unnamedTripPlaceholder;
-
     // **A reconcile that changed nothing must write nothing.** The roster's
     // stream is one of the two this class listens to, so a write here asks
     // for the sync that produced it — and a sync that always writes is a sync
     // that never stops. Every apply below is guarded the same way.
     final settled =
         _sameRoster(stored, incoming) &&
-        local.startedByMemberId == shared.startedBy.value &&
-        !adoptName;
+        local.startedByMemberId == shared.startedBy.value;
     if (!settled) {
       await database.replaceRoster(
         members: incoming,
         startedByMemberId: shared.startedBy.value,
-        name: adoptName ? shared.name : null,
       );
     }
     await database.markSynced(rosterSyncedAtUtcIso: _stamp());

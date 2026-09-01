@@ -29,7 +29,7 @@ import what is written there, not here.
 - Drift's generated code (`lib/**/*.g.dart`) is not checked in (root
   `.gitignore`): run `dart run build_runner build` after checkout, before
   analyzing or testing the app.
-- Schema is at v9. A test that stands up an *old* schema by winding
+- Schema is at v10. A test that stands up an *old* schema by winding
   `user_version` back must also drop everything later versions added
   (`test/trip_id_test.dart`'s `windBackToV4` is the pattern) -- an upgrade that
   finds its own column already there fails outright, and the failure reads like
@@ -302,10 +302,11 @@ import what is written there, not here.
   `trips.timezone` is checked against `pg_timezone_names` at write time.
   Reintroducing an offset-derived zone is the thing to refuse in review.
   Three rules hold this together. **An unnamed trip still publishes**, as
-  `unnamedTripPlaceholder`, and the roster apply **must never adopt that word
-  back** — nothing pushes a rename *up*, so an adopting reconcile would revert
-  a rename typed here (the ratchet is `adoptName` in
-  `itinerary_sync.dart`, pinned by a test). **One gate remains and only one**:
+  `unnamedTripPlaceholder`; a clearing rename uses the same non-null wire word
+  and maps it back to null locally. Names now carry their own
+  `name_revised_at` clock through `sync_trip_name`, and any current member may
+  rename while the starter-only protection over every other trip-row column
+  stays intact (`0014_member_trip_rename.sql`). **One gate remains and only one**:
   a plan with no resolved first or last date, because those columns are
   `not null` and inventing a date is the guess the paste flow exists to
   refuse. And **`TripSync.standings` is the only thing above the seam that
