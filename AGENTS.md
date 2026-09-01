@@ -761,8 +761,13 @@ Sharp edges worth knowing before touching this directory again:
     one, an area drawn from a *vocabulary run* must also be a real place name
     before it may be attached, which is what kills the menu words a run alone
     admits ('UNAGI', 'UDON'); the traveller's own in-tail wording is trusted
-    unvalidated, because it is a statement rather than an inference. Given
-    none, the extractor is phase-1 exactly — the C7t floors in
+    unvalidated, because it is a statement rather than an inference. A
+    gazetteer is also positive evidence in exactly two narrow rules — unique
+    stop-line self-evidence beats the running heading, and a gazetteer-known
+    destination on a wrapped train-route continuation may set it — stated in
+    the package README's gazetteer section and pinned by
+    `test/area_rule_test.dart`; a third rule needs the same measurement bar.
+    Given none, the extractor is phase-1 exactly — the C7t floors in
     `test/area_ground_truth_test.dart` are pinned **without** a gazetteer and
     must stay that way, and the C10 floors beside them are the same corpus
     scored **with** the committed assets. Four things worth knowing before

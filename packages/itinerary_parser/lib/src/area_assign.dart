@@ -35,7 +35,9 @@ class AreaAssignment {
 
 /// Assigns areas to all stops. Mirrors scorer's `anchor_assign` with
 /// `train_rule=True` (C7t). When [gazetteer] is non-null, enables C10
-/// validator behaviour (seed must be gazetteer-listed, bare parenthetical).
+/// validator behaviour (seed must be gazetteer-listed, bare parenthetical)
+/// plus the two gazetteer-evidence rules (stop-line self-evidence and the
+/// train-route continuation; the package README states both).
 Map<int, AreaAssignment> anchorAssign(
   List<String> plines,
   List<AreaDayInput> days,
@@ -56,6 +58,8 @@ Map<int, AreaAssignment> anchorAssign(
   int? runningSetBy;
 
   for (final day in days) {
+    var routeContinuation = false;
+    final trustedSelfAreas = <String>{};
     final kind = headerKind(day.headerText);
     final seed = _seedForDay(day.place, vocab, gazetteer, gazetteerObj);
     if (kind == 'daynum' || kind == 'date' || kind == 'none') {
@@ -126,25 +130,38 @@ Map<int, AreaAssignment> anchorAssign(
       }
 
       // train-route destination (C7t)
-      if (trainRule && assignedOwn == null) {
-        if (RegExp(r'^\s*(?:train\s+)?route\b', caseSensitive: false)
-            .hasMatch(clean)) {
-          final dests = <String>[];
-          for (final m in stationRegExp
-              .allMatches(raw.replaceAll(RegExp(r'https?://\S+'), ' '))) {
-            final d = m.group(1)!;
-            if (areaTokens(d).every((w) => vocab.contains(w))) {
-              dests.add(d);
-            }
-          }
-          if (dests.isNotEmpty) {
-            running = dests.last;
-            runningSetBy = s.lineNumber;
-            assignedOwn = running;
-            assignedSource = 'trainDestination';
-            assignedSetBy = s.lineNumber;
+      final isTrainRoute =
+          RegExp(r'^\s*(?:train\s+)?route\b', caseSensitive: false)
+              .hasMatch(clean);
+      final hadRouteContinuation = routeContinuation;
+      if (trainRule &&
+          assignedOwn == null &&
+          (isTrainRoute || hadRouteContinuation)) {
+        final dests = <String>[];
+        for (final m in stationRegExp
+            .allMatches(raw.replaceAll(RegExp(r'https?://\S+'), ' '))) {
+          final d = m.group(1)!;
+          final dws = areaTokens(d);
+          final isAnchorArea = dws.every((w) => vocab.contains(w));
+          final isGazetteerArea =
+              hasGaz() && _destinationInGazetteer(dws, gazContains);
+          if (dws.isNotEmpty &&
+              ((isTrainRoute && isAnchorArea) || isGazetteerArea)) {
+            dests.add(d);
           }
         }
+        if (dests.isNotEmpty) {
+          running = dests.last;
+          runningSetBy = s.lineNumber;
+          assignedOwn = running;
+          assignedSource = 'trainDestination';
+          assignedSetBy = s.lineNumber;
+        }
+      }
+      if (isTrainRoute) {
+        routeContinuation = true;
+      } else if (hadRouteContinuation) {
+        routeContinuation = false;
       }
 
       // in-tail locality (this stop only)
@@ -154,6 +171,18 @@ Map<int, AreaAssignment> anchorAssign(
           assignedOwn = t;
           assignedSource = 'inlineLocality';
           // running unchanged
+        }
+      }
+
+      // stop-line self-evidence (gazetteer only): a unique gazetteer-listed
+      // area named by the line itself beats the running heading
+      if (assignedOwn == null && hasGaz()) {
+        final selfArea =
+            _gazetteerAreaInStop(clean, trustedSelfAreas, gazContains);
+        if (selfArea != null) {
+          assignedOwn = selfArea;
+          assignedSource = 'travellerDeclared';
+          trustedSelfAreas.add(joinedAreaWords(selfArea));
         }
       }
 
@@ -209,6 +238,80 @@ Map<int, AreaAssignment> anchorAssign(
     }
   }
   return out;
+}
+
+/// True when a station destination's tokens name a gazetteer entry. A
+/// hyphenated station's `areaTokens` end with the joined duplicate
+/// ("kotake-mukaihara" -> [kotake, mukaihara, kotakemukaihara]), so all
+/// three spellings — split, space-joined, concatenated — are tried.
+bool _destinationInGazetteer(
+  List<String> dws,
+  bool Function(String normalizedName) contains,
+) {
+  final filtered = [
+    for (final w in dws)
+      if (!genericStopWords.contains(w)) w
+  ];
+  if (filtered.isEmpty) return false;
+  final candidates = <String>{filtered.join(' ')};
+  if (filtered.length >= 2) {
+    final last = filtered.last;
+    final withoutLast = filtered.sublist(0, filtered.length - 1);
+    if (withoutLast.join() == last) {
+      candidates.add(withoutLast.join(' '));
+      candidates.add(last);
+    }
+  }
+  return candidates.any(contains);
+}
+
+/// A gazetteer-listed area the stop line names about itself, or null. A
+/// candidate only counts in a position where it reads as a locality — after
+/// a venue/meal/furniture word, standing alone, as a `Name -` prefix, or
+/// already trusted earlier the same day — and the line must name exactly one
+/// distinct area: two candidates, or none, is designed silence, never a pick.
+String? _gazetteerAreaInStop(
+  String clean,
+  Set<String> trustedSelfAreas,
+  bool Function(String normalizedName) contains,
+) {
+  final matches = <String, String>{};
+  for (final segment in clean.split(RegExp(r'[/,+&;]'))) {
+    final words = areaTokens(segment);
+    for (var start = 0; start < words.length; start++) {
+      for (var end = start; end < words.length && end < start + 5; end++) {
+        final candidateWords = words.sublist(start, end + 1);
+        final candidate = candidateWords.join(' ');
+        if (areaWords(candidate).isEmpty) continue;
+        final precededByDescriptor = start > 0 &&
+            (venueGenericWords.contains(words[start - 1]) ||
+                mealPrefixWords.contains(words[start - 1]) ||
+                furnitureWords.contains(words[start - 1]));
+        final isStandalone = start == 0 && end == words.length - 1;
+        final isHyphenatedSuffix = RegExp(
+                r'(^|\s)' + RegExp.escape(candidate) + r'\s*[-–—](?:\s|$)',
+                caseSensitive: false)
+            .hasMatch(segment);
+        final isPreviouslyTrusted =
+            trustedSelfAreas.contains(joinedAreaWords(candidate));
+        if (!precededByDescriptor &&
+            !isStandalone &&
+            !isHyphenatedSuffix &&
+            !isPreviouslyTrusted) {
+          continue;
+        }
+        if (venueGenericWords.contains(candidateWords.last) ||
+            furnitureWords.contains(candidateWords.last)) {
+          continue;
+        }
+        if (contains(candidate)) {
+          matches[joinedAreaWords(candidate)] = candidate;
+        }
+      }
+    }
+  }
+  if (matches.length != 1) return null;
+  return matches.values.single;
 }
 
 String? _seedForDay(String? place, Set<String> vocab, Set<String>? gazetteer,
