@@ -114,6 +114,25 @@ what stops a menu word ('UNAGI', 'UDON') being sent to a map. The
 traveller's own in-tail wording ('Art & Eats in Le Marais') is trusted
 without validation, because it is a statement rather than an inference.
 
+A gazetteer also *adds* evidence, in exactly two narrow ways, and both
+prefer silence over a confident guess
+(`test/area_rule_test.dart` pins each with synthetic fixtures):
+
+- **Stop-line self-evidence beats the running heading.** A stop line
+  that names exactly one gazetteer-listed area — standing alone,
+  directly after a venue/meal word (`... CAFE HARAJUKU`), written as a
+  `Name -` prefix, or already trusted this way earlier in the same day —
+  takes that area (`travellerDeclared`) instead of inheriting the day's
+  running area. A line matching two different gazetteer areas, or none,
+  says nothing and the running heading stands.
+- **A train route's destination may continue onto the next line.** On a
+  `Route:` line, and on the single line directly after one (a wrapped
+  route), a gazetteer-known `... STN`/`Station` destination sets the
+  running area — hyphenated stations (`KOTAKE-MUKAIHARA STN`) match a
+  gazetteer entry spelled without the hyphen. Without a gazetteer, only
+  the route line itself and only anchor-vocabulary stations can, so the
+  continuation line adds nothing in phase-1 mode.
+
 `SortedListAreaGazetteer` is the shipped implementation: a sorted name
 list searched by bisection, built from already-normalised text through
 `SortedListAreaGazetteer.fromAssetTexts`. **This package never reads a
@@ -295,7 +314,10 @@ building UI on top of this package.
   (a coffee chain, a department store) can inherit the wrong
   neighbourhood — this is a known, pinned limitation
   (`test/area_ground_truth_test.dart`'s "known failures are documented"),
-  not something a caller should silently trust for every stop.
+  not something a caller should silently trust for every stop. With a
+  gazetteer, a stop line that itself uniquely names a gazetteer-listed
+  area overrides the running heading (see the gazetteer section above),
+  but a line that names no area still inherits it.
 
 - **Nothing is ever silently dropped, but "unplaced" isn't "wrong."**
   Every line the parser didn't turn into a header or a stop shows up in

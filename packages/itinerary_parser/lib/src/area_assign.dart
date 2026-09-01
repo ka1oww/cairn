@@ -35,7 +35,9 @@ class AreaAssignment {
 
 /// Assigns areas to all stops. Mirrors scorer's `anchor_assign` with
 /// `train_rule=True` (C7t). When [gazetteer] is non-null, enables C10
-/// validator behaviour (seed must be gazetteer-listed, bare parenthetical).
+/// validator behaviour (seed must be gazetteer-listed, bare parenthetical)
+/// plus the two gazetteer-evidence rules (stop-line self-evidence and the
+/// train-route continuation; the package README states both).
 Map<int, AreaAssignment> anchorAssign(
   List<String> plines,
   List<AreaDayInput> days,
@@ -172,6 +174,8 @@ Map<int, AreaAssignment> anchorAssign(
         }
       }
 
+      // stop-line self-evidence (gazetteer only): a unique gazetteer-listed
+      // area named by the line itself beats the running heading
       if (assignedOwn == null && hasGaz()) {
         final selfArea =
             _gazetteerAreaInStop(clean, trustedSelfAreas, gazContains);
@@ -236,6 +240,10 @@ Map<int, AreaAssignment> anchorAssign(
   return out;
 }
 
+/// True when a station destination's tokens name a gazetteer entry. A
+/// hyphenated station's `areaTokens` end with the joined duplicate
+/// ("kotake-mukaihara" -> [kotake, mukaihara, kotakemukaihara]), so all
+/// three spellings — split, space-joined, concatenated — are tried.
 bool _destinationInGazetteer(
   List<String> dws,
   bool Function(String normalizedName) contains,
@@ -257,6 +265,11 @@ bool _destinationInGazetteer(
   return candidates.any(contains);
 }
 
+/// A gazetteer-listed area the stop line names about itself, or null. A
+/// candidate only counts in a position where it reads as a locality — after
+/// a venue/meal/furniture word, standing alone, as a `Name -` prefix, or
+/// already trusted earlier the same day — and the line must name exactly one
+/// distinct area: two candidates, or none, is designed silence, never a pick.
 String? _gazetteerAreaInStop(
   String clean,
   Set<String> trustedSelfAreas,
