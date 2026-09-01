@@ -311,7 +311,10 @@ import what is written there, not here.
   column a later migration adds to `trips` is refused rather than silently
   handed to every member, and a closed trip refuses a rename from anybody,
   starter included, which is the read-only record rule written twice like
-  every other write path. **One gate remains and only one**:
+  every other write path. That second refusal is keyed on the *rename* and
+  sits above the trigger's starter early-return, so it holds on a bare
+  `PATCH` round `sync_trip_name` and still takes nothing else off
+  `trips_update_starter`. **One gate remains and only one**:
   a plan with no resolved first or last date, because those columns are
   `not null` and inventing a date is the guess the paste flow exists to
   refuse. And **`TripSync.standings` is the only thing above the seam that

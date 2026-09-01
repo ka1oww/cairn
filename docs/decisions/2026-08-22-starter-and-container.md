@@ -46,8 +46,13 @@ current members get a name-only update path and `name_revised_at` resolves
 offline renames. The starter's broader update and delete policies are
 unchanged, and so is the ending: a closed trip refuses a rename from anybody,
 starter included, because what a trip was called is part of what it closed as
-(`canRenameTrip` takes a `TripStanding` for exactly this, and both the trigger
-and `sync_trip_name` ask `trip_closes_at`).
+(`canRenameTrip` takes a `TripStanding` for exactly this). The refusal is
+written on the *rename* and not on the member path — `guard_member_trip_rename`
+asks `trip_closes_at` before it lets the starter past, and `sync_trip_name`
+asks again — so it is a property of the record rather than of the one function
+the app happens to call, and a bare `PATCH` round that function is refused
+with it. It takes nothing else off the starter: everything they could already
+do to a closed trip under `trips_update_starter` they still can.
 
 **Why.** These look like one permission and are not remotely the same act.
 Renaming is reversible, visible to everyone, and harmless - making somebody wait

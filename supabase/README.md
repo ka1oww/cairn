@@ -413,6 +413,7 @@ directions.
 | **Credit survives the person** | `profile_is_visible_to` (`0009`) resolves a name for anyone you travel with **or** anyone credited on a photo or trip in a trip you are in — because membership is exactly the thing that ends. |
 | **The trip's clock is one shared clock** | `trips_update_starter` / `trips_delete_starter` (`0004`) keep retiming and deletion with the person who authored the trip, and `validate_trip_timezone` (`0003`) refuses a zone that is not real. |
 | **Naming is flat without making the trip row flat** | `trips_update_member_rename`, `guard_member_trip_rename` and `sync_trip_name` (`0014`) admit any current member to `(name, name_revised_at)` only. The starter policy over every other mutable trip column is unchanged; strictly newer name revisions win. |
+| **A closed trip keeps the name it closed under** | `guard_member_trip_rename` (`0014`) asks `trip_closes_at` whenever `name` or `name_revised_at` moves, *before* it lets the starter past — so the refusal is a property of the record and not of one function, and a bare `PATCH /rest/v1/trips` round `sync_trip_name` is refused with it. Deliberately scoped to the rename: nothing else the starter could already do to a closed trip changes. |
 | **The plan is the trip's, and any member may change it** | Every policy on the four itinerary tables (`0010`) is plain membership through `is_trip_member`, with no starter branch and no contributor branch. Editing the plan is flat, like inviting and like naming: a trip is a thing eight people are on, not a thing one of them owns. |
 | **A closed trip takes no new photographs** | `photos_insert_trip_member` (`0006`) also requires `now() < trip_closes_at(...)`, and the `photos_lock_trip_id` trigger (`0006`) stops a row being repointed at a closed trip round it. Deliberately *not* on the update and delete policies: a person's hold on their own photograph — correcting its day, removing it — survives the close ([the ending](../docs/decisions/2026-08-26-the-ending.md)). |
 | **A closed trip's plan is the record** | `sync_trip_itinerary` (`0010`) raises on `trip_closes_at` before its first write, so neither half of the round trip runs and the stored plan is unchanged rather than merely un-returned. The phone refuses first (`TripSync._reconcile`); this is the half that holds when one of eight phones has a wrong clock. |
@@ -893,7 +894,7 @@ not an artefact of one machine's setup.
 
 - All fourteen migrations apply cleanly, and apply again cleanly on a second
   run.
-- 165 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 167 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
@@ -937,11 +938,13 @@ not an artefact of one machine's setup.
 **What the hosted project has actually done** (2026-08-26; migration state
 current to 2026-09-01). Migrations `0001` through `0010`, `0012` and `0014`
 are applied to it — but the copy of `0014` that ran there predates its
-closed-trip refusal and its allowlist guard, so **`0014` must be applied again
-before the hosted project matches this repo**. It is written to be re-run:
-every statement in it is `create or replace`, `drop … if exists` or
-`add column if not exists`. Until then a member can rename a hosted trip after
-it has closed, and the phone is the only thing refusing.
+closed-trip refusal, its allowlist guard and the starter half of that refusal,
+so **`0014` must be applied again before the hosted project matches this
+repo**. It is written to be re-run: every statement in it is
+`create or replace`, `drop … if exists` or `add column if not exists`, and
+`sync_trip_name` keeps its signature, so a second run replaces the function in
+place rather than leaving two. Until then anybody on a hosted trip can rename
+it after it has closed, and the phone is the only thing refusing.
 **Neither `0011` nor `0013` is applied** — the photo transport
 delta, and the
 `sync_trip_itinerary` recreation that carries the area columns over the wire,

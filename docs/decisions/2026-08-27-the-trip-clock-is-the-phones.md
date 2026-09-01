@@ -108,7 +108,9 @@ while the starter-only powers over the rest of the trip row and deletion are
 unchanged. A name carries its own `name_revised_at` clock and
 `sync_trip_name` applies the same offline last-write-wins shape as itinerary
 days: strictly newer wins and the server returns the winner. Flat is not
-unbounded: a closed trip takes no rename at all, refused on the server the way
+unbounded: a closed trip takes no rename at all, from any door and from
+anybody — the trigger refuses it before the starter's own update path is
+reached, not only inside `sync_trip_name` — refused on the server the way
 a closed trip's plan and pool already are, so the record keeps the name it
 closed under. Clearing a name
 travels as `This trip` because the server column is non-null, then maps back to

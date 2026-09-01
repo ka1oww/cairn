@@ -5,8 +5,10 @@
 -- and the trigger bounds that member's write to (name, name_revised_at).
 --
 -- Flat, and still refused once the trip has closed: what a trip was called is
--- part of what it closed as, so both the trigger and `sync_trip_name` ask
--- `trip_closes_at` before letting a rename through.
+-- part of what it closed as. That refusal is on the *rename*, not on the
+-- member path, so it reaches every door -- the trigger asks `trip_closes_at`
+-- before it lets even the starter through, and `sync_trip_name` asks again
+-- so a closed trip's name is unchanged rather than merely un-returned.
 
 alter table public.trips
   add column if not exists name_revised_at timestamptz;
@@ -37,28 +39,39 @@ begin
     return new;
   end if;
 
-  -- The starter's UPDATE policy is unchanged. This trigger only narrows the
-  -- additional path opened to an ordinary member.
+  -- A closed trip is the record, and what it was called is part of what it
+  -- closed as (`cairn_model`'s `canRenameTrip`). Written twice for the same
+  -- reason `sync_trip_itinerary` and `photos_insert_trip_member` are: the
+  -- phone refuses first (`TripSync._reconcile` returns `SyncStanding.archived`
+  -- before reaching the network) and this is the half that holds when one of
+  -- eight phones has a wrong clock.
+  --
+  -- Asked before the starter is let through, and scoped to a rename rather
+  -- than to the whole UPDATE, because both halves of that are the decision.
+  -- The starter's `trips_update_starter` path is otherwise exactly as 0004
+  -- wrote it -- this adds no condition to retiming or to anything else they
+  -- could already do -- but the name is not theirs to change after the close
+  -- either, and leaving them a bare PATCH round `sync_trip_name` would have
+  -- made the refusal a property of one function instead of a property of the
+  -- record. Null is "a trip this caller cannot see", never "never closes".
+  if new.name is distinct from old.name
+     or new.name_revised_at is distinct from old.name_revised_at then
+    v_closes_at := public.trip_closes_at(old.id);
+    if v_closes_at is not null and now() >= v_closes_at then
+      raise exception 'this trip has closed'
+        using errcode = 'insufficient_privilege';
+    end if;
+  end if;
+
+  -- Past the close, the starter's UPDATE policy is unchanged. The rest of
+  -- this trigger only narrows the additional path opened to an ordinary
+  -- member.
   if public.is_trip_starter(old.id, auth.uid()) then
     return new;
   end if;
 
   if not public.is_trip_member(old.id, auth.uid()) then
     raise exception 'only a current member may rename this trip'
-      using errcode = 'insufficient_privilege';
-  end if;
-
-  -- A closed trip is the record, and what it was called is part of what it
-  -- closed as (`cairn_model`'s `canRenameTrip`). Written twice for the same
-  -- reason `sync_trip_itinerary` and `photos_insert_trip_member` are: the
-  -- phone refuses first (`TripSync._reconcile` returns `SyncStanding.archived`
-  -- before reaching the network) and this is the half that holds when one of
-  -- eight phones has a wrong clock. Null is "a trip this caller cannot see",
-  -- which membership above has already ruled out, and is never read as
-  -- "never closes".
-  v_closes_at := public.trip_closes_at(old.id);
-  if v_closes_at is not null and now() >= v_closes_at then
-    raise exception 'this trip has closed'
       using errcode = 'insufficient_privilege';
   end if;
 
@@ -93,7 +106,9 @@ create trigger trips_guard_member_rename
 
 -- Keep `trips_update_starter` exactly as 0004 defined it. PostgreSQL ORs
 -- permissive policies: this second path admits a current member, while the
--- trigger above makes that path name-only.
+-- trigger above makes that path name-only. The one thing the trigger takes
+-- from the starter's path is a rename after the close, which is a rule about
+-- the record rather than a power the starter holds.
 drop policy if exists "trips_update_member_rename" on public.trips;
 create policy "trips_update_member_rename"
   on public.trips for update
@@ -126,10 +141,10 @@ begin
   end if;
 
   -- Refused before the UPDATE, so a closed trip's name is unchanged and not
-  -- merely un-returned. The trigger refuses an ordinary member the same way,
-  -- but it lets the starter through on the path 0004 already gave them, and
-  -- this function is the one rename door the app knocks on -- so the close is
-  -- asked here as well, and a starter cannot rename the record either.
+  -- merely un-returned rather than half-written and rolled back. The trigger
+  -- refuses the same rename whoever sends it, including through a bare PATCH
+  -- that goes round this function; asking here too is what makes the message
+  -- the caller sees the function's own.
   v_closes_at := public.trip_closes_at(p_trip_id);
   if v_closes_at is not null and now() >= v_closes_at then
     raise exception 'this trip has closed';

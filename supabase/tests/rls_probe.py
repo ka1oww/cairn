@@ -256,6 +256,24 @@ def main():
         t=closed)
     check(status == "err" and trip_name(closed) == "Last summer",
           "nor round the function, straight into the table", repr(rows)[:100])
+    # The starter has an UPDATE policy of their own (0004), so a bare PATCH is
+    # a second door and the refusal has to be a property of the record rather
+    # than of `sync_trip_name`.
+    status, rows = a.try_run(
+        """update public.trips set name = 'Round it as the starter',
+               name_revised_at = now() + interval '12 minutes' where id = :t""",
+        t=closed)
+    check(status == "err" and "closed" in str(rows) and trip_name(closed) == "Last summer",
+          "and the starter cannot walk round it either, on the path 0004 gave them",
+          repr(rows)[:100])
+    # ...while nothing else the starter could already do to a closed trip has
+    # been taken away with it: the guard is on the rename, not on the UPDATE.
+    status, rows = a.try_run(
+        "update public.trips set city = 'Sapporo' where id = :t", t=closed)
+    check(status == "ok" and db.run(
+        "select city from public.trips where id = :t", t=closed)[0][0] == "Sapporo",
+        "the rest of the starter's power over a closed trip is untouched",
+        repr(rows)[:100])
     a.run("delete from public.trips where id = :t", t=closed)
 
     # The guard is an allowlist, so a column a later migration adds to `trips`
