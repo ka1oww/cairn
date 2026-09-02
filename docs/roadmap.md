@@ -5,8 +5,9 @@
 This file records **what is built, what is not, and the order the rest arrives in** —
 and, where the order is not obvious, why it is that order.
 
-Last true as of 27 August 2026, reconciled claim by claim against a full bug
-sweep run on a simulator against the live backend. Where this file used to
+Last true as of 1 September 2026, reconciled claim by claim against a full bug
+sweep run on a simulator against the live backend and the subsequent hosted
+cleanup and member-rename rollout. Where this file used to
 claim something that turned out not to be true, the claim has been replaced
 rather than annotated.
 
@@ -215,8 +216,9 @@ well-formed code belonging to somebody else's trip it says so plainly rather
 than spinning. That last step is Phase 2 and nothing else.
 
 **The itinerary really does leave the phone now — and that was not true until
-27 August 2026.** The hosted project exists, migrations `0001`-`0010` are
-applied to it (`0011`, the photo transport delta, is not), an ordinary build
+27 August 2026.** The hosted project exists, migrations `0001`-`0010`, `0012`
+and `0014` are applied to it (`0011`, the photo transport delta, and `0013`,
+its area-sync companion, are not), an ordinary build
 points at it, and the phone signs in as an anonymous GoTrue
 account until Apple lands. But until today, `CAIRN_TRIP_TIMEZONE` was a
 compile-time constant with **no default**, so an ordinary `flutter build ios`
@@ -232,6 +234,11 @@ about "syncs for real" is the audience: **no itinerary has ever been read by a
 second phone**, because nothing carries a membership to one. A pool of one
 phone's photos is likewise only half the Pool, and that is what the gate is
 waiting on to matter.
+
+The 27 August proof rows are gone from the hosted project as of 1 September:
+the “Bug sweep trip”, its itinerary and its one unambiguous linked anonymous
+account were deleted. Six anonymous accounts created that day had no link to
+the trip and were deliberately left alone rather than guessed to be residue.
 
 Still not built: the day page's photo timeline, the Trail's filled node, and
 the gate's face on the day page — the rule is there, the page has no
@@ -281,7 +288,7 @@ tested.
 | `packages/trip_moments` | Landed. Deals one ping per person across the party. Nothing delivers what it deals. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
 | `packages/plan_extraction` | Landed. Bytes in, plan text out — the file-import contract and its `.txt`/`.docx`/`.xlsx`/`.csv`/`.pdf` extractors. Extraction is correct on the Wanderlog print; the cleanup does not strip two of its chrome shapes. |
-| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with migrations `0001`-`0010` applied (`0011` is written and locally probed, not hosted). **No photo transport, and no phone-side call that redeems an invite.** |
+| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with migrations `0001`-`0010`, `0012` and `0014` applied (`0011` and `0013` are written and locally probed, not hosted). **No photo transport, and no phone-side call that redeems an invite.** |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
 | The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** Paste-and-confirm persisting the itinerary locally, with two doors beside the box — a document (`.txt`, `.docx`, `.xlsx`, `.csv`, `.pdf`) or a photo/screenshot through Apple Vision — filling it and never auto-parsing; the day page it lands on, the trip's path, the three-tab container, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them, the trip as a stored fact (roster, starter, flat-but-gated powers, three-word codes that die with the trip, the sheet off the Trail's title), and the itinerary reaching the hosted project on an ordinary build with the app saying when it has not. **Nothing registered with iOS; no photograph can move; no code can admit anybody.** |
@@ -308,8 +315,10 @@ It is also the first moment the project stops being an argument and becomes a
 thing you can hold. That matters more than it sounds for a project whose
 deadline is a chosen anchor rather than a booked trip.
 
-*Needs from you: Xcode, and your phone on a cable. No paid program yet — a free
-Apple ID signs onto your own phone, seven days at a time.*
+*Needs from you: choose one of the three connected devices when it is time to
+walk the device-only paths. Xcode 26.6 is already installed and licensed. No
+paid program yet — a free Apple ID signs onto your own phone, seven days at a
+time.*
 
 ### Phase 2 — Cairn on eight phones
 
@@ -411,22 +420,12 @@ to fill.
 
 Nothing here can be delegated, and several of these block a whole phase.
 
-- **Xcode**, and accepting its licence. Blocks Phase 1.
+- **Xcode is no longer a blocker.** Xcode 26.6 is installed and licensed,
+  `flutter doctor` passes its Xcode check, and three devices are connected.
 - **The Cloudflare account.** Blocks Phase 2; the Supabase one is done and its
   project is live. No secret — the service-role key, the database password —
   ever enters this repository, a pull request, or an agent's hands
   (`supabase/README.md` is the authority on which key is which).
-- **Clearing the sweep's residue from the hosted project.** The 27 August bug
-  sweep wrote real rows into the live project to establish whether the
-  itinerary reached it: a `trips` row `921ac2fa-c6c7-49c5-8bc4-77b79e3c1b55`
-  named "Bug sweep trip" with its days, stops and starting membership, and
-  several anonymous GoTrue accounts each with a `profiles` row. They are inert.
-  Deleting them needs the service-role key, so only you can.
-- **Deciding whether a member may rename a trip.** The phone says any member
-  may (`canRenameTrip` is flat); the server says only the creator may
-  (`trips_update_starter`). Both are deliberate and they disagree. Until it is
-  settled, no rename is pushed at all, so a renamed trip is stale on the
-  server.
 - **Paying Apple** at the weekend test, **and Google** at Android delivery.
 - **Sending design prompts to Claude Design**, and returning the handoffs.
 - **Showing the app to any of the eight.** Nothing has been shown yet, and a
@@ -487,20 +486,15 @@ are the ones that stand between Cairn and being a group at all.
   the phone forgives them by, and kills a code at the trip's close instead of
   at a per-invite `expires_at` (the single timestamp the grace-window decision
   exists to prevent), with `tests/rls_probe.py` reading the Dart vocabulary to
-  keep the two halves from drifting. What is still unreconciled: `max_uses`,
-  which the phone has no notion of; and rename, where the server is
-  starter-only and the phone is flat (above, in what only Zhehang can decide).
+  keep the two halves from drifting. What is still unreconciled is
+  `max_uses`, which the phone has no notion of. Rename is reconciled by
+  migration `0014`: any current member gets the name-only path and the
+  starter's broader row powers remain unchanged.
 - Throttle `redeem_trip_invite`. Three spoken words are a little over six
   hundred thousand codes where eight characters were ~850 billion, and each
   guess covers a neighbourhood of near-spellings. Sayable was the point and
   the trade is the decision's; the rate limit it assumes is not written yet,
   at the database level or above it.
-- **Push a rename.** The roster reconcile pulls the trip's name down; nothing
-  pushes one up, so a trip renamed on this phone stays `This trip` on the
-  server and on everyone else's. The phone deliberately refuses to adopt the
-  placeholder back, which is what stops the pull from *reverting* a local
-  rename. Closing it needs a name clock — a third merge rule where the design
-  has two — and the rename-power decision above.
 - Real sign-in: an account somebody owns and a display name that is theirs. The
   anonymous GoTrue account is real and its id *is* this phone's member id, so
   the roster and the gate ask about the right person; what is still a local

@@ -291,12 +291,14 @@ class RemoteMember {
 class RemoteTrip {
   final TripId id;
   final String? name;
+  final DateTime nameRevisedAt;
   final MemberId startedBy;
   final List<RemoteMember> members;
 
   RemoteTrip({
     required this.id,
     this.name,
+    required this.nameRevisedAt,
     required this.startedBy,
     List<RemoteMember> members = const [],
   }) : members = List.unmodifiable(members);
@@ -314,6 +316,7 @@ class RemoteTripDraft {
   final TripId id;
   final String name;
   final MemberId createdBy;
+  final DateTime nameRevisedAt;
 
   /// An IANA name (`Asia/Tokyo`). Validated at write time by a trigger, so a
   /// wrong one fails here rather than on eight phones later
@@ -331,12 +334,22 @@ class RemoteTripDraft {
     required this.id,
     required this.name,
     required this.createdBy,
+    required this.nameRevisedAt,
     required this.timeZone,
     this.country,
     this.city,
     required this.startDateIso,
     required this.endDateIso,
   });
+}
+
+/// The trip name after the server has compared this phone's revision with
+/// the one it already holds.
+class RemoteTripName {
+  final String name;
+  final DateTime revisedAt;
+
+  const RemoteTripName({required this.name, required this.revisedAt});
 }
 
 /// One row of the trip's shared photo index, spelled as the wire spells it.
@@ -458,6 +471,15 @@ abstract interface class SharedFacts {
   /// (`supabase/migrations/0003_trips.sql`). A row that already exists comes
   /// back as [SharedFactsRefused], which is the honest answer to "make this".
   Future<void> createTrip(RemoteTripDraft draft);
+
+  /// Offers this phone's spelling of the trip name and returns the spelling
+  /// that won. Revisions are ordered by the writing phone's clock, like the
+  /// itinerary's per-day merge.
+  Future<RemoteTripName> syncTripName({
+    required TripId tripId,
+    required String name,
+    required DateTime revisedAt,
+  });
 
   /// Pushes this phone's plan and returns the plan the trip holds once it was
   /// merged in — one round trip, both directions.

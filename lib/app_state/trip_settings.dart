@@ -358,7 +358,7 @@ TripSettingsView? tripSettingsFor({
     name: trip.name,
     // The stand-in word, taken from the seam rather than written twice: it
     // is also what the phone publishes for a trip nobody has named, and the
-    // sync refuses to adopt it back as a name (`itinerary_sync.dart`).
+    // name sync maps it back to null (`itinerary_sync.dart`).
     headline: trip.name ?? unnamedTripPlaceholder,
     span: _span(plan, utcOffset),
     people: [

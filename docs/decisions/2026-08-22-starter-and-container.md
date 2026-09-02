@@ -26,9 +26,9 @@ in the interface would over-promise it; it should not be surfaced as a title at
 all.
 
 **Implementation note.** The backend already treats the starter as a fact about
-the trip (`trips.created_by`) rather than a membership row, so this is a change
-to one predicate: the starter, or the earliest-joined remaining member if the
-starter has left.
+the trip (`trips.created_by`) rather than a membership row, so succession is a
+change to one predicate: the starter, or the earliest-joined remaining member
+if the starter has left. That succession remains pending.
 
 ## 2. Renaming is flat; deleting is not
 
@@ -39,6 +39,20 @@ actually needs.
 
 Changing the trip's **timezone** belongs with delete, not with rename: it
 silently re-times everyone's pings.
+
+**Captain's ruling recorded 1 September 2026:** “sure let them rename it.”
+Migration `0014_member_trip_rename.sql` brings the server up to this decision:
+current members get a name-only update path and `name_revised_at` resolves
+offline renames. The starter's broader update and delete policies are
+unchanged, and so is the ending: a closed trip refuses a rename from anybody,
+starter included, because what a trip was called is part of what it closed as
+(`canRenameTrip` takes a `TripStanding` for exactly this). The refusal is
+written on the *rename* and not on the member path — `guard_member_trip_rename`
+asks `trip_closes_at` before it lets the starter past, and `sync_trip_name`
+asks again — so it is a property of the record rather than of the one function
+the app happens to call, and a bare `PATCH` round that function is refused
+with it. It takes nothing else off the starter: everything they could already
+do to a closed trip under `trips_update_starter` they still can.
 
 **Why.** These look like one permission and are not remotely the same act.
 Renaming is reversible, visible to everyone, and harmless - making somebody wait

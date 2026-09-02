@@ -40,7 +40,8 @@ class PostgrestSharedFacts implements SharedFacts {
   Future<RemoteTrip?> readTrip(TripId tripId) async {
     final auth = await _demand();
     final trip = await _get(
-      '/rest/v1/trips?id=eq.${tripId.value}&select=name,created_by&limit=1',
+      '/rest/v1/trips?id=eq.${tripId.value}'
+      '&select=name,name_revised_at,created_by&limit=1',
       auth,
     );
     final rows = _rows(trip);
@@ -61,6 +62,7 @@ class PostgrestSharedFacts implements SharedFacts {
     return RemoteTrip(
       id: tripId,
       name: rows.first['name'] as String?,
+      nameRevisedAt: _instant(rows.first['name_revised_at']),
       startedBy: MemberId(rows.first['created_by'] as String),
       members: [
         for (final row in roster)
@@ -83,6 +85,7 @@ class PostgrestSharedFacts implements SharedFacts {
       body: {
         'id': draft.id.value,
         'name': draft.name,
+        'name_revised_at': draft.nameRevisedAt.toUtc().toIso8601String(),
         'created_by': draft.createdBy.value,
         'timezone': draft.timeZone,
         if (draft.country != null) 'country': draft.country,
@@ -94,6 +97,34 @@ class PostgrestSharedFacts implements SharedFacts {
       // come back as a refusal, not be quietly overwritten with this
       // phone's idea of it.
       headers: const {'Prefer': 'return=minimal'},
+    );
+  }
+
+  @override
+  Future<RemoteTripName> syncTripName({
+    required TripId tripId,
+    required String name,
+    required DateTime revisedAt,
+  }) async {
+    final auth = await _demand();
+    final response = await _send(
+      'POST',
+      '/rest/v1/rpc/sync_trip_name',
+      auth,
+      body: {
+        'p_trip_id': tripId.value,
+        'p_name': name,
+        'p_name_revised_at': revisedAt.toUtc().toIso8601String(),
+      },
+    );
+    final body = response is Map<String, dynamic>
+        ? response
+        : throw SharedFactsRefused(
+            'name sync returned ${response.runtimeType}',
+          );
+    return RemoteTripName(
+      name: body['name'] as String,
+      revisedAt: _instant(body['name_revised_at']),
     );
   }
 

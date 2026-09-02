@@ -92,6 +92,7 @@ class FakeServer implements SharedFacts {
   String? refuses;
 
   final pushes = <Push>[];
+  final namePushes = <RemoteTripName>[];
   final created = <RemoteTripDraft>[];
   var readTrips = 0;
 
@@ -121,6 +122,7 @@ class FakeServer implements SharedFacts {
     trip = RemoteTrip(
       id: draft.id,
       name: draft.name,
+      nameRevisedAt: draft.nameRevisedAt,
       startedBy: draft.createdBy,
       members: [
         RemoteMember(
@@ -130,6 +132,26 @@ class FakeServer implements SharedFacts {
         ),
       ],
     );
+  }
+
+  @override
+  Future<RemoteTripName> syncTripName({
+    required TripId tripId,
+    required String name,
+    required DateTime revisedAt,
+  }) async {
+    _gate();
+    final answer = RemoteTripName(name: name, revisedAt: revisedAt);
+    namePushes.add(answer);
+    final current = trip!;
+    trip = RemoteTrip(
+      id: current.id,
+      name: name,
+      nameRevisedAt: revisedAt,
+      startedBy: current.startedBy,
+      members: current.members,
+    );
+    return answer;
   }
 
   @override
@@ -240,8 +262,18 @@ ConfirmedDay confirmed(
 Future<TripId> startTrip(AppDatabase db) =>
     db.startTripIfAbsent(starterId: anna, starterDisplayName: 'Anna');
 
-RemoteTrip sharedTrip(TripId id, List<RemoteMember> members, {String? name}) =>
-    RemoteTrip(id: id, name: name, startedBy: MemberId(anna), members: members);
+RemoteTrip sharedTrip(
+  TripId id,
+  List<RemoteMember> members, {
+  String? name,
+  DateTime? nameAt,
+}) => RemoteTrip(
+  id: id,
+  name: name,
+  nameRevisedAt: nameAt ?? DateTime.utc(1970),
+  startedBy: MemberId(anna),
+  members: members,
+);
 
 void main() {
   group('nothing is configured, so nothing happens', () {
@@ -463,10 +495,7 @@ void main() {
       },
     );
 
-    test('a name typed on this phone survives the next reconcile', () async {
-      // The ratchet the sync being off was hiding: nothing pushes a rename,
-      // so a phone that pulled the name would put the old word back in front
-      // of the person who had just typed the new one.
+    test('a name typed on this phone reaches the server', () async {
       final db = inMemory();
       addTearDown(db.close);
       final id = await startTrip(db);
@@ -475,13 +504,18 @@ void main() {
         at: DateTime.utc(2027, 6, 1),
       );
       final server = FakeServer(
-        trip: sharedTrip(id, [
-          RemoteMember(
-            id: MemberId(anna),
-            displayName: 'Anna',
-            joinedAt: DateTime.utc(2027, 6, 1),
-          ),
-        ], name: 'Norway'),
+        trip: sharedTrip(
+          id,
+          [
+            RemoteMember(
+              id: MemberId(anna),
+              displayName: 'Anna',
+              joinedAt: DateTime.utc(2027, 6, 1),
+            ),
+          ],
+          name: 'Norway',
+          nameAt: DateTime.utc(2027, 6, 1),
+        ),
       );
       final sync = TripSync(
         database: db,
@@ -494,11 +528,58 @@ void main() {
       await sync.syncNow();
       expect((await db.readTripFacts())!.name, 'Norway');
 
-      await db.renameTrip('Norway, June');
+      final renamedAt = DateTime.utc(2027, 6, 15, 11);
+      await db.renameTrip('Norway, June', at: renamedAt);
       await sync.syncNow();
 
       expect((await db.readTripFacts())!.name, 'Norway, June');
+      expect(server.namePushes.single.name, 'Norway, June');
+      expect(server.namePushes.single.revisedAt, renamedAt);
+      expect(server.trip!.name, 'Norway, June');
     });
+
+    test(
+      'a newer name from another member wins without being pushed back',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await startTrip(db);
+        await db.renameTrip(
+          'Norway from this phone',
+          at: DateTime.utc(2027, 6, 3),
+        );
+        await TripRepository(db).saveItinerary(
+          plan([confirmed(1, 'Oslo', date: CalendarDate(2027, 6, 14))]),
+          at: DateTime.utc(2027, 6, 1),
+        );
+        final server = FakeServer(
+          trip: sharedTrip(
+            id,
+            [
+              RemoteMember(
+                id: MemberId(anna),
+                displayName: 'Anna',
+                joinedAt: DateTime.utc(2027, 6, 1),
+              ),
+            ],
+            name: 'Norway together',
+            nameAt: DateTime.utc(2027, 6, 4),
+          ),
+        );
+
+        await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+          tripRow: tripRowFor(const FixedTimeZone('Europe/Oslo')),
+        ).syncNow();
+
+        final local = await db.readTripFacts();
+        expect(local!.name, 'Norway together');
+        expect(local.nameRevisedAtUtcIso, '2027-06-04T00:00:00.000Z');
+        expect(server.namePushes, isEmpty);
+      },
+    );
 
     test('every reconcile says where it got to', () async {
       // The second half of D3: the standing has to be hearable, or a plan
@@ -572,6 +653,7 @@ void main() {
           id: pending.tripId,
           name: pending.name ?? 'Norway',
           createdBy: pending.startedBy,
+          nameRevisedAt: pending.nameRevisedAt,
           timeZone: 'Europe/Oslo',
           startDateIso: pending.firstDateIso!,
           endDateIso: pending.lastDateIso!,
@@ -618,6 +700,7 @@ void main() {
             id: pending.tripId,
             name: pending.name ?? 'Norway',
             createdBy: pending.startedBy,
+            nameRevisedAt: pending.nameRevisedAt,
             timeZone: 'Europe/Oslo',
             startDateIso: pending.firstDateIso!,
             endDateIso: ends,
@@ -1224,6 +1307,9 @@ void main() {
         'ALTER TABLE itinerary_stops DROP COLUMN area_source',
       );
       await db.customStatement('DROP TABLE app_preferences');
+      await db.customStatement(
+        'ALTER TABLE trip_facts DROP COLUMN name_revised_at_utc_iso',
+      );
       await db.customStatement('PRAGMA user_version = 5');
     }
 

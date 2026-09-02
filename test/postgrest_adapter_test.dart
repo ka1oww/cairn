@@ -349,7 +349,11 @@ void main() {
           if (request.url.path == '/rest/v1/trips') {
             return http.Response(
               jsonEncode([
-                {'name': 'Norway', 'created_by': anna},
+                {
+                  'name': 'Norway',
+                  'name_revised_at': '2027-06-13T00:00:00+00:00',
+                  'created_by': anna,
+                },
               ]),
               200,
             );
@@ -371,6 +375,7 @@ void main() {
 
       expect(paths, ['/rest/v1/trips', '/rest/v1/trip_roster']);
       expect(shared!.name, 'Norway');
+      expect(shared.nameRevisedAt, DateTime.utc(2027, 6, 13));
       expect(shared.startedBy, MemberId(anna));
       expect(shared.members.single.displayName, 'Anna');
       expect(shared.members.single.joinedAt, DateTime.utc(2027, 6, 14, 8));
@@ -393,6 +398,7 @@ void main() {
           id: trip,
           name: 'Norway',
           createdBy: MemberId(anna),
+          nameRevisedAt: DateTime.utc(2027, 6, 13),
           timeZone: 'Europe/Oslo',
           startDateIso: '2027-06-14',
           endDateIso: '2027-06-18',
@@ -404,8 +410,39 @@ void main() {
       final body =
           jsonDecode((seen as http.Request).body) as Map<String, dynamic>;
       expect(body['id'], trip.value);
+      expect(body['name_revised_at'], '2027-06-13T00:00:00.000Z');
       expect(body['timezone'], 'Europe/Oslo');
       expect(body['start_date'], '2027-06-14');
+    });
+
+    test('a rename goes through the clocked name RPC', () async {
+      late http.Request seen;
+      final sync = facts(
+        MockClient((request) async {
+          seen = request;
+          return http.Response(
+            jsonEncode({
+              'name': 'Norway, June',
+              'name_revised_at': '2027-06-15T09:30:00+00:00',
+            }),
+            200,
+          );
+        }),
+      );
+
+      final answer = await sync.syncTripName(
+        tripId: trip,
+        name: 'Norway, June',
+        revisedAt: DateTime.utc(2027, 6, 15, 9, 30),
+      );
+
+      expect(seen.url.path, '/rest/v1/rpc/sync_trip_name');
+      final body = jsonDecode(seen.body) as Map<String, dynamic>;
+      expect(body['p_trip_id'], trip.value);
+      expect(body['p_name'], 'Norway, June');
+      expect(body['p_name_revised_at'], '2027-06-15T09:30:00.000Z');
+      expect(answer.name, 'Norway, June');
+      expect(answer.revisedAt, DateTime.utc(2027, 6, 15, 9, 30));
     });
   });
 

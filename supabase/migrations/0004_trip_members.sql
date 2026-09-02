@@ -179,9 +179,12 @@ create policy "trips_insert_self"
 -- so it stays with the person who authored it. Flat roles are about what
 -- members may do to each other's contributions -- nobody edits anyone else's
 -- photos or placements -- not about who may retime the whole trip or delete
--- it out from under eight people. Renaming is the only thing lost by this,
--- and the alternative (any member may edit) puts the one value that must not
--- diverge in eight pairs of hands.
+-- it out from under eight people. Renaming was the one thing lost by this,
+-- and `0014_member_trip_rename.sql` has since given it back on the captain's
+-- ruling: a second, narrower UPDATE policy admits any current member, and a
+-- trigger bounds that path to the name alone, on a trip that has not closed.
+-- The policy below is unchanged by that -- retiming and deletion are still
+-- the starter's.
 drop policy if exists "trips_update_owner" on public.trips;
 drop policy if exists "trips_update_starter" on public.trips;
 create policy "trips_update_starter"

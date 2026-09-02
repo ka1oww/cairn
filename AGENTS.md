@@ -29,7 +29,7 @@ import what is written there, not here.
 - Drift's generated code (`lib/**/*.g.dart`) is not checked in (root
   `.gitignore`): run `dart run build_runner build` after checkout, before
   analyzing or testing the app.
-- Schema is at v9. A test that stands up an *old* schema by winding
+- Schema is at v10. A test that stands up an *old* schema by winding
   `user_version` back must also drop everything later versions added
   (`test/trip_id_test.dart`'s `windBackToV4` is the pattern) -- an upgrade that
   finds its own column already there fails outright, and the failure reads like
@@ -302,10 +302,19 @@ import what is written there, not here.
   `trips.timezone` is checked against `pg_timezone_names` at write time.
   Reintroducing an offset-derived zone is the thing to refuse in review.
   Three rules hold this together. **An unnamed trip still publishes**, as
-  `unnamedTripPlaceholder`, and the roster apply **must never adopt that word
-  back** — nothing pushes a rename *up*, so an adopting reconcile would revert
-  a rename typed here (the ratchet is `adoptName` in
-  `itinerary_sync.dart`, pinned by a test). **One gate remains and only one**:
+  `unnamedTripPlaceholder`; a clearing rename uses the same non-null wire word
+  and maps it back to null locally. Names now carry their own
+  `name_revised_at` clock through `sync_trip_name`, and any current member may
+  rename while the starter-only protection over every other trip-row column
+  stays intact (`0014_member_trip_rename.sql`) — bounded on both sides:
+  `guard_member_trip_rename` is an *allowlist* over `to_jsonb(new)`, so a
+  column a later migration adds to `trips` is refused rather than silently
+  handed to every member, and a closed trip refuses a rename from anybody,
+  starter included, which is the read-only record rule written twice like
+  every other write path. That second refusal is keyed on the *rename* and
+  sits above the trigger's starter early-return, so it holds on a bare
+  `PATCH` round `sync_trip_name` and still takes nothing else off
+  `trips_update_starter`. **One gate remains and only one**:
   a plan with no resolved first or last date, because those columns are
   `not null` and inventing a date is the guess the paste flow exists to
   refuse. And **`TripSync.standings` is the only thing above the seam that
@@ -628,8 +637,22 @@ Sharp edges worth knowing before touching this directory again:
   defers its own RLS policies to `0004_trip_members.sql`, because `trips` must
   exist before `trip_members` can reference it but the policies are written in
   terms of membership. Read that comment before reordering anything.
-- **A hosted project exists and migrations `0001`-`0010` and `0012` are
-  applied to it** (`0012`, the tap-to-Maps area columns, on 2026-08-31;
+- **Editing a migration the hosted project has already recorded changes
+  nothing on the hosted project, and nothing says so.** `db push` skips a
+  version already in `supabase_migrations.schema_migrations`, and that row
+  keeps the statements as they were when it ran — hosted's `0014` row still
+  holds the first version's eleven, none mentioning `trip_closes_at`. So an
+  amendment is either the next numbered file (the direction `0011` took
+  rather than patching `0007`) or a deliberate explicit patch over an
+  `--db-url`, written down in `supabase/README.md`'s Verification section.
+  `0014` is the one time this repo has taken the second road; a green
+  `db push` is not evidence the hosted bodies match the files.
+- **A hosted project exists and migrations `0001`-`0010`, `0012` and `0014`
+  are applied to it** (`0012`, the tap-to-Maps area columns, on 2026-08-31;
+  `0014`, the flat member rename, on 2026-09-01, re-applied the same day —
+  function, trigger and policy half only — once review added its closed-trip
+  refusal and allowlist guard, so the hosted bodies match the repo — patched
+  in place rather than re-pushed, per the bullet above;
   `0011`, the photo transport delta, and `0013`, which teaches
   `sync_trip_itinerary` those columns, are written and locally probed but
   applied nowhere else — until `0013` runs, an area correction is stripped on

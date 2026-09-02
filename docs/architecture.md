@@ -113,9 +113,13 @@ across is that roster, so the stub member is gone; it holds one person on a
 phone nobody has signed into. The **itinerary and the roster are now shared
 facts** (grill round one §2): the schema holds them, and `TripSync`
 (`lib/repositories/itinerary_sync.dart`) reconciles them last-write-wins per
-day, over a first slice of the Supabase adapter that speaks PostgREST. That
-whole path is now **live**: a hosted project exists with migrations `0001`
-through `0010` applied, an ordinary build points at it by default, and the phone signs in as a
+day, over a first slice of the Supabase adapter that speaks PostgREST. The
+trip's **name** rides the same seam since the captain's rename ruling, on a
+clock of its own (`name_revised_at` through `sync_trip_name`, migration
+`0014`) rather than on any day's. That whole path is now **live**: a hosted
+project exists with the schema applied to it (`supabase/README.md` is the
+authority on exactly which migrations have run), an ordinary build points at
+it by default, and the phone signs in as a
 GoTrue anonymous account — the stand-in until Sign in with Apple lands
 (`supabase/README.md`). The pool is still
 local: nobody else's bytes arrive until Phase 2. **A trip now ends** as well as
@@ -211,7 +215,8 @@ lives nowhere else:
   above to be built — and `photo_sync.dart`, the outbox's driver, is now its
   deliberate sibling rather than a lodger inside it: those two files are the
   only ones that hold both backends at once. `itinerary_sync.dart`
-  reads the plan and the roster out of Drift, pushes them through the adapter,
+  reads the plan, the roster and the trip's name out of Drift, pushes them
+  through the adapter,
   applies what comes back, and reports a standing rather than an error —
   dormant, no trip, awaiting the trip row, offline, refused, archived,
   synced. **Offline means the local copy is untouched and authoritative**, which is the whole
@@ -357,7 +362,7 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Repositories** | partial — one repository over the itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store. The membership seam (`membership_repository.dart`) has the same two halves for the same reason — `MembershipRepository`, the read interface the trip's surfaces and the ping's party are written against and the only way a test can stand a party of eight up, and `MembershipStore`, the Drift implementation that also owns starting the trip, renaming it, minting and revoking codes and deleting it. The remote side has begun: `TripSync` (`itinerary_sync.dart`) reconciles the two shared facts — the itinerary and the roster — against Supabase, and nothing above it knows it exists, because it makes the store every screen already reads agree with the other phones. The rest of what is listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
+| **Repositories** | partial — one repository over the itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store. The membership seam (`membership_repository.dart`) has the same two halves for the same reason — `MembershipRepository`, the read interface the trip's surfaces and the ping's party are written against and the only way a test can stand a party of eight up, and `MembershipStore`, the Drift implementation that also owns starting the trip, renaming it, minting and revoking codes and deleting it. The remote side has begun: `TripSync` (`itinerary_sync.dart`) reconciles the shared facts — the itinerary, the roster, and the trip's name on its own `name_revised_at` clock — against Supabase, and nothing above it knows it exists, because it makes the store every screen already reads agree with the other phones. The rest of what is listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
 
 ### Storage
 
@@ -378,7 +383,7 @@ nothing about pings fired or who has answered today.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (145-probe RLS suite); **applied to the hosted project 2026-08-26**, where only the permitted paths have been walked (one account, so no refusal observed there); starter-and-container decisions not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns — the one shared clock), `trip_members`, `trip_invites`, `photos` (day-numbered since `0011`, and captioned), `day_unlocks` (likewise), `photo_tombstones`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `may_read_trip_photos`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check, and every *photo* read reaches it through `may_read_trip_photos` — one seat, so the leaver rule lands in one place. |
+| **Postgres schema + RLS** | partial — built and verified on a throwaway local Postgres 17 (167-probe RLS suite); hosted migrations include `0014`'s flat, name-only member rename with its closed-trip refusal in force, where only the permitted paths have been walked (one account, so no refusal observed there); the remaining starter succession and delete-photo gate are not yet implemented | Supabase Auth (`auth.uid()`); written against the model vocabulary | Client adapter, both edge functions, and cross-device agreement on the trip clock | `profiles`, `trips` (+ timezone/window columns and `name_revised_at`), `trip_members`, `trip_invites`, `photos` (day-numbered since `0011`, and captioned), `day_unlocks` (likewise), `photo_tombstones`, `day_pages`, `day_page_photos`, and the itinerary's four (`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`, `trip_itinerary_set_asides`); `is_trip_member`/`is_trip_starter`, `may_read_trip_photos`, `day_page_is_open`, `redeem_trip_invite`, `sync_trip_name`, `sync_trip_itinerary`, and the `trip_roster` view. Membership is the root of every access check, and every *photo* read reaches it through `may_read_trip_photos` — one seat, so the leaver rule lands in one place. |
 | **Supabase Auth (GoTrue)** | partial — **anonymous accounts are live** on the hosted project and are how the phone signs in (`gotrue_sessions.dart`); Apple and Google are dashboard steps and are not enabled | (platform service) | Postgres (`auth.uid()` in every policy), client adapter, edge functions | Accounts. Sign in with Apple first; display name editable at join because providers supply legal names. |
 | **`r2-upload-url` edge fn** | partial — code exists and its decisions are now tested offline (`handler_test.ts`), never deployed; **the phone now calls it** (`photoUploadTicket` in the adapter, driven by the outbox), so far only against a fake | Postgres (re-checks membership, the trip's close, and whether a `photos` row already claims this id — all as the caller), R2 (mints a 5-minute presigned PUT, bounded to a declared type and size) | The only write path for photo bytes — and the outbox's whole retry story leans on its flat refusal of a claimed id | Exists solely because the R2 secret cannot live in the app binary. Split in two on purpose: `handler.ts` decides and imports nothing remote, `index.ts` builds the clients — which is the only way an edge function nothing has deployed can be exercised at all. |
 | **`r2-download-url` edge fn** | partial — code exists and its refusals are tested offline (`handler_test.ts`), never deployed and never run against a project | Postgres, all as the caller: it reads each `photos` row through RLS (so authorisation is *inherited* from `may_read_trip_photos`, never re-decided) and calls `day_page_is_open(trip, day number, uid)` **before** signing, R2 (a 15-minute presigned GET) | The gate itself: a version that skips the check is the single worst potential leak in the app | The bucket is private; every read needs a signature; gating the signature is what makes the shut gate real rather than a curtain. Batched, with a verdict per id and **no reason attached to a refusal** — a reason would map the corpus. It signs only the row's own stored `r2_object_key`; a trip, day or key named by the caller is not read at all — and since `0011` a row may only *store* a key inside its own `trips/<trip>/photos/<id>/` folder (`photos_object_key_own_prefix_check`), which is what makes that sentence an invariant rather than a convention. Same split as the upload function, for the same reason. |
@@ -499,7 +504,10 @@ a "change one, change all" edge:
     `photos_insert_trip_member`, the latter backed by a trigger that forbids
     a photo being repointed at another trip — and both halves shut the plan
     — `TripSync._reconcile` and `sync_trip_itinerary` — because eight phones
-    means one wrong clock. What the close does not take, on either side, is a
+    means one wrong clock. The trip's *name* shuts the same way since the
+    rename ruling: `canRenameTrip` refuses on a read-only standing, and
+    `guard_member_trip_rename` asks `trip_closes_at` whenever the name moves,
+    before it lets even the starter past. What the close does not take, on either side, is a
     person's hold on their own photograph. See
     `docs/decisions/2026-08-26-the-ending.md`.
 
@@ -511,13 +519,14 @@ Drawn as open on the map, not as settled. None of these is a contradiction —
 in every case the decision record is clear and the code is behind it,
 acknowledged and queued (`docs/roadmap.md`, "Work already queued").
 
-- **The starter-and-container decisions are implemented on the phone and not
-  on the server.** `cairn_model`'s `trip_powers.dart` is the whole permission
+- **The starter-and-container decisions are implemented on the phone and
+  partly on the server.** `cairn_model`'s `trip_powers.dart` is the whole permission
   model — rename and mint flat, delete the starter's only while the trip holds
   nobody else's photos, revoke by the minter or the starter, and the removal
   power passing silently to the longest-standing member when the starter
   leaves — and the trip's own surface asks it before every act. The migrations
-  in `supabase/` still have starter-only rename/delete with no photo condition
+  in `supabase/` now let any current member rename through a name-only clocked
+  path (`0014`), but still have starter-only delete with no photo condition
   and no succession, and a `max_uses` the phone has no notion of. The
   three-word grammar and the trip-close expiry are reconciled: the migration
   mints two words and a number, forgives order and spelling by the same rule,
@@ -539,9 +548,10 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   place an RLS refusal has ever been watchable — and it is unrun for the same
   reason. Written-and-unrun is a smaller blank than not-built, and it is still
   the map's most dangerous one.
-- **Sync and conflict policy is settled for the itinerary and the roster, and
-  undecided for everything else.** The two shared facts reconcile
-  last-write-wins per day with no conflict UI and no CRDT — a deliberate
+- **Sync and conflict policy is settled for the itinerary, the roster and the
+  trip's name, and undecided for everything else.** Those shared facts
+  reconcile last-write-wins per day — and the name on its own
+  `name_revised_at` clock — with no conflict UI and no CRDT — a deliberate
   choice, and it costs what last-write-wins always costs: a phone with a fast
   clock wins edits it should lose. Of the photos' three written notes, the
   outbox ordering is now built (the push half, `photo_sync.dart`; the caption
@@ -554,7 +564,7 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   written, tested and correct for weeks while a `String.fromEnvironment` with
   no default meant no binary anybody would run could create the shared `trips`
   row; the clock is now the phone's own IANA zone and an unnamed trip
-  publishes under a placeholder the phone refuses to adopt back
+  publishes under a placeholder the phone maps back to local null
   (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`).
   A green `flutter test` still proves nothing about the hosted project:
   every widget test binds `NoSession` and an in-memory database, deliberately,
@@ -562,7 +572,7 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   `test/hosted_smoke_test.dart`, skipped unless asked for
   (`--dart-define=CAIRN_HOSTED_SMOKE=true`). What it does *not* cover: more
   than one account at a time, so no RLS refusal has ever been observed on the
-  hosted project — only the permitted paths. The 145 adversarial checks still
+  hosted project — only the permitted paths. The 167 adversarial checks still
   run against a throwaway local Postgres, and must.
 - **The shared roster replaces this phone's, and this phone is now whoever
   signed in.** `localMemberIdProvider` (`lib/app_state/ping_schedule.dart`) is

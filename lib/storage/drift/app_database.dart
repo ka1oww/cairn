@@ -250,6 +250,12 @@ class TripFacts extends Table {
   /// so this column is not the starter's.
   TextColumn get name => text().nullable()();
 
+  /// When this spelling was authored. The phone's clock is the ordering,
+  /// matching the itinerary's last-write-wins rule; the epoch means nobody
+  /// has named this trip yet.
+  TextColumn get nameRevisedAtUtcIso =>
+      text().withDefault(const Constant(beforeAnySync))();
+
   /// Who started the trip.
   ///
   /// A fact about the trip, never a rank on a membership row — which is why
@@ -415,7 +421,7 @@ class AppDatabase extends _$AppDatabase {
   final TripId Function() mint;
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -425,6 +431,7 @@ class AppDatabase extends _$AppDatabase {
       // later branch retrofit columns it was born with.
       var photosBornCurrent = false;
       var syncStatesBornCurrent = false;
+      var tripFactsBornCurrent = false;
       if (from < 2) {
         // v1 was the scaffold's single disposable trip_drafts row: a
         // draft with no trip id at all, which is the sidestep
@@ -444,6 +451,7 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 4) {
         await m.createTable(tripFacts);
+        tripFactsBornCurrent = true;
         await m.createTable(tripMembers);
         await m.createTable(tripInviteCodes);
         // A phone that already had a plan already had a trip: it was
@@ -465,6 +473,18 @@ class AppDatabase extends _$AppDatabase {
           "insert into trip_members (id, display_name, joined_on_day) "
           "select 'me', 'You', 1 "
           "where exists (select 1 from itinerary_days)",
+        );
+      }
+      if (from < 10 && !tripFactsBornCurrent) {
+        // This must precede the v5 read of `trip_facts` below: generated row
+        // mapping already expects the current non-null shape.
+        await m.addColumn(tripFacts, tripFacts.nameRevisedAtUtcIso);
+        // A name typed before it had a sync clock is precisely the stale
+        // server name this migration exists to repair, so it becomes a fresh
+        // local revision on upgrade. An unnamed trip stays at the epoch.
+        await customStatement(
+          "update trip_facts set name_revised_at_utc_iso = "
+          "strftime('%Y-%m-%dT%H:%M:%fZ', 'now') where name is not null",
         );
       }
       if (from < 5) {
@@ -1162,7 +1182,6 @@ class AppDatabase extends _$AppDatabase {
   Future<void> replaceRoster({
     required List<TripMemberRecord> members,
     String? startedByMemberId,
-    String? name,
   }) {
     return transaction(() async {
       await delete(tripMembers).go();
@@ -1176,24 +1195,34 @@ class AppDatabase extends _$AppDatabase {
             ),
         ]);
       });
-      if (startedByMemberId != null || name != null) {
+      if (startedByMemberId != null) {
         await (update(tripFacts)..where((t) => t.id.equals(_theOneTrip))).write(
-          TripFactsCompanion(
-            startedByMemberId: startedByMemberId == null
-                ? const Value.absent()
-                : Value(startedByMemberId),
-            name: name == null ? const Value.absent() : Value(name),
-          ),
+          TripFactsCompanion(startedByMemberId: Value(startedByMemberId)),
         );
       }
     });
   }
 
   /// Renames the trip, or clears the name with null.
-  Future<int> renameTrip(String? name) =>
+  Future<int> renameTrip(String? name, {required DateTime at}) =>
       (update(tripFacts)..where((t) => t.id.equals(_theOneTrip))).write(
-        TripFactsCompanion(name: Value(name)),
+        TripFactsCompanion(
+          name: Value(name),
+          nameRevisedAtUtcIso: Value(at.toUtc().toIso8601String()),
+        ),
       );
+
+  /// Applies the name the server's revision comparison returned. The merge
+  /// decision lives in `TripSync`; this write only persists its answer.
+  Future<int> applySharedTripName({
+    required String? name,
+    required DateTime revisedAt,
+  }) => (update(tripFacts)..where((t) => t.id.equals(_theOneTrip))).write(
+    TripFactsCompanion(
+      name: Value(name),
+      nameRevisedAtUtcIso: Value(revisedAt.toUtc().toIso8601String()),
+    ),
+  );
 
   /// Records one minted code.
   Future<int> insertInviteCode(InviteCodeRecord invite) =>

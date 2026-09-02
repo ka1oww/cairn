@@ -87,6 +87,9 @@ Future<void> windBackToV4(AppDatabase db) async {
     'ALTER TABLE itinerary_stops DROP COLUMN area_source',
   );
   await db.customStatement('DROP TABLE app_preferences');
+  await db.customStatement(
+    'ALTER TABLE trip_facts DROP COLUMN name_revised_at_utc_iso',
+  );
   await db.customStatement('PRAGMA user_version = 4');
 }
 
@@ -196,7 +199,10 @@ void main() {
     test('renaming the trip does not renumber it', () async {
       final db = inMemory();
       addTearDown(db.close);
-      final store = MembershipStore(db);
+      final store = MembershipStore(
+        db,
+        now: () => DateTime.utc(2027, 6, 14, 10),
+      );
 
       final minted = await store.startTrip(
         starter: MemberId(you),

@@ -203,6 +203,13 @@ class FakePool implements SharedFacts {
       throw UnimplementedError('PhotoSync never creates the trip row');
 
   @override
+  Future<RemoteTripName> syncTripName({
+    required TripId tripId,
+    required String name,
+    required DateTime revisedAt,
+  }) => throw UnimplementedError('PhotoSync never renames the trip');
+
+  @override
   Future<RemoteItinerary> syncItinerary({
     required TripId tripId,
     required DateTime planRevisedAt,
@@ -986,6 +993,9 @@ void main() {
           'ALTER TABLE itinerary_stops DROP COLUMN area_source',
         );
         await db.customStatement('DROP TABLE app_preferences');
+        await db.customStatement(
+          'ALTER TABLE trip_facts DROP COLUMN name_revised_at_utc_iso',
+        );
         await db.customStatement('PRAGMA user_version = 7');
       }
 

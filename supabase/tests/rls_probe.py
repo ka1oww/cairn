@@ -142,6 +142,153 @@ def main():
     check(status == "ok" and rows is None,
           "and no UPDATE policy at all, so any rewrite matches zero rows")
 
+    # --------------------------------------------------------- naming is flat
+    print("\n== any current member may rename, and only rename, the trip ==")
+    renamed_at = db.run("select now() + interval '1 minute'")[0][0]
+    status, rows = c.try_run(
+        """update public.trips
+           set name = 'Japan together', name_revised_at = :at
+           where id = :t""",
+        t=japan, at=renamed_at)
+    check(status == "ok" and db.run(
+        "select name from public.trips where id = :t", t=japan)[0][0] == "Japan together",
+        "a member who did not create the trip can rename it", repr(rows)[:80])
+
+    b.try_run(
+        """update public.trips
+           set name = 'Not Bob''s trip', name_revised_at = now() + interval '2 minutes'
+           where id = :t""",
+        t=japan)
+    check(db.run("select name from public.trips where id = :t", t=japan)[0][0]
+          == "Japan together",
+          "a person who is not a member cannot rename it")
+
+    before_zone = db.run("select timezone from public.trips where id = :t", t=japan)[0][0]
+    status, rows = c.try_run(
+        """update public.trips
+           set timezone = 'Asia/Seoul', name_revised_at = now() + interval '3 minutes'
+           where id = :t""",
+        t=japan)
+    check(status == "err" and db.run(
+        "select timezone from public.trips where id = :t", t=japan)[0][0] == before_zone,
+        "the member rename path cannot retime the trip", repr(rows)[:100])
+
+    disposable = str(a.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Disposable', :u, 'Asia/Tokyo', current_date, current_date + 1)
+           returning id""", u=alice)[0][0])
+    a.run("insert into public.trip_members (trip_id, user_id) values (:t, :u)",
+          t=disposable, u=carol)
+    c.try_run("delete from public.trips where id = :t", t=disposable)
+    check(db.run("select count(*) from public.trips where id = :t", t=disposable)[0][0] == 1,
+          "a non-starter member still cannot delete the trip")
+    a.run("delete from public.trips where id = :t", t=disposable)
+    check(db.run("select count(*) from public.trips where id = :t", t=disposable)[0][0] == 0,
+          "and the starter's existing delete power is unchanged")
+
+    # ------------------------------- and through the door the app actually uses
+    #
+    # Everything above drives `update public.trips` directly, which the app
+    # never does: `PostgrestSharedFacts.syncTripName` posts to
+    # `/rest/v1/rpc/sync_trip_name`. A column that exists but is not reachable
+    # through the function is the state `0012` shipped in, and reading the
+    # schema cannot see it -- so the merge rule is asserted on the round trip,
+    # exactly as the itinerary's is.
+    print("\n== the rename round trip, through sync_trip_name ==")
+
+    def rename(who, trip, name, at):
+        """('ok', the name that won) or ('err', message)."""
+        status, rows = who.try_run(
+            "select public.sync_trip_name(:t, :n, :at::timestamptz)",
+            t=trip, n=name, at=at)
+        if status != "ok":
+            return status, rows
+        payload = rows[0][0]
+        return status, json.loads(payload) if isinstance(payload, str) else payload
+
+    def now_plus(minutes):
+        return db.run("select (now() + make_interval(mins => :m))::text", m=minutes)[0][0]
+
+    def trip_name(trip):
+        return db.run("select name from public.trips where id = :t", t=trip)[0][0]
+
+    fresh_at = now_plus(10)
+    status, answer = rename(c, japan, "Japan, the second time", fresh_at)
+    check(status == "ok" and answer["name"] == "Japan, the second time"
+          and trip_name(japan) == "Japan, the second time",
+          "a member who did not start the trip renames it through the RPC",
+          repr(answer)[:100])
+
+    status, answer = rename(c, japan, "Typed on a phone with a slow clock", now_plus(5))
+    check(status == "ok" and answer["name"] == "Japan, the second time"
+          and trip_name(japan) == "Japan, the second time",
+          "a stale revision loses and is handed the name that won -- strictly newer wins",
+          repr(answer)[:100])
+
+    status, answer = rename(c, japan, "Japan, again", now_plus(20))
+    check(status == "ok" and trip_name(japan) == "Japan, again",
+          "while a newer revision from the same phone lands", repr(answer)[:100])
+
+    status, rows = rename(b, japan, "Not Bob's trip", now_plus(30))
+    check(status == "err" and "not a member" in str(rows)
+          and trip_name(japan) == "Japan, again",
+          "a non-member calling the function directly is refused, and nothing moved",
+          repr(rows)[:100])
+
+    # A trip of its own, closed, so the refusal is the close and nothing else:
+    # Carol is a member of it and Alice started it, and both are refused.
+    closed = str(a.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Last summer', :u, 'Asia/Tokyo', current_date - 44, current_date - 40)
+           returning id""", u=alice)[0][0])
+    a.run("insert into public.trip_members (trip_id, user_id) values (:t, :u)",
+          t=closed, u=carol)
+    status, rows = rename(c, closed, "Renamed after the fact", now_plus(10))
+    check(status == "err" and "closed" in str(rows) and trip_name(closed) == "Last summer",
+          "a member cannot rename a closed trip -- what it was called is part of the record",
+          repr(rows)[:100])
+    status, rows = rename(a, closed, "Renamed by the starter", now_plus(10))
+    check(status == "err" and "closed" in str(rows) and trip_name(closed) == "Last summer",
+          "and neither can the person who started it", repr(rows)[:100])
+    status, rows = c.try_run(
+        """update public.trips set name = 'Round the function',
+               name_revised_at = now() + interval '11 minutes' where id = :t""",
+        t=closed)
+    check(status == "err" and trip_name(closed) == "Last summer",
+          "nor round the function, straight into the table", repr(rows)[:100])
+    # The starter has an UPDATE policy of their own (0004), so a bare PATCH is
+    # a second door and the refusal has to be a property of the record rather
+    # than of `sync_trip_name`.
+    status, rows = a.try_run(
+        """update public.trips set name = 'Round it as the starter',
+               name_revised_at = now() + interval '12 minutes' where id = :t""",
+        t=closed)
+    check(status == "err" and "closed" in str(rows) and trip_name(closed) == "Last summer",
+          "and the starter cannot walk round it either, on the path 0004 gave them",
+          repr(rows)[:100])
+    # ...while nothing else the starter could already do to a closed trip has
+    # been taken away with it: the guard is on the rename, not on the UPDATE.
+    status, rows = a.try_run(
+        "update public.trips set city = 'Sapporo' where id = :t", t=closed)
+    check(status == "ok" and db.run(
+        "select city from public.trips where id = :t", t=closed)[0][0] == "Sapporo",
+        "the rest of the starter's power over a closed trip is untouched",
+        repr(rows)[:100])
+    a.run("delete from public.trips where id = :t", t=closed)
+
+    # The guard is an allowlist, so a column a later migration adds to `trips`
+    # is refused without that migration having to remember this trigger.
+    db.run("alter table public.trips add column probe_future_column text")
+    status, rows = c.try_run(
+        """update public.trips set probe_future_column = 'mine now',
+               name_revised_at = now() + interval '40 minutes' where id = :t""",
+        t=japan)
+    check(status == "err" and db.run(
+        "select probe_future_column from public.trips where id = :t", t=japan)[0][0] is None,
+        "a column nobody has taught the guard about is refused, not handed over",
+        repr(rows)[:100])
+    db.run("alter table public.trips drop column probe_future_column")
+
     # ------------------------------------------- ...except the starter's removal
     print("\n== the one asymmetry: the person who started the trip can remove someone ==")
     c.try_run("delete from public.trip_members where trip_id = :t and user_id = :u", t=japan, u=alice)
@@ -537,6 +684,25 @@ def main():
         "insert into public.trip_invites (trip_id, code, created_by) values (:t, 'cedar willow 27', :u)",
         t=japan, u=carol)
     check(status == "ok", "any member can mint one -- inviting is flat", repr(rows)[:80])
+    c.run(
+        "insert into public.trip_invites (trip_id, code, created_by) values (:t, 'puffin quartz 63', :u)",
+        t=japan, u=carol)
+    b.try_run("delete from public.trip_invites where code = 'puffin quartz 63'")
+    check(db.run("select count(*) from public.trip_invites where code = 'puffin quartz 63'")[0][0]
+          == 1, "a stranger still cannot revoke a member's code")
+    c.run("delete from public.trip_invites where code = 'puffin quartz 63'")
+    check(db.run("select count(*) from public.trip_invites where code = 'puffin quartz 63'")[0][0]
+          == 0, "the member who minted a code can still revoke it")
+    b.run("insert into public.trip_members (trip_id, user_id) values (:t, :u)",
+          t=iceland, u=carol)
+    c.run(
+        "insert into public.trip_invites (trip_id, code, created_by) values (:t, 'puffin quartz 64', :u)",
+        t=iceland, u=carol)
+    b.run("delete from public.trip_invites where code = 'puffin quartz 64'")
+    check(db.run("select count(*) from public.trip_invites where code = 'puffin quartz 64'")[0][0]
+          == 0, "the starter can still revoke a member's code")
+    c.run("delete from public.trip_members where trip_id = :t and user_id = :u",
+          t=iceland, u=carol)
     before = db.run("select use_count from public.trip_invites where code = 'otter maple 42'")[0][0]
     c.run("select public.redeem_trip_invite('otter maple 42')")
     after = db.run("select use_count from public.trip_invites where code = 'otter maple 42'")[0][0]

@@ -16,10 +16,15 @@ of those is worked out on each phone from the plan it holds, and moving any of
 them server-side would need its own decision.
 
 **A hosted project now exists and migrations `0001` through `0010`, plus
-`0012`, are applied to it** (`https://nswcgzhynclrrunekskh.supabase.co`,
-region `ap-southeast-1`; `0012`, the tap-to-Maps area columns, was applied on
-31 August 2026). `0011`, the photo transport delta, and `0013`, which teaches
-`sync_trip_itinerary` those columns, exist only here and in the local probe. The app
+`0012` and `0014`, are applied to it**
+(`https://nswcgzhynclrrunekskh.supabase.co`, region `ap-southeast-1`; `0012`,
+the tap-to-Maps area columns, was applied on 31 August 2026, and `0014`, flat
+member renames, on 1 September — first as written, then re-applied the same day
+once review added the closed-trip refusal, so the hosted function bodies match
+this repo). `0011`, the photo
+transport delta, and
+`0013`, which teaches `sync_trip_itinerary` those columns, exist only here and
+in the local probe. The app
 points at it by default — see
 [Pointing the app at it](#pointing-the-app-at-it) — and
 [Verification](#verification-what-was-actually-run) at the bottom says what has
@@ -31,7 +36,7 @@ the real sign-in providers are still untouched.
 | Table | Why it exists |
 | --- | --- |
 | `profiles` | One row per person, and the durable home of the name credited under every photo. Auto-created by a trigger on `auth.users` insert. Has **no foreign key to `auth.users`**, on purpose — see [Deletion](#deletion-the-login-goes-the-credit-stays). |
-| `trips` | A named container, plus the shared trip clock (timezone, dates, waking window). The plan itself hangs off it in the three tables below. **`trips.id` is minted by the phone, not here**; see [Who names a trip](#who-names-a-trip). |
+| `trips` | A named container, plus the shared trip clock (timezone, dates, waking window). `name_revised_at` is the name's independent last-write-wins clock, so any current member may rename without gaining power over the trip clock. The plan itself hangs off it in the three tables below. **`trips.id` is minted by the phone, not here**; see [Who names a trip](#who-names-a-trip). |
 | `trip_members` | The root of every access-control check in this schema. A row is reachable by a user if and only if they have a matching `(trip_id, user_id)` row here. Carries **no role column**; see [Roles are flat](#roles-are-flat-except-one-thing). |
 | `trip_invites` | Invite codes — three spoken words each — kept in their own table rather than a column on `trips` so a code can be rotated, revoked, or usage-limited without touching trip identity, and a trip can have more than one outstanding code. Carries **no expiry column**; a code dies when its trip closes and at no other time. See [How someone joins](#how-someone-joins-a-trip). |
 | `photos` | One row per photo in the pool. The bytes live in R2; this row is the index the app queries and the thing RLS protects. Since `0011` it carries **`day_number`** — the photograph's home on the trail, and what the gate keys on — beside the retained `trip_day` date, and an optional **`caption`**. |
@@ -406,7 +411,9 @@ directions.
 | **A caption is its own contributor's** | `photos_update_contributor` (`0006`) already restricted every UPDATE to the contributor, so `caption` (`0011`) needed no new policy. Worth watching refuse rather than assuming: `tests/rls_probe.py` does. |
 | **A member joining mid-trip sees every past day freely** | The *absence* of any day predicate in `photos_select_trip_member` (`0006`), plus the first branch of `day_page_is_open`: any day already finished on the trip's clock is open to every member. |
 | **Credit survives the person** | `profile_is_visible_to` (`0009`) resolves a name for anyone you travel with **or** anyone credited on a photo or trip in a trip you are in — because membership is exactly the thing that ends. |
-| **The trip's clock is one shared clock** | `trips_update_starter` / `trips_delete_starter` (`0004`) keep the trip row with the person who authored it, and `validate_trip_timezone` (`0003`) refuses a zone that is not real. |
+| **The trip's clock is one shared clock** | `trips_update_starter` / `trips_delete_starter` (`0004`) keep retiming and deletion with the person who authored the trip, and `validate_trip_timezone` (`0003`) refuses a zone that is not real. |
+| **Naming is flat without making the trip row flat** | `trips_update_member_rename`, `guard_member_trip_rename` and `sync_trip_name` (`0014`) admit any current member to `(name, name_revised_at)` only. The starter policy over every other mutable trip column is unchanged; strictly newer name revisions win. |
+| **A closed trip keeps the name it closed under** | `guard_member_trip_rename` (`0014`) asks `trip_closes_at` whenever `name` or `name_revised_at` moves, *before* it lets the starter past — so the refusal is a property of the record and not of one function, and a bare `PATCH /rest/v1/trips` round `sync_trip_name` is refused with it. Deliberately scoped to the rename: nothing else the starter could already do to a closed trip changes. |
 | **The plan is the trip's, and any member may change it** | Every policy on the four itinerary tables (`0010`) is plain membership through `is_trip_member`, with no starter branch and no contributor branch. Editing the plan is flat, like inviting and like naming: a trip is a thing eight people are on, not a thing one of them owns. |
 | **A closed trip takes no new photographs** | `photos_insert_trip_member` (`0006`) also requires `now() < trip_closes_at(...)`, and the `photos_lock_trip_id` trigger (`0006`) stops a row being repointed at a closed trip round it. Deliberately *not* on the update and delete policies: a person's hold on their own photograph — correcting its day, removing it — survives the close ([the ending](../docs/decisions/2026-08-26-the-ending.md)). |
 | **A closed trip's plan is the record** | `sync_trip_itinerary` (`0010`) raises on `trip_closes_at` before its first write, so neither half of the round trip runs and the stored plan is unchanged rather than merely un-returned. The phone refuses first (`TripSync._reconcile`); this is the half that holds when one of eight phones has a wrong clock. |
@@ -442,7 +449,7 @@ than the row a real gate and not a curtain.
 
 ### Roles are flat, except one thing
 
-Inviting, composing a day page, renaming nothing, deleting your own photo: all
+Inviting, composing a day page, renaming, deleting your own photo: all
 flat. The one asymmetry is that the person who started the trip can remove
 someone, because the join code is three spoken words and a wrong join has to be
 undoable.
@@ -450,12 +457,14 @@ undoable.
 Two places extend that literal wording, both noted here so they can be
 overruled cheaply:
 
-- **The trip row itself (`trips_update_starter`, `trips_delete_starter`).**
+- **The trip row beyond its name (`trips_update_starter`,
+  `trips_delete_starter`).**
   Deleting a trip cascades every photo in it; changing its timezone silently
   re-times everyone's pings. Flatness in the decision record is about what
   members may do to each other's contributions — "nobody edits anyone else's
   photos or placements" — not about who may retime or destroy the container.
-  The cost of this reading is that a member cannot rename the trip.
+  Migration `0014` separates the harmless part: a member may change only the
+  name and its revision clock; the trigger rejects every other trip column.
 - **Invites are flat** (they were owner-only). Anyone who joined by code
   already knows a working code and can repeat it aloud, so restricting who may
   *create* one bought almost no safety while making the starter a bottleneck —
@@ -507,7 +516,12 @@ is the credit.
    file, tracked in the `supabase_migrations` schema so re-running is
    idempotent — `db push` skips migrations it has already recorded, and
    each file's own `create table if not exists`/`drop policy if exists`
-   guards make a manual re-run safe too.
+   guards make a manual re-run safe too. **That skip cuts both ways**: a
+   migration whose *file* changes after the project recorded it is not
+   replayed, and nothing warns. Amend by adding the next numbered file, or
+   run the changed statements explicitly and write down that you did —
+   [Verification](#verification-what-was-actually-run) records the one time
+   this repo has had to.
 5. **Dashboard steps that are not expressible in SQL**, all one-time:
    - **Enable Sign in with Apple**: Authentication -> Providers -> Apple.
      Requires a Services ID, a Sign in with Apple key, and your app's
@@ -574,13 +588,11 @@ created once and the clock is not re-read, so a phone that flies does not
 rewrite it.
 
 **A trip may be published before it is named.** `trips.name` is `not null`, so
-an unnamed trip goes up as `This trip` (`unnamedTripPlaceholder`), and the
-phone **refuses to adopt that word back** as a name — otherwise the roster
-apply would rename the trip on the next reconcile, and, worse, would revert a
-rename typed on this phone, since nothing ever pushes a rename *up*. The cost
-is that the server's copy of the name goes stale; closing that needs a name
-clock and a decision about `trips_update_starter` (starter-only) against the
-phone's flat `canRenameTrip`, which the roadmap carries as unreconciled.
+an unnamed trip goes up as `This trip` (`unnamedTripPlaceholder`). Since the
+captain's 1 September ruling that any member may rename, `name_revised_at` and
+`sync_trip_name` carry later changes both ways. Clearing a name sends the same
+placeholder over the non-null wire and maps it back to null on each phone; it
+is never adopted as a name somebody typed.
 
 **One thing can still stop the row being created, and only one:** the plan must
 carry at least one resolved date at each end, because `start_date` and
@@ -885,9 +897,9 @@ throwaway Postgres; see that directory's README. It has been run green on two
 independently built clusters — 17.10 and a Homebrew 17.11 — so the results are
 not an artefact of one machine's setup.
 
-- All thirteen migrations apply cleanly, and apply again cleanly on a second
+- All fourteen migrations apply cleanly, and apply again cleanly on a second
   run.
-- 149 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 167 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, the gate opening and never
   re-locking, a mid-trip joiner's access to past days, credit surviving both
@@ -929,9 +941,43 @@ not an artefact of one machine's setup.
   makes the helper functions safe.
 
 **What the hosted project has actually done** (2026-08-26; migration state
-current to 2026-08-31). Migrations `0001` through `0010` are applied to it, and
-so is `0012`, the tap-to-Maps area columns (applied 2026-08-31); **neither
-`0011` nor `0013` is** — the photo transport delta, and the
+current to 2026-09-01). Migrations `0001` through `0010`, `0012` and `0014`
+are applied to it. `0014` ran twice: once as first written, and again on
+1 September once review added the closed-trip refusal, the allowlist guard and
+the starter half of that refusal.
+
+**That second run had to be hand-driven, and it leaves a trap worth stating
+before anything else.** `db push` skips a migration it has already recorded
+(see [Applying this to a fresh Supabase
+project](#applying-this-to-a-fresh-supabase-project), step
+4), and the hosted `supabase_migrations.schema_migrations` row for `0014`
+still holds the *first* version's eleven statements — checked, not assumed:
+none of them mentions `trip_closes_at` or `to_jsonb`. So the hosted function
+bodies match this repo only because the amended DDL was executed explicitly,
+and a later `db push` will report the project up to date while `0014`'s file
+and the hosted bodies say different things. **The standing rule, then: once a
+migration is recorded on hosted, do not amend it and expect `db push` to
+notice.** Either add the next numbered file — the direction `0011` already
+took rather than patching `0007`, and the one to prefer — or repeat a
+deliberate explicit patch like this one, and record it here.
+
+The second run was the *function, trigger and
+policy* half of the migration only — extracted from
+`create or replace function public.guard_member_trip_rename()` to the end of
+the file, so the `alter table` and the `name_revised_at` backfill did not
+re-run — executed over an explicit percent-encoded pooler `--db-url` in a
+scratch directory, never `supabase link`. Read back afterwards:
+`guard_member_trip_rename` now asks `trip_closes_at` *before* its
+`is_trip_starter` early return and compares `to_jsonb(new)` against
+`to_jsonb(old)`; `sync_trip_name` asks it too and is still a single overload;
+`trips` still carries exactly five policies with `trips_update_starter` and
+`trips_delete_starter` unchanged at `created_by = auth.uid()`; and
+`trip_members` still has no `role` column. Every application-table count was
+identical before and after (0 trips, 0 members, 0 photos, 0 invites, 0
+itinerary rows, 24 profiles, 24 `auth.users`) — the patch carried no
+`insert`, `update` or `delete` against any table.
+**Neither `0011` nor `0013` is applied** — the photo transport
+delta, and the
 `sync_trip_itinerary` recreation that carries the area columns over the wire,
 exist only here and in the local probe. The following ran against it for real, from the app's
 own code: an anonymous sign-in through GoTrue; `handle_new_user` minting the
@@ -947,6 +993,34 @@ back down. That simulator walk predates the defect D3 fix and was made with
 `--dart-define=CAIRN_TRIP_TIMEZONE` passed; **no build reading the phone's own
 zone has yet reached this project**, because that path needs a device or
 simulator run and none has been made since.
+
+The 27 August bug-sweep proof data was removed on 1 September: the exact trip,
+its three days and three stops, its itinerary header and starting membership,
+and the one anonymous account unambiguously linked to it (including its
+profile and auth session children). Six other anonymous accounts created on
+27 August had no link to that trip and were deliberately left untouched.
+
+**That removal was read back independently on 1 September**, over the same kind
+of explicit percent-encoded pooler `--db-url` in a scratch directory (never
+`supabase link`), in a session pinned `default_transaction_read_only = on` so
+nothing but `select` could run. Aggregate counts only, and every one of them as
+claimed above: the target trip holds **zero** rows in `trips`,
+`trip_itineraries`, `trip_itinerary_days`, `trip_itinerary_stops`,
+`trip_itinerary_set_asides`, `trip_members`, `trip_invites`, `photos`,
+`day_unlocks` and `day_pages`; the one deleted anonymous account is gone from
+`auth.users`, `public.profiles`, `auth.sessions` and `auth.identities` alike,
+and is named by no `trip_members` row and no `trips.created_by`; the other
+**six** anonymous accounts created on 27 August 2026 are still there with their
+**six** profiles and **zero** trip links; and the project as a whole holds 24
+`auth.users`, 24 profiles and no trip, member, invite, itinerary or photo rows
+at all. The same read-back confirms the migration state — `0001`-`0010`, `0012`
+and `0014` recorded, **`0011` and `0013` absent** — and, more usefully than the
+prose above, that the hosted `guard_member_trip_rename` and `sync_trip_name`
+bodies are **identical to this repo's `0014`** once whitespace is normalised
+(same length, same md5), with the guard's `trip_closes_at` check sitting before
+its `is_trip_starter` early return, `trips` carrying exactly five policies with
+`trips_update_starter` and `trips_delete_starter` still at
+`created_by = auth.uid()`, and `trip_members` still having no `role` column.
 
 **What it still does not prove.** The environment in `tests/supabase_env.sql`
 is a reconstruction of the parts a migration sees, not a Supabase clone; it is
