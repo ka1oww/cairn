@@ -4,8 +4,9 @@
 // Three layers of claim, in order of how much they cost to run:
 //
 //  1. The window, as a pure function. Its edges are the design's numbers
-//     (thirty minutes, the last two) and are the easiest thing in the flow
-//     to get wrong by an off-by-one.
+//     (two minutes, the last thirty seconds) and are the easiest thing in the
+//     flow to get wrong by an off-by-one. The countdown the capture screen
+//     shows is the same function read a third way, so it is pinned here too.
 //  2. The schedule, over a plan. One ping per dated day, inside the waking
 //     day, and never one for a day whose date is still open.
 //  3. The flow itself, through the real screens and the real store.
@@ -168,24 +169,61 @@ void main() {
       expect((call as MomentOpen).isLastStretch, isFalse);
     });
 
-    test('the last two minutes are the last stretch, and not before', () {
+    test('two minutes, to the second, and then the window is shut', () {
+      // The narrowing of 2 September, at both of its edges. The last second
+      // of the window is still the window; the closing instant itself is not.
+      expect(
+        callAt(DateTime.utc(2027, 6, 14, 11, 41, 59)),
+        isA<MomentOpen>(),
+        reason: 'a second short of two minutes is still your minute',
+      );
+      expect(
+        callAt(DateTime.utc(2027, 6, 14, 11, 42)),
+        isA<MomentLate>(),
+        reason: 'two minutes past the ping the window has shut',
+      );
+    });
+
+    test('the last thirty seconds are the last stretch, and not before', () {
+      // `lastStretch` was retuned with the window rather than left at the two
+      // minutes it was: two minutes of a two-minute window is not a tail, and
+      // would make `isLastStretch: false` a state nobody could be in.
       expect(
         (callAt(
-          DateTime.utc(2027, 6, 14, 12, 7, 59),
+          DateTime.utc(2027, 6, 14, 11, 41, 29),
         ) as MomentOpen).isLastStretch,
         isFalse,
       );
       expect(
-        (callAt(DateTime.utc(2027, 6, 14, 12, 8)) as MomentOpen).isLastStretch,
+        (callAt(
+          DateTime.utc(2027, 6, 14, 11, 41, 30),
+        ) as MomentOpen).isLastStretch,
         isTrue,
       );
     });
 
-    test('thirty minutes later the window is closed and the day is not', () {
+    test('a moment carries the instant it shuts, open or shut', () {
+      // The deadline is a fact about the moment, and both doors into the
+      // camera hand it over: it is what the countdown counts to and what a
+      // retake returns to, and nothing downstream recomputes it.
+      final closes = DateTime.utc(2027, 6, 14, 11, 42);
+      expect(
+        (callAt(DateTime.utc(2027, 6, 14, 11, 41)) as MomentOpen).closesAt,
+        closes,
+      );
+      expect(
+        (callAt(DateTime.utc(2027, 6, 14, 18)) as MomentLate).closesAt,
+        closes,
+      );
+    });
+
+    test('past the window the door is open and stays open till midnight', () {
       expect(callAt(DateTime.utc(2027, 6, 14, 12, 10)), isA<MomentLate>());
       // No lockout, ever: hours later is still the open door
-      // (docs/decisions/2026-08-22-design-calls.md §7).
+      // (docs/decisions/2026-08-22-design-calls.md §7). The narrowing took
+      // the window down to two minutes and left this alone.
       expect(callAt(DateTime.utc(2027, 6, 14, 23, 40)), isA<MomentLate>());
+      expect(callAt(DateTime.utc(2027, 6, 14, 23, 59, 59)), isA<MomentLate>());
     });
 
     test('having answered outranks a window that is still open', () {
@@ -206,6 +244,74 @@ void main() {
         standing: model.TripStanding.underway,
       );
       expect((call as MomentAnswered).hourLabel, '11:40');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  group('the countdown', () {
+    // One derivation behind three things that have to agree — what is left,
+    // whether this is the tail, and whether the window has shut — because a
+    // surface that worked any of them out itself could contradict the other
+    // two mid-second.
+    final closes = DateTime.utc(2027, 6, 14, 11, 42);
+    WindowStanding at(DateTime now) =>
+        windowStandingAt(closesAt: closes, now: now);
+
+    test('a whole window reads as the whole window', () {
+      final window = at(DateTime.utc(2027, 6, 14, 11, 40));
+      expect(window.remaining, const Duration(minutes: 2));
+      expect(window.countdownLabel, '2:00 left');
+      expect(window.isLastStretch, isFalse);
+      expect(window.isLate, isFalse);
+    });
+
+    test('the tail is thirty seconds, and the label says so', () {
+      expect(
+        at(DateTime.utc(2027, 6, 14, 11, 41, 29)).countdownLabel,
+        '0:31 left',
+      );
+      expect(at(DateTime.utc(2027, 6, 14, 11, 41, 29)).isLastStretch, isFalse);
+      expect(
+        at(DateTime.utc(2027, 6, 14, 11, 41, 30)).countdownLabel,
+        '0:30 left',
+      );
+      expect(at(DateTime.utc(2027, 6, 14, 11, 41, 30)).isLastStretch, isTrue);
+    });
+
+    test('the last reading is 0:01 and never a lingering 0:00', () {
+      // Rounded up: half a second left is still a second on screen, and the
+      // countdown is gone entirely by the time it would have said zero.
+      expect(
+        at(DateTime.utc(2027, 6, 14, 11, 41, 59, 500)).countdownLabel,
+        '0:01 left',
+      );
+      expect(
+        at(DateTime.utc(2027, 6, 14, 11, 41, 59)).countdownLabel,
+        '0:01 left',
+      );
+    });
+
+    test('a shut window is handed no countdown at all', () {
+      // Surface 10c in the type: a late capture is not given a timer to hide,
+      // it is given nothing to show, so there is nothing to have failed.
+      final window = at(closes);
+      expect(window.isLate, isTrue);
+      expect(window.remaining, Duration.zero);
+      expect(window.countdownLabel, isNull);
+      expect(at(DateTime.utc(2027, 6, 14, 18)).countdownLabel, isNull);
+    });
+
+    test('the deadline is an input, so late is a one-way door', () {
+      // Nothing here derives `closesAt`, which is what lets a retake hand
+      // back the very instant it was given. Time runs one way over a fixed
+      // instant, so a moment that has gone late cannot come back.
+      for (final now in [
+        DateTime.utc(2027, 6, 14, 11, 42),
+        DateTime.utc(2027, 6, 14, 11, 45),
+        DateTime.utc(2027, 6, 14, 23, 59),
+      ]) {
+        expect(at(now).isLate, isTrue, reason: '$now');
+      }
     });
   });
 
@@ -396,6 +502,30 @@ void main() {
                 as Text)
             .data!;
 
+    /// What the capture screen's countdown says, or null when there is no
+    /// countdown on screen at all — which is the whole of surface 10c's rule
+    /// and so is asserted as often as the label itself.
+    String? countdown() =>
+        find.byKey(const Key('capture-countdown')).evaluate().isEmpty
+        ? null
+        : textOf(const Key('capture-countdown'));
+
+    /// The same reading as a duration, for the tests that care that it *moved*
+    /// rather than what it says.
+    Duration leftOnScreen() {
+      final clock = countdown()!.split(' ').first.split(':');
+      return Duration(
+        minutes: int.parse(clock.first),
+        seconds: int.parse(clock.last),
+      );
+    }
+
+    /// Opens the camera from the day page's one call to action.
+    Future<void> openTheCamera(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('capture-call-action')));
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('before your minute, today says so and asks for nothing', (
       tester,
     ) async {
@@ -420,17 +550,21 @@ void main() {
     testWidgets('the whole moment: the call, the shutter, the pause, the word, '
         'and a photo in the store', (tester) async {
       final ping = pingOn(day(14));
-      final shutter = ping.at.add(const Duration(minutes: 3));
+      // Half a minute in: the window is two minutes wide now, so a shutter
+      // three minutes past the ping would be a late capture, not this one.
+      final shutter = ping.at.add(const Duration(seconds: 30));
       final camera = FakeCamera(frames, takenAtUtc: shutter);
       await launch(tester, today: day(14), now: shutter, camera: camera);
       await accept(tester, tripPaste);
 
       expect(textOf(const Key('capture-call')), 'Your minute. Look up.');
-      await tester.tap(find.byKey(const Key('capture-call-action')));
-      await tester.pumpAndSettle();
+      await openTheCamera(tester);
 
-      // The thread has not run out, and the app is as precise as it ever gets.
+      // The thread has not run out, and the app is as deadpan as it ever gets
+      // — with the countdown beside it, which is the only precise thing on
+      // the screen and the main feedback a two-minute window gives.
       expect(textOf(const Key('capture-window')), 'a while yet');
+      expect(countdown(), '1:30 left');
 
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
@@ -487,8 +621,7 @@ void main() {
       );
       await accept(tester, tripPaste);
 
-      await tester.tap(find.byKey(const Key('capture-call-action')));
-      await tester.pumpAndSettle();
+      await openTheCamera(tester);
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -520,8 +653,7 @@ void main() {
       await launch(tester, today: day(14), now: ping.at);
       await accept(tester, tripPaste);
 
-      await tester.tap(find.byKey(const Key('capture-call-action')));
-      await tester.pumpAndSettle();
+      await openTheCamera(tester);
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
       // The tap that skips writing is the same tap that was always there.
@@ -532,14 +664,15 @@ void main() {
       expect(kept.single.word, isNull);
     });
 
-    testWidgets('one retake, and after it the control is gone', (tester) async {
+    testWidgets('a retake before the deadline, and the control stays', (
+      tester,
+    ) async {
       final ping = pingOn(day(14));
       final camera = FakeCamera(frames, takenAtUtc: ping.at);
       await launch(tester, today: day(14), now: ping.at, camera: camera);
       await accept(tester, tripPaste);
 
-      await tester.tap(find.byKey(const Key('capture-call-action')));
-      await tester.pumpAndSettle();
+      await openTheCamera(tester);
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
 
@@ -554,9 +687,190 @@ void main() {
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
 
-      // Absent, not disabled.
-      expect(find.byKey(const Key('capture-once-more')), findsNothing);
+      // And the control is still there. The one-retake cap came off on
+      // 1 September (bereal-parity-calls §2); what bounds a retake now is the
+      // window, which is why the countdown sits beside the control.
+      expect(find.byKey(const Key('capture-once-more')), findsOneWidget);
       expect(find.byKey(const Key('capture-keep')), findsOneWidget);
+      expect(countdown(), isNotNull);
+    });
+
+    testWidgets('several retakes in a row, and the window pays for none '
+        'of them', (tester) async {
+      final ping = pingOn(day(14));
+      // Answered a minute in, so the clock the app was given and the deadline
+      // it is counting to are *different* instants. A retake that recomputed
+      // the deadline from "now" would be invisible if they were the same.
+      final arrived = ping.at.add(const Duration(seconds: 60));
+      final camera = FakeCamera(frames, takenAtUtc: arrived);
+      await launch(tester, today: day(14), now: arrived, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      expect(countdown(), '1:00 left', reason: 'a minute of it already gone');
+
+      // Thirty more seconds spent standing at the framing screen.
+      await tester.pump(const Duration(seconds: 30));
+      expect(countdown(), '0:30 left');
+      expect(textOf(const Key('capture-window')), 'last stretch');
+
+      for (var attempt = 1; attempt <= 4; attempt++) {
+        await tester.tap(find.byKey(const Key('capture-shutter')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('capture-once-more')),
+          findsOneWidget,
+          reason: 'retake $attempt was refused a control',
+        );
+        await tester.tap(find.byKey(const Key('capture-once-more')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('capture-shutter')), findsOneWidget);
+      }
+
+      // Four frames taken and all four thrown away — nothing is kept until
+      // the day is turned over.
+      expect(camera.taken, hasLength(4));
+      expect(camera.discarded, camera.taken);
+
+      // And the deadline never moved. A retake that recomputed it from now
+      // would be reading about a minute and a half here, on its way to never
+      // closing at all; a countdown the retakes had restarted would be
+      // reading the whole two minutes. Both are the bug.
+      expect(countdown(), isNotNull, reason: 'the window shut mid-test');
+      expect(
+        leftOnScreen(),
+        lessThanOrEqualTo(const Duration(seconds: 30)),
+        reason: 'four retakes handed back time the window had already spent',
+      );
+      expect(textOf(const Key('capture-window')), 'last stretch');
+
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('capture-keep')));
+      await tester.pumpAndSettle();
+
+      final kept = await db.readPhotos();
+      expect(kept, hasLength(1), reason: 'one moment is one photograph');
+      expect(kept.single.filePath, camera.taken.last);
+      // The count of retakes is nobody's business but the person's: it is not
+      // stored, and the pool has no column that could show it (the captain
+      // answered "nope" on 3 September).
+      expect(kept.single.word, isNull);
+    });
+
+    testWidgets('the countdown runs the window down, and the surface goes '
+        'with it', (tester) async {
+      final ping = pingOn(day(14));
+      await launch(tester, today: day(14), now: ping.at);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      expect(countdown(), '2:00 left');
+      expect(textOf(const Key('capture-window')), 'a while yet');
+
+      // Ninety seconds in, the tail. `lastStretch` is thirty seconds now,
+      // retuned with the window rather than left at the two minutes it was.
+      await tester.pump(const Duration(seconds: 90));
+      expect(countdown(), '0:30 left');
+      expect(textOf(const Key('capture-window')), 'last stretch');
+
+      await tester.pump(const Duration(seconds: 29));
+      expect(countdown(), '0:01 left');
+
+      // Two minutes exactly, and the window is shut — with the camera still
+      // open, because there is no lockout. What goes away is the timer, not
+      // the door (surface 10c).
+      await tester.pump(const Duration(seconds: 1));
+      expect(countdown(), isNull);
+      expect(
+        textOf(const Key('capture-window')),
+        "Your slot was teatime. It's fine — whatever you take now lands at "
+        "the hour it's taken.",
+      );
+      expect(find.byKey(const Key('capture-shutter')), findsOneWidget);
+    });
+
+    testWidgets('a retake after the window shut is still late, and stays '
+        'marked late', (tester) async {
+      // The bug this replaces: `onceMore` used to hand back a fresh
+      // `isLate: false`, so a late capture came back from a retake looking
+      // punctual — the mark the whole late path exists to carry, wiped by the
+      // one control that is always on screen.
+      const lateSentence =
+          "Your slot was teatime. It's fine — whatever you take now lands at "
+          "the hour it's taken.";
+      final ping = pingOn(day(14));
+      final late = ping.at.add(const Duration(hours: 6));
+      final camera = FakeCamera(frames, takenAtUtc: late);
+      await launch(tester, today: day(14), now: late, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      expect(textOf(const Key('capture-window')), lateSentence);
+      expect(countdown(), isNull);
+
+      for (var attempt = 1; attempt <= 3; attempt++) {
+        await tester.tap(find.byKey(const Key('capture-shutter')));
+        await tester.pumpAndSettle();
+        // No timer on the breath either: a late capture is not handed one to
+        // hide, it is handed nothing to show.
+        expect(countdown(), isNull, reason: 'a countdown on retake $attempt');
+        await tester.tap(find.byKey(const Key('capture-once-more')));
+        await tester.pumpAndSettle();
+        expect(
+          textOf(const Key('capture-window')),
+          lateSentence,
+          reason: 'retake $attempt came back punctual',
+        );
+        expect(
+          countdown(),
+          isNull,
+          reason:
+              'retake $attempt re-opened the '
+              'window',
+        );
+      }
+
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('capture-keep')));
+      await tester.pumpAndSettle();
+
+      // And it lands at the hour it was really taken, which is the only
+      // pressure the system applies.
+      expect(
+        (await db.readPhotos()).single.takenAtUtcIso,
+        late.toIso8601String(),
+      );
+    });
+
+    testWidgets('a window that shuts during the breath is honestly late', (
+      tester,
+    ) async {
+      // The other direction of the same rule. The deadline is frozen and time
+      // is not, so lateness is derived rather than latched: a moment answered
+      // punctually but dithered over past the deadline goes late, and the
+      // retake that follows finds it late rather than finding the window it
+      // opened with.
+      final ping = pingOn(day(14));
+      await launch(tester, today: day(14), now: ping.at);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      expect(countdown(), isNotNull, reason: 'the breath opened in time');
+
+      await tester.pump(const Duration(minutes: 3));
+      expect(countdown(), isNull);
+
+      await tester.tap(find.byKey(const Key('capture-once-more')));
+      await tester.pumpAndSettle();
+      expect(
+        textOf(const Key('capture-window')),
+        "Your slot was teatime. It's fine — whatever you take now lands at "
+        "the hour it's taken.",
+      );
     });
 
     testWidgets('leaving without keeping throws the frame away', (
@@ -567,8 +881,7 @@ void main() {
       await launch(tester, today: day(14), now: ping.at, camera: camera);
       await accept(tester, tripPaste);
 
-      await tester.tap(find.byKey(const Key('capture-call-action')));
-      await tester.pumpAndSettle();
+      await openTheCamera(tester);
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('capture-keep')));
@@ -588,8 +901,7 @@ void main() {
         textOf(const Key('capture-call')),
         "Your minute came and went. The door's open till midnight.",
       );
-      await tester.tap(find.byKey(const Key('capture-call-action')));
-      await tester.pumpAndSettle();
+      await openTheCamera(tester);
 
       // Surface 10c: no thread at all, so there is nothing to have failed.
       expect(
@@ -597,6 +909,7 @@ void main() {
         "Your slot was teatime. It's fine — whatever you take now lands at "
         "the hour it's taken.",
       );
+      expect(countdown(), isNull);
 
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
@@ -606,6 +919,65 @@ void main() {
       final kept = await db.readPhotos();
       // The late photo carries its real hour, and is visibly late.
       expect(kept.single.takenAtUtcIso, late.toIso8601String());
+    });
+
+    testWidgets('the last minute before midnight is still yours', (
+      tester,
+    ) async {
+      // The window narrowed to two minutes and the late path did not move an
+      // inch: it runs to midnight, and the minute before midnight is inside
+      // it (docs/decisions/2026-09-02-bereal-parity-calls.md, second round).
+      final ping = pingOn(day(14));
+      await launch(
+        tester,
+        today: day(14),
+        now: day(14).add(const Duration(hours: 23, minutes: 59)),
+        camera: FakeCamera(frames, takenAtUtc: ping.at),
+      );
+      await accept(tester, tripPaste);
+
+      expect(
+        textOf(const Key('capture-call')),
+        "Your minute came and went. The door's open till midnight.",
+      );
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('capture-keep')));
+      await tester.pumpAndSettle();
+
+      expect(await db.readPhotos(), hasLength(1));
+    });
+
+    testWidgets('midnight is where the late path stops, and the day belongs '
+        'to the party after it', (tester) async {
+      // A minute later and yesterday asks nothing of anybody. This is the
+      // cutoff itself: the moment is a fact about *today*, and adding to a
+      // day that is over is the import sweep's job, not this flow's.
+      await launch(
+        tester,
+        today: day(15),
+        now: day(15).add(const Duration(minutes: 1)),
+      );
+      await accept(tester, tripPaste);
+
+      // Today is day two, and its own minute is still somewhere ahead — the
+      // waking day starts at 08:00.
+      expect(
+        textOf(const Key('capture-call')),
+        'Your minute is somewhere in today.',
+      );
+
+      await tester.tap(find.byKey(const Key('tab-trail')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('trail-node-1')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('capture-call')),
+        findsNothing,
+        reason: 'yesterday was still offering a moment after midnight',
+      );
     });
 
     testWidgets('a camera that will not open says so, and keeps nothing', (
@@ -620,8 +992,7 @@ void main() {
       );
       await accept(tester, tripPaste);
 
-      await tester.tap(find.byKey(const Key('capture-call-action')));
-      await tester.pumpAndSettle();
+      await openTheCamera(tester);
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
 
