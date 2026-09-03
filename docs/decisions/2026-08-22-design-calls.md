@@ -87,6 +87,11 @@ memory of a trip they were physically on, over a notification missed while
 swimming. Being visibly the person who answered at 23:40 is pressure enough,
 and it is funnier.
 
+*The thirty was narrowed to two minutes on 3 September; nothing else in this
+call moved, and the late path is still open till midnight. The number lives
+in `captureWindow` (`lib/app_state/capture_flow.dart`), which is the only
+place it is written.*
+
 ## Open
 The book's page design, pending a reference the captain is supplying. One spread
 per day, photos in the order they happened, digital only.

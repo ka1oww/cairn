@@ -82,7 +82,12 @@ can join). Joining, buzzing, and the shared pool are all unwritten.
   *keeps* back-only, the accepted fallback. What follows is composing the
   inset and keeping it. See
   [the camera decision](decisions/2026-08-22-camera-like-bereal.md).
-- **The countdown.**
+- **The countdown.** The *drawn* one — the dashed thread burning down the edge
+  with its coral bead (10a/10b). The reading itself came forward with the
+  two-minute window: the capture screen counts the time left down to the
+  second in the house's own type, because at two minutes it is the only
+  feedback the person has and stopped being decoration. What is still after
+  the line is the treatment.
 
 **The test the line is held to:** when a friend on the trip asks what this
 does, one sentence answers it — if the answer needs two sentences, something
@@ -544,7 +549,8 @@ are the ones that stand between Cairn and being a group at all.
 - The end-of-trip handover of the book and everyone's photos.
 - The two-frame camera (the front inset).
 - The cat.
-- The countdown.
+- The countdown's drawn treatment (the burning thread). The reading itself
+  came forward with the two-minute window and is built.
 - Android delivery through the Play testing track.
 - Autofill the itinerary from a Wanderlog *export* — distinct from reading a
   Wanderlog *print*, which is built and, today, produces an unusable plan.

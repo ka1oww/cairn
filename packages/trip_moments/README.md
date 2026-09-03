@@ -263,8 +263,9 @@ diff (or a Node step in CI) to be caught.
   (permissions, battery optimization, the device being off) is outside its
   control.
 - **No knowledge of who answered.** The schedule is derived, not recorded.
-  Late contributions, the thirty-minute answering window and the day's page
-  belong to the app layer.
+  Late contributions, the answering window (how long it lasts is the app's
+  own `captureWindow`, not this package's) and the day's page belong to the
+  app layer.
 - **No trip metadata.** This package does not know what a trip "is" beyond
   a string id, a party of member ids, dates and offsets. It does not
   validate that a trip exists, load timezones, or know when a trip starts —
