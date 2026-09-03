@@ -669,8 +669,9 @@ Sharp edges worth knowing before touching this directory again:
   function, trigger and policy half only — once review added its closed-trip
   refusal and allowlist guard, so the hosted bodies match the repo — patched
   in place rather than re-pushed, per the bullet above;
-  `0011`, the photo transport delta, and `0013`, which teaches
-  `sync_trip_itinerary` those columns, are written and locally probed but
+  `0011`, the photo transport delta, `0013`, which teaches
+  `sync_trip_itinerary` those columns, and `0015`, the day-gate and tenancy
+  hardening, are written and locally probed but
   applied nowhere else — until `0013` runs, an area correction is stripped on
   push and absent on pull, so it never leaves the phone that made it), and an
   ordinary build points at it (`supabase/README.md` is the authority on the
@@ -707,11 +708,11 @@ Sharp edges worth knowing before touching this directory again:
   an outbox that inserted the row first would refuse its own retry. The two
   probe checks under *"a co-member can read what an upload URL is minted from"*
   pin the premise that a photo id is not a secret.
-- **A row may only point at its own object, and both halves of that are in
-  `0011`.** `photos_object_key_own_prefix_check` /
-  `photos_thumbnail_key_own_prefix_check` bound the *first* claim to
+- **A row may only point at its own object.** `photos_object_key_own_prefix_check` /
+  `photos_thumbnail_key_own_prefix_check` (`0011`, tightened by `0015`) bound
+  the *first* claim to
   `lower(key) like 'trips/' || trip_id || '/photos/' || id || '/%'`, and the
-  `photos_lock_object_keys` trigger stops either key changing afterwards.
+  `photos_lock_object_keys` trigger (`0011`) stops either key changing afterwards.
   Neither is sufficient alone — a trigger has no old row on INSERT, and a
   locked key that was free to be anything is a permanent theft rather than a
   revocable one. This is what `r2-download-url`'s promise rests on: it signs
@@ -721,23 +722,32 @@ Sharp edges worth knowing before touching this directory again:
   Three things not to undo. The comparison is **case-insensitive on purpose**:
   both functions' `UUID_RE` carries the `i` flag, so a strict check would take
   the PUT and then refuse the row, stranding an object behind a retry that
-  re-mints the same rejected key forever. Everything past the prefix is
-  deliberately free, because naming the file is `objectKeyFor`'s business.
+  re-mints the same rejected key forever. Past the prefix, `0015` refuses
+  traversal and empty segments, backslashes, percent escapes and URL
+  delimiters — a `.../<id>/../` key passed the prefix check and was normalised
+  outside the photo's folder before signing (`supabase/README.md` owns the
+  detail); the rest of the naming is still `objectKeyFor`'s business.
   And the client must **mint the photo id itself** — a key containing the row's
   own id cannot be written by a client waiting on `gen_random_uuid()`.
-  `day_pages.r2_object_key` has the identical latent freedom and is left alone
-  deliberately: nothing signs a day-page key yet.
-- **The download function signs the row's key and nothing else, and its four
+  `day_pages.r2_object_key` is still unconstrained deliberately: nothing signs
+  a day-page key yet (its `trip_id` is locked by `0015`'s
+  `day_pages_lock_trip_id` trigger, though).
+- **The download function signs the row's key and nothing else, and its five
   properties are load-bearing in order.** `r2-download-url` takes a trip and up
   to 64 photo ids and answers a verdict per id. (1) **The row decides**: every
   id is looked up server-side and only that row's own stored `r2_object_key` is
   signed — a trip, a day, a key or a uid in the body is not read at all, and R2
   keys are derivable from ids the sync already hands out, so a function that
-  signed a key it was handed would leak every trip. (2) **Authorisation is
+  signed a key it was handed would leak every trip. (2) **The stored key is
+  validated again before signing** (`isSafePhotoObjectKey`): it must name the
+  row's own folder in literal, non-empty, non-traversing segments, so a
+  malformed legacy row is refused before the gate is asked — the last wall in
+  front of the signer, deliberately repeating `0015`'s constraint. (3)
+  **Authorisation is
   inherited, not re-decided**: the row is read *as the caller* through RLS, so
   `may_read_trip_photos` answers and no second copy of the rule exists in
-  TypeScript. (3) **The gate is asked before anything is signed**, per id,
-  inside the loop. (4) **A refusal carries no reason** — unreadable,
+  TypeScript. (4) **The gate is asked before anything is signed**, per id,
+  inside the loop. (5) **A refusal carries no reason** — unreadable,
   nonexistent, malformed and gated are one answer, because a reason is an
   oracle for walking the corpus. A failed read and an unanswerable gate both
   refuse rather than sign. The shape is settled (2026-08-28): a time-limited
@@ -755,7 +765,12 @@ Sharp edges worth knowing before touching this directory again:
   has no shut days at all. Failing shut instead would shut a live trip against
   the people who took the photographs. Uploading never requires a day to have a
   date, and contributing to an undated day opens it (`record_day_unlock` has no
-  `trip_day is not null` guard any more — that guard was the hole).
+  `trip_day is not null` guard any more — that guard was the hole). Since
+  `0015` the permissive default cannot be forged: an unlock follows a moved
+  photograph (deleting one still never re-locks its day), and re-dating or
+  un-dating a still current or future day holds the gate shut until the old
+  date passes (`day_gate_date_guards`) — `supabase/README.md`'s gate section
+  owns the detail.
 - **Every photograph read goes through one seat.** `may_read_trip_photos`
   (`0011`) today answers exactly `is_trip_member`, and both the `photos` SELECT
   policy and `r2-download-url` go through it. It exists so that when leaving
