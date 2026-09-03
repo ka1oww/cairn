@@ -3,17 +3,15 @@
 //
 // The camera is a platform edge — the map draws those beside this band:
 // services know them, they know nothing of Cairn. Everything above this file
-// asks for one frame and is handed a file path and an instant; nothing above
-// it names a lens, a controller, or a plugin.
+// asks for one capture event and is handed file paths and an instant; nothing
+// above it names a lens, a controller, or a plugin.
 //
-// **Back camera only.** That is the first release, decided and settled: the
-// composition is back-full-bleed with the front inset following after the
+// The composition is back-full-bleed with the front inset following after the
 // line (docs/decisions/2026-08-22-camera-like-bereal.md, and the first
 // release's list in docs/roadmap.md). The spike at
-// learning/dual-camera-spike/ established that the inset, when it lands, is a
-// back-*then*-front sequence and never a simultaneous capture — which is
-// why this interface takes one frame at a time rather than a pair. Adding the
-// inset is a second method here, not a different shape.
+// learning/dual-camera-spike/ established that the inset is a
+// back-*then*-front sequence and never a simultaneous capture. This source
+// therefore opens and closes one camera at a time.
 import 'dart:io';
 
 import 'package:camera/camera.dart';
@@ -22,10 +20,16 @@ import 'package:path_provider/path_provider.dart';
 
 import 'stand_in_frame.dart';
 
-/// One frame, taken.
+/// One capture event, with the back frame first and an optional front frame.
 class CapturedFrame {
-  /// Where the bytes landed on this device.
+  /// Where the back-frame bytes landed on this device.
+  ///
+  /// This name is retained for the existing capture flow, which currently
+  /// stores one path. New consumers should use [backPath] and [frontPath].
   final String path;
+
+  /// Where the front-frame bytes landed, when a front frame was taken.
+  final String? frontPath;
 
   /// When the shutter fired, in UTC.
   ///
@@ -34,7 +38,17 @@ class CapturedFrame {
   /// `PhotoOrigin.imported` (design-calls §2, "the hour is reliable").
   final DateTime takenAtUtc;
 
-  const CapturedFrame({required this.path, required this.takenAtUtc});
+  const CapturedFrame({
+    required this.path,
+    required this.takenAtUtc,
+    this.frontPath,
+  });
+
+  /// The back frame, named explicitly for two-frame consumers.
+  String get backPath => path;
+
+  /// Whether this capture event includes the front inset frame.
+  bool get hasFrontFrame => frontPath != null;
 }
 
 /// The camera could not be used. Carries a sentence a person could read.
@@ -46,15 +60,54 @@ class CameraRefused implements Exception {
   String toString() => 'CameraRefused: $reason';
 }
 
-/// Whatever can hand the app one photograph.
+/// Whatever can hand the app one capture event.
 abstract interface class CameraSource {
-  /// Takes one frame with the back camera, or throws [CameraRefused].
+  /// Takes a back frame and, when available, a front frame, or throws
+  /// [CameraRefused]. The two captures are sequential.
   Future<CapturedFrame> takeOne();
 
   /// Throws away a frame that was never kept — a retake, or a capture
   /// abandoned before the day turned over. The file was this seam's to make,
   /// so it is this seam's to unmake; no band above does file I/O.
   Future<void> discard(String path);
+}
+
+/// The hardware-facing part of [BackCameraSource].
+///
+/// Keeping this small seam separate from file storage lets tests exercise the
+/// real sequencing and cleanup rules without needing a camera or a platform
+/// channel.
+abstract interface class CameraCaptureEdge {
+  Future<List<CameraDescription>> listCameras();
+
+  /// Captures a frame and returns the plugin-owned temporary path.
+  Future<String> capture(CameraDescription camera);
+}
+
+class _PluginCameraCaptureEdge implements CameraCaptureEdge {
+  const _PluginCameraCaptureEdge();
+
+  @override
+  Future<List<CameraDescription>> listCameras() => availableCameras();
+
+  @override
+  Future<String> capture(CameraDescription camera) async {
+    // `max`, not `high`: the pool stores the original. Every smaller size
+    // shown by the app is derived at decode time by
+    // `lib/screens/photo_frame.dart` and never written back over this file.
+    final controller = CameraController(
+      camera,
+      ResolutionPreset.max,
+      enableAudio: false,
+    );
+    try {
+      await controller.initialize();
+      final shot = await controller.takePicture();
+      return shot.path;
+    } finally {
+      await controller.dispose();
+    }
+  }
 }
 
 /// Where kept and unkept frames both live on this device.
@@ -71,49 +124,91 @@ Future<Directory> _frameDirectory() async {
 
 /// The real one. **Real device only** — see [standInOrRealCamera].
 class BackCameraSource implements CameraSource {
-  const BackCameraSource();
+  const BackCameraSource({
+    CameraCaptureEdge camera = const _PluginCameraCaptureEdge(),
+    Future<Directory> Function() directoryProvider = _frameDirectory,
+  }) : this._(camera, directoryProvider);
+
+  const BackCameraSource._(this._camera, this._directoryProvider);
+
+  final CameraCaptureEdge _camera;
+  final Future<Directory> Function() _directoryProvider;
 
   @override
   Future<CapturedFrame> takeOne() async {
-    final cameras = await availableCameras();
-    final back = cameras.where(
-      (c) => c.lensDirection == CameraLensDirection.back,
-    );
-    if (back.isEmpty) {
-      throw const CameraRefused('This device has no back camera.');
-    }
-    // `max`, not `high`. The pool stores the **original**
-    // (docs/decisions/2026-08-22-grill-round-one.md §3), and the handover
-    // promise is a full-size set, so the largest frame the sensor will give
-    // is the frame this app is entitled to keep. `ResolutionPreset.high` is
-    // 720p on iOS (`camera_avfoundation` maps it to `.hd1280x720`) -- a
-    // downsize applied before the bytes ever reach the store, which no later
-    // layer could undo. `max` selects the device's highest-resolution format
-    // instead, and the plugin falls back down the ladder on a device that
-    // cannot offer it, so asking for it is never the thing that fails.
-    // Every smaller size the app shows is derived at decode time by
-    // `lib/screens/photo_frame.dart` and never written back over this file.
-    final controller = CameraController(
-      back.first,
-      ResolutionPreset.max,
-      enableAudio: false,
-    );
+    String? backPath;
     try {
-      await controller.initialize();
-      final shot = await controller.takePicture();
-      final at = DateTime.now().toUtc();
-      final dir = await _frameDirectory();
-      final path = '${dir.path}/${at.microsecondsSinceEpoch}.jpg';
-      // A byte-for-byte copy, deliberately: no re-encode, no strip, no
-      // recompression. The file the plugin wrote is the original, and this
-      // is only where it is filed.
-      await File(shot.path).copy(path);
-      return CapturedFrame(path: path, takenAtUtc: at);
-    } on CameraException catch (e) {
-      throw CameraRefused(e.description ?? 'The camera would not open.');
-    } finally {
-      await controller.dispose();
+      final cameras = await _camera.listCameras();
+      final back = cameras.where(
+        (c) => c.lensDirection == CameraLensDirection.back,
+      );
+      if (back.isEmpty) {
+        throw const CameraRefused('This device has no back camera.');
+      }
+      final front = cameras.where(
+        (c) => c.lensDirection == CameraLensDirection.front,
+      );
+      if (front.isEmpty) {
+        throw const CameraRefused('This device has no front camera.');
+      }
+
+      // The back capture completes before this call begins. Each controller
+      // is disposed by the platform edge before the next lens is opened.
+      final backFrame = await _captureAndStore(back.first, 'back');
+      backPath = backFrame.path;
+      final frontFrame = await _captureAndStore(front.first, 'front');
+      return CapturedFrame(
+        path: backFrame.path,
+        frontPath: frontFrame.path,
+        takenAtUtc: backFrame.takenAtUtc,
+      );
+    } catch (error, stackTrace) {
+      if (backPath != null) {
+        // If the second lens refuses or its capture fails, the first copy is
+        // not a photograph the app can keep. Do not leave it behind.
+        try {
+          await discard(backPath);
+        } catch (_) {
+          // A cleanup that cannot delete is a stray file, and a stray file is
+          // not what the caller is waiting to hear about: the refusal below is
+          // the only thing above this seam handles.
+        }
+      }
+      if (error is CameraException) {
+        Error.throwWithStackTrace(
+          CameraRefused(error.description ?? 'The camera would not open.'),
+          stackTrace,
+        );
+      }
+      Error.throwWithStackTrace(error, stackTrace);
     }
+  }
+
+  Future<({String path, DateTime takenAtUtc})> _captureAndStore(
+    CameraDescription camera,
+    String identity,
+  ) async {
+    final temporaryPath = await _camera.capture(camera);
+    final at = DateTime.now().toUtc();
+    final dir = await _directoryProvider();
+    final path = '${dir.path}/$identity-${at.microsecondsSinceEpoch}.jpg';
+    // A byte-for-byte copy, deliberately: no re-encode, no strip, no
+    // recompression. The file the plugin wrote is the original, and this
+    // is only where it is filed.
+    try {
+      await File(temporaryPath).copy(path);
+    } catch (error, stackTrace) {
+      // A copy that stops half way — a full disk, on a `max` original —
+      // leaves a truncated destination behind. Nothing above knows this path
+      // yet, so unmaking it is this call's own business.
+      try {
+        await _delete(path);
+      } catch (_) {
+        // Same rule as the caller's cleanup: the original failure travels.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    return (path: path, takenAtUtc: at);
   }
 
   @override

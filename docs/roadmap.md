@@ -76,8 +76,11 @@ can join). Joining, buzzing, and the shared pool are all unwritten.
   each person's own phone. The grace window means nothing is lost by it
   arriving after the first trip starts — but it is the highest-severity blank
   in the backend and lands early in version two.
-- **The two-frame camera.** First release captures back-only, the accepted
-  fallback; the front inset follows. See
+- **The two-frame camera.** The camera edge's half has landed — one
+  `takeOne()` now takes the back frame and then the front one, sequentially —
+  but nothing above the seam reads the second file, so the first release still
+  *keeps* back-only, the accepted fallback. What follows is composing the
+  inset and keeping it. See
   [the camera decision](decisions/2026-08-22-camera-like-bereal.md).
 - **The countdown.**
 

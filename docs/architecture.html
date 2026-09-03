@@ -316,7 +316,7 @@
 <div class="node partial" style="left:424px;top:22px;width:170px;height:130px">
   <span class="chip">partial</span><h4>Capture</h4>
   <p>Answers the ping. 30-min window, late path always open, one retake, one line of words.</p>
-  <span class="sub">back-only built — the line's own scope; the front inset and a live viewfinder not</span>
+  <span class="sub">keeps the back frame only — the line's own scope; the camera edge hands up a front frame, but its composition and a live viewfinder are not built</span>
 </div>
 <div class="node partial" style="left:606px;top:22px;width:170px;height:130px">
   <span class="chip">partial</span><h4>Pool</h4>
@@ -379,7 +379,7 @@
 </div>
 <div class="node partial" style="left:915px;top:445px;width:115px">
   <span class="chip">partial</span><h4>Camera</h4>
-  <p>Back-then-front sequence (the spike settled it); back-only ships first, and is built.</p>
+  <p>Back-then-front sequence (the spike settled it), one camera open at a time. The source takes both frames and hands up <code>backPath</code> and <code>frontPath</code>; nothing above it reads the second yet.</p>
 </div>
 <div class="node nb" style="left:1045px;top:445px;width:115px">
   <span class="chip">not built</span><h4>Location</h4>
@@ -560,8 +560,9 @@
       a seeded roster in the tests; a phone can still only write its own row.</li>
       <li><b>Nothing is registered with iOS.</b> The schedule reaches a <code>NotificationEdge</code>
       and stops. The whole ping path is real except its last inch — the one the user would notice.</li>
-      <li><b>No viewfinder, and a drawn frame where there is no camera.</b> Capture takes a frame
-      without showing the live preview, and falls back to a generated image on the Simulator. That
+      <li><b>No viewfinder, and a drawn frame where there is no camera.</b> Capture takes a back
+      frame and then a front one without showing the live preview, and falls back to a single
+      generated image on the Simulator. That
       makes the flow walkable without a cable; it also means a green Simulator run is no evidence
       the real camera path works.</li>
       <li><b>No download path.</b> Only uploads exist. The requirements are written down — which is
