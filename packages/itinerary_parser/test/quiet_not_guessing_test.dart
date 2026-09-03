@@ -101,6 +101,16 @@ void main() {
       expect(timeOfOnlyStop('Taxi 45.00 usd shared'), isNull);
     });
 
+    test('a priced 4-digit number refuses the bare military form', () {
+      expect(timeOfOnlyStop('Lunch ¥1200'), isNull);
+      expect(timeOfOnlyStop('1200 JPY entry'), isNull);
+      expect(timeOfOnlyStop('Check in 1400'), const ParsedTime(14, 0),
+          reason: 'an ordinary bare military time still stars');
+      expect(timeOfOnlyStop('Lunch ¥1200, walk over by 1400'),
+          const ParsedTime(14, 0),
+          reason: 'a later real time on the same line still counts');
+    });
+
     test('a labelled 4-digit number refuses the bare military form', () {
       expect(timeOfOnlyStop('Hotel check-in, Room 1204'), isNull);
       expect(timeOfOnlyStop('Gate 2130 at Changi'), isNull);

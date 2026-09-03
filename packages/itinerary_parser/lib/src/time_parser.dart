@@ -15,11 +15,12 @@ import 'models.dart';
 /// year and almost never contain a genuine 19xx/20xx military time. This is
 /// a known, documented limitation rather than an oversight. It also refuses
 /// a 4-digit number whose preceding word labels it (`room 1204`, `gate
-/// 2130`, `flight`, `platform`, `bus`, `train`, `no.`, `#`), and the
-/// `H.MM`/`H:MM` form refuses a match that is priced rather than timed — a
-/// currency symbol right before it (`$12.50`) or a currency code right
-/// after it (`12.50 SGD`). Both lists are deliberately short: going wider
-/// would be guessing in the other direction.
+/// 2130`, `flight`, `platform`, `bus`, `train`, `no.`, `#`), and both it
+/// and the `H.MM`/`H:MM` form refuse a match that is priced rather than
+/// timed — a currency symbol right before it (`$12.50`, `¥1200`) or a
+/// currency code right after it (`12.50 SGD`, `1200 JPY`). Both lists are
+/// deliberately short: going wider would be guessing in the other
+/// direction.
 ///
 /// A *hedged* time is not extracted at all: `maybe 4pm?`, `around 4.40 PM`,
 /// `~7pm`, `7pm-ish`, `2pm or 3pm` all return null. An extracted time is
@@ -53,6 +54,9 @@ ParsedTime? extractTime(String line) {
   for (final military in _bareMilitary.allMatches(line)) {
     final text = military.group(0)!;
     if (_looksLikeYear(text)) continue;
+    // A price wearing a military time's shape — `¥1200`, `1200 JPY` — is
+    // skipped, not starred; a later real time on the same line still counts.
+    if (_looksLikePrice(line, military)) continue;
     // `Room 1204`, `Gate 2130`: four digits after a label word are a
     // labelled number, never a departure time. The label list is short on
     // purpose — anything wider is guessing in the other direction.
