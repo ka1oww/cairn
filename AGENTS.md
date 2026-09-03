@@ -427,14 +427,30 @@ import what is written there, not here.
   type. `test/tab_bar_style_test.dart` pins the tokens and states.
 - **Capture is a route, not a tab.** The only way in is the day page's one
   call to action, and only an open or a late window offers it. The camera is
-  behind `CameraSource` (`lib/app_state/camera_source.dart`): a real back
-  camera on a device, a *generated* PNG anywhere without one — which is what
+  behind `CameraSource` (`lib/app_state/camera_source.dart`): a real camera on
+  a device, a *generated* PNG anywhere without one — which is what
   makes the flow walkable on the Simulator, and also means a green simulator
   run is no evidence the camera path works. Judge that on a device only.
   `NSCameraUsageDescription` is in `ios/Runner/Info.plist`; audio is off, so
   no microphone string is needed. The ping's schedule is real
   (`trip_moments`) but dealt for a stub party of one, and `NotificationEdge`
   is not implemented against iOS -- nothing actually buzzes yet.
+- **One `takeOne()` is one capture *event*: the back frame, then the front
+  one.** Sequential and never simultaneous — the spike settled that
+  (`learning/dual-camera-spike/`), and `BackCameraSource` opens and disposes
+  one controller per lens through `CameraCaptureEdge`, so two lenses are
+  never live at once. `CapturedFrame.path` still *is* `backPath`, deliberately,
+  so the single-frame callers above the seam keep working while
+  `frontPath` / `hasFrontFrame` wait for a consumer; **the source composes
+  nothing** — it delivers two files and the inset's layout is somebody else's
+  slice. Three refusals are load-bearing and all three are `CameraRefused`: no
+  back camera, no *front* camera, and a failure of the second shot — and the
+  last one **discards the back file it already copied**, because a half-taken
+  event must leave no orphan on disk. `CameraCaptureEdge` and the injectable
+  directory exist for exactly that: `test/camera_source_test.dart` proves the
+  ordering, the frame identity and the cleanup against a fake, which is
+  evidence about the sequencing rules and still none at all about a real
+  camera.
 - **The stored frame is the original, and every displayed size is derived.**
   Settled 2026-08-22 (`docs/decisions/2026-08-22-grill-round-one.md` §3);
   the trip's full-size handover promise rests on it. Two halves, and both

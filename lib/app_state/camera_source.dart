@@ -60,7 +60,7 @@ class CameraRefused implements Exception {
   String toString() => 'CameraRefused: $reason';
 }
 
-/// Whatever can hand the app one photograph.
+/// Whatever can hand the app one capture event.
 abstract interface class CameraSource {
   /// Takes a back frame and, when available, a front frame, or throws
   /// [CameraRefused]. The two captures are sequential.

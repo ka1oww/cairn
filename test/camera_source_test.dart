@@ -31,6 +31,12 @@ class FakeCameraEdge implements CameraCaptureEdge {
   int? failOnCapture;
   int? loseFrameOnCapture;
 
+  /// How many captures were ever open at once. The captain's settled choice is
+  /// back-*then*-front, so this must never exceed one: request order alone
+  /// would still read `[back, front]` if the two lenses were opened together.
+  int inFlight = 0;
+  int mostInFlightAtOnce = 0;
+
   @override
   Future<List<CameraDescription>> listCameras() async => cameras;
 
@@ -38,6 +44,15 @@ class FakeCameraEdge implements CameraCaptureEdge {
   Future<String> capture(CameraDescription camera) async {
     requestedLenses.add(camera.lensDirection);
     captureCount += 1;
+    inFlight += 1;
+    mostInFlightAtOnce = inFlight > mostInFlightAtOnce
+        ? inFlight
+        : mostInFlightAtOnce;
+    // An await inside the capture, so a caller that started the second lens
+    // without waiting for the first would be seen here rather than hidden by
+    // a fake that happens to answer without ever yielding.
+    await Future<void>.delayed(Duration.zero);
+    inFlight -= 1;
     if (captureCount == failOnCapture) {
       throw CameraException('capture', 'permission denied');
     }
@@ -88,6 +103,7 @@ void main() {
       CameraLensDirection.back,
       CameraLensDirection.front,
     ]);
+    expect(edge.mostInFlightAtOnce, 1);
     expect(frame.path, frame.backPath);
     expect(
       frame.backPath,
