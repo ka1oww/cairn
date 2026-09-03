@@ -1167,116 +1167,100 @@ void main() {
 
         await sync.syncNow();
 
-        expect(
-          (await db.readItineraryDays()).map((day) => day.place),
-          ['Oslo', 'Bergen'],
-          reason: 'an answer cannot delete a day it was never shown',
-        );
+        expect((await db.readItineraryDays()).map((day) => day.place), [
+          'Oslo',
+          'Bergen',
+        ], reason: 'an answer cannot delete a day it was never shown');
 
         server.holds = null;
         await sync.syncNow();
-        expect(
-          server.pushes.last.days.map((day) => day.number),
-          [1, 2],
-          reason: 'the surviving addition rides the follow-up push',
-        );
+        expect(server.pushes.last.days.map((day) => day.number), [
+          1,
+          2,
+        ], reason: 'the surviving addition rides the follow-up push');
       },
     );
 
-    test(
-      'a day deleted during the round trip stays deleted',
-      () async {
-        final db = inMemory();
-        addTearDown(db.close);
-        final id = await startTrip(db);
-        final repository = TripRepository(db);
+    test('a day deleted during the round trip stays deleted', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      final repository = TripRepository(db);
+      await repository.saveItinerary(
+        plan([confirmed(1, 'Oslo'), confirmed(2, 'Bergen')]),
+        at: DateTime.utc(2027, 6, 1, 9),
+      );
+      // The answer is the snapshot from before the deletion: it still
+      // carries day 2, under clocks older than the deletion's.
+      final server = FakeServer(trip: sharedTrip(id, const []))
+        ..holds = serverHolds([
+          serverDay(1, 'Oslo', DateTime.utc(2027, 6, 1, 9)),
+          serverDay(2, 'Bergen', DateTime.utc(2027, 6, 1, 9)),
+        ], planAt: DateTime.utc(2027, 6, 1, 9));
+      server.onSyncItinerary = () async {
+        server.onSyncItinerary = null;
         await repository.saveItinerary(
-          plan([confirmed(1, 'Oslo'), confirmed(2, 'Bergen')]),
-          at: DateTime.utc(2027, 6, 1, 9),
+          plan([confirmed(1, 'Oslo')]),
+          at: DateTime.utc(2027, 6, 6, 9),
         );
-        // The answer is the snapshot from before the deletion: it still
-        // carries day 2, under clocks older than the deletion's.
-        final server = FakeServer(trip: sharedTrip(id, const []))
-          ..holds = serverHolds([
-            serverDay(1, 'Oslo', DateTime.utc(2027, 6, 1, 9)),
-            serverDay(2, 'Bergen', DateTime.utc(2027, 6, 1, 9)),
-          ], planAt: DateTime.utc(2027, 6, 1, 9));
-        server.onSyncItinerary = () async {
-          server.onSyncItinerary = null;
-          await repository.saveItinerary(
-            plan([confirmed(1, 'Oslo')]),
-            at: DateTime.utc(2027, 6, 6, 9),
-          );
-        };
-        final sync = TripSync(database: db, facts: server, now: duringTheTrip);
+      };
+      final sync = TripSync(database: db, facts: server, now: duringTheTrip);
 
-        await sync.syncNow();
+      await sync.syncNow();
 
-        expect(
-          (await db.readItineraryDays()).map((day) => day.place),
-          ['Oslo'],
-          reason: 'the older incoming copy must not resurrect the deletion',
-        );
+      expect((await db.readItineraryDays()).map((day) => day.place), [
+        'Oslo',
+      ], reason: 'the older incoming copy must not resurrect the deletion');
 
-        // The follow-up push carries the deletion to the server.
-        server.holds = null;
-        await sync.syncNow();
-        expect(server.pushes.last.days.map((day) => day.number), [1]);
-        expect(
-          (await db.readItineraryDays()).map((day) => day.place),
-          ['Oslo'],
-          reason: 'the acknowledging echo settles the tombstone quietly',
-        );
-        expect(
-          await db.select(db.itineraryDayTombstones).get(),
-          isEmpty,
-          reason: 'an acknowledged deletion needs no further defending',
-        );
-      },
-    );
+      // The follow-up push carries the deletion to the server.
+      server.holds = null;
+      await sync.syncNow();
+      expect(server.pushes.last.days.map((day) => day.number), [1]);
+      expect((await db.readItineraryDays()).map((day) => day.place), [
+        'Oslo',
+      ], reason: 'the acknowledging echo settles the tombstone quietly');
+      expect(
+        await db.select(db.itineraryDayTombstones).get(),
+        isEmpty,
+        reason: 'an acknowledged deletion needs no further defending',
+      );
+    });
 
-    test(
-      'a deletion loses to a copy somebody edited after it',
-      () async {
-        final db = inMemory();
-        addTearDown(db.close);
-        final id = await startTrip(db);
-        final repository = TripRepository(db);
+    test('a deletion loses to a copy somebody edited after it', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      final repository = TripRepository(db);
+      await repository.saveItinerary(
+        plan([confirmed(1, 'Oslo'), confirmed(2, 'Bergen')]),
+        at: DateTime.utc(2027, 6, 1, 9),
+      );
+      // Somebody else edited day 2 *after* this phone will delete it:
+      // per-day last-write-wins, their edit wins the day back.
+      final server = FakeServer(trip: sharedTrip(id, const []))
+        ..holds = serverHolds([
+          serverDay(1, 'Oslo', DateTime.utc(2027, 6, 1, 9)),
+          serverDay(
+            2,
+            'Bergen',
+            DateTime.utc(2027, 6, 7, 9),
+            stops: ['Bryggen'],
+          ),
+        ], planAt: DateTime.utc(2027, 6, 7, 9));
+      server.onSyncItinerary = () async {
+        server.onSyncItinerary = null;
         await repository.saveItinerary(
-          plan([confirmed(1, 'Oslo'), confirmed(2, 'Bergen')]),
-          at: DateTime.utc(2027, 6, 1, 9),
+          plan([confirmed(1, 'Oslo')]),
+          at: DateTime.utc(2027, 6, 6, 9),
         );
-        // Somebody else edited day 2 *after* this phone will delete it:
-        // per-day last-write-wins, their edit wins the day back.
-        final server = FakeServer(trip: sharedTrip(id, const []))
-          ..holds = serverHolds([
-            serverDay(1, 'Oslo', DateTime.utc(2027, 6, 1, 9)),
-            serverDay(
-              2,
-              'Bergen',
-              DateTime.utc(2027, 6, 7, 9),
-              stops: ['Bryggen'],
-            ),
-          ], planAt: DateTime.utc(2027, 6, 7, 9));
-        server.onSyncItinerary = () async {
-          server.onSyncItinerary = null;
-          await repository.saveItinerary(
-            plan([confirmed(1, 'Oslo')]),
-            at: DateTime.utc(2027, 6, 6, 9),
-          );
-        };
+      };
 
-        await TripSync(
-          database: db,
-          facts: server,
-          now: duringTheTrip,
-        ).syncNow();
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
 
-        final saved = await repository.watchItinerary().first;
-        expect(saved!.days.map((day) => day.place), ['Oslo', 'Bergen']);
-        expect(saved.days.last.stops.single.text, 'Bryggen');
-      },
-    );
+      final saved = await repository.watchItinerary().first;
+      expect(saved!.days.map((day) => day.place), ['Oslo', 'Bergen']);
+      expect(saved.days.last.stops.single.text, 'Bryggen');
+    });
 
     test('a day somebody else added arrives, with their clock on it', () async {
       final db = inMemory();
