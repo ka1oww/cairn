@@ -45,8 +45,20 @@ size touches is in `2026-08-22-round7-handoff.zip`:
   (`15d` — past days open freely, today gated like anyone's).
 
 Still current from the 22 August handoff: `8` (day page), `9`'s composition
-at the round-7 count, `10` (capture room states), `11` (the cairn), `12`
-(the notification).
+at the round-7 count, `11` (the cairn), `12` (the notification).
+
+`10` (capture room states) is **current in its states and superseded in its
+timing**, by
+[the two-minute window](../decisions/2026-09-03-the-two-minute-window.md).
+The four rooms it draws are the four the app has — open, last stretch, late,
+the breath — and `10c`'s rule that a late capture is shown no timer at all is
+built exactly as drawn. What no longer holds is the timing they were drawn
+against: the window is two minutes rather than thirty, the last stretch is its
+final thirty seconds, and the retake control on `10d` is always present because
+retakes are unlimited. The drawn treatment of the countdown — the dashed thread
+burning down the edge with its coral bead — is still owed; what is built is a
+numeric countdown in the house's own tokens, which is that surface's job done
+plainly while the treatment waits.
 
 The **paste-confirmation gap is closed** (round 8): what the itinerary
 parser understood now has its screens — the confident read (`16a`), the
