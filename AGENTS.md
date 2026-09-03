@@ -29,7 +29,7 @@ import what is written there, not here.
 - Drift's generated code (`lib/**/*.g.dart`) is not checked in (root
   `.gitignore`): run `dart run build_runner build` after checkout, before
   analyzing or testing the app.
-- Schema is at v10. A test that stands up an *old* schema by winding
+- Schema is at v11. A test that stands up an *old* schema by winding
   `user_version` back must also drop everything later versions added
   (`test/trip_id_test.dart`'s `windBackToV4` is the pattern) -- an upgrade that
   finds its own column already there fails outright, and the failure reads like
@@ -266,7 +266,12 @@ import what is written there, not here.
   a merge that kept a local row would resurrect somebody who left and deal
   them a ping). It reports a *standing*, never an error — dormant, no trip,
   awaiting the trip row, offline, refused, archived, synced — and offline
-  means the local copy is untouched and authoritative. Two rules to keep: applying a merge must
+  means the local copy is untouched and authoritative. The apply is itself a
+  merge: `AppDatabase.applyRemoteItinerary` (its doc comment is the
+  authority) re-reads the plan inside its own transaction so an edit made
+  during the round trip wins by its own clock, and a day deleted mid-flight
+  is defended by a durable tombstone (`itinerary_day_tombstones`, schema v11)
+  instead of being resurrected by the answer's older snapshot. Two rules to keep: applying a merge must
   never re-stamp a day's clock (that is what makes two phones push at each
   other forever), **an archived trip is not reconciled at all** (it returns
   `SyncStanding.archived` before the first round trip, so a pull cannot apply
@@ -508,9 +513,14 @@ import what is written there, not here.
   re-minted once a PUT has returned 200** — past that line the `photos` row
   may land any moment and a row's existence is what makes `r2-upload-url`
   refuse the id. `SharedFactsUnavailable` stops the whole pass with no
-  per-item penalty, `UploadTicketRejected` re-queues with backoff (attempts
-  never terminate; the server's close-plus-grace is the real deadline,
-  relayed as `refused`), `SharedFactsRefused` is terminal. And uploading
+  per-item penalty, `UploadTicketRejected` retries with backoff — an
+  `uploaded` or `caption` row keeps its state through `delayOutboxRetry`, so
+  a retryable failure after the PUT never re-mints a ticket over durable
+  bytes (attempts never terminate; the server's close-plus-grace is the real
+  deadline, relayed as `refused`), and `SharedFactsRefused` is terminal but
+  minted only on the upload function's own verdicts (403, 409, a validation
+  400) — any other 4xx retries, and the v11 migration re-queues rows an
+  older client's broader classification left `refused`. And uploading
   never requires a dated day — the photo's home is its day *number*, so no
   form ever stands in front of the camera; a plan nobody dated still
   publishes, `trip_day` simply null. The caption is a single-owner field

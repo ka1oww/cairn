@@ -358,6 +358,12 @@ class TripSync {
       return SyncOutcome(SyncStanding.offline, detail: e.reason);
     } on SharedFactsRefused catch (e) {
       return SyncOutcome(SyncStanding.refused, detail: e.reason);
+    } on Object catch (e) {
+      // A malformed or otherwise unexpected server answer is still an
+      // offline reconcile from the person's point of view: none of the local
+      // itinerary apply ran, so this phone remains authoritative and the
+      // next scheduled sync must be free to try again.
+      return SyncOutcome(SyncStanding.offline, detail: e.toString());
     }
   }
 
@@ -567,11 +573,10 @@ class TripSync {
       ],
     );
 
-    // Applied wholesale and *without* re-stamping: what came back is already
-    // the merge of this phone's push and everyone else's, decided by the rule
-    // at the top of this file. Stamping it here would make every pull look
-    // like a local edit, and two phones would push each other's plans back
-    // and forth for as long as they both had signal.
+    // Applied without re-stamping: what came back is already the merge of
+    // this phone's push and everyone else's, decided by the rule at the top
+    // of this file. The store re-reads inside its apply transaction so a
+    // local edit made during this round trip wins over an older incoming day.
     final incomingDays = [
       for (final day in merged.days)
         (
@@ -645,6 +650,10 @@ class TripSync {
         state.planRevisedAtUtcIso == planAt &&
         state.pocketRevisedAtUtcIso == pocketAt;
     if (settled) {
+      await database.retireAcknowledgedTombstones(
+        answeredNumbers: {for (final day in incomingDays) day.number},
+        planRevisedAtUtcIso: planAt,
+      );
       await database.markSynced(itinerarySyncedAtUtcIso: _stamp());
     } else {
       await database.applyRemoteItinerary(
@@ -654,6 +663,7 @@ class TripSync {
         planRevisedAtUtcIso: planAt,
         pocketRevisedAtUtcIso: pocketAt,
         syncedAtUtcIso: _stamp(),
+        pushedDayNumbers: {for (final day in localDays) day.number},
       );
     }
     return SyncOutcome(

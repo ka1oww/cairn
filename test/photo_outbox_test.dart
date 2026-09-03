@@ -60,8 +60,10 @@ class FakePool implements SharedFacts {
 
   /// Scripted verdicts, one per step. Each stands until the test clears it.
   String? mintRefuses;
+  String? mintRetryable;
   String? putRejects;
   String? recordRefuses;
+  String? recordRetryable;
   String? recordUnavailable;
   String? captionRefuses;
 
@@ -102,6 +104,7 @@ class FakePool implements SharedFacts {
     _gate();
     calls.add(('mint', photoId));
     if (mintRefuses != null) throw SharedFactsRefused(mintRefuses!);
+    if (mintRetryable != null) throw UploadTicketRejected(mintRetryable!);
     // The flat claimed-id refusal, contributor included: a row is what
     // closes an original to further writes. Mirrored here because the crash
     // matrix's "PUT landed, 200 lost" row is safe precisely because no row
@@ -146,6 +149,9 @@ class FakePool implements SharedFacts {
       throw SharedFactsUnavailable(recordUnavailable!);
     }
     if (recordRefuses != null) throw SharedFactsRefused(recordRefuses!);
+    if (recordRetryable != null) {
+      throw UploadTicketRejected(recordRetryable!);
+    }
     // THE invariant, asserted on every driver run in this file: a `photos`
     // row implies the object is at its key.
     if (!objects.containsKey(photo.r2ObjectKey)) {
@@ -587,6 +593,20 @@ void main() {
   });
 
   group('later and no are not the same answer', () {
+    test('a 404 at the ticket call backs off instead of refusing', () async {
+      await startTrip();
+      await keepOne();
+      pool.mintRetryable = '404: {"code":"NOT_FOUND"}';
+
+      await driver().syncNow();
+
+      final outbox = (await db.readOutboxRows()).single;
+      expect(outbox.state, 'queued');
+      expect(outbox.attempts, 1);
+      expect(outbox.lastError, contains('NOT_FOUND'));
+      expect(pool.calls.where((call) => call.$1 == 'put'), isEmpty);
+    });
+
     test('unreachable stops the whole pass and penalises nothing', () async {
       await startTrip();
       await keepOne(mintId: () => 'photo-1');
@@ -630,6 +650,28 @@ void main() {
       expect(outbox.state, 'refused');
       expect(outbox.lastError, contains('not a member'));
       expect(pool.calls.where((c) => c.$1 == 'put'), isEmpty);
+    });
+
+    test('a retryable record error keeps the uploaded progress', () async {
+      await startTrip();
+      await keepOne();
+      pool.recordRetryable = '400: PGRST204 schema cache is stale';
+
+      await driver().syncNow();
+
+      var outbox = (await db.readOutboxRows()).single;
+      expect(outbox.state, 'uploaded');
+      expect(outbox.attempts, 1);
+      expect(outbox.r2ObjectKey, isNotNull);
+      expect(outbox.uploadedByteSize, frameBytes.length);
+      expect(outbox.lastError, contains('PGRST204'));
+
+      pool.recordRetryable = null;
+      pool.calls.clear();
+      clock = DateTime.parse(outbox.nextAttemptAtUtcIso);
+      await driver().syncNow();
+      expect(pool.calls, [('record', 'photo-1')]);
+      expect(await db.readOutboxRows(), isEmpty);
     });
 
     test('a week-later phone against a trip the server closed hears no, '
@@ -825,6 +867,33 @@ void main() {
         );
       },
     );
+
+    test('a retry delay on a caption debt keeps it a caption', () async {
+      await startTrip();
+      await keepOne();
+      await deliver();
+      await store().writeWord(PhotoId('photo-1'), 'hindsight');
+
+      await db.delayOutboxRetry(
+        photoId: 'photo-1',
+        attempts: 1,
+        nextAttemptAtUtcIso: clock.toIso8601String(),
+        lastError: 'seeded',
+      );
+
+      expect(
+        (await db.readOutboxRows()).single.state,
+        'caption',
+        reason: 'the bytes crossed; a delayed word must never re-mint them',
+      );
+      await driver().syncNow();
+      expect(pool.captions['photo-1'], 'hindsight');
+      expect(
+        pool.calls.where((c) => c.$1 == 'mint' || c.$1 == 'put').length,
+        2,
+        reason: 'a demoted caption would walk the upload path again',
+      );
+    });
 
     test('two edits before the push collapse into one push, saying the '
         'later word', () async {
@@ -1073,5 +1142,47 @@ void main() {
         hasLength(1),
       );
     });
+  });
+
+  group('the v11 recovery migration', () {
+    test(
+      'a previously refused row gets one fresh chance and crosses',
+      () async {
+        final directory = Directory.systemTemp.createTempSync(
+          'cairn-refused-recovery',
+        );
+        addTearDown(() => directory.deleteSync(recursive: true));
+        final file = File('${directory.path}/cairn.sqlite');
+
+        await db.close();
+        db = AppDatabase(
+          DatabaseConnection(
+            NativeDatabase(file),
+            closeStreamsSynchronously: true,
+          ),
+        );
+        await startTrip();
+        await keepOne();
+        await db.markOutboxRefused(
+          photoId: 'photo-1',
+          lastError: '404: {"code":"NOT_FOUND"}',
+        );
+        await db.customStatement('PRAGMA user_version = 10');
+        await db.close();
+
+        db = AppDatabase(
+          DatabaseConnection(
+            NativeDatabase(file),
+            closeStreamsSynchronously: true,
+          ),
+        );
+        expect((await db.readOutboxRows()).single.state, 'queued');
+
+        await driver().syncNow();
+
+        expect(pool.recorded, contains('photo-1'));
+        expect(await db.readOutboxRows(), isEmpty);
+      },
+    );
   });
 }

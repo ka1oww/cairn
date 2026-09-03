@@ -46,6 +46,18 @@ class NobodySignedIn implements SessionSource {
   Future<SharedFactsSession?> current() async => null;
 }
 
+class AbortObservingClient extends http.BaseClient {
+  http.AbortableRequest? request;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final abortable = request as http.AbortableRequest;
+    this.request = abortable;
+    await abortable.abortTrigger;
+    throw http.RequestAbortedException(request.url);
+  }
+}
+
 /// The RPC's answer, spelled as `sync_trip_itinerary` spells it.
 const mergedPlan = {
   'plan_revised_at': '2027-06-03T00:00:00+00:00',
@@ -94,9 +106,15 @@ const mergedPlan = {
 };
 
 PostgrestSharedFacts facts(
-  MockClient client, {
+  http.Client client, {
   SessionSource sessions = const OneSession(),
-}) => PostgrestSharedFacts(config: config, sessions: sessions, client: client);
+  Duration timeout = const Duration(seconds: 10),
+}) => PostgrestSharedFacts(
+  config: config,
+  sessions: sessions,
+  client: client,
+  timeout: timeout,
+);
 
 void main() {
   group('a request carries the key and the session, and nothing else', () {
@@ -539,9 +557,7 @@ void main() {
       );
     });
 
-    test('a refusal at the mint is no, and terminal', () async {
-      // Not a member, the trip closed, the id claimed: the handler's 4xxs
-      // all mean the *photograph* is unwelcome, unlike a 4xx at the PUT.
+    test('a 403 at the mint is no, and terminal', () async {
       final sync = facts(
         MockClient(
           (_) async => http.Response('{"error":"trip is closed"}', 403),
@@ -553,6 +569,57 @@ void main() {
           tripId: trip,
           photoId: 'photo-9',
           contentType: 'image/jpeg',
+          byteSize: 1,
+        ),
+        throwsA(isA<SharedFactsRefused>()),
+      );
+    });
+
+    test('a gateway 404 at the mint is retryable, not a refusal', () async {
+      final sync = facts(
+        MockClient((_) async => http.Response('{"code":"NOT_FOUND"}', 404)),
+      );
+
+      await expectLater(
+        sync.photoUploadTicket(
+          tripId: trip,
+          photoId: 'photo-9',
+          contentType: 'image/jpeg',
+          byteSize: 1,
+        ),
+        throwsA(isA<UploadTicketRejected>()),
+      );
+    });
+
+    test('a 5xx at the mint is later, stopping the pass', () async {
+      final sync = facts(
+        MockClient((_) async => http.Response('Bad Gateway', 502)),
+      );
+
+      await expectLater(
+        sync.photoUploadTicket(
+          tripId: trip,
+          photoId: 'photo-9',
+          contentType: 'image/jpeg',
+          byteSize: 1,
+        ),
+        throwsA(isA<SharedFactsUnavailable>()),
+        reason:
+            'an outage is nobody\'s fault: no per-item attempt, '
+            'no climbing backoff',
+      );
+    });
+
+    test('the function\'s own 400 validation error is terminal', () async {
+      final sync = facts(
+        MockClient((_) async => http.Response('unsupported content type', 400)),
+      );
+
+      await expectLater(
+        sync.photoUploadTicket(
+          tripId: trip,
+          photoId: 'photo-9',
+          contentType: 'image/gif',
           byteSize: 1,
         ),
         throwsA(isA<SharedFactsRefused>()),
@@ -637,6 +704,18 @@ void main() {
         sync.putPhotoBytes(ticket, bytes),
         throwsA(isA<SharedFactsUnavailable>()),
       );
+    });
+
+    test('a size-budget timeout aborts the underlying PUT', () async {
+      final client = AbortObservingClient();
+      final sync = facts(client, timeout: Duration.zero);
+
+      await expectLater(
+        sync.putPhotoBytes(ticket, bytes),
+        throwsA(isA<UploadTicketRejected>()),
+      );
+      expect(client.request, isNotNull);
+      expect(client.request!.abortTrigger, completes);
     });
   });
 
@@ -750,6 +829,22 @@ void main() {
         reason:
             'the id is claimed and the claim is not this phone\'s; '
             'no retry changes that',
+      );
+    });
+
+    test('a PGRST schema-cache error is retryable', () async {
+      final sync = facts(
+        MockClient(
+          (_) async => http.Response(
+            '{"code":"PGRST204","message":"column is not in schema cache"}',
+            400,
+          ),
+        ),
+      );
+
+      await expectLater(
+        sync.recordPhoto(photo()),
+        throwsA(isA<UploadTicketRejected>()),
       );
     });
   });

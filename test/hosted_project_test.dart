@@ -14,6 +14,7 @@
 //
 // The *live* round trip against the hosted project is `hosted_smoke_test.dart`
 // and is skipped unless asked for. See `supabase/README.md`.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -44,6 +45,18 @@ class MemoryVault implements SessionVault {
   Future<StoredSession?> read() async => stored;
   @override
   Future<void> write(StoredSession? session) async => stored = session;
+}
+
+class BlockingVault extends MemoryVault {
+  final writeStarted = Completer<void>();
+  final releaseWrite = Completer<void>();
+
+  @override
+  Future<void> write(StoredSession? session) async {
+    writeStarted.complete();
+    await releaseWrite.future;
+    await super.write(session);
+  }
 }
 
 /// A GoTrue answer, spelled the way GoTrue spells one.
@@ -133,6 +146,33 @@ void main() {
       expect(vault.token, 'refresh-2');
     });
 
+    test(
+      'does not expose a rotated session before its token is saved',
+      () async {
+        final vault = BlockingVault();
+        final sessions = GotrueSessions(
+          config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
+          vault: vault,
+          client: MockClient(
+            (_) async => http.Response(sessionBody('user-a'), 200),
+          ),
+        );
+        var completed = false;
+
+        final acquiring = sessions.current().then((session) {
+          completed = true;
+          return session;
+        });
+        await vault.writeStarted.future;
+        await Future<void>.delayed(Duration.zero);
+        expect(completed, isFalse);
+
+        vault.releaseWrite.complete();
+        expect((await acquiring)!.userId.value, 'user-a');
+        expect(vault.token, 'refresh-1');
+      },
+    );
+
     test('a refused refresh token is dropped, not retried forever', () async {
       final vault = MemoryVault(
         stored: const StoredSession(userId: 'user-a', refreshToken: 'revoked'),
@@ -158,6 +198,34 @@ void main() {
       // as somebody it can no longer speak as.
       expect(vault.stored!.userId, 'user-b');
     });
+
+    test(
+      'a non-token 4xx keeps the stored account and does not mint',
+      () async {
+        final saved = const StoredSession(
+          userId: 'user-a',
+          refreshToken: 'saved-refresh',
+        );
+        final vault = MemoryVault(stored: saved);
+        var calls = 0;
+        final sessions = GotrueSessions(
+          config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
+          vault: vault,
+          client: MockClient((request) async {
+            calls++;
+            return http.Response('{"error":"captcha_failed"}', 400);
+          }),
+        );
+
+        expect(await sessions.current(), isNull);
+        expect(
+          calls,
+          1,
+          reason: 'an auth gateway error must not mint a stranger',
+        );
+        expect(vault.stored, same(saved));
+      },
+    );
 
     test('a server that cannot be reached keeps the saved token', () async {
       final vault = MemoryVault(
@@ -204,6 +272,31 @@ void main() {
 
       // Not an exception: `main` signs in on the boot path, so a throw here is
       // an app that never renders a frame.
+      expect(await sessions.current(), isNull);
+      expect(calls, 1);
+      expect(vault.token, 'saved-refresh');
+    });
+
+    test('a 2xx whose JSON is not a map is unreachable, not a verdict '
+        'on the token', () async {
+      final vault = MemoryVault(
+        stored: const StoredSession(
+          userId: 'user-a',
+          refreshToken: 'saved-refresh',
+        ),
+      );
+      var calls = 0;
+      final sessions = GotrueSessions(
+        config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
+        vault: vault,
+        client: MockClient((request) async {
+          calls++;
+          return http.Response('["a proxy answering in the wrong shape"]', 200);
+        }),
+      );
+
+      // Only GoTrue's explicit dead-refresh-token verdict may spend the
+      // saved account; a lying intermediary is a tunnel, not a refusal.
       expect(await sessions.current(), isNull);
       expect(calls, 1);
       expect(vault.token, 'saved-refresh');

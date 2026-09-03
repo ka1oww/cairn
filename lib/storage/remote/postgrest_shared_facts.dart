@@ -189,11 +189,11 @@ class PostgrestSharedFacts implements SharedFacts {
     required int byteSize,
   }) async {
     final auth = await _demand();
-    // An edge function, not PostgREST, but the same transport: JSON up, JSON
-    // back, the session as the caller. `_send`'s 4xx→Refused mapping is
-    // right here — every refusal the function makes (not a member, trip
-    // closed, id claimed, bad input) is terminal for the photograph.
-    final response = await _send(
+    // An edge function, not PostgREST. Its own refusal vocabulary is much
+    // narrower than a generic HTTP 4xx: 403 is membership/closure, 409 is a
+    // claimed id, and the exact validation messages below are bad cargo.
+    // Gateway 401/404/405, timeouts and rate limits say only "try later".
+    final response = await _request(
       'POST',
       '/functions/v1/r2-upload-url',
       auth,
@@ -204,20 +204,34 @@ class PostgrestSharedFacts implements SharedFacts {
         'contentLength': byteSize,
       },
     );
-    final body = response is Map<String, dynamic>
-        ? response
-        : throw SharedFactsRefused(
-            'the upload function returned ${response.runtimeType}',
-          );
-    return RemoteUploadTicket(
-      uploadUrl: Uri.parse(body['uploadUrl'] as String),
-      objectKey: body['objectKey'] as String,
-      contentType: contentType,
-      byteSize: byteSize,
-      expiresAt: DateTime.now().toUtc().add(
-        Duration(seconds: (body['expiresInSeconds'] as num).toInt()),
-      ),
-    );
+    if (response.statusCode == 403 || response.statusCode == 409) {
+      throw SharedFactsRefused(_message(response));
+    }
+    if (response.statusCode == 400 && _isUploadValidation(response.body)) {
+      throw SharedFactsRefused(_message(response));
+    }
+    if (response.statusCode >= 500) {
+      throw SharedFactsUnavailable(
+        'the server answered ${response.statusCode}',
+      );
+    }
+    if (response.statusCode >= 400) {
+      throw UploadTicketRejected(_message(response));
+    }
+    try {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      return RemoteUploadTicket(
+        uploadUrl: Uri.parse(body['uploadUrl'] as String),
+        objectKey: body['objectKey'] as String,
+        contentType: contentType,
+        byteSize: byteSize,
+        expiresAt: DateTime.now().toUtc().add(
+          Duration(seconds: (body['expiresInSeconds'] as num).toInt()),
+        ),
+      );
+    } on Object catch (e) {
+      throw UploadTicketRejected('the upload function answered badly: $e');
+    }
   }
 
   @override
@@ -228,16 +242,34 @@ class PostgrestSharedFacts implements SharedFacts {
     // `apikey`, no bearer token. The `Content-Type` must be exactly the
     // ticket's string and the body a known length, never chunked, because
     // aws4fetch signed both headers into the URL (`r2-upload-url/index.ts`).
-    final request = http.Request('PUT', ticket.uploadUrl)
-      ..headers['Content-Type'] = ticket.contentType
-      ..bodyBytes = bytes;
+    final abort = Completer<void>();
+    final request =
+        http.AbortableRequest(
+            'PUT',
+            ticket.uploadUrl,
+            abortTrigger: abort.future,
+          )
+          ..headers['Content-Type'] = ticket.contentType
+          ..bodyBytes = bytes;
 
     final http.Response response;
     try {
-      final streamed = await _client.send(request).timeout(timeout);
-      response = await http.Response.fromStream(streamed).timeout(timeout);
+      final transfer = _client.send(request).then(http.Response.fromStream);
+      response = await transfer.timeout(
+        _uploadBudget(bytes.length),
+        onTimeout: () {
+          if (!abort.isCompleted) abort.complete();
+          throw TimeoutException('the upload exceeded its size-based budget');
+        },
+      );
     } on TimeoutException {
-      throw const SharedFactsUnavailable('the store did not answer in time');
+      throw const UploadTicketRejected(
+        'the upload exceeded its size-based deadline',
+      );
+    } on http.RequestAbortedException {
+      throw const UploadTicketRejected(
+        'the upload was aborted at its size-based deadline',
+      );
     } on SocketException catch (e) {
       throw SharedFactsUnavailable('no route to the store: ${e.message}');
     } on http.ClientException catch (e) {
@@ -290,6 +322,7 @@ class PostgrestSharedFacts implements SharedFacts {
         headers: const {
           'Prefer': 'resolution=ignore-duplicates,return=minimal',
         },
+        retryPgrstSchemaErrors: true,
       );
     } on SharedFactsRefused {
       // The refusal may be about a row that is already there — a replay the
@@ -410,6 +443,48 @@ class PostgrestSharedFacts implements SharedFacts {
     SharedFactsSession auth, {
     Object? body,
     Map<String, String> headers = const {},
+    bool retryPgrstSchemaErrors = false,
+  }) async {
+    final response = await _request(
+      method,
+      path,
+      auth,
+      body: body,
+      headers: headers,
+    );
+
+    // 5xx is "later" and 4xx is "no" — the distinction the whole offline
+    // story rests on. A caller retries the first and must never retry the
+    // second: `insufficient_privilege` from `sync_trip_itinerary` arrives as
+    // a 403 and means this phone is not on the trip, which no amount of
+    // waiting fixes.
+    if (response.statusCode >= 400 &&
+        retryPgrstSchemaErrors &&
+        _pgrstCode(response)?.startsWith('PGRST') == true) {
+      // A rollout where the table or schema cache is not ready is not a
+      // verdict on this photograph. Reuse the upload-path retry signal so
+      // the outbox records the failure while retaining an `uploaded` row's
+      // object key and byte count.
+      throw UploadTicketRejected(_message(response));
+    }
+    if (response.statusCode >= 500) {
+      throw SharedFactsUnavailable(
+        'the server answered ${response.statusCode}',
+      );
+    }
+    if (response.statusCode >= 400) {
+      throw SharedFactsRefused(_message(response));
+    }
+    if (response.body.isEmpty) return null;
+    return jsonDecode(response.body);
+  }
+
+  Future<http.Response> _request(
+    String method,
+    String path,
+    SharedFactsSession auth, {
+    Object? body,
+    Map<String, String> headers = const {},
   }) async {
     final request = http.Request(method, Uri.parse('${config.url}$path'))
       ..headers.addAll({..._headers(auth), ...headers});
@@ -429,21 +504,35 @@ class PostgrestSharedFacts implements SharedFacts {
       );
     }
 
-    // 5xx is "later" and 4xx is "no" — the distinction the whole offline
-    // story rests on. A caller retries the first and must never retry the
-    // second: `insufficient_privilege` from `sync_trip_itinerary` arrives as
-    // a 403 and means this phone is not on the trip, which no amount of
-    // waiting fixes.
-    if (response.statusCode >= 500) {
-      throw SharedFactsUnavailable(
-        'the server answered ${response.statusCode}',
-      );
+    return response;
+  }
+
+  /// A transfer gets the ordinary request allowance plus enough time to move
+  /// its actual bytes at 256 KiB/s. That is deliberately conservative for a
+  /// phone connection while still bounding a stuck multi-megabyte PUT.
+  Duration _uploadBudget(int byteSize) =>
+      timeout + Duration(milliseconds: (byteSize * 1000 / (256 * 1024)).ceil());
+
+  static bool _isUploadValidation(String body) {
+    final message = body.trim();
+    return const {
+          'invalid JSON body',
+          'tripId and photoId must be UUIDs',
+          'unsupported content type',
+          'contentLength must be a positive whole number',
+        }.contains(message) ||
+        RegExp(r'^contentLength must be at most \d+ bytes$').hasMatch(message);
+  }
+
+  static String? _pgrstCode(http.Response response) {
+    try {
+      final body = jsonDecode(response.body);
+      return body is Map && body['code'] is String
+          ? body['code'] as String
+          : null;
+    } on FormatException {
+      return null;
     }
-    if (response.statusCode >= 400) {
-      throw SharedFactsRefused(_message(response));
-    }
-    if (response.body.isEmpty) return null;
-    return jsonDecode(response.body);
   }
 
   static String _message(http.Response response) {
