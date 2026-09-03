@@ -166,7 +166,13 @@ class BackCameraSource implements CameraSource {
       if (backPath != null) {
         // If the second lens refuses or its capture fails, the first copy is
         // not a photograph the app can keep. Do not leave it behind.
-        await discard(backPath);
+        try {
+          await discard(backPath);
+        } catch (_) {
+          // A cleanup that cannot delete is a stray file, and a stray file is
+          // not what the caller is waiting to hear about: the refusal below is
+          // the only thing above this seam handles.
+        }
       }
       if (error is CameraException) {
         Error.throwWithStackTrace(
@@ -189,7 +195,19 @@ class BackCameraSource implements CameraSource {
     // A byte-for-byte copy, deliberately: no re-encode, no strip, no
     // recompression. The file the plugin wrote is the original, and this
     // is only where it is filed.
-    await File(temporaryPath).copy(path);
+    try {
+      await File(temporaryPath).copy(path);
+    } catch (error, stackTrace) {
+      // A copy that stops half way — a full disk, on a `max` original —
+      // leaves a truncated destination behind. Nothing above knows this path
+      // yet, so unmaking it is this call's own business.
+      try {
+        await _delete(path);
+      } catch (_) {
+        // Same rule as the caller's cleanup: the original failure travels.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
     return (path: path, takenAtUtc: at);
   }
 

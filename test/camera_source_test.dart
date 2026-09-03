@@ -29,6 +29,7 @@ class FakeCameraEdge implements CameraCaptureEdge {
   final List<CameraLensDirection> requestedLenses = [];
   int captureCount = 0;
   int? failOnCapture;
+  int? loseFrameOnCapture;
 
   @override
   Future<List<CameraDescription>> listCameras() async => cameras;
@@ -41,9 +42,24 @@ class FakeCameraEdge implements CameraCaptureEdge {
       throw CameraException('capture', 'permission denied');
     }
     final path = '${directory.path}/temporary-$captureCount.png';
+    // A frame the plugin says it wrote and did not: the copy into the frame
+    // directory is then what fails, rather than the capture.
+    if (captureCount == loseFrameOnCapture) return path;
     File(path).writeAsBytesSync(standInFrameBytes(captureCount));
     return path;
   }
+}
+
+/// A source whose cleanup delete cannot succeed.
+class UndeletableFrameSource extends BackCameraSource {
+  UndeletableFrameSource({
+    required super.camera,
+    required super.directoryProvider,
+  });
+
+  @override
+  Future<void> discard(String path) async =>
+      throw const FileSystemException('cannot delete');
 }
 
 void main() {
@@ -123,5 +139,46 @@ void main() {
       CameraLensDirection.front,
     ]);
     expect(frames.listSync(), isEmpty);
+  });
+
+  test('leaves nothing behind when filing the back frame fails', () async {
+    final edge = FakeCameraEdge(temporary)..loseFrameOnCapture = 1;
+
+    await expectLater(
+      source(edge).takeOne(),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(frames.listSync(), isEmpty);
+  });
+
+  test('leaves nothing behind when filing the front frame fails', () async {
+    final edge = FakeCameraEdge(temporary)..loseFrameOnCapture = 2;
+
+    await expectLater(
+      source(edge).takeOne(),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(frames.listSync(), isEmpty);
+  });
+
+  test('a cleanup that cannot delete does not replace the refusal', () async {
+    final edge = FakeCameraEdge(temporary)..failOnCapture = 2;
+    final refusing = UndeletableFrameSource(
+      camera: edge,
+      directoryProvider: () async => frames,
+    );
+
+    await expectLater(
+      refusing.takeOne(),
+      throwsA(
+        isA<CameraRefused>().having(
+          (e) => e.reason,
+          'reason',
+          'permission denied',
+        ),
+      ),
+    );
   });
 }
