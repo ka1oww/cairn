@@ -223,7 +223,7 @@ final tripSettingsProvider = Provider<AsyncValue<TripSettingsView?>>((ref) {
             plan: savedPlan,
             photos: pooled,
             you: model.MemberId(ref.watch(localMemberIdProvider)),
-            now: ref.watch(nowProvider),
+            now: ref.watch(nowProvider)(),
             utcOffset: ref.watch(tripUtcOffsetProvider),
             standing: ref.watch(tripStandingProvider),
             sharing: ref.watch(sharedFactsStandingProvider).value?.standing,
@@ -284,7 +284,7 @@ class TripActions {
       return;
     }
     final store = _ref.read(membershipStoreProvider);
-    final now = _ref.read(nowProvider);
+    final now = _ref.read(nowProvider)();
     final closesAt = _ref.read(tripClosesAtProvider);
     await store.mintInvite(by: _you, now: now);
     for (final invite in trip.invites) {

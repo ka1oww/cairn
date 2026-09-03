@@ -13,12 +13,23 @@
 //  - **The camera** is the back camera and nothing else in the first release
 //    (docs/decisions/2026-08-22-camera-like-bereal.md). It sits behind
 //    `camera_source.dart` so this file never names a lens.
-//  - **Thirty minutes, and late is always allowed**
-//    (docs/decisions/2026-08-22-design-calls.md §7). There is no lockout: a
-//    photo taken at 23:40 carries its real hour and is visibly late, which is
-//    the only pressure the system applies and is enough.
-//  - **The pause** is surface 10d, the breath before the flip: the frame, one
-//    retake and only one, and a primary action that names the payoff.
+//  - **Two minutes, and late is always allowed.** The window is two minutes,
+//    which narrows the thirty of design-calls §7 and changes nothing else.
+//    There is no lockout: a photo taken at 23:40 carries its real hour and is
+//    visibly late, which is the only pressure the system applies and is
+//    enough.
+//  - **The pause** is surface 10d, the breath before the flip: the frame, a
+//    retake whenever you want one, and a primary action that names the payoff.
+//  - **A retake is the same moment, so it is the same deadline.** There is no
+//    cap on retakes, and the cap that came off was the only thing that used
+//    to bound one; what bounds a retake now is the window, and a retake that
+//    re-opened the window would bound nothing at all. That is why
+//    [Framing] carries the moment's own `closesAt` and *nothing else* about
+//    the window: late, the last stretch and the countdown are all
+//    [windowStandingAt] over that one instant, so there is no second copy of
+//    the deadline for a retake to reset. The bug this replaces did exactly
+//    that — `onceMore` handed back `isLate: false`, and a late capture came
+//    back from a retake looking punctual.
 //  - **The word** is design round 10's `18a`: one line on that sheet, under
 //    the hour it will print beside, skippable by construction. Blank is the
 //    usual. Nothing is corrected into tidiness — no autocapitalise, no full
@@ -54,12 +65,26 @@ import 'ping_schedule.dart';
 import 'trip_lifecycle.dart';
 import 'trip_providers.dart';
 
-/// How long the moment stays open after the ping (design-calls §7).
-const captureWindow = Duration(minutes: 30);
+/// How long the moment stays open after the ping.
+///
+/// Two minutes, narrowed from the thirty of design-calls §7. The narrowing is
+/// only affordable because the ping is *yours* and nobody else's: a personal
+/// minute is a much smaller thing to miss than a party-wide one, and the late
+/// path below is still open till midnight either way.
+const captureWindow = Duration(minutes: 2);
 
 /// The tail of that window the design calls "last stretch" (surface 10b).
-/// Change, not alarm: nothing blinks and nothing counts.
-const lastStretch = Duration(minutes: 2);
+/// Change, not alarm: the wording moves and the countdown warms; nothing
+/// blinks.
+///
+/// **Thirty seconds, retuned with the window and not left where it was.** It
+/// was two minutes when the window was thirty, and two minutes of a
+/// two-minute window is not a tail — it is the whole thing, which would make
+/// `MomentOpen(isLastStretch: false)` a state nobody could ever be in and the
+/// day page's "Your minute. Look up." a line nobody could ever read. A quarter
+/// of the window keeps both readings reachable and keeps the tail long enough
+/// to be a change rather than an alarm.
+const lastStretch = Duration(seconds: 30);
 
 // ---------------------------------------------------------------------------
 // View models — everything a screen may see, spoken in screen terms.
@@ -85,16 +110,25 @@ class MomentAhead extends CaptureCall {
 
 /// You have been pinged and the window is open.
 class MomentOpen extends CaptureCall {
-  /// The last two minutes (surface 10b).
+  /// The tail of the window (surface 10b), [lastStretch] long.
   final bool isLastStretch;
 
-  const MomentOpen({required this.isLastStretch});
+  /// When the window shuts. Carried rather than recomputed, because it is
+  /// what the capture screen counts down to and what a retake returns to.
+  final DateTime closesAt;
+
+  const MomentOpen({required this.isLastStretch, required this.closesAt});
 }
 
 /// The window closed and the day did not (surface 10c). There is no lockout
 /// and never will be; what you take now lands at the hour it is taken.
 class MomentLate extends CaptureCall {
-  const MomentLate();
+  /// When the window shut — in the past, by definition. Carried for the same
+  /// reason [MomentOpen.closesAt] is: the capture screen opened from here is
+  /// the same moment, and a retake inside it must find the same deadline.
+  final DateTime closesAt;
+
+  const MomentLate(this.closesAt);
 }
 
 /// You have already answered today, at this hour in the trip's own clock.
@@ -117,25 +151,20 @@ class CaptureClosed extends CaptureState {
 
 /// Ready to take one, or taking it.
 class Framing extends CaptureState {
-  /// The last two minutes of the window.
-  final bool isLastStretch;
-
-  /// The window has closed. There is no thread on a late capture — the timer
-  /// simply is not there, so there is nothing to have failed (surface 10c).
-  final bool isLate;
+  /// When this moment's window shuts, and the *only* thing this state says
+  /// about the window. Late, the last stretch and the countdown are all
+  /// [windowStandingAt] over this instant, which is what makes a retake
+  /// incapable of resetting any of them: there is one deadline and no copies.
+  final DateTime closesAt;
 
   /// The shutter is open.
   final bool isTaking;
 
-  const Framing({
-    required this.isLastStretch,
-    required this.isLate,
-    this.isTaking = false,
-  });
+  const Framing({required this.closesAt, this.isTaking = false});
 }
 
 /// The breath before the flip (surface 10d): the frame taken, the line to
-/// write on it, and one retake if it has not been spent.
+/// write on it, and a retake for as long as the window is open.
 class TheBreath extends CaptureState {
   /// Where the frame is, for the screen to show.
   final String framePath;
@@ -150,9 +179,11 @@ class TheBreath extends CaptureState {
   /// What is on the line right now. Empty is the usual.
   final String word;
 
-  /// The one retake has been used. After that the control is not there —
-  /// not disabled, absent (surface 10d).
-  final bool isRetakeSpent;
+  /// The moment's deadline, carried through unchanged from [Framing]. The
+  /// breath is where a retake is decided, so it is where the person most
+  /// needs to know how much of the window is left — and it is the same
+  /// window, which is the whole of the rule.
+  final DateTime closesAt;
 
   /// The write is in flight.
   final bool isKeeping;
@@ -162,7 +193,7 @@ class TheBreath extends CaptureState {
     required this.takenAtUtc,
     required this.hourLabel,
     this.word = '',
-    required this.isRetakeSpent,
+    required this.closesAt,
     this.isKeeping = false,
   });
 
@@ -171,8 +202,75 @@ class TheBreath extends CaptureState {
     takenAtUtc: takenAtUtc,
     hourLabel: hourLabel,
     word: word ?? this.word,
-    isRetakeSpent: isRetakeSpent,
+    closesAt: closesAt,
     isKeeping: isKeeping ?? this.isKeeping,
+  );
+}
+
+/// What the window is doing at one instant, given the moment's own deadline.
+///
+/// One derivation for three things that have to agree — the countdown, the
+/// last stretch and late — because they are the same fact read three ways and
+/// a surface that computed any of them itself could contradict the other two
+/// mid-second.
+class WindowStanding {
+  /// What is left of the window, floored at zero.
+  final Duration remaining;
+
+  /// The window has closed. There is no thread on a late capture — the timer
+  /// simply is not there, so there is nothing to have failed (surface 10c).
+  final bool isLate;
+
+  /// Inside the tail (surface 10b).
+  final bool isLastStretch;
+
+  const WindowStanding._({
+    required this.remaining,
+    required this.isLate,
+    required this.isLastStretch,
+  });
+
+  /// `1:07 left` — said once here rather than at each of the two surfaces
+  /// that show it, so they cannot word the same window differently.
+  ///
+  /// Null once the window has shut, which is surface 10c's rule expressed in
+  /// the type: a late capture is not handed a countdown to hide, it is handed
+  /// nothing to show. Rounded *up*, so the last visible reading is `0:01` and
+  /// never a `0:00` that lingers.
+  String? get countdownLabel {
+    if (isLate) return null;
+    final seconds = (remaining.inMicroseconds / Duration.microsecondsPerSecond)
+        .ceil();
+    return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')} left';
+  }
+}
+
+/// [WindowStanding] at [now], for a window that shuts at [closesAt].
+///
+/// The deadline is an input and never derived here, which is what lets a
+/// retake hand back the very instant it was given. Time only runs forwards
+/// and the instant never moves, so "late" derived this way is monotonic: a
+/// moment that has gone late cannot come back, however many retakes follow,
+/// and a window that shuts *during* the breath is honestly late rather than
+/// frozen punctual.
+WindowStanding windowStandingAt({
+  required DateTime closesAt,
+  required DateTime now,
+}) {
+  final remaining = closesAt.difference(now);
+  // On the closing instant itself the window is shut, which is the edge
+  // `captureCallFor` has always drawn (`now.isBefore(closes)`).
+  if (remaining <= Duration.zero) {
+    return const WindowStanding._(
+      remaining: Duration.zero,
+      isLate: true,
+      isLastStretch: false,
+    );
+  }
+  return WindowStanding._(
+    remaining: remaining,
+    isLate: false,
+    isLastStretch: remaining <= lastStretch,
   );
 }
 
@@ -212,7 +310,7 @@ final captureCallProvider = Provider.family<CaptureCall, DateTime>((ref, date) {
   if (dayNumber == null) return const NoMomentHere();
   return captureCallFor(
     ping: ref.watch(todaysPingProvider),
-    now: ref.watch(nowProvider),
+    now: ref.watch(nowProvider)(),
     answeredAt: _myPhotoToday(ref, dayNumber)?.ref.takenAt,
     utcOffset: ref.watch(tripUtcOffsetProvider),
     standing: ref.watch(tripStandingProvider),
@@ -254,12 +352,9 @@ CaptureCall captureCallFor({
   if (ping == null) return const NoMomentHere();
   if (now.isBefore(ping.at)) return const MomentAhead();
   final closes = ping.at.add(captureWindow);
-  if (now.isBefore(closes)) {
-    return MomentOpen(
-      isLastStretch: !now.isBefore(closes.subtract(lastStretch)),
-    );
-  }
-  return const MomentLate();
+  final window = windowStandingAt(closesAt: closes, now: now);
+  if (window.isLate) return MomentLate(closes);
+  return MomentOpen(isLastStretch: window.isLastStretch, closesAt: closes);
 }
 
 /// `14:50` — an instant read in the trip's own clock.
@@ -280,9 +375,13 @@ final captureFlowProvider = NotifierProvider<CaptureFlow, CaptureState>(
 );
 
 class CaptureFlow extends Notifier<CaptureState> {
-  /// Survives the trip back through [Framing], which is the whole point: the
-  /// mulligan is one per moment, not one per sheet.
-  bool _retakeSpent = false;
+  // No field here holds anything about the window, and that is deliberate.
+  // The moment's deadline rides in the state itself ([Framing.closesAt],
+  // [TheBreath.closesAt]) and is handed on unchanged at every hop, so there
+  // is nothing for `open`, `shoot`, `onceMore` or a rebuild to re-derive or
+  // reset. The count of retakes is not held either: it is nobody's business
+  // but the person's, and the posted photograph never shows how many retakes
+  // it took, so no count is kept in state, in the store, or anywhere else.
 
   @override
   CaptureState build() => const CaptureClosed();
@@ -304,26 +403,20 @@ class CaptureFlow extends Notifier<CaptureState> {
       return;
     }
     final call = ref.read(captureCallProvider(ref.read(todayProvider)));
+    // Both doors into the camera carry the same thing — when this moment's
+    // window shuts — and the screen works the rest out from it.
     state = switch (call) {
-      MomentOpen(:final isLastStretch) => Framing(
-        isLastStretch: isLastStretch,
-        isLate: false,
-      ),
-      MomentLate() => const Framing(isLastStretch: false, isLate: true),
+      MomentOpen(:final closesAt) => Framing(closesAt: closesAt),
+      MomentLate(:final closesAt) => Framing(closesAt: closesAt),
       _ => const CaptureClosed(),
     };
-    if (state is Framing) _retakeSpent = false;
   }
 
   /// Takes the frame, and lands on the breath.
   Future<void> shoot() async {
     final framing = state;
     if (framing is! Framing || framing.isTaking) return;
-    state = Framing(
-      isLastStretch: framing.isLastStretch,
-      isLate: framing.isLate,
-      isTaking: true,
-    );
+    state = Framing(closesAt: framing.closesAt, isTaking: true);
     try {
       final frame = await ref.read(cameraSourceProvider).takeOne();
       state = TheBreath(
@@ -333,29 +426,34 @@ class CaptureFlow extends Notifier<CaptureState> {
           frame.takenAtUtc,
           ref.read(tripUtcOffsetProvider),
         ),
-        isRetakeSpent: _retakeSpent,
+        closesAt: framing.closesAt,
       );
     } on CameraRefused catch (e) {
       state = CaptureRefusedState(e.reason);
     }
   }
 
-  /// "Once more" — the single mulligan. One retake matches how people treat
-  /// film: zero punishes the thumb-over-lens frame and makes the ping feel
-  /// like a trap; unlimited turns a candid into a photoshoot.
+  /// "Once more" — as many times as you like, for as long as the window
+  /// lasts.
+  ///
+  /// There is no cap on retakes. The old cap of one had been the authenticity
+  /// guard — one retake matches how people treat film — and what replaces it
+  /// is the clock: two minutes is short enough that a photoshoot does not fit
+  /// inside one, and the deadline below is the same deadline whichever retake
+  /// this is. A count is *not* kept, here or anywhere the pool can see: the
+  /// posted photograph never shows how many retakes it took, and a number
+  /// rendered to the party would reinstate the very pressure the cap was
+  /// removed to lift.
   Future<void> onceMore() async {
     final breath = state;
-    if (breath is! TheBreath || breath.isRetakeSpent || breath.isKeeping) {
-      return;
-    }
-    _retakeSpent = true;
+    if (breath is! TheBreath || breath.isKeeping) return;
     await ref.read(cameraSourceProvider).discard(breath.framePath);
-    state = Framing(
-      isLastStretch: false,
-      // A retake never re-opens a closed window and never closes an open one;
-      // it is the same moment, so the sheet it returns to is the same sheet.
-      isLate: false,
-    );
+    // The same instant it came in with. A retake never re-opens a closed
+    // window and never closes an open one — it is the same moment, so the
+    // sheet it returns to is the sheet it left, still late if the moment was
+    // late, and still counting down to the minute it was always counting
+    // down to.
+    state = Framing(closesAt: breath.closesAt);
   }
 
   /// Writes on the line. Stored exactly as typed — see the file header.
@@ -396,7 +494,6 @@ class CaptureFlow extends Notifier<CaptureState> {
           filePath: breath.framePath,
           word: breath.word,
         );
-    _retakeSpent = false;
     state = const CaptureClosed();
   }
 
@@ -404,7 +501,6 @@ class CaptureFlow extends Notifier<CaptureState> {
   /// an unkept photograph is not a photograph.
   Future<void> abandon() async {
     final breath = state;
-    _retakeSpent = false;
     state = const CaptureClosed();
     if (breath is TheBreath) {
       await ref.read(cameraSourceProvider).discard(breath.framePath);

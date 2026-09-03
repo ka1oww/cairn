@@ -82,7 +82,12 @@ can join). Joining, buzzing, and the shared pool are all unwritten.
   *keeps* back-only, the accepted fallback. What follows is composing the
   inset and keeping it. See
   [the camera decision](decisions/2026-08-22-camera-like-bereal.md).
-- **The countdown.**
+- **The countdown.** The *drawn* one — the dashed thread burning down the edge
+  with its coral bead (10a/10b). The reading itself came forward with the
+  two-minute window: the capture screen counts the time left down to the
+  second in the house's own type, because at two minutes it is the only
+  feedback the person has and stopped being decoration. What is still after
+  the line is the treatment.
 
 **The test the line is held to:** when a friend on the trip asks what this
 does, one sentence answers it — if the answer needs two sentences, something
@@ -172,7 +177,8 @@ a shortcut, since the front inset is explicitly after the line. The whole loop
 is real: the schedule is dealt from `trip_moments` for every dated day of the
 plan, the day you are standing in says where your moment stands, an open or a
 late window offers the way in, the shutter takes a frame, the breath offers
-exactly one retake and one line of words, and keeping it writes a row into the
+unlimited retakes against the same deadline — a retake never re-opens the
+window — and one line of words, and keeping it writes a row into the
 photo index with the frame beside it on disk — where the Pool, reading the same
 store, draws it. A missed slot is never a lockout: the door stays open till
 midnight and what you take then lands at the hour it was taken.
@@ -545,7 +551,8 @@ are the ones that stand between Cairn and being a group at all.
 - The end-of-trip handover of the book and everyone's photos.
 - The two-frame camera (the front inset).
 - The cat.
-- The countdown.
+- The countdown's drawn treatment (the burning thread). The reading itself
+  came forward with the two-minute window and is built.
 - Android delivery through the Play testing track.
 - Autofill the itinerary from a Wanderlog *export* — distinct from reading a
   Wanderlog *print*, which is built and, today, produces an unusable plan.

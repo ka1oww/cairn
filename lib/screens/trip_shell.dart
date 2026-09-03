@@ -76,8 +76,8 @@ class _TripShellState extends ConsumerState<TripShell> {
     // Registering the pings is a side effect of the trip existing, not of any
     // one screen. The container is the only thing that is on screen for the
     // whole of a trip, so this is where the schedule is kept in step: watching
-    // it re-registers whenever the plan or the clock moves. See
-    // `pingRegistrationProvider`.
+    // it re-registers whenever the deal changes, and not when the clock moves.
+    // See `pingRegistrationProvider`.
     ref.watch(pingRegistrationProvider);
     return Scaffold(
       // The paper the bar floats on. Each tab's own screen paints its whole

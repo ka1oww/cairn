@@ -135,12 +135,14 @@ final tripClosesAtProvider = Provider<DateTime?>(
 /// reaching for the network. A second comparison of dates anywhere above this
 /// provider is the thing to refuse in review.
 ///
-/// Read rather than ticked, for the reason `nowProvider` and `todayProvider`
-/// are: nothing in this slice holds a timer, and every surface that reads it
-/// is rebuilt by the things that would make it interesting.
+/// Derived on demand and cached until something rebuilds it. The clock it
+/// asks is live (`nowProvider` says why), so this is as fresh as the last
+/// time it was built — nothing in this slice pushes a new answer at a
+/// surface, and a trip's ending is a boundary hours wide rather than the
+/// two-minute one the capture screen keeps its own second hand for.
 final tripStandingProvider = Provider<model.TripStanding>(
   (ref) => model.tripStandingAt(
-    now: ref.watch(nowProvider),
+    now: ref.watch(nowProvider)(),
     endsAt: ref.watch(tripEndsAtProvider),
   ),
 );

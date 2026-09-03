@@ -86,14 +86,105 @@ final tripUtcOffsetProvider = Provider<Duration>(
   (ref) => DateTime.now().timeZoneOffset,
 );
 
-/// Now, in UTC.
+/// Now, in UTC — a clock to *ask*, never an instant to remember.
 ///
-/// Read rather than ticked, for the reason `todayProvider` is: this slice has
-/// no timer anywhere, and every surface that reads it is rebuilt by the thing
-/// that would have made it interesting — opening the app from the ping,
-/// switching to Today, coming back from the camera. A live-counting window is
-/// design round ten's burning thread, and lands with it.
-final nowProvider = Provider<DateTime>((ref) => DateTime.now().toUtc());
+/// **It hands back a function on purpose, and that is the whole of it.** A
+/// `Provider<DateTime>` reads the wall clock once and caches that reading for
+/// as long as anything listens: `trip_shell.dart` watches the ping
+/// registration, which watches this, so the instant used to be taken at
+/// launch and never taken again. Every verdict downstream — is the window
+/// open, has the trip ended, is this code still live — was then decided
+/// against a clock that had stopped when the app started. It read as a
+/// deliberate choice ("every surface that reads it is rebuilt by the thing
+/// that would have made it interesting") and it was simply false: rebuilding
+/// a widget does not recompute a cached provider.
+///
+/// So the cached thing is the *clock* and not the time. Watching it never
+/// rebuilds anybody — the closure's identity does not change, so there is no
+/// once-a-second storm over the whole app — and every caller that asks gets
+/// the wall clock as it is at the asking. What a caller may not do is
+/// remember the answer and add elapsed time on top of it: this is the one
+/// place wall time becomes "now", and a second one would let two surfaces
+/// disagree about one window.
+///
+/// What it does not do is *push*. A provider that derived a verdict from an
+/// earlier ask keeps that verdict until something invalidates it, so the
+/// asking is arranged in exactly one place: the app root (`app.dart`)
+/// invalidates this on the way back to the foreground and every
+/// [clockRefresh] while it is there, and every time-derived verdict in the
+/// app moves together. A surface that grows a refresh of its own instead is
+/// the thing to refuse in review — with one deliberate exception, the capture
+/// screen's second hand, which counts a two-minute window down and needs a
+/// finer grain than the whole app should pay for.
+final nowProvider = Provider<Clock>(
+  (ref) => Clock(() => DateTime.now().toUtc()),
+);
+
+/// How often the app root asks the clock again while the app is in front.
+///
+/// Coarse on purpose: an invalidation recomputes every time-derived verdict
+/// in the app at once, and in ordinary use none of them changes more than
+/// once an hour. What it really sets is how long a surface may be wrong for,
+/// which is why it is a fraction of the two-minute window and not a round
+/// minute — the day page has to stop offering a moment that has passed and
+/// start offering one that arrived while the app was already open, and a
+/// minute's lag would eat half of the window it is announcing.
+const clockRefresh = Duration(seconds: 10);
+
+/// What [nowProvider] hands out: ask it and it reads the wall clock.
+///
+/// **Two clocks handed out at the same instant are the same clock, and that
+/// is what decides who hears an invalidation.** Riverpod tells a provider's
+/// dependents nothing when the rebuilt value equals the one it replaced, so a
+/// clock that compared equal to its predecessor would make the app root's
+/// asking a no-op — the whole point of which is to move every verdict drawn
+/// from it. Comparing on [askedAt] gets both cases right at once: a clock a
+/// test pinned to an instant really has not moved and rightly wakes nobody,
+/// and a running one has, so everything worked out from it is worked out
+/// again. It is a plain field read at construction and never recomputed, so
+/// [hashCode] holds still for the life of the object.
+class Clock {
+  Clock._(this.askedAt, this._read);
+
+  factory Clock(DateTime Function() read) => Clock._(read(), read);
+
+  /// What it read at the moment it was handed out.
+  final DateTime askedAt;
+
+  final DateTime Function() _read;
+
+  /// Now, as the wall clock has it at the asking.
+  DateTime call() => _read();
+
+  @override
+  bool operator ==(Object other) => other is Clock && other.askedAt == askedAt;
+
+  @override
+  int get hashCode => askedAt.hashCode;
+}
+
+/// How much real time has gone by since a measurement was started.
+typedef ElapsedSince = Duration Function();
+
+/// Starts one such measurement, at the instant it is called.
+typedef StartElapsed = ElapsedSince Function();
+
+/// A clock a test drives: [from] is the instant it starts at, and [moving] is
+/// a measurement already running, which is how it advances from there.
+///
+/// This is the composition, written once, and nothing downstream repeats it.
+/// A test that pins only [from] gets a clock that has stopped, which is what
+/// most of them want; one that walks a window hands in [moving] as well and
+/// the two are added here rather than at the surface reading them.
+///
+/// Pure, and safe to call again on every rebuild — the measurement is
+/// *started* by whoever holds the [StartElapsed], once, and starting it here
+/// instead would reset it every time the root asked the clock again. [from]
+/// is required because there is no honest clock without it: added to a base
+/// that already moves, [moving] would count the same interval twice and run
+/// the window down at double speed.
+Clock pinnedClock({required DateTime from, ElapsedSince? moving}) =>
+    Clock(moving == null ? () => from : () => from.add(moving()));
 
 // ---------------------------------------------------------------------------
 // The schedule.
@@ -236,16 +327,24 @@ final notificationEdgeProvider = Provider<NotificationEdge>(
 ///
 /// Watching rather than calling: the schedule is derived from the itinerary,
 /// so "when should this run" has exactly one honest answer — whenever the
-/// itinerary or the clock moves. The side effect in [build] is the mirror
-/// being kept in step, and the replace-not-append rule above is what makes
-/// running it twice harmless.
+/// deal itself changes. The side effect in [build] is the mirror being kept
+/// in step, and the replace-not-append rule above is what makes running it
+/// twice harmless.
+///
+/// **The clock is read and never watched, and that is the difference between
+/// a pass and a habit.** It answers one question — which of the deal is
+/// already behind us — and the answer does not need re-asking, because a
+/// ping that has fired needs no unregistering. Watching it made this a side
+/// effect on the app root's cadence instead: every ten seconds the trip's
+/// whole notification set torn down and put back, with a window on each pass
+/// where none of it was registered at all.
 final pingRegistrationProvider =
     NotifierProvider<PingRegistration, List<tm.Ping>>(PingRegistration.new);
 
 class PingRegistration extends Notifier<List<tm.Ping>> {
   @override
   List<tm.Ping> build() {
-    final from = ref.watch(nowProvider);
+    final from = ref.read(nowProvider)();
     final due = [
       for (final ping in ref.watch(pingScheduleProvider))
         if (!ping.at.isBefore(from)) ping,

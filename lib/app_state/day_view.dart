@@ -24,6 +24,7 @@ import 'package:cairn_model/cairn_model.dart' show AreaSource, StopKind;
 
 import '../logic/maps_handoff.dart';
 import 'date_labels.dart';
+import 'ping_schedule.dart';
 import 'trip_lifecycle.dart';
 import 'trip_providers.dart';
 
@@ -231,11 +232,18 @@ class AfterTheTrip extends DayView {
 /// a day out for a phone set elsewhere; when the trip clock lands, this
 /// provider is the one place that changes.
 ///
-/// Read once per app launch rather than ticking: the day advances by the
-/// clock, never by completing anything, and a relaunch is soon enough for
-/// that in this slice. Tests override it to pin a date.
+/// **It is the app's one clock, read as a date**, which is what keeps the
+/// calendar and every instant-shaped verdict on the same asking: the app
+/// root invalidates `nowProvider` (`app.dart` says when) and midnight rolls
+/// over with it. Read once per launch until 2026-09-03, and the day the app
+/// thought it was on then never changed while it ran — a phone picked up ten
+/// minutes after midnight still called yesterday today, and the late door,
+/// which nothing but this date shuts, was still open on a day that had
+/// ended. The reading is the *device's*, hence `toLocal`: a bare UTC date
+/// would put a phone in Tokyo on yesterday for its whole morning. Tests
+/// override it to pin a date.
 final todayProvider = Provider<DateTime>((ref) {
-  final now = DateTime.now();
+  final now = ref.watch(nowProvider)().toLocal();
   return DateTime.utc(now.year, now.month, now.day);
 });
 

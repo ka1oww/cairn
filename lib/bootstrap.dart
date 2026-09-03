@@ -92,6 +92,20 @@ import 'storage/remote/shared_facts.dart';
 /// the import awaits the load before it fills the box, so a real isolate
 /// under the fake clock never resolves (see area_gazetteer_loader.dart).
 ///
+/// [elapsed] is the other half of [now], and the two are composed into one
+/// clock here (`pinnedClock`) rather than anywhere downstream. The app's
+/// clock is live at every ask, so a test that only pins [now] gets a clock
+/// that has stopped — right for almost every test, and useless for one
+/// walking a two-minute window down. Such a test hands in [elapsed] as well
+/// and drives it itself; the real clock's own passage cannot serve, because
+/// a window measured against it would pass or fail by how long the suite
+/// took to run. It is meaningless without [now] and is refused there, since
+/// an interval added to a base that already moves counts twice. Both must be
+/// handed in *here* rather than in a scope wrapped around this one: a
+/// provider not overridden in this scope is hosted in whichever scope is the
+/// root, and every binding above would then be looked for in the wrong
+/// place.
+///
 /// [sharing] is how a test says where the plan stands with the server without
 /// a server: the app binds the real sync's own [TripSync.standings], and a
 /// test hands in a stream of its own. Passing nothing means nothing is ever
@@ -114,7 +128,16 @@ Widget bootstrapApp({
   Future<String?> Function()? lateAccountId,
   Stream<SyncOutcome>? sharing,
   LinkOpenerEdge? linkOpener,
+  StartElapsed? elapsed,
 }) {
+  assert(
+    elapsed == null || now != null,
+    'elapsed: measures time from an instant, so it needs now: to measure '
+    'from. Without one the clock would count the same interval twice.',
+  );
+  // Started here and only here: the measurement runs from the launch, and
+  // `pinnedClock` composes it afresh every time the clock is asked again.
+  final since = elapsed?.call();
   final db = database ?? openAppDatabase();
   final store = PhotoStore(db);
   final roster = MembershipStore(db);
@@ -163,7 +186,10 @@ Widget bootstrapApp({
       membershipRepositoryProvider.overrideWithValue(membership ?? roster),
       membershipStoreProvider.overrideWithValue(roster),
       if (today != null) todayProvider.overrideWithValue(today),
-      if (now != null) nowProvider.overrideWithValue(now),
+      if (now != null)
+        nowProvider.overrideWith(
+          (ref) => pinnedClock(from: now, moving: since),
+        ),
       if (utcOffset != null) tripUtcOffsetProvider.overrideWithValue(utcOffset),
       if (camera != null) cameraSourceProvider.overrideWithValue(camera),
       if (picker != null) filePickerEdgeProvider.overrideWithValue(picker),

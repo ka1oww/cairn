@@ -1088,7 +1088,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
         .startTrip(
           starter: starter,
           starterDisplayName: localMemberName,
-          now: ref.read(nowProvider),
+          now: ref.read(nowProvider)(),
         );
     // The pending import has become the trip: there is nothing left for it
     // to protect, and a draft that outlived its accept would be offered back
