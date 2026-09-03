@@ -172,7 +172,8 @@ a shortcut, since the front inset is explicitly after the line. The whole loop
 is real: the schedule is dealt from `trip_moments` for every dated day of the
 plan, the day you are standing in says where your moment stands, an open or a
 late window offers the way in, the shutter takes a frame, the breath offers
-exactly one retake and one line of words, and keeping it writes a row into the
+unlimited retakes against the same deadline — a retake never re-opens the
+window — and one line of words, and keeping it writes a row into the
 photo index with the frame beside it on disk — where the Pool, reading the same
 store, draws it. A missed slot is never a lockout: the door stays open till
 midnight and what you take then lands at the hour it was taken.

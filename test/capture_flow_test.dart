@@ -31,6 +31,7 @@ import 'package:cairn_model/cairn_model.dart'
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show StringCodec;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trip_moments/trip_moments.dart' as tm;
@@ -170,8 +171,8 @@ void main() {
     });
 
     test('two minutes, to the second, and then the window is shut', () {
-      // The narrowing of 2 September, at both of its edges. The last second
-      // of the window is still the window; the closing instant itself is not.
+      // The window is two minutes, at both of its edges. The last second of
+      // the window is still the window; the closing instant itself is not.
       expect(
         callAt(DateTime.utc(2027, 6, 14, 11, 41, 59)),
         isA<MomentOpen>(),
@@ -442,6 +443,16 @@ void main() {
     late AppDatabase db;
     late Directory frames;
 
+    /// Wall time that passed while none of the app's timers ran.
+    ///
+    /// The countdown measures elapsed time rather than counting its own ticks
+    /// (`elapsedSourceProvider` says why), and this is the only way to say so
+    /// in a test: `tester.pump(d)` fires every tick it skips over, so a phone
+    /// suspended for ninety seconds cannot be written as a pump — a countdown
+    /// that merely added a second per tick would come back looking right.
+    /// Set this instead and nothing of the app's runs at all.
+    late Duration suspended;
+
     setUp(() {
       db = AppDatabase(
         DatabaseConnection(
@@ -452,6 +463,7 @@ void main() {
         mint: () => testTripId,
       );
       frames = Directory.systemTemp.createTempSync('cairn-frames');
+      suspended = Duration.zero;
     });
     tearDown(() async {
       await db.close();
@@ -474,6 +486,18 @@ void main() {
           now: now,
           utcOffset: Duration.zero,
           camera: camera ?? FakeCamera(frames, takenAtUtc: now),
+          // The countdown's elapsed-time source, pinned exactly as `now:`
+          // pins the instant it counts from — the real one is the wall clock,
+          // and a countdown reading that here would pass or fail by how long
+          // the suite took to run. This one follows the widget test's own
+          // faked clock, so `pump(d)` moves it exactly as it moves everything
+          // else, and carries [suspended] on top: wall time the app slept
+          // through.
+          elapsed: () {
+            final from = tester.binding.clock.now();
+            return () =>
+                tester.binding.clock.now().difference(from) + suspended;
+          },
         ),
       );
       await tester.pump();
@@ -524,6 +548,22 @@ void main() {
     Future<void> openTheCamera(WidgetTester tester) async {
       await tester.tap(find.byKey(const Key('capture-call-action')));
       await tester.pumpAndSettle();
+    }
+
+    /// The app going away and coming back — the one moment no tick of the
+    /// app's own announces.
+    Future<void> awayAndBack(WidgetTester tester) async {
+      for (final state in [
+        AppLifecycleState.paused,
+        AppLifecycleState.resumed,
+      ]) {
+        await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+          'flutter/lifecycle',
+          const StringCodec().encodeMessage(state.toString()),
+          (_) {},
+        );
+      }
+      await tester.pump();
     }
 
     testWidgets('before your minute, today says so and asks for nothing', (
@@ -687,9 +727,9 @@ void main() {
       await tester.tap(find.byKey(const Key('capture-shutter')));
       await tester.pumpAndSettle();
 
-      // And the control is still there. The one-retake cap came off on
-      // 1 September (bereal-parity-calls §2); what bounds a retake now is the
-      // window, which is why the countdown sits beside the control.
+      // And the control is still there. There is no cap on retakes; what
+      // bounds one now is the window, which is why the countdown sits beside
+      // the control.
       expect(find.byKey(const Key('capture-once-more')), findsOneWidget);
       expect(find.byKey(const Key('capture-keep')), findsOneWidget);
       expect(countdown(), isNotNull);
@@ -752,9 +792,9 @@ void main() {
       final kept = await db.readPhotos();
       expect(kept, hasLength(1), reason: 'one moment is one photograph');
       expect(kept.single.filePath, camera.taken.last);
-      // The count of retakes is nobody's business but the person's: it is not
-      // stored, and the pool has no column that could show it (the captain
-      // answered "nope" on 3 September).
+      // The count of retakes is nobody's business but the person's: the
+      // posted photograph never shows how many retakes it took, so it is not
+      // stored and the pool has no column that could show it.
       expect(kept.single.word, isNull);
     });
 
@@ -788,6 +828,60 @@ void main() {
         "the hour it's taken.",
       );
       expect(find.byKey(const Key('capture-shutter')), findsOneWidget);
+    });
+
+    testWidgets('a window that ran down in somebody else\'s app is run down '
+        'when the phone comes back', (tester) async {
+      // The countdown measures elapsed time; it does not count its own ticks.
+      // iOS suspends a backgrounded app's timers wholesale and
+      // `Timer.periodic` fires no catch-up ticks for the interval it slept
+      // through, so a clock that added a second per tick came back from
+      // ninety seconds in a pocket still reading `2:00 left / a while yet` —
+      // half a minute after the window had shut. On a two-minute window the
+      // one screen that exists to say whether you are late must never say
+      // punctual when you are not.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      expect(countdown(), '2:00 left');
+      expect(textOf(const Key('capture-window')), 'a while yet');
+
+      // Ninety seconds of the window spent somewhere else. Deliberately not
+      // `pump(90s)`: that fires all ninety of the ticks the real suspension
+      // eats, and a tick-counting countdown would pass it.
+      suspended = const Duration(seconds: 90);
+      await awayAndBack(tester);
+
+      expect(
+        countdown(),
+        '0:30 left',
+        reason: 'the countdown counted its ticks instead of the clock',
+      );
+      expect(textOf(const Key('capture-window')), 'last stretch');
+
+      // And the resume is only a prompt to look again, never the source of
+      // the answer: thirty-five more seconds pass with no lifecycle event at
+      // all, and the first ordinary rebuild — the shutter — finds the window
+      // shut rather than finding where the ticks left off.
+      suspended = const Duration(seconds: 125);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('capture-hour')), findsOneWidget);
+      expect(countdown(), isNull, reason: 'a shut window still had a thread');
+
+      // Late is late however it was arrived at, and the frame still lands at
+      // the hour it was really taken.
+      await tester.tap(find.byKey(const Key('capture-once-more')));
+      await tester.pumpAndSettle();
+      expect(
+        textOf(const Key('capture-window')),
+        "Your slot was teatime. It's fine — whatever you take now lands at "
+        "the hour it's taken.",
+      );
     });
 
     testWidgets('a retake after the window shut is still late, and stays '
@@ -926,7 +1020,7 @@ void main() {
     ) async {
       // The window narrowed to two minutes and the late path did not move an
       // inch: it runs to midnight, and the minute before midnight is inside
-      // it (docs/decisions/2026-09-02-bereal-parity-calls.md, second round).
+      // it.
       final ping = pingOn(day(14));
       await launch(
         tester,

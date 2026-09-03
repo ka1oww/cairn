@@ -4,14 +4,13 @@
 // file cannot see.
 //
 // **The house's own paper, and no Material scheme anywhere under it.** The
-// captain's call on 2 September was that the parity work keeps Cairn's voice
-// and look rather than taking on BeReal's black chrome
-// (docs/decisions/2026-09-02-bereal-parity-calls.md §3), and that is not a
-// no-op: this screen ran on `Theme.of(context)` and so on whatever Material
-// happened to hand it. Every colour and every face below now comes from
-// `house_style.dart`, which is the design record's one transcription — a
-// second spelling of a house colour, or a `Theme.of` reaching for one, is the
-// thing to refuse in review.
+// capture surface keeps the house style rather than a Material scheme, so it
+// keeps Cairn's voice and look rather than taking on BeReal's black chrome.
+// That is not a no-op: this screen ran on `Theme.of(context)` and so on
+// whatever Material happened to hand it. Every colour and every face below
+// now comes from `house_style.dart`, which is the design record's one
+// transcription — a second spelling of a house colour, or a `Theme.of`
+// reaching for one, is the thing to refuse in review.
 //
 // Still not here: the design's drawn treatment of this screen — the dashed
 // thread burning down the edge with its coral bead (10a/10b), the paper sheet,
@@ -22,7 +21,7 @@
 // rather than looks — the line takes what is typed without correcting it into
 // tidiness, a late capture is shown no timer at all (surface 10c), and the
 // posted photograph never says how many retakes it took, so nothing here
-// counts them (docs/decisions/2026-09-03-parity-order-and-retake-count.md §1).
+// counts them.
 //
 // Also not here: a live viewfinder. The seam hands back a frame, not a
 // preview, so on a phone the shutter fires without one. That is the next
@@ -176,10 +175,21 @@ ButtonStyle get _quiet => TextButton.styleFrom(
 /// `nowProvider` is deliberately not ticked (ping_schedule.dart says why), and
 /// making it tick would rebuild every surface in the app once a second for the
 /// sake of one. So the tick is here, for exactly as long as the camera is
-/// open: the same instant the moment itself was judged by seeds it, a timer
-/// moves it a second at a time, and `dispose` stops it. Seeding it from a
-/// different clock than the state machine's would let the countdown and the
-/// window disagree about the window.
+/// open, and `dispose` stops it. The instant it counts from is the same one
+/// the moment itself was judged by: seeding it from a different clock than
+/// the state machine's would let the countdown and the window disagree about
+/// the window.
+///
+/// **The tick is what redraws it; the elapsed time is what it reads.** The
+/// timer only asks the sheet to have another look — how much of the window
+/// has actually gone is [ElapsedSince], measured against the wall clock
+/// through `elapsedSourceProvider` (which says why). Counting the ticks
+/// instead was the defect: iOS suspends a backgrounded app's timers, so a
+/// phone away in a pocket for ninety seconds fired no ticks and came back to
+/// a screen still reading `2:00 left / a while yet` half a minute after the
+/// window had shut. Every rebuild now reads real elapsed time, whatever
+/// caused it — so the resume the observer below catches is a *prompt* to
+/// redraw and never the source of the answer.
 ///
 /// It knows [until] only so that it can *stop*: once there is nothing left to
 /// count it cancels itself rather than rebuilding the sheet once a second for
@@ -200,16 +210,21 @@ class _CaptureClock extends ConsumerStatefulWidget {
   ConsumerState<_CaptureClock> createState() => _CaptureClockState();
 }
 
-class _CaptureClockState extends ConsumerState<_CaptureClock> {
+class _CaptureClockState extends ConsumerState<_CaptureClock>
+    with WidgetsBindingObserver {
   Timer? _timer;
-  Duration _sinceSeed = Duration.zero;
+
+  /// Started when the camera opens, and *read* on every rebuild thereafter —
+  /// never accumulated, so there is nothing here for a missed tick to lose.
+  late final ElapsedSince _elapsed;
 
   bool get _hasSomethingToCount {
     final until = widget.until;
-    // `ref.read` here and `ref.watch` in `build`, so the seed is the same
-    // pinned clock a test's `bootstrapApp(now:)` gives everything else.
+    // `ref.read` here and `ref.watch` in `build`, so the instant counted from
+    // is the same pinned clock a test's `bootstrapApp(now:)` gives everything
+    // else.
     return until != null &&
-        ref.read(nowProvider).add(_sinceSeed).isBefore(until);
+        ref.read(nowProvider).add(_elapsed()).isBefore(until);
   }
 
   void _ensureTicking() {
@@ -218,18 +233,31 @@ class _CaptureClockState extends ConsumerState<_CaptureClock> {
       _timer = null;
       return;
     }
-    _timer ??= Timer.periodic(const Duration(seconds: 1), _tick);
+    _timer ??= Timer.periodic(const Duration(seconds: 1), (_) => _lookAgain());
   }
 
-  void _tick(Timer timer) {
-    setState(() => _sinceSeed += const Duration(seconds: 1));
+  /// Redraw, then decide whether there is still anything to redraw for. The
+  /// `setState` carries no value on purpose — `build` reads the elapsed time
+  /// itself, so there is nothing here to get out of step with it.
+  void _lookAgain() {
+    setState(() {});
     _ensureTicking();
   }
 
   @override
   void initState() {
     super.initState();
+    _elapsed = ref.read(elapsedSourceProvider)();
+    WidgetsBinding.instance.addObserver(this);
     _ensureTicking();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Coming back from somebody else's app is the one moment no tick of ours
+    // announces, so it is asked for by hand. It changes nothing about *what*
+    // is read — only about when the sheet is asked to read it.
+    if (state == AppLifecycleState.resumed) _lookAgain();
   }
 
   @override
@@ -240,13 +268,14 @@ class _CaptureClockState extends ConsumerState<_CaptureClock> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) =>
-      widget.builder(context, ref.watch(nowProvider).add(_sinceSeed));
+      widget.builder(context, ref.watch(nowProvider).add(_elapsed()));
 }
 
 /// The countdown itself, or nothing at all once the window has shut.
@@ -403,9 +432,9 @@ class _Breath extends ConsumerWidget {
           onPressed: breath.isKeeping ? null : flow.turnTheDayOver,
           child: const Text('Turn the day over'),
         ),
-        // Once more, and again, and again: the cap came off on 1 September
-        // and the control is simply always here now. What bounds a retake is
-        // the countdown beside it — the *same* countdown the framing screen
+        // Once more, and again, and again: there is no cap on retakes, so
+        // the control is simply always here. What bounds a retake is the
+        // countdown beside it — the *same* countdown the framing screen
         // showed, because a retake buys no more of the window
         // (capture_flow.dart's `onceMore`).
         Row(

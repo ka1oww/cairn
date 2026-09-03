@@ -13,17 +13,17 @@
 //  - **The camera** is the back camera and nothing else in the first release
 //    (docs/decisions/2026-08-22-camera-like-bereal.md). It sits behind
 //    `camera_source.dart` so this file never names a lens.
-//  - **Two minutes, and late is always allowed**
-//    (docs/decisions/2026-09-02-bereal-parity-calls.md, second round; it
-//    narrows the thirty of design-calls §7 and changes nothing else). There is
-//    no lockout: a photo taken at 23:40 carries its real hour and is visibly
-//    late, which is the only pressure the system applies and is enough.
+//  - **Two minutes, and late is always allowed.** The window is two minutes,
+//    which narrows the thirty of design-calls §7 and changes nothing else.
+//    There is no lockout: a photo taken at 23:40 carries its real hour and is
+//    visibly late, which is the only pressure the system applies and is
+//    enough.
 //  - **The pause** is surface 10d, the breath before the flip: the frame, a
 //    retake whenever you want one, and a primary action that names the payoff.
-//  - **A retake is the same moment, so it is the same deadline.** The cap came
-//    off on 1 September (bereal-parity-calls §2) and with it the only thing
-//    that used to bound a retake; what bounds one now is the window, and a
-//    retake that re-opened the window would bound nothing at all. That is why
+//  - **A retake is the same moment, so it is the same deadline.** There is no
+//    cap on retakes, and the cap that came off was the only thing that used
+//    to bound one; what bounds a retake now is the window, and a retake that
+//    re-opened the window would bound nothing at all. That is why
 //    [Framing] carries the moment's own `closesAt` and *nothing else* about
 //    the window: late, the last stretch and the countdown are all
 //    [windowStandingAt] over that one instant, so there is no second copy of
@@ -67,11 +67,10 @@ import 'trip_providers.dart';
 
 /// How long the moment stays open after the ping.
 ///
-/// Two minutes (docs/decisions/2026-09-02-bereal-parity-calls.md, second
-/// round), narrowed from the thirty of design-calls §7. The narrowing is only
-/// affordable because the ping is *yours* and nobody else's: a personal minute
-/// is a much smaller thing to miss than a party-wide one, and the late path
-/// below is still open till midnight either way.
+/// Two minutes, narrowed from the thirty of design-calls §7. The narrowing is
+/// only affordable because the ping is *yours* and nobody else's: a personal
+/// minute is a much smaller thing to miss than a party-wide one, and the late
+/// path below is still open till midnight either way.
 const captureWindow = Duration(minutes: 2);
 
 /// The tail of that window the design calls "last stretch" (surface 10b).
@@ -275,6 +274,52 @@ WindowStanding windowStandingAt({
   );
 }
 
+// ---------------------------------------------------------------------------
+// The countdown's measure of time actually passed.
+// ---------------------------------------------------------------------------
+
+/// How much real time has gone by since a measurement was started.
+typedef ElapsedSince = Duration Function();
+
+/// Starts one such measurement, at the instant it is called.
+typedef StartElapsed = ElapsedSince Function();
+
+/// What the capture countdown measures elapsed time with, injected so that a
+/// test can drive it.
+///
+/// This is a *delta* and never a second clock. The instant the countdown
+/// counts from is [nowProvider] — the same read the window was judged by —
+/// and this only says how far past that instant the phone has since got. Two
+/// clocks that could disagree about one window is the same defect class the
+/// deadline's single copy exists to remove, so a source that answered "now"
+/// outright is the thing to refuse in review.
+///
+/// It has to be **measured rather than counted**, because a timer is not a
+/// clock: iOS suspends a backgrounded app's timers wholesale, `Timer.periodic`
+/// fires no catch-up ticks for the seconds it slept through, and a countdown
+/// that added a second per tick came back from ninety seconds in somebody's
+/// pocket still claiming the whole two minutes. On a two-minute window the one
+/// screen that exists to say whether you are late must never say punctual when
+/// you are not.
+///
+/// The measure is the wall clock rather than a [Stopwatch], deliberately: the
+/// deadline is itself a wall-clock instant, so this counts in the very units
+/// the window is written in, and a monotonic stopwatch is not guaranteed to
+/// run while the phone is asleep — which is exactly the interval that has to
+/// be counted.
+final elapsedSourceProvider = Provider<StartElapsed>((ref) => startElapsed);
+
+/// The real one: wall time, from the instant it is called.
+ElapsedSince startElapsed() {
+  final from = DateTime.now();
+  return () {
+    final since = DateTime.now().difference(from);
+    // A clock dragged backwards — an NTP correction, a hand-set date — hands
+    // back no time at all rather than time the window has not spent.
+    return since.isNegative ? Duration.zero : since;
+  };
+}
+
 /// The camera would not open, in words a person can read.
 class CaptureRefusedState extends CaptureState {
   final String reason;
@@ -381,8 +426,8 @@ class CaptureFlow extends Notifier<CaptureState> {
   // [TheBreath.closesAt]) and is handed on unchanged at every hop, so there
   // is nothing for `open`, `shoot`, `onceMore` or a rebuild to re-derive or
   // reset. The count of retakes is not held either: it is nobody's business
-  // but the person's, and the posted photograph never shows it
-  // (docs/decisions/2026-09-03-parity-order-and-retake-count.md §1).
+  // but the person's, and the posted photograph never shows how many retakes
+  // it took, so no count is kept in state, in the store, or anywhere else.
 
   @override
   CaptureState build() => const CaptureClosed();
@@ -437,14 +482,14 @@ class CaptureFlow extends Notifier<CaptureState> {
   /// "Once more" — as many times as you like, for as long as the window
   /// lasts.
   ///
-  /// The cap came off on 1 September (bereal-parity-calls §2). It had been
-  /// the authenticity guard — one retake matches how people treat film — and
-  /// what replaces it is the clock: two minutes is short enough that a
-  /// photoshoot does not fit inside one, and the deadline below is the same
-  /// deadline whichever retake this is. A count is *not* kept, here or
-  /// anywhere the pool can see: the captain answered "nope" to showing it
-  /// (parity-order-and-retake-count §1), and a number rendered to the party
-  /// would reinstate the very pressure the cap was removed to lift.
+  /// There is no cap on retakes. The old cap of one had been the authenticity
+  /// guard — one retake matches how people treat film — and what replaces it
+  /// is the clock: two minutes is short enough that a photoshoot does not fit
+  /// inside one, and the deadline below is the same deadline whichever retake
+  /// this is. A count is *not* kept, here or anywhere the pool can see: the
+  /// posted photograph never shows how many retakes it took, and a number
+  /// rendered to the party would reinstate the very pressure the cap was
+  /// removed to lift.
   Future<void> onceMore() async {
     final breath = state;
     if (breath is! TheBreath || breath.isKeeping) return;
