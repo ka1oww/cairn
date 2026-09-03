@@ -13,7 +13,13 @@ import 'models.dart';
 /// The bare 4-digit form deliberately excludes anything that reads as a
 /// calendar year (1900-2099), since pasted itineraries very often contain a
 /// year and almost never contain a genuine 19xx/20xx military time. This is
-/// a known, documented limitation rather than an oversight.
+/// a known, documented limitation rather than an oversight. It also refuses
+/// a 4-digit number whose preceding word labels it (`room 1204`, `gate
+/// 2130`, `flight`, `platform`, `bus`, `train`, `no.`, `#`), and the
+/// `H.MM`/`H:MM` form refuses a match that is priced rather than timed — a
+/// currency symbol right before it (`$12.50`) or a currency code right
+/// after it (`12.50 SGD`). Both lists are deliberately short: going wider
+/// would be guessing in the other direction.
 ///
 /// A *hedged* time is not extracted at all: `maybe 4pm?`, `around 4.40 PM`,
 /// `~7pm`, `7pm-ish`, `2pm or 3pm` all return null. An extracted time is
@@ -30,8 +36,10 @@ ParsedTime? extractTime(String line) {
     return _fromColonMatch(range);
   }
 
-  final colon = _colonOrDot.firstMatch(line);
-  if (colon != null) {
+  for (final colon in _colonOrDot.allMatches(line)) {
+    // A price wearing a time's shape — `$12.50`, `12.50 SGD` — is skipped,
+    // not starred; a later real time on the same line still counts.
+    if (_looksLikePrice(line, colon)) continue;
     if (_isHedged(line, colon)) return null;
     return _fromColonMatch(colon);
   }
@@ -42,21 +50,44 @@ ParsedTime? extractTime(String line) {
     return _fromHourMeridiemMatch(hourOnly);
   }
 
-  final military = _bareMilitary.firstMatch(line);
-  if (military != null) {
+  for (final military in _bareMilitary.allMatches(line)) {
     final text = military.group(0)!;
-    if (!_looksLikeYear(text)) {
-      final hour = int.parse(text.substring(0, 2));
-      final minute = int.parse(text.substring(2, 4));
-      if (hour <= 23 && minute <= 59) {
-        if (_isHedged(line, military)) return null;
-        return ParsedTime(hour, minute);
-      }
+    if (_looksLikeYear(text)) continue;
+    // `Room 1204`, `Gate 2130`: four digits after a label word are a
+    // labelled number, never a departure time. The label list is short on
+    // purpose — anything wider is guessing in the other direction.
+    if (_labelledNumber.hasMatch(line.substring(0, military.start))) continue;
+    final hour = int.parse(text.substring(0, 2));
+    final minute = int.parse(text.substring(2, 4));
+    if (hour <= 23 && minute <= 59) {
+      if (_isHedged(line, military)) return null;
+      return ParsedTime(hour, minute);
     }
   }
 
   return null;
 }
+
+/// A currency symbol right before the match (`$12.50`, `S$12.50`) or a
+/// currency code right after it (`12.50 SGD`) marks a price, not a time.
+final RegExp _currencySymbolBefore = RegExp(r'[$€£¥₩₹₫₱]\s*$');
+final RegExp _currencyCodeAfter = RegExp(
+  r'^\s*(?:usd|sgd|eur|gbp|jpy|aud|nzd|cad|chf|cny|rmb|hkd|twd|krw|thb|myr|'
+  r'idr|php|vnd|inr|mxn|brl)\b',
+  caseSensitive: false,
+);
+
+bool _looksLikePrice(String line, RegExpMatch match) =>
+    _currencySymbolBefore.hasMatch(line.substring(0, match.start)) ||
+    _currencyCodeAfter.hasMatch(line.substring(match.end));
+
+/// The word right before a bare 4-digit number that says it is a labelled
+/// number rather than a clock time: `room 1204`, `gate 2130`, `no. 1230`,
+/// `#1930`.
+final RegExp _labelledNumber = RegExp(
+  r'(?:\b(?:room|gate|flight|platform|bus|train|no)\.?|#)\s*$',
+  caseSensitive: false,
+);
 
 /// Words that, appearing in the same clause before a time, mark it as an
 /// estimate rather than a commitment. Kept as whole words so e.g. the

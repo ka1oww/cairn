@@ -27,6 +27,7 @@ import 'package:cairn_model/cairn_model.dart' as model;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
+import '../logic/calendar_days.dart';
 import '../logic/parsed_areas.dart';
 import '../logic/plan_text.dart';
 import '../logic/repaste_merge.dart' as merge;
@@ -79,6 +80,8 @@ enum DayDoubtCause {
   dateWithoutYear,
   barePlaceName,
   noStops,
+  impossibleDate,
+  weekdayDisagrees,
 }
 
 /// One stop as the confirmation screen shows it: the text as it now stands,
@@ -548,6 +551,12 @@ class PasteFlow extends Notifier<PasteFlowState> {
   bool _nothingRead = false;
   MonthFirstExample? _monthFirstExample;
 
+  /// The first date header the last read saw that named a day and month but
+  /// no year — what [useYear] turns into a real trip start. Overwritten on
+  /// every read, so it always describes the paste the year chip is asking
+  /// about.
+  ip.YearlessDate? _firstYearlessDate;
+
   /// The read as it is being edited. Rebuilt from scratch by anything that
   /// re-reads the whole paste ([readMonthFirst], [useYear]): a re-read makes
   /// different stops, so the edits made to the old ones have nothing left to
@@ -617,8 +626,23 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// One answer to "which year?": re-read with a trip-start hint so the
   /// parser itself resolves every year-less date, rather than this layer
   /// second-guessing it.
+  ///
+  /// The hint means "the trip starts here", so it is the plan's own first
+  /// year-less date in the chosen year — never a bare 1 January, which used
+  /// to date a year-straddling plan's January days a year early (they sat
+  /// eleven months "before" the invented start, inside the parser's 30-day
+  /// roll window) and land every `Day N` header on N January.
   void useYear(int year) {
-    _tripStartHint = DateTime(year, 1, 1);
+    final first = _firstYearlessDate;
+    final start = first == null
+        ? null
+        : DateTime(year, first.month, first.day);
+    // The plan's own date, when it exists in the chosen year (29 February
+    // may not be); the year's first day only as the fallback of last resort.
+    _tripStartHint =
+        (start != null && start.year == year && start.month == first!.month)
+            ? start
+            : DateTime(year, 1, 1);
     _readAgain();
   }
 
@@ -1192,6 +1216,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
     );
     _nothingRead = result.usedHeaderlessFallback || result.days.isEmpty;
     _monthFirstExample = _exampleFrom(result.firstAmbiguousNumericDate);
+    _firstYearlessDate = result.firstYearlessDate;
     return result;
   }
 
@@ -1249,6 +1274,13 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   text: stop.text,
                   time: stop.time,
                   sourceLineNumber: 0,
+                  // The merge already decided whose area survives — the
+                  // person's carry, or what the new text declares. Dropping
+                  // the three fields here would throw that answer away on
+                  // the way into the draft.
+                  kind: stop.kind,
+                  area: stop.area,
+                  areaSource: stop.areaSource,
                 ),
             ],
           ),
@@ -1298,7 +1330,18 @@ class PasteFlow extends Notifier<PasteFlowState> {
         place: day.place,
         stops: [
           for (final stop in day.stops)
-            model.Stop(text: stop.text, time: stop.time),
+            // Every field [accept] persists, because this list is the merge
+            // baseline: a stop's kind, area and areaSource dropped here would
+            // erase a hand-made area correction on Save, and starve the
+            // merge's human-area carry of the very corrections it exists to
+            // preserve.
+            model.Stop(
+              text: stop.text,
+              time: stop.time,
+              kind: stop.kind,
+              area: stop.area,
+              areaSource: stop.areaSource,
+            ),
         ],
       ),
   ];
@@ -1511,9 +1554,19 @@ class PasteFlow extends Notifier<PasteFlowState> {
     switch (uncertainty) {
       case ip.DayUncertainty.weekdayWithoutDate:
       case ip.DayUncertainty.dateWithoutYear:
+      case ip.DayUncertainty.impossibleDate:
         // A date answered — picked directly, or resolved by a whole-paste
         // year re-read — closes the question.
         if (day.date != null) return _emptiedDoubt(day);
+      case ip.DayUncertainty.weekdayDisagrees:
+        // Live state, not a verdict: re-dating the day (or clearing its
+        // date) answers this — including a new date the named weekday now
+        // agrees with.
+        final named = day.headerWeekday;
+        final date = day.date;
+        if (named == null || date == null || date.weekday == named) {
+          return _emptiedDoubt(day);
+        }
       case ip.DayUncertainty.noStops:
         // Anything in the day answers it, however it got there: typed in, or
         // dragged in from another day or from the set-aside.
@@ -1534,6 +1587,30 @@ class PasteFlow extends Notifier<PasteFlowState> {
         uncertainty.explanation,
       ),
       ip.DayUncertainty.dateWithoutYear => _yearDoubt(uncertainty.explanation),
+      ip.DayUncertainty.impossibleDate => DayDoubt(
+        cause: DayDoubtCause.impossibleDate,
+        explanation: uncertainty.explanation,
+        ask:
+            "The plan names a day that month doesn't have, and I don't "
+            'guess a neighbouring one. Your call:',
+        options: const [DayAskOption('Pick the date', PickDate())],
+      ),
+      ip.DayUncertainty.weekdayDisagrees => DayDoubt(
+        cause: DayDoubtCause.weekdayDisagrees,
+        explanation: uncertainty.explanation,
+        ask:
+            'The plan calls this one ${weekdayName(day.headerWeekday!)}, '
+            'but ${dayMonthLabel(day.date!)} is a '
+            '${weekdayName(day.date!.weekday)}. I kept the date as written. '
+            'Your call:',
+        options: [
+          DayAskOption(
+            "Keep the ${ordinal(day.date!.day)}",
+            const ConfirmAsIs(),
+          ),
+          DayAskOption('A different date', PickDate(initial: day.date)),
+        ],
+      ),
       ip.DayUncertainty.barePlaceName => DayDoubt(
         cause: DayDoubtCause.barePlaceName,
         explanation: uncertainty.explanation,
@@ -1648,11 +1725,11 @@ class PasteFlow extends Notifier<PasteFlowState> {
     final position = draft.days.indexOf(day);
     for (var i = position - 1; i >= 0; i--) {
       final date = draft.days[i].date;
-      if (date != null) return date.add(Duration(days: position - i));
+      if (date != null) return calendarPlusDays(date, position - i);
     }
     for (var i = position + 1; i < draft.days.length; i++) {
       final date = draft.days[i].date;
-      if (date != null) return date.subtract(Duration(days: i - position));
+      if (date != null) return calendarPlusDays(date, position - i);
     }
     return null;
   }
@@ -1663,7 +1740,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
     final forward = (isoWeekday - around.weekday + 7) % 7;
     final backward = (around.weekday - isoWeekday + 7) % 7;
     return forward <= backward
-        ? around.add(Duration(days: forward))
-        : around.subtract(Duration(days: backward));
+        ? calendarPlusDays(around, forward)
+        : calendarPlusDays(around, -backward);
   }
 }

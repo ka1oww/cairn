@@ -388,7 +388,26 @@ final RegExp _fragmentIso = RegExp(r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b');
 final RegExp _fragmentNumeric =
     RegExp(r'\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b');
 
-bool _validDay(int d) => d >= 1 && d <= 31;
+/// The longest each month ever gets — February keeps its leap day, because
+/// with no year in sight `29 Feb` is a date some year really has.
+const List<int> _monthLengths = [
+  31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, //
+];
+
+/// True when a `day`-of-`month` exists on the calendar: in [year] exactly
+/// when one was named (`DateTime` round-trips it rather than sliding to a
+/// neighbour), and in *some* year otherwise. `31 June` is false whatever
+/// the year; `29 February` is false only when a named year is not a leap
+/// year. Written here once — the fragment finder refuses an impossible
+/// date so it is never offered, and the parser's header path uses the same
+/// answer to go quiet with [DayUncertainty.impossibleDate] instead of
+/// binding a neighbouring day.
+bool dayExistsInMonth(int day, int month, int? year) {
+  if (month < 1 || month > 12 || day < 1) return false;
+  if (year == null) return day <= _monthLengths[month - 1];
+  final date = DateTime(year, month, day);
+  return date.year == year && date.month == month && date.day == day;
+}
 
 /// Finds the first date-shaped fragment anywhere in [text], or null when
 /// there is none.
@@ -409,7 +428,7 @@ DateFragment? findDateFragment(
   for (final m in _fragmentIso.allMatches(text)) {
     final month = int.parse(m.group(2)!);
     final day = int.parse(m.group(3)!);
-    if (month < 1 || month > 12 || !_validDay(day)) continue;
+    if (!dayExistsInMonth(day, month, int.parse(m.group(1)!))) continue;
     found.add(DateFragment(
       day: day,
       month: month,
@@ -424,11 +443,12 @@ DateFragment? findDateFragment(
   for (final m in _fragmentDayMonth.allMatches(text)) {
     final month = _month(m.group(2)!);
     final day = int.parse(m.group(1)!);
-    if (month == null || !_validDay(day)) continue;
+    final year = m.group(3) != null ? int.parse(m.group(3)!) : null;
+    if (month == null || !dayExistsInMonth(day, month, year)) continue;
     found.add(DateFragment(
       day: day,
       month: month,
-      year: m.group(3) != null ? int.parse(m.group(3)!) : null,
+      year: year,
       text: m.group(0)!,
       start: m.start,
       end: m.end,
@@ -439,11 +459,12 @@ DateFragment? findDateFragment(
   for (final m in _fragmentMonthDay.allMatches(text)) {
     final month = _month(m.group(1)!);
     final day = int.parse(m.group(2)!);
-    if (month == null || !_validDay(day)) continue;
+    final year = m.group(3) != null ? int.parse(m.group(3)!) : null;
+    if (month == null || !dayExistsInMonth(day, month, year)) continue;
     found.add(DateFragment(
       day: day,
       month: month,
-      year: m.group(3) != null ? int.parse(m.group(3)!) : null,
+      year: year,
       text: m.group(0)!,
       start: m.start,
       end: m.end,
@@ -454,8 +475,9 @@ DateFragment? findDateFragment(
   for (final m in _fragmentNumeric.allMatches(text)) {
     final first = int.parse(m.group(1)!);
     final second = int.parse(m.group(2)!);
-    final dayFirstValid = _validDay(first) && second >= 1 && second <= 12;
-    final monthFirstValid = first >= 1 && first <= 12 && _validDay(second);
+    final year = m.group(3) != null ? _fullYear(int.parse(m.group(3)!)) : null;
+    final dayFirstValid = dayExistsInMonth(first, second, year);
+    final monthFirstValid = dayExistsInMonth(second, first, year);
     if (!dayFirstValid && !monthFirstValid) continue;
     final readMonthFirst = monthFirstNumericDates
         ? monthFirstValid
@@ -463,7 +485,7 @@ DateFragment? findDateFragment(
     found.add(DateFragment(
       day: readMonthFirst ? second : first,
       month: readMonthFirst ? first : second,
-      year: m.group(3) != null ? _fullYear(int.parse(m.group(3)!)) : null,
+      year: year,
       text: m.group(0)!,
       start: m.start,
       end: m.end,

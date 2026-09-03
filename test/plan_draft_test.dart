@@ -184,6 +184,11 @@ void main() {
     );
     await importAFile(tester);
     await importAFile(tester);
+    // The box already held the first import, so the second asks before it
+    // replaces anything — the one confirmation the destructive landing gets.
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('import-replace-confirm')));
+    await tester.pumpAndSettle();
     await settleTheDraft(tester);
 
     expect(await db.readPlanDraft(), second);
@@ -216,7 +221,7 @@ void main() {
     expect(boxText(tester), edited);
   });
 
-  testWidgets("'Try an example' does not overwrite a standing import draft", (
+  testWidgets("'Try an example' cannot reach a standing import draft", (
     tester,
   ) async {
     await launch(
@@ -232,11 +237,12 @@ void main() {
     await importAFile(tester);
     expect(await db.readPlanDraft(), _importedPlan);
 
-    await tester.tap(find.byKey(const Key('try-example')));
+    // The example is a programmatic fill, not an import: it must not touch
+    // the standing draft. A draft tracks the box, so a standing draft means
+    // a non-empty box — and over a non-empty box the pill is absent, not
+    // disabled, so the overwrite cannot even be asked for.
     await settleTheDraft(tester);
-
-    // The example is a programmatic fill, not an import: it must not
-    // touch the standing draft, imported before it.
+    expect(find.byKey(const Key('try-example')), findsNothing);
     expect(await db.readPlanDraft(), _importedPlan);
 
     await relaunch(tester);

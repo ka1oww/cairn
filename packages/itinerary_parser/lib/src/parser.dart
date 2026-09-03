@@ -204,6 +204,7 @@ ParseResult _annotateWithAreas(
     overallConfidence: base.overallConfidence,
     usedHeaderlessFallback: base.usedHeaderlessFallback,
     firstAmbiguousNumericDate: base.firstAmbiguousNumericDate,
+    firstYearlessDate: base.firstYearlessDate,
   );
 }
 
@@ -415,15 +416,27 @@ DateTime? _resolveDateHeaderDate(DateHeaderMatch m, DateTime? tripStartDate) {
   } else {
     return null;
   }
-  var date = DateTime(year, m.month!, m.day!);
+  // A date that does not exist in the year it lands in is refused, never
+  // slid: `DateTime(2027, 6, 31)` would quietly answer 1 July, and a
+  // confident neighbour is exactly the guess this parser exists to refuse.
+  var date = _realDateOrNull(year, m.month!, m.day!);
+  if (date == null) return null;
   if (rolledForward) {
     final start =
         DateTime(tripStartDate!.year, tripStartDate.month, tripStartDate.day);
     if (date.difference(start).inDays < -30) {
-      date = DateTime(year + 1, m.month!, m.day!);
+      date = _realDateOrNull(year + 1, m.month!, m.day!);
     }
   }
   return date;
+}
+
+/// `DateTime(year, month, day)` when that calendar day really exists, null
+/// when `DateTime` would have slid it into a neighbouring day or month.
+DateTime? _realDateOrNull(int year, int month, int day) {
+  final date = DateTime(year, month, day);
+  final real = date.year == year && date.month == month && date.day == day;
+  return real ? date : null;
 }
 
 class _OpenDay {
@@ -473,6 +486,7 @@ ParseResult _buildHeaderModeResult(
   _OpenDay? current;
   var contentLineCount = 0;
   AmbiguousNumericDate? firstAmbiguousNumericDate;
+  YearlessDate? firstYearlessDate;
 
   void closeCurrent() {
     if (current != null) {
@@ -501,9 +515,14 @@ ParseResult _buildHeaderModeResult(
         firstAmbiguousNumericDate ??= fragment?.numericAsWritten;
         current = _OpenDay(
           index: days.length + 1,
+          // Calendar arithmetic, not Duration arithmetic: adding 24-hour
+          // blocks to a local midnight lands at 23:00 the previous day
+          // across a daylight-saving fall-back, and the truncation then
+          // dates the day a day early.
           date: tripStartDate == null
               ? null
-              : _dateOnly(tripStartDate.add(Duration(days: c.dayNumber! - 1))),
+              : DateTime(tripStartDate.year, tripStartDate.month,
+                  tripStartDate.day + c.dayNumber! - 1),
           place: c.headerTrailing,
           headerConfidence: Confidence.high,
           headerSourceLine: c.line.sourceLine,
@@ -523,9 +542,29 @@ ParseResult _buildHeaderModeResult(
         closeCurrent();
         final m = c.dateMatch!;
         firstAmbiguousNumericDate ??= m.numericAsWritten;
-        final resolvedDate = _resolveDateHeaderDate(m, tripStartDate);
+        // `31 June` names a day its month never has, in any year. The date
+        // stays open and the doubt says why — sliding to 1 July would be a
+        // confident guess the person never made.
+        final impossible = m.hasFullDate &&
+            !dayExistsInMonth(m.day!, m.month!, m.year);
+        if (m.hasFullDate && m.year == null && !impossible) {
+          firstYearlessDate ??= YearlessDate(day: m.day!, month: m.month!);
+        }
+        final resolvedDate =
+            impossible ? null : _resolveDateHeaderDate(m, tripStartDate);
+        // A named weekday beside a resolved date is checked, not trusted
+        // blind: on a disagreement the date is kept (numbers are harder to
+        // mistype than a weekday word) and the doubt is surfaced so the
+        // confirmation screen asks instead of the parser correcting anyone.
+        final weekdayDisagrees = resolvedDate != null &&
+            m.weekday != null &&
+            resolvedDate.weekday != m.weekday;
         final DayUncertainty? uncertainty;
-        if (resolvedDate != null) {
+        if (impossible) {
+          uncertainty = DayUncertainty.impossibleDate;
+        } else if (weekdayDisagrees) {
+          uncertainty = DayUncertainty.weekdayDisagrees;
+        } else if (resolvedDate != null) {
           uncertainty = null;
         } else if (m.hasFullDate) {
           uncertainty = DayUncertainty.dateWithoutYear;
@@ -537,7 +576,7 @@ ParseResult _buildHeaderModeResult(
           date: resolvedDate,
           place: m.trailingText,
           headerConfidence:
-              resolvedDate != null ? Confidence.high : Confidence.medium,
+              uncertainty == null ? Confidence.high : Confidence.medium,
           headerUncertainty: uncertainty,
           headerWeekday: m.weekday,
           headerSourceLine: c.line.sourceLine,
@@ -578,6 +617,7 @@ ParseResult _buildHeaderModeResult(
     overallConfidence: overall,
     usedHeaderlessFallback: false,
     firstAmbiguousNumericDate: firstAmbiguousNumericDate,
+    firstYearlessDate: firstYearlessDate,
   );
 }
 
@@ -663,5 +703,3 @@ Confidence _combineOverall(
   }
   return overall;
 }
-
-DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);

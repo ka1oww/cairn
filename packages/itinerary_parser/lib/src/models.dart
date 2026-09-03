@@ -67,6 +67,26 @@ enum DayUncertainty {
     'No day headers were found anywhere in the paste, so this is just a '
         'block of lines split on blank space.',
   ),
+
+  /// The header names a date that does not exist on the calendar (`31
+  /// June`). The parser refuses to slide it to a neighbouring day — a
+  /// confident neighbour is a guess wearing a date's clothes — so the day's
+  /// `date` is null and the confirmation screen asks instead.
+  impossibleDate(
+    'impossible-date',
+    "The plan names a day that month doesn't have, so no date was set "
+        'rather than guessing a neighbouring one.',
+  ),
+
+  /// The header names both a weekday and a full date, and they disagree
+  /// (`Tue 14 June 2027`, when 14 June 2027 is a Monday). The date is kept
+  /// — the person's own numbers outrank a word that is easier to mistype —
+  /// but the disagreement is surfaced rather than silently corrected.
+  weekdayDisagrees(
+    'weekday-disagrees',
+    "The weekday the plan names doesn't fall on the date written beside "
+        'it. The date was kept; the disagreement is flagged, not corrected.',
+  ),
   ;
 
   /// Stable, machine-readable identifier (also what `toJson` emits).
@@ -294,10 +314,25 @@ class DateCandidate {
     this.ambiguousNumericOrder = false,
   });
 
-  /// The concrete date, when the header spelled a year out; null otherwise.
-  DateTime? get resolved => year == null ? null : DateTime(year!, month, day);
+  /// The concrete date, when the header spelled a year out; null otherwise —
+  /// and null when the named date does not exist in that year (`31 June
+  /// 2027`), because `DateTime` would silently slide it to a neighbouring
+  /// day and a candidate must never offer a date the plan does not say.
+  DateTime? get resolved {
+    final y = year;
+    if (y == null) return null;
+    final date = DateTime(y, month, day);
+    final real = date.year == y && date.month == month && date.day == day;
+    return real ? date : null;
+  }
 
   /// The concrete date this candidate means in [year].
+  ///
+  /// Fragments are validated at recognition (`findDateFragment` refuses a
+  /// day the month can never have), so the one combination left that can
+  /// fail to exist is 29 February in a non-leap [year] — `DateTime` then
+  /// answers 1 March, and the caller shows the worked-out date and weekday
+  /// before anything binds, which is what keeps that slide visible.
   DateTime inYear(int year) => DateTime(year, month, day);
 
   Map<String, dynamic> toJson() => {
@@ -523,6 +558,32 @@ class AmbiguousNumericDate {
   String toString() => 'AmbiguousNumericDate($asWritten)';
 }
 
+/// A day and month a date header named without a year — what a "which
+/// year?" answer needs to become a real trip start rather than a guessed
+/// 1 January.
+///
+/// Held as the two numbers only: resolving them against a year is the
+/// caller's decision, exactly as it is for [DateCandidate].
+class YearlessDate {
+  /// Day of month, 1-31, known to exist in [month] in at least some year.
+  final int day;
+
+  /// Month, 1-12.
+  final int month;
+
+  const YearlessDate({required this.day, required this.month});
+
+  @override
+  bool operator ==(Object other) =>
+      other is YearlessDate && other.day == day && other.month == month;
+
+  @override
+  int get hashCode => Object.hash(day, month);
+
+  @override
+  String toString() => 'YearlessDate($day/$month)';
+}
+
 /// The full result of parsing one pasted itinerary.
 class ParseResult {
   final List<ParsedDay> days;
@@ -555,12 +616,22 @@ class ParseResult {
   /// disagree, which is the point of deriving it.
   bool get hasAmbiguousNumericDates => firstAmbiguousNumericDate != null;
 
+  /// The first date header that named a day and month but no year, or null
+  /// when the paste holds none. This is what a "which year?" answer should
+  /// seed the re-read's trip start with: `30 December` answered "2026"
+  /// means the trip starts 30 December 2026 — not 1 January — so a
+  /// year-straddling plan's January days roll into the following year
+  /// instead of landing a year early, and a `Day N` header counts from the
+  /// plan's own first date.
+  final YearlessDate? firstYearlessDate;
+
   const ParseResult({
     required this.days,
     required this.unplacedLines,
     required this.overallConfidence,
     required this.usedHeaderlessFallback,
     this.firstAmbiguousNumericDate,
+    this.firstYearlessDate,
   });
 
   Map<String, dynamic> toJson() => {
