@@ -632,10 +632,15 @@ first-ever launch has an account to mint, and that one waits at most three
 seconds — a separate budget from `GotrueSessions`'s ten-second request
 timeout — before running as the local stand-in. The identity is then **fixed
 for the life of the launch**: a session that lands after the budget is written
-to the vault and picked up next launch, never adopted mid-session, because a
+to the vault and picked up next launch, not adopted mid-session, because a
 surface that drew itself as `me` and then became a uuid would credit a photo to
-somebody the roster does not hold. A phone that cannot reach the server at all,
-on a launch with nothing stored, keeps the stand-in and runs entirely offline.
+somebody the roster does not hold. Two bounded exceptions, both
+`lib/bootstrap.dart`'s (its docs are the authority): accepting a plan may
+adopt a late-landing account only while no trip exists yet, and a roster a
+previous launch left under the stand-in is healed to the account on the next
+launch (`MembershipStore.adoptAccountIdentity`). A phone that cannot reach the
+server at all, on a launch with nothing stored, keeps the stand-in and runs
+entirely offline.
 
 ### Running the live smoke test
 

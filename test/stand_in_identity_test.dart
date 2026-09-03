@@ -216,9 +216,8 @@ Thu 17 June 2027 - Osaka
   testWidgets('the heal runs on every launch and changes nothing the second '
       'time', (tester) async {
     await tripStartedUnderStandIn();
-    await MembershipStore(
-      db,
-    ).adoptAccountIdentity(standInId: localMemberId, accountId: account);
+    await MembershipStore(db)
+        .adoptAccountIdentity(standInId: localMemberId, accountId: account);
 
     final rosterAfterFirst = await db.readTripMembers();
     final factsAfterFirst = (await db.readTripFacts())!;
@@ -232,16 +231,17 @@ Thu 17 June 2027 - Osaka
     await tester.pump();
     final emissionsBefore = emissions.length;
 
-    await MembershipStore(
-      db,
-    ).adoptAccountIdentity(standInId: localMemberId, accountId: account);
+    await MembershipStore(db)
+        .adoptAccountIdentity(standInId: localMemberId, accountId: account);
     await tester.pump();
     await tester.pump();
 
     expect(emissions.length, emissionsBefore, reason: 'no second write');
     expect(await db.readTripMembers(), rosterAfterFirst);
-    expect((await db.readTripFacts())!.startedByMemberId,
-        factsAfterFirst.startedByMemberId);
+    expect(
+      (await db.readTripFacts())!.startedByMemberId,
+      factsAfterFirst.startedByMemberId,
+    );
   });
 
   testWidgets('healing a roster the account already sits in drops the '
@@ -256,9 +256,8 @@ Thu 17 June 2027 - Osaka
       ],
     );
 
-    await MembershipStore(
-      db,
-    ).adoptAccountIdentity(standInId: localMemberId, accountId: account);
+    await MembershipStore(db)
+        .adoptAccountIdentity(standInId: localMemberId, accountId: account);
 
     expect((await db.readTripMembers()).single.id, account);
   });
@@ -281,8 +280,9 @@ Thu 17 June 2027 - Osaka
   });
 
   testWidgets('an accept on a configured build that still cannot reach the '
-      'backend starts the trip under the stand-in, exactly as offline does',
-      (tester) async {
+      'backend starts the trip under the stand-in, exactly as offline does', (
+    tester,
+  ) async {
     await launch(tester, lateAccountId: () async => null);
     await pasteAndAccept(tester);
 

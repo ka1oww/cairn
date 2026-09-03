@@ -578,14 +578,16 @@
       <code>'me'</code> when there is not; <code>main()</code> resolves it out of the session vault,
       with no network round trip, before the first frame &mdash; so nothing is credited to the
       stand-in and then re-credited &mdash; and <code>_applyRoster</code> runs for real on an
-      ordinary build. The identity is fixed for the life of the launch. Two things this leaves open.
-      A trip <i>started</i> under <code>'me'</code> can never become a <code>trips</code> row
-      (<code>created_by</code> references <code>profiles.id</code>, a uuid;
-      <code>_createSharedTrip</code> is refused for the life of that trip) and nothing migrates it
-      &mdash; which is the plane, and <b>also a first launch on a merely slow network</b>: a phone
-      with nothing in its vault waits three seconds for an account and then runs as the stand-in,
-      with no signal to the person that it happened. The budget is deliberate, so that is a gap
-      recorded rather than solved. And the roster the server hands back names people by
+      ordinary build. The identity is fixed for the life of the launch, with one narrow exception:
+      the accept path's bounded chance to adopt a late-landing account while no trip exists yet
+      (<code>bootstrap.dart</code>'s docs are the authority). A trip still <i>started</i> under
+      <code>'me'</code> &mdash; the plane, or a configured build offline past accept &mdash; cannot
+      become a <code>trips</code> row on that launch (<code>created_by</code> references
+      <code>profiles.id</code>, a uuid), but it is no longer stranded for good: the next launch that
+      knows its account heals the roster to it (<code>MembershipStore.adoptAccountIdentity</code>).
+      A first launch on a merely slow network still waits three seconds for an account and then
+      runs as the stand-in, with no signal to the person that it happened on that launch.
+      And the roster the server hands back names people by
       <code>profiles.display_name</code>, which nothing on the phone writes, so an anonymous account
       reads as <code>New traveller</code> rather than <code>You</code>. Both close when sign-in asks
       for a name.</li>
