@@ -400,7 +400,10 @@ void main() {
           membershipRepositoryProvider.overrideWithValue(MembershipStore(db)),
           membershipStoreProvider.overrideWithValue(MembershipStore(db)),
           todayProvider.overrideWithValue(june(16)),
-          nowProvider.overrideWith((ref) => clock),
+          nowProvider.overrideWith(
+            (ref) =>
+                () => clock,
+          ),
           tripUtcOffsetProvider.overrideWithValue(Duration.zero),
           cameraSourceProvider.overrideWithValue(camera),
         ],

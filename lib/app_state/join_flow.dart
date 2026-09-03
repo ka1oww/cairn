@@ -88,7 +88,7 @@ class JoinFlow extends Notifier<JoinState> {
         typed: state.typed,
         trip: ref.read(tripMembershipProvider).value,
         closesAt: ref.read(tripClosesAtProvider),
-        now: ref.read(nowProvider),
+        now: ref.read(nowProvider)(),
         you: model.MemberId(ref.read(localMemberIdProvider)),
       ),
     );

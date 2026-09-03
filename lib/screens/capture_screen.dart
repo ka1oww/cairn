@@ -172,24 +172,22 @@ ButtonStyle get _quiet => TextButton.styleFrom(
 
 /// The capture route's own second hand, and the only ticking thing in the app.
 ///
-/// `nowProvider` is deliberately not ticked (ping_schedule.dart says why), and
-/// making it tick would rebuild every surface in the app once a second for the
-/// sake of one. So the tick is here, for exactly as long as the camera is
-/// open, and `dispose` stops it. The instant it counts from is the same one
-/// the moment itself was judged by: seeding it from a different clock than
-/// the state machine's would let the countdown and the window disagree about
-/// the window.
+/// **The tick redraws the sheet; it never tells it the time.** `nowProvider`
+/// is the app's one clock and it is live at every ask (ping_schedule.dart
+/// says why), so each rebuild here asks it again and gets the wall clock as
+/// it really is. Nothing is accumulated and nothing is counted, which is what
+/// makes the two ways of losing time both harmless: a `Timer.periodic` fires
+/// no catch-up ticks for the seconds a suspended app slept through, and
+/// nothing rebuilds a sheet nobody is touching. Either way the next look is
+/// the true one, and the resume the observer below catches is a *prompt* to
+/// look rather than the source of the answer. Counting ticks instead was the
+/// defect: a phone away in a pocket for ninety seconds came back reading
+/// `2:00 left / a while yet` half a minute after the window had shut.
 ///
-/// **The tick is what redraws it; the elapsed time is what it reads.** The
-/// timer only asks the sheet to have another look — how much of the window
-/// has actually gone is [ElapsedSince], measured against the wall clock
-/// through `elapsedSourceProvider` (which says why). Counting the ticks
-/// instead was the defect: iOS suspends a backgrounded app's timers, so a
-/// phone away in a pocket for ninety seconds fired no ticks and came back to
-/// a screen still reading `2:00 left / a while yet` half a minute after the
-/// window had shut. Every rebuild now reads real elapsed time, whatever
-/// caused it — so the resume the observer below catches is a *prompt* to
-/// redraw and never the source of the answer.
+/// The tick is here rather than in the clock because the clock notifies
+/// nobody: pushing a new instant once a second would rebuild every surface in
+/// the app for the sake of this one screen. So the asking is local, for
+/// exactly as long as the camera is open, and `dispose` stops it.
 ///
 /// It knows [until] only so that it can *stop*: once there is nothing left to
 /// count it cancels itself rather than rebuilding the sheet once a second for
@@ -214,17 +212,11 @@ class _CaptureClockState extends ConsumerState<_CaptureClock>
     with WidgetsBindingObserver {
   Timer? _timer;
 
-  /// Started when the camera opens, and *read* on every rebuild thereafter —
-  /// never accumulated, so there is nothing here for a missed tick to lose.
-  late final ElapsedSince _elapsed;
-
   bool get _hasSomethingToCount {
     final until = widget.until;
-    // `ref.read` here and `ref.watch` in `build`, so the instant counted from
-    // is the same pinned clock a test's `bootstrapApp(now:)` gives everything
-    // else.
-    return until != null &&
-        ref.read(nowProvider).add(_elapsed()).isBefore(until);
+    // `ref.read` here and `ref.watch` in `build`, so the clock asked is the
+    // same one a test's `bootstrapApp(now:)` pins for everything else.
+    return until != null && ref.read(nowProvider)().isBefore(until);
   }
 
   void _ensureTicking() {
@@ -237,8 +229,8 @@ class _CaptureClockState extends ConsumerState<_CaptureClock>
   }
 
   /// Redraw, then decide whether there is still anything to redraw for. The
-  /// `setState` carries no value on purpose — `build` reads the elapsed time
-  /// itself, so there is nothing here to get out of step with it.
+  /// `setState` carries no value on purpose — `build` asks the clock itself,
+  /// so there is nothing here to get out of step with it.
   void _lookAgain() {
     setState(() {});
     _ensureTicking();
@@ -247,7 +239,6 @@ class _CaptureClockState extends ConsumerState<_CaptureClock>
   @override
   void initState() {
     super.initState();
-    _elapsed = ref.read(elapsedSourceProvider)();
     WidgetsBinding.instance.addObserver(this);
     _ensureTicking();
   }
@@ -275,7 +266,7 @@ class _CaptureClockState extends ConsumerState<_CaptureClock>
 
   @override
   Widget build(BuildContext context) =>
-      widget.builder(context, ref.watch(nowProvider).add(_elapsed()));
+      widget.builder(context, ref.watch(nowProvider)());
 }
 
 /// The countdown itself, or nothing at all once the window has shut.

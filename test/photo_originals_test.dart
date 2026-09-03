@@ -205,6 +205,14 @@ void main() {
           now: ping.at,
           utcOffset: Duration.zero,
           camera: camera,
+          // The app's clock is live at every ask, so a capture surface left
+          // unpinned here would read the machine's wall clock and any window
+          // assertion added later would pass or fail by how long the suite
+          // took. This walks with the widget test's own faked clock instead.
+          elapsed: () {
+            final from = tester.binding.clock.now();
+            return () => tester.binding.clock.now().difference(from);
+          },
         ),
       );
       await tester.pump();

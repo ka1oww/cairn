@@ -86,14 +86,60 @@ final tripUtcOffsetProvider = Provider<Duration>(
   (ref) => DateTime.now().timeZoneOffset,
 );
 
-/// Now, in UTC.
+/// Now, in UTC — a clock to *ask*, never an instant to remember.
 ///
-/// Read rather than ticked, for the reason `todayProvider` is: this slice has
-/// no timer anywhere, and every surface that reads it is rebuilt by the thing
-/// that would have made it interesting — opening the app from the ping,
-/// switching to Today, coming back from the camera. A live-counting window is
-/// design round ten's burning thread, and lands with it.
-final nowProvider = Provider<DateTime>((ref) => DateTime.now().toUtc());
+/// **It hands back a function on purpose, and that is the whole of it.** A
+/// `Provider<DateTime>` reads the wall clock once and caches that reading for
+/// as long as anything listens: `trip_shell.dart` watches the ping
+/// registration, which watches this, so the instant used to be taken at
+/// launch and never taken again. Every verdict downstream — is the window
+/// open, has the trip ended, is this code still live — was then decided
+/// against a clock that had stopped when the app started. It read as a
+/// deliberate choice ("every surface that reads it is rebuilt by the thing
+/// that would have made it interesting") and it was simply false: rebuilding
+/// a widget does not recompute a cached provider.
+///
+/// So the cached thing is the *clock* and not the time. Watching it never
+/// rebuilds anybody — the closure's identity does not change, so there is no
+/// once-a-second storm over the whole app — and every caller that asks gets
+/// the wall clock as it is at the asking. What a caller may not do is
+/// remember the answer and add elapsed time on top of it: this is the one
+/// place wall time becomes "now", and a second one would let two surfaces
+/// disagree about one window.
+///
+/// What it still does not do is *notify*. A provider that derived a verdict
+/// from an earlier ask keeps that verdict until something rebuilds it, so a
+/// surface wanting a live answer has to ask again — which is what the capture
+/// screen's own second hand is for (`capture_screen.dart`). A clock that
+/// pushed would be design round ten's burning thread, and lands with it.
+final nowProvider = Provider<Clock>(
+  (ref) =>
+      () => DateTime.now().toUtc(),
+);
+
+/// What [nowProvider] hands out.
+typedef Clock = DateTime Function();
+
+/// How much real time has gone by since a measurement was started.
+typedef ElapsedSince = Duration Function();
+
+/// Starts one such measurement, at the instant it is called.
+typedef StartElapsed = ElapsedSince Function();
+
+/// A clock a test drives: [from] is the instant it starts at, and [moving] is
+/// how it advances from there.
+///
+/// This is the composition, written once, and nothing downstream repeats it.
+/// A test that pins only [from] gets a clock that has stopped, which is what
+/// most of them want; one that walks a window hands in [moving] as well and
+/// the two are added here rather than at the surface reading them.
+Clock pinnedClock({DateTime? from, StartElapsed? moving}) {
+  final since = moving?.call();
+  return () {
+    final base = from ?? DateTime.now().toUtc();
+    return since == null ? base : base.add(since());
+  };
+}
 
 // ---------------------------------------------------------------------------
 // The schedule.
@@ -245,7 +291,7 @@ final pingRegistrationProvider =
 class PingRegistration extends Notifier<List<tm.Ping>> {
   @override
   List<tm.Ping> build() {
-    final from = ref.watch(nowProvider);
+    final from = ref.watch(nowProvider)();
     final due = [
       for (final ping in ref.watch(pingScheduleProvider))
         if (!ping.at.isBefore(from)) ping,

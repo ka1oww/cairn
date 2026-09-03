@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'app_state/camera_source.dart';
-import 'app_state/capture_flow.dart';
 import 'app_state/day_view.dart';
 import 'app_state/device_prefs.dart';
 import 'app_state/device_time_zone.dart';
@@ -79,15 +78,17 @@ import 'storage/remote/shared_facts.dart';
 /// the import awaits the load before it fills the box, so a real isolate
 /// under the fake clock never resolves (see area_gazetteer_loader.dart).
 ///
-/// [elapsed] is the capture countdown's measure of time actually passed, on
-/// the same pattern once more. The countdown reads elapsed time rather than
-/// counting its own ticks — a suspended app fires none — and the real measure
-/// is the wall clock (`capture_flow.dart`'s `elapsedSourceProvider` says why),
-/// which in a test would pass or fail by how long the suite took to run. A
-/// test that walks a window hands in a source it drives itself; it must be
-/// handed in *here* rather than in a scope wrapped around this one, because a
-/// provider not overridden in this scope is hosted in whichever scope is the
-/// root, and every binding above would then be looked for in the wrong place.
+/// [elapsed] is the other half of [now], and the two are composed into one
+/// clock here (`pinnedClock`) rather than anywhere downstream. The app's
+/// clock is live at every ask, so a test that only pins [now] gets a clock
+/// that has stopped — right for almost every test, and useless for one
+/// walking a two-minute window down. Such a test hands in [elapsed] as well
+/// and drives it itself; the real clock's own passage cannot serve, because
+/// a window measured against it would pass or fail by how long the suite
+/// took to run. Both must be handed in *here* rather than in a scope wrapped
+/// around this one: a provider not overridden in this scope is hosted in
+/// whichever scope is the root, and every binding above would then be looked
+/// for in the wrong place.
 ///
 /// [sharing] is how a test says where the plan stands with the server without
 /// a server: the app binds the real sync's own [TripSync.standings], and a
@@ -137,7 +138,8 @@ Widget bootstrapApp({
       membershipRepositoryProvider.overrideWithValue(membership ?? roster),
       membershipStoreProvider.overrideWithValue(roster),
       if (today != null) todayProvider.overrideWithValue(today),
-      if (now != null) nowProvider.overrideWithValue(now),
+      if (now != null || elapsed != null)
+        nowProvider.overrideWithValue(pinnedClock(from: now, moving: elapsed)),
       if (utcOffset != null) tripUtcOffsetProvider.overrideWithValue(utcOffset),
       if (camera != null) cameraSourceProvider.overrideWithValue(camera),
       if (picker != null) filePickerEdgeProvider.overrideWithValue(picker),
@@ -148,7 +150,6 @@ Widget bootstrapApp({
       if (textRecognition != null)
         textRecognitionEdgeProvider.overrideWithValue(textRecognition),
       if (memberId != null) localMemberIdProvider.overrideWithValue(memberId),
-      if (elapsed != null) elapsedSourceProvider.overrideWithValue(elapsed),
     ],
     child: const CairnApp(),
   );

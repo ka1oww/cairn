@@ -415,7 +415,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           pingScheduleProvider.overrideWithValue(schedule),
-          nowProvider.overrideWithValue(day(15)),
+          nowProvider.overrideWithValue(pinnedClock(from: day(15))),
         ],
       );
       addTearDown(container.dispose);
@@ -828,6 +828,53 @@ void main() {
         "the hour it's taken.",
       );
       expect(find.byKey(const Key('capture-shutter')), findsOneWidget);
+    });
+
+    testWidgets('three minutes inside the app is three minutes off the '
+        'window', (tester) async {
+      // The app's clock is asked, never remembered. It used to be a cached
+      // `Provider<DateTime>` read once at launch and held for the life of the
+      // session, so a launch from the ping notification pinned "now" at the
+      // moment the app started and every verdict afterwards was measured
+      // against a clock that had stopped. Cold-launch five seconds after the
+      // ping, spend three minutes in the app, and the capture surface used to
+      // open on `1:55 left / a while yet` a minute after the window shut.
+      final ping = pingOn(day(14));
+      final arrived = ping.at.add(const Duration(seconds: 5));
+      final camera = FakeCamera(frames, takenAtUtc: arrived);
+      await launch(tester, today: day(14), now: arrived, camera: camera);
+      await accept(tester, tripPaste);
+
+      // Launched inside the window, so the day page rightly asks for the
+      // photograph. That call is what the person taps three minutes later.
+      expect(textOf(const Key('capture-call')), 'Your minute. Look up.');
+
+      await tester.pump(const Duration(minutes: 3));
+      await openTheCamera(tester);
+
+      expect(
+        textOf(const Key('capture-window')),
+        "Your slot was teatime. It's fine — whatever you take now lands at "
+        "the hour it's taken.",
+        reason: 'the camera opened on a clock that stopped at launch',
+      );
+      expect(countdown(), isNull, reason: 'a shut window still had a thread');
+
+      // And it stays right through the retakes, because the deadline it is
+      // measured against never moved either.
+      for (var attempt = 1; attempt <= 2; attempt++) {
+        await tester.tap(find.byKey(const Key('capture-shutter')));
+        await tester.pumpAndSettle();
+        expect(countdown(), isNull, reason: 'a countdown on retake $attempt');
+        await tester.tap(find.byKey(const Key('capture-once-more')));
+        await tester.pumpAndSettle();
+        expect(
+          textOf(const Key('capture-window')),
+          "Your slot was teatime. It's fine — whatever you take now lands at "
+          "the hour it's taken.",
+          reason: 'retake $attempt came back punctual',
+        );
+      }
     });
 
     testWidgets('a window that ran down in somebody else\'s app is run down '

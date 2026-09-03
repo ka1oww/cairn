@@ -274,52 +274,6 @@ WindowStanding windowStandingAt({
   );
 }
 
-// ---------------------------------------------------------------------------
-// The countdown's measure of time actually passed.
-// ---------------------------------------------------------------------------
-
-/// How much real time has gone by since a measurement was started.
-typedef ElapsedSince = Duration Function();
-
-/// Starts one such measurement, at the instant it is called.
-typedef StartElapsed = ElapsedSince Function();
-
-/// What the capture countdown measures elapsed time with, injected so that a
-/// test can drive it.
-///
-/// This is a *delta* and never a second clock. The instant the countdown
-/// counts from is [nowProvider] — the same read the window was judged by —
-/// and this only says how far past that instant the phone has since got. Two
-/// clocks that could disagree about one window is the same defect class the
-/// deadline's single copy exists to remove, so a source that answered "now"
-/// outright is the thing to refuse in review.
-///
-/// It has to be **measured rather than counted**, because a timer is not a
-/// clock: iOS suspends a backgrounded app's timers wholesale, `Timer.periodic`
-/// fires no catch-up ticks for the seconds it slept through, and a countdown
-/// that added a second per tick came back from ninety seconds in somebody's
-/// pocket still claiming the whole two minutes. On a two-minute window the one
-/// screen that exists to say whether you are late must never say punctual when
-/// you are not.
-///
-/// The measure is the wall clock rather than a [Stopwatch], deliberately: the
-/// deadline is itself a wall-clock instant, so this counts in the very units
-/// the window is written in, and a monotonic stopwatch is not guaranteed to
-/// run while the phone is asleep — which is exactly the interval that has to
-/// be counted.
-final elapsedSourceProvider = Provider<StartElapsed>((ref) => startElapsed);
-
-/// The real one: wall time, from the instant it is called.
-ElapsedSince startElapsed() {
-  final from = DateTime.now();
-  return () {
-    final since = DateTime.now().difference(from);
-    // A clock dragged backwards — an NTP correction, a hand-set date — hands
-    // back no time at all rather than time the window has not spent.
-    return since.isNegative ? Duration.zero : since;
-  };
-}
-
 /// The camera would not open, in words a person can read.
 class CaptureRefusedState extends CaptureState {
   final String reason;
@@ -356,7 +310,7 @@ final captureCallProvider = Provider.family<CaptureCall, DateTime>((ref, date) {
   if (dayNumber == null) return const NoMomentHere();
   return captureCallFor(
     ping: ref.watch(todaysPingProvider),
-    now: ref.watch(nowProvider),
+    now: ref.watch(nowProvider)(),
     answeredAt: _myPhotoToday(ref, dayNumber)?.ref.takenAt,
     utcOffset: ref.watch(tripUtcOffsetProvider),
     standing: ref.watch(tripStandingProvider),

@@ -352,7 +352,7 @@ void main() {
             ),
           ),
           tripUtcOffsetProvider.overrideWithValue(Duration.zero),
-          nowProvider.overrideWithValue(day(14)),
+          nowProvider.overrideWithValue(pinnedClock(from: day(14))),
         ],
       );
       addTearDown(container.dispose);
