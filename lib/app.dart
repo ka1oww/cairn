@@ -17,9 +17,12 @@ import 'screens/root_screen.dart';
 /// answer until something invalidates it — and the things derived from it are
 /// exactly the things a person notices going stale: whether your minute is
 /// ahead, open, in its last stretch or gone; whether the trip is underway, in
-/// its grace or archived; whether an invite code is still live. Invalidating
-/// the clock is what moves all of them, so it is done in one place rather
-/// than each screen growing a refresh of its own and drifting from the next.
+/// its grace or archived; whether an invite code is still live; and, through
+/// `todayProvider`, which day of the trip it even is, which is the only thing
+/// that shuts the late door at midnight. Invalidating the clock is what moves
+/// all of them, so it is done in one place rather than each screen growing a
+/// refresh of its own and drifting from the next — and everything that turns
+/// time into a verdict hangs off this one provider so that it can be.
 ///
 /// It is done twice over, because the two ways of losing time are different.
 /// A resume is the one instant no tick of the app's own announces — iOS

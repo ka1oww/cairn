@@ -327,16 +327,24 @@ final notificationEdgeProvider = Provider<NotificationEdge>(
 ///
 /// Watching rather than calling: the schedule is derived from the itinerary,
 /// so "when should this run" has exactly one honest answer — whenever the
-/// itinerary or the clock moves. The side effect in [build] is the mirror
-/// being kept in step, and the replace-not-append rule above is what makes
-/// running it twice harmless.
+/// deal itself changes. The side effect in [build] is the mirror being kept
+/// in step, and the replace-not-append rule above is what makes running it
+/// twice harmless.
+///
+/// **The clock is read and never watched, and that is the difference between
+/// a pass and a habit.** It answers one question — which of the deal is
+/// already behind us — and the answer does not need re-asking, because a
+/// ping that has fired needs no unregistering. Watching it made this a side
+/// effect on the app root's cadence instead: every ten seconds the trip's
+/// whole notification set torn down and put back, with a window on each pass
+/// where none of it was registered at all.
 final pingRegistrationProvider =
     NotifierProvider<PingRegistration, List<tm.Ping>>(PingRegistration.new);
 
 class PingRegistration extends Notifier<List<tm.Ping>> {
   @override
   List<tm.Ping> build() {
-    final from = ref.watch(nowProvider)();
+    final from = ref.read(nowProvider)();
     final due = [
       for (final ping in ref.watch(pingScheduleProvider))
         if (!ping.at.isBefore(from)) ping,

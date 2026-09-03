@@ -114,6 +114,17 @@ class FakeCamera implements CameraSource {
   Future<void> discard(String path) async => discarded.add(path);
 }
 
+/// The recording edge, plus a tally of how often it was asked.
+class CountingNotificationEdge extends RecordingNotificationEdge {
+  int passes = 0;
+
+  @override
+  Future<void> replaceScheduledPings(List<ScheduledPing> pings) {
+    passes++;
+    return super.replaceScheduledPings(pings);
+  }
+}
+
 /// A camera that will not open — a denied permission, a lens in use.
 class RefusingCamera implements CameraSource {
   @override
@@ -436,6 +447,49 @@ void main() {
             'promises never to do',
       );
     });
+
+    test('the clock moving is not a reason to register anything again', () {
+      // The registration follows the *deal*, and the clock only says which
+      // of it is behind us. Watching the clock instead made this a pass on
+      // the app root's cadence: the trip's whole notification set torn down
+      // and re-registered every ten seconds, for as long as a trip surface
+      // was on screen.
+      final schedule = pingsForPlan(
+        plan: plan([day(14), day(15), day(16)]),
+        party: party,
+        utcOffset: Duration.zero,
+        memberId: localMemberId,
+        tripId: testTripId,
+      );
+      final edge = CountingNotificationEdge();
+      // A clock that really reads differently on every ask, so that a
+      // registration watching it would rebuild and this test would fail.
+      var instant = day(15);
+      final container = ProviderContainer(
+        overrides: [
+          pingScheduleProvider.overrideWithValue(schedule),
+          nowProvider.overrideWith((ref) => pinnedClock(from: instant)),
+          notificationEdgeProvider.overrideWithValue(edge),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(pingRegistrationProvider, (_, _) {});
+
+      expect(container.read(pingRegistrationProvider), hasLength(2));
+      expect(edge.passes, 1);
+
+      for (var tick = 1; tick <= 5; tick++) {
+        instant = instant.add(const Duration(seconds: 10));
+        container.invalidate(nowProvider);
+        container.read(pingRegistrationProvider);
+      }
+
+      expect(
+        edge.passes,
+        1,
+        reason: 'the schedule was re-registered on a bare clock tick',
+      );
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -472,8 +526,9 @@ void main() {
 
     Future<void> launch(
       WidgetTester tester, {
-      required DateTime today,
+      DateTime? today,
       required DateTime now,
+      Duration utcOffset = Duration.zero,
       CameraSource? camera,
     }) async {
       tester.view.physicalSize = const Size(800, 2600);
@@ -484,7 +539,7 @@ void main() {
           database: db,
           today: today,
           now: now,
-          utcOffset: Duration.zero,
+          utcOffset: utcOffset,
           camera: camera ?? FakeCamera(frames, takenAtUtc: now),
           // The countdown's elapsed-time source, pinned exactly as `now:`
           // pins the instant it counts from — the real one is the wall clock,
@@ -886,6 +941,46 @@ void main() {
           reason: 'retake $attempt came back punctual',
         );
       }
+    });
+
+    testWidgets('an app still running past midnight lets go of yesterday', (
+      tester,
+    ) async {
+      // The late door runs to midnight and nothing but the date shuts it —
+      // `captureCallFor` never compares against one. So the date has to move
+      // while the app runs, and it does because it is the same clock read
+      // another way. This is the only test here that does not pin `today:`,
+      // for exactly that reason: pinning it would answer the question the
+      // test is asking.
+      //
+      // Written in the device's own zone on both sides, because the date is
+      // the device's: the trip's offset is the one in force that evening, so
+      // the ping lands in that evening's waking hours whatever zone the
+      // suite runs in.
+      final evening = DateTime(2027, 6, 14, 23, 50);
+      final zone = evening.timeZoneOffset;
+      final camera = FakeCamera(frames, takenAtUtc: evening.toUtc());
+      await launch(
+        tester,
+        now: evening.toUtc(),
+        utcOffset: zone,
+        camera: camera,
+      );
+      await accept(tester, tripPaste);
+
+      expect(
+        textOf(const Key('capture-call')),
+        "Your minute came and went. The door's open till midnight.",
+        reason: 'ten past eleven at night is still the fourteenth',
+      );
+
+      await tester.pump(const Duration(minutes: 20));
+
+      expect(
+        textOf(const Key('capture-call')),
+        'Your minute is somewhere in today.',
+        reason: "midnight passed and yesterday's door was still open",
+      );
     });
 
     testWidgets('a window that shut in a pocket is shut on the day page when '
