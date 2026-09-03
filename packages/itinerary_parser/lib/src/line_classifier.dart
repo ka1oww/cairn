@@ -93,11 +93,25 @@ final RegExp _bulletPrefix = RegExp(
   r'^(?:[-*•–—]|\(\d{1,3}\)|\d{1,3}[.)]|\d{1,3}(?=\s))\s*',
 );
 
+// A dotted-bullet match that is really the front half of a clock time:
+// `9.` with `30 Breakfast` after it is `9.30 Breakfast`, not item 9. The
+// digits must complete the time immediately — `1. 30 min walk` keeps its
+// space and stays a numbered bullet — and the minutes must stop at two
+// digits, so a decimal like `1.234` is not a time either.
+final RegExp _dottedBulletHour = RegExp(r'^(\d{1,2})\.$');
+final RegExp _completesATime = RegExp(r'^[0-5]\d(?!\d)');
+
 bool startsWithBullet(String line) {
   final trimmed = line.trim();
   final m = _bulletPrefix.firstMatch(trimmed);
   if (m == null) return false;
   final matched = m.group(0)!;
+  final dottedHour = _dottedBulletHour.firstMatch(matched);
+  if (dottedHour != null &&
+      int.parse(dottedHour.group(1)!) <= 23 &&
+      _completesATime.hasMatch(trimmed.substring(m.end))) {
+    return false;
+  }
   if (RegExp(r'^\d{1,3}(?=\s)').hasMatch(matched)) {
     final after = trimmed.substring(m.end).trimLeft();
     if (after.isEmpty) return true;

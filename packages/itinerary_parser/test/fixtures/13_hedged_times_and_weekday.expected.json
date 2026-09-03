@@ -45,8 +45,8 @@
           "placeText": "around 7pm"
         }
       ],
-      "confidence": "high",
-      "uncertainty": null,
+      "confidence": "medium",
+      "uncertainty": "weekday-disagrees",
       "headerWeekday": 6,
       "headerSourceLine": {
         "lineNumber": 1,

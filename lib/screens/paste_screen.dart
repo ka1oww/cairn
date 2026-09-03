@@ -205,11 +205,19 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
 
   /// Whatever an import attempt resolves to, this is what happens next:
   /// success fills the box (and shows the provenance note); every refusal
-  /// stays in the flow's state as the error card.
+  /// stays in the flow's state as the error card. A box already holding
+  /// something is asked about first — a typed plan, an earlier import, or a
+  /// re-paste's pre-filled text is kept nowhere else, so replacing it
+  /// silently would be a loss with no way back.
   Future<void> _applyImport(Future<ImportSucceeded?> done) async {
     setState(() => _importNote = null);
     final result = await done;
     if (!mounted || result == null) return;
+    final standing = _controller.text;
+    if (standing.trim().isNotEmpty && standing != result.text) {
+      final replace = await _askBeforeReplacingTheBox();
+      if (replace != true || !mounted) return;
+    }
     setState(() {
       _setControllerTextWithoutTracking(result.text);
       _importNote = result.notes.isEmpty ? null : result.notes.join(' ');
@@ -218,6 +226,45 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
     // one; nothing else on this screen creates one (`plan_draft.dart`).
     await ref.read(planDraftProvider).remember(result.text);
   }
+
+  /// One question, asked only when there is genuinely something to lose:
+  /// the file has been read, the box is not empty, and what it holds is not
+  /// already the same text.
+  Future<bool?> _askBeforeReplacingTheBox() => showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      key: const Key('import-replace-ask'),
+      backgroundColor: _paper,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(
+        'Put the file in its place?',
+        style: _serif.copyWith(fontSize: 19, color: _ink),
+      ),
+      content: Text(
+        "The box already holds a plan. The file read fine — but what's in "
+        "the box now isn't kept anywhere once it's replaced.",
+        style: const TextStyle(fontSize: 14, color: _muted, height: 1.4),
+      ),
+      actions: [
+        TextButton(
+          key: const Key('import-replace-keep'),
+          onPressed: () => Navigator.of(context).pop(false),
+          style: TextButton.styleFrom(foregroundColor: _muted),
+          child: const Text('Keep what I have'),
+        ),
+        FilledButton(
+          key: const Key('import-replace-confirm'),
+          onPressed: () => Navigator.of(context).pop(true),
+          style: FilledButton.styleFrom(
+            backgroundColor: _olive,
+            foregroundColor: Colors.white,
+            shape: const StadiumBorder(),
+          ),
+          child: const Text('Replace it'),
+        ),
+      ],
+    ),
+  );
 
   /// The two doors of slice D's import sheet (the import plan §2.6):
   /// documents from Files, pictures from the photo library.
@@ -508,27 +555,38 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
                   style: TextButton.styleFrom(foregroundColor: _muted),
                   child: const Text('Back to the editor'),
                 )
-              else ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SoftPill(
-                        key: const Key('try-example'),
-                        label: 'Try an example',
-                        onPressed: _fillExample,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _SoftPill(
-                        key: const Key('build-by-hand'),
-                        label: 'Build it by hand',
-                        onPressed: _buildByHand,
-                      ),
-                    ),
-                  ],
+              else
+                // The two starter pills exist to fill an empty box; once
+                // the box holds anything they would clobber it, so they are
+                // absent, not disabled — the same treatment the re-paste
+                // branch already gives them.
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _controller,
+                  builder: (context, value, _) {
+                    if (value.text.trim().isNotEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: _SoftPill(
+                            key: const Key('try-example'),
+                            label: 'Try an example',
+                            onPressed: _fillExample,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _SoftPill(
+                            key: const Key('build-by-hand'),
+                            label: 'Build it by hand',
+                            onPressed: _buildByHand,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-              ],
               // The second of design surface 6a's two doors. Most people
               // arrive here holding a code somebody told them rather than a
               // plan to paste, so the other door is on this screen and not
