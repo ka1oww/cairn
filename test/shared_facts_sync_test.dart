@@ -1139,6 +1139,51 @@ void main() {
     );
 
     test(
+      'a day added during the round trip survives a newer shape clock',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await startTrip(db);
+        final repository = TripRepository(db);
+        await repository.saveItinerary(
+          plan([confirmed(1, 'Oslo')]),
+          at: DateTime.utc(2027, 6, 1, 9),
+        );
+        // A peer's unrelated shape edit stamps the answer's plan clock past
+        // the local addition's own — but the push never showed the server
+        // day 2, so the answer cannot be judging it.
+        final server = FakeServer(trip: sharedTrip(id, const []))
+          ..holds = serverHolds([
+            serverDay(1, 'Oslo', DateTime.utc(2027, 6, 1, 9)),
+          ], planAt: DateTime.utc(2027, 6, 5, 12));
+        server.onSyncItinerary = () async {
+          server.onSyncItinerary = null;
+          await repository.saveItinerary(
+            plan([confirmed(1, 'Oslo'), confirmed(2, 'Bergen')]),
+            at: DateTime.utc(2027, 6, 3, 9),
+          );
+        };
+        final sync = TripSync(database: db, facts: server, now: duringTheTrip);
+
+        await sync.syncNow();
+
+        expect(
+          (await db.readItineraryDays()).map((day) => day.place),
+          ['Oslo', 'Bergen'],
+          reason: 'an answer cannot delete a day it was never shown',
+        );
+
+        server.holds = null;
+        await sync.syncNow();
+        expect(
+          server.pushes.last.days.map((day) => day.number),
+          [1, 2],
+          reason: 'the surviving addition rides the follow-up push',
+        );
+      },
+    );
+
+    test(
       'a day deleted during the round trip stays deleted',
       () async {
         final db = inMemory();
@@ -1181,6 +1226,11 @@ void main() {
           (await db.readItineraryDays()).map((day) => day.place),
           ['Oslo'],
           reason: 'the acknowledging echo settles the tombstone quietly',
+        );
+        expect(
+          await db.select(db.itineraryDayTombstones).get(),
+          isEmpty,
+          reason: 'an acknowledged deletion needs no further defending',
         );
       },
     );

@@ -591,6 +591,25 @@ void main() {
       );
     });
 
+    test('a 5xx at the mint is later, stopping the pass', () async {
+      final sync = facts(
+        MockClient((_) async => http.Response('Bad Gateway', 502)),
+      );
+
+      await expectLater(
+        sync.photoUploadTicket(
+          tripId: trip,
+          photoId: 'photo-9',
+          contentType: 'image/jpeg',
+          byteSize: 1,
+        ),
+        throwsA(isA<SharedFactsUnavailable>()),
+        reason:
+            'an outage is nobody\'s fault: no per-item attempt, '
+            'no climbing backoff',
+      );
+    });
+
     test('the function\'s own 400 validation error is terminal', () async {
       final sync = facts(
         MockClient((_) async => http.Response('unsupported content type', 400)),

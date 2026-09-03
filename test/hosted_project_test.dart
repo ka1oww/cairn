@@ -277,6 +277,31 @@ void main() {
       expect(vault.token, 'saved-refresh');
     });
 
+    test('a 2xx whose JSON is not a map is unreachable, not a verdict '
+        'on the token', () async {
+      final vault = MemoryVault(
+        stored: const StoredSession(
+          userId: 'user-a',
+          refreshToken: 'saved-refresh',
+        ),
+      );
+      var calls = 0;
+      final sessions = GotrueSessions(
+        config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),
+        vault: vault,
+        client: MockClient((request) async {
+          calls++;
+          return http.Response('["a proxy answering in the wrong shape"]', 200);
+        }),
+      );
+
+      // Only GoTrue's explicit dead-refresh-token verdict may spend the
+      // saved account; a lying intermediary is a tunnel, not a refusal.
+      expect(await sessions.current(), isNull);
+      expect(calls, 1);
+      expect(vault.token, 'saved-refresh');
+    });
+
     test('a refused handshake is unreachable too', () async {
       final sessions = GotrueSessions(
         config: const SharedFactsConfig(url: 'https://p.test', anonKey: 'k'),

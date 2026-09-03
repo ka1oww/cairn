@@ -650,6 +650,10 @@ class TripSync {
         state.planRevisedAtUtcIso == planAt &&
         state.pocketRevisedAtUtcIso == pocketAt;
     if (settled) {
+      await database.retireAcknowledgedTombstones(
+        answeredNumbers: {for (final day in incomingDays) day.number},
+        planRevisedAtUtcIso: planAt,
+      );
       await database.markSynced(itinerarySyncedAtUtcIso: _stamp());
     } else {
       await database.applyRemoteItinerary(
@@ -659,6 +663,7 @@ class TripSync {
         planRevisedAtUtcIso: planAt,
         pocketRevisedAtUtcIso: pocketAt,
         syncedAtUtcIso: _stamp(),
+        pushedDayNumbers: {for (final day in localDays) day.number},
       );
     }
     return SyncOutcome(

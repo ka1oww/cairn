@@ -278,7 +278,10 @@ class GotrueSessions implements SessionSource {
         return _isDeadRefreshToken(response) ? null : _unreachable;
       }
       final decoded = jsonDecode(response.body);
-      return decoded is Map<String, dynamic> ? decoded : null;
+      // A 2xx whose body decodes to something other than a map is a proxy
+      // or portal answering in the server's place, not a verdict on the
+      // token — the same lie the FormatException net below catches.
+      return decoded is Map<String, dynamic> ? decoded : _unreachable;
     } on Exception {
       return _unreachable;
     }

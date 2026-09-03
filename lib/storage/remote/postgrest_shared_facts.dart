@@ -210,6 +210,11 @@ class PostgrestSharedFacts implements SharedFacts {
     if (response.statusCode == 400 && _isUploadValidation(response.body)) {
       throw SharedFactsRefused(_message(response));
     }
+    if (response.statusCode >= 500) {
+      throw SharedFactsUnavailable(
+        'the server answered ${response.statusCode}',
+      );
+    }
     if (response.statusCode >= 400) {
       throw UploadTicketRejected(_message(response));
     }

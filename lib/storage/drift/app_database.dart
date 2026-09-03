@@ -807,9 +807,12 @@ class AppDatabase extends _$AppDatabase {
   /// sync took its upload snapshot but before the server answers; comparing
   /// against that old snapshot would overwrite the edit. An incoming day
   /// replaces the current one only when its clock is at least as new. A day
-  /// absent from the answer is deleted only when the answer's shape clock is
-  /// at least as new as the day, so a newly added or edited local day survives
-  /// for the queued follow-up push. A day *deleted* locally is guarded by its
+  /// absent from the answer is deleted only when the push showed it to the
+  /// server ([pushedDayNumbers]) and the answer's shape clock is at least as
+  /// new as the day — an answer cannot be judging a day it was never shown,
+  /// so a day added mid-flight survives unconditionally for the queued
+  /// follow-up push, whatever clock a peer's unrelated shape edit put on the
+  /// answer. A day *deleted* locally is guarded by its
   /// tombstone ([ItineraryDayTombstones]): an incoming copy older than the
   /// deletion is refused rather than resurrected, while a copy somebody
   /// edited after the deletion wins it back, per-day last-write-wins as
@@ -821,6 +824,7 @@ class AppDatabase extends _$AppDatabase {
     required String planRevisedAtUtcIso,
     required String pocketRevisedAtUtcIso,
     required String syncedAtUtcIso,
+    required Set<int> pushedDayNumbers,
   }) {
     return transaction(() async {
       final localDays = await readItineraryDays();
@@ -853,7 +857,8 @@ class AppDatabase extends _$AppDatabase {
           } else {
             mergedDays.add(incoming);
           }
-        } else if (localAt.isAfter(incomingPlanAt)) {
+        } else if (!pushedDayNumbers.contains(local.number) ||
+            localAt.isAfter(incomingPlanAt)) {
           keepLocal.add(local.number);
           mergedDays.add((
             number: local.number,
@@ -957,6 +962,33 @@ class AppDatabase extends _$AppDatabase {
         ),
       );
     });
+  }
+
+  /// Retires tombstones an answer has acknowledged without a full apply.
+  ///
+  /// The settled fast path in the sync — the answer matched the snapshot, so
+  /// nothing is written — never reaches [applyRemoteItinerary]'s retirement,
+  /// and a tombstone left standing for the life of the trip would keep
+  /// refusing a later legitimate copy of its number. The rule is the same
+  /// one: a deletion the answer already reflects (the day absent, the shape
+  /// clock at least the tombstone's) needs no further defending. The
+  /// tombstone table feeds no sync-triggering stream, so this write does not
+  /// ask for the next sync.
+  Future<void> retireAcknowledgedTombstones({
+    required Set<int> answeredNumbers,
+    required String planRevisedAtUtcIso,
+  }) async {
+    final planAt = DateTime.parse(planRevisedAtUtcIso);
+    final settled = <int>[
+      for (final tombstone in await select(itineraryDayTombstones).get())
+        if (!answeredNumbers.contains(tombstone.number) &&
+            !planAt.isBefore(DateTime.parse(tombstone.deletedAtUtcIso)))
+          tombstone.number,
+    ];
+    if (settled.isEmpty) return;
+    await (delete(
+      itineraryDayTombstones,
+    )..where((t) => t.number.isIn(settled))).go();
   }
 
   Future<void> _writeItinerary({
@@ -1263,8 +1295,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Files one failed attempt and pushes the next try out to
-  /// [nextAttemptAtUtcIso]. An uploaded row stays uploaded: a retryable
-  /// PostgREST schema error happens after the bytes crossed, and forgetting
+  /// [nextAttemptAtUtcIso]. An uploaded row stays uploaded and a caption row
+  /// stays a caption: past either state the bytes crossed, and forgetting
   /// that fact would mint a second ticket for an already durable object.
   Future<void> delayOutboxRetry({
     required String photoId,
@@ -1281,7 +1313,11 @@ class AppDatabase extends _$AppDatabase {
         photoOutbox,
       )..where((t) => t.photoId.equals(photoId))).write(
         PhotoOutboxCompanion(
-          state: Value(row.state == 'uploaded' ? 'uploaded' : 'queued'),
+          state: Value(
+            row.state == 'uploaded' || row.state == 'caption'
+                ? row.state
+                : 'queued',
+          ),
           attempts: Value(attempts),
           nextAttemptAtUtcIso: Value(nextAttemptAtUtcIso),
           lastError: Value(lastError),

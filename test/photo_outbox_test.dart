@@ -868,6 +868,33 @@ void main() {
       },
     );
 
+    test('a retry delay on a caption debt keeps it a caption', () async {
+      await startTrip();
+      await keepOne();
+      await deliver();
+      await store().writeWord(PhotoId('photo-1'), 'hindsight');
+
+      await db.delayOutboxRetry(
+        photoId: 'photo-1',
+        attempts: 1,
+        nextAttemptAtUtcIso: clock.toIso8601String(),
+        lastError: 'seeded',
+      );
+
+      expect(
+        (await db.readOutboxRows()).single.state,
+        'caption',
+        reason: 'the bytes crossed; a delayed word must never re-mint them',
+      );
+      await driver().syncNow();
+      expect(pool.captions['photo-1'], 'hindsight');
+      expect(
+        pool.calls.where((c) => c.$1 == 'mint' || c.$1 == 'put').length,
+        2,
+        reason: 'a demoted caption would walk the upload path again',
+      );
+    });
+
     test('two edits before the push collapse into one push, saying the '
         'later word', () async {
       await startTrip();
