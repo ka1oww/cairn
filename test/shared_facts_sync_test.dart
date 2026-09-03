@@ -91,6 +91,16 @@ class FakeServer implements SharedFacts {
   /// Set to make every call fail the way a refusal does.
   String? refuses;
 
+  /// An unexpected failure consumed by the next remote call.
+  Object? nextError;
+
+  /// Runs after the itinerary upload was captured but before its answer is
+  /// returned, modelling a person editing during the round trip.
+  Future<void> Function()? onSyncItinerary;
+
+  /// Runs after the shared trip snapshot is captured but before it arrives.
+  Future<void> Function()? onReadTrip;
+
   final pushes = <Push>[];
   final namePushes = <RemoteTripName>[];
   final created = <RemoteTripDraft>[];
@@ -101,6 +111,10 @@ class FakeServer implements SharedFacts {
   final firstPush = Completer<void>();
 
   void _gate() {
+    if (nextError case final error?) {
+      nextError = null;
+      throw error;
+    }
     if (unreachable != null) throw SharedFactsUnavailable(unreachable!);
     if (refuses != null) throw SharedFactsRefused(refuses!);
   }
@@ -112,7 +126,9 @@ class FakeServer implements SharedFacts {
   Future<RemoteTrip?> readTrip(TripId tripId) async {
     _gate();
     readTrips++;
-    return trip;
+    final answer = trip;
+    await onReadTrip?.call();
+    return answer;
   }
 
   @override
@@ -169,6 +185,7 @@ class FakeServer implements SharedFacts {
       pocketRevisedAt: pocketRevisedAt,
       setAside: setAside,
     ));
+    await onSyncItinerary?.call();
     if (!firstPush.isCompleted) firstPush.complete();
     return holds ??
         RemoteItinerary(
@@ -580,6 +597,35 @@ void main() {
         expect(server.namePushes, isEmpty);
       },
     );
+
+    test('a rename made while the trip row is in flight survives', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      await db.renameTrip('Before', at: DateTime.utc(2027, 6, 1));
+      await TripRepository(db).saveItinerary(
+        plan([confirmed(1, 'Oslo', date: CalendarDate(2027, 6, 14))]),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(
+        trip: sharedTrip(
+          id,
+          const [],
+          name: 'Remote',
+          nameAt: DateTime.utc(2027, 6, 4),
+        ),
+      );
+      server.onReadTrip = () async {
+        server.onReadTrip = null;
+        await db.renameTrip('Typed mid-flight', at: DateTime.utc(2027, 6, 6));
+      };
+
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
+
+      final local = await db.readTripFacts();
+      expect(local!.name, 'Typed mid-flight');
+      expect(local.nameRevisedAtUtcIso, '2027-06-06T00:00:00.000Z');
+    });
 
     test('every reconcile says where it got to', () async {
       // The second half of D3: the standing has to be hearable, or a plan
@@ -1000,6 +1046,188 @@ void main() {
   });
 
   group('a remote change is applied', () {
+    test(
+      'a local edit made during the round trip survives the apply',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await startTrip(db);
+        final repository = TripRepository(db);
+        await repository.saveItinerary(
+          plan([
+            confirmed(1, 'Oslo', stops: ['Vigeland']),
+          ]),
+          at: DateTime.utc(2027, 6, 1, 9),
+        );
+        final server = FakeServer(trip: sharedTrip(id, const []))
+          ..holds = serverHolds([
+            serverDay(
+              1,
+              'Oslo',
+              DateTime.utc(2027, 6, 1, 9),
+              stops: ['Vigeland'],
+            ),
+            serverDay(
+              2,
+              'Tromsø',
+              DateTime.utc(2027, 6, 5, 12),
+              stops: ['Fjellheisen'],
+            ),
+          ], planAt: DateTime.utc(2027, 6, 5, 12));
+        server.onSyncItinerary = () async {
+          server.onSyncItinerary = null;
+          await repository.saveItinerary(
+            plan([
+              confirmed(1, 'Oslo', stops: ['Vigeland', 'Munchmuseet']),
+            ]),
+            at: DateTime.utc(2027, 6, 6, 9),
+          );
+        };
+        final sync = TripSync(database: db, facts: server, now: duringTheTrip);
+
+        await sync.syncNow();
+
+        final saved = await repository.watchItinerary().first;
+        expect(saved!.days.map((day) => day.place), ['Oslo', 'Tromsø']);
+        expect(saved.days.first.stops.map((stop) => stop.text), [
+          'Vigeland',
+          'Munchmuseet',
+        ], reason: 'the transaction-time local revision is newer');
+
+        await sync.syncNow();
+        expect(server.pushes.last.days.first.stops.map((stop) => stop.text), [
+          'Vigeland',
+          'Munchmuseet',
+        ], reason: 'the surviving edit is carried by the follow-up push');
+      },
+    );
+
+    test(
+      'a day added during the round trip is not deleted as absent',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await startTrip(db);
+        final repository = TripRepository(db);
+        await repository.saveItinerary(
+          plan([confirmed(1, 'Oslo')]),
+          at: DateTime.utc(2027, 6, 1, 9),
+        );
+        final server = FakeServer(trip: sharedTrip(id, const []))
+          ..holds = serverHolds([
+            serverDay(1, 'Oslo', DateTime.utc(2027, 6, 1, 9)),
+          ], planAt: DateTime.utc(2027, 6, 5, 12));
+        server.onSyncItinerary = () async {
+          server.onSyncItinerary = null;
+          await repository.saveItinerary(
+            plan([confirmed(1, 'Oslo'), confirmed(2, 'Bergen')]),
+            at: DateTime.utc(2027, 6, 6, 9),
+          );
+        };
+
+        await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
+
+        expect((await db.readItineraryDays()).map((day) => day.place), [
+          'Oslo',
+          'Bergen',
+        ]);
+      },
+    );
+
+    test(
+      'a day deleted during the round trip stays deleted',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await startTrip(db);
+        final repository = TripRepository(db);
+        await repository.saveItinerary(
+          plan([confirmed(1, 'Oslo'), confirmed(2, 'Bergen')]),
+          at: DateTime.utc(2027, 6, 1, 9),
+        );
+        // The answer is the snapshot from before the deletion: it still
+        // carries day 2, under clocks older than the deletion's.
+        final server = FakeServer(trip: sharedTrip(id, const []))
+          ..holds = serverHolds([
+            serverDay(1, 'Oslo', DateTime.utc(2027, 6, 1, 9)),
+            serverDay(2, 'Bergen', DateTime.utc(2027, 6, 1, 9)),
+          ], planAt: DateTime.utc(2027, 6, 1, 9));
+        server.onSyncItinerary = () async {
+          server.onSyncItinerary = null;
+          await repository.saveItinerary(
+            plan([confirmed(1, 'Oslo')]),
+            at: DateTime.utc(2027, 6, 6, 9),
+          );
+        };
+        final sync = TripSync(database: db, facts: server, now: duringTheTrip);
+
+        await sync.syncNow();
+
+        expect(
+          (await db.readItineraryDays()).map((day) => day.place),
+          ['Oslo'],
+          reason: 'the older incoming copy must not resurrect the deletion',
+        );
+
+        // The follow-up push carries the deletion to the server.
+        server.holds = null;
+        await sync.syncNow();
+        expect(server.pushes.last.days.map((day) => day.number), [1]);
+        expect(
+          (await db.readItineraryDays()).map((day) => day.place),
+          ['Oslo'],
+          reason: 'the acknowledging echo settles the tombstone quietly',
+        );
+      },
+    );
+
+    test(
+      'a deletion loses to a copy somebody edited after it',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await startTrip(db);
+        final repository = TripRepository(db);
+        await repository.saveItinerary(
+          plan([confirmed(1, 'Oslo'), confirmed(2, 'Bergen')]),
+          at: DateTime.utc(2027, 6, 1, 9),
+        );
+        // Somebody else edited day 2 *after* this phone will delete it:
+        // per-day last-write-wins, their edit wins the day back.
+        final server = FakeServer(trip: sharedTrip(id, const []))
+          ..holds = serverHolds([
+            serverDay(1, 'Oslo', DateTime.utc(2027, 6, 1, 9)),
+            serverDay(
+              2,
+              'Bergen',
+              DateTime.utc(2027, 6, 7, 9),
+              stops: ['Bryggen'],
+            ),
+          ], planAt: DateTime.utc(2027, 6, 7, 9));
+        server.onSyncItinerary = () async {
+          server.onSyncItinerary = null;
+          await repository.saveItinerary(
+            plan([confirmed(1, 'Oslo')]),
+            at: DateTime.utc(2027, 6, 6, 9),
+          );
+        };
+
+        await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
+
+        final saved = await repository.watchItinerary().first;
+        expect(saved!.days.map((day) => day.place), ['Oslo', 'Bergen']);
+        expect(saved.days.last.stops.single.text, 'Bryggen');
+      },
+    );
+
     test('a day somebody else added arrives, with their clock on it', () async {
       final db = inMemory();
       addTearDown(db.close);
@@ -1393,6 +1621,38 @@ void main() {
   });
 
   group('offline, the local copy is the trip', () {
+    test(
+      'an unexpected server error emits offline and the next sync runs',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await startTrip(db);
+        await TripRepository(db).saveItinerary(
+          plan([confirmed(1, 'Oslo', date: CalendarDate(2027, 6, 14))]),
+          at: DateTime.utc(2027, 6, 1, 9),
+        );
+        final server = FakeServer(trip: sharedTrip(id, const []))
+          ..nextError = StateError('malformed answer');
+        final sync = TripSync(database: db, facts: server, now: duringTheTrip);
+        final heard = <SyncOutcome>[];
+        final listening = sync.standings.listen(heard.add);
+        addTearDown(listening.cancel);
+
+        final first = await sync.syncNow();
+        final second = await sync.syncNow();
+        await Future<void>.delayed(Duration.zero);
+
+        expect(first.standing, SyncStanding.offline);
+        expect(first.detail, contains('malformed answer'));
+        expect(second.standing, SyncStanding.synced);
+        expect(server.pushes, hasLength(1));
+        expect(heard.map((outcome) => outcome.standing), [
+          SyncStanding.offline,
+          SyncStanding.synced,
+        ]);
+      },
+    );
+
     test('a tunnel changes nothing and is not an error', () async {
       final db = inMemory();
       addTearDown(db.close);

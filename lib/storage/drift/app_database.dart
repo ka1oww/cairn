@@ -87,6 +87,36 @@ class AppPreferences extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A day this phone deleted whose deletion no server answer has yet
+/// acknowledged.
+///
+/// The mid-flight merge in [AppDatabase.applyRemoteItinerary] re-reads the
+/// plan at apply time, so a day *edited* during the round trip survives by
+/// its own clock — but a day *deleted* during the round trip leaves no row
+/// to carry a clock, and without this record the server's answer (a snapshot
+/// from before the deletion) would quietly resurrect it. A clock guard on
+/// the incoming day cannot stand in: a day another phone genuinely added
+/// carries whatever old instant it was edited at, and refusing it by age
+/// would refuse the legitimate arrival too. Only a durable record of "this
+/// number was deleted, at this instant" separates the two.
+///
+/// A tombstone dies three ways: the deletion is acknowledged (an answer
+/// whose shape clock is at least the tombstone's arrives without the day),
+/// the day is out-edited (an answer carries the day with a newer clock —
+/// per-day last-write-wins, the deletion lost), or the person re-creates
+/// the number locally.
+class ItineraryDayTombstones extends Table {
+  /// The deleted day's number — the same identity `ItineraryDays.number` is.
+  IntColumn get number => integer()();
+
+  /// When the deletion happened, on this phone. Compared against the
+  /// incoming day's `revisedAtUtcIso` and the answer's plan shape clock.
+  TextColumn get deletedAtUtcIso => text()();
+
+  @override
+  Set<Column> get primaryKey => {number};
+}
+
 /// A pasted line the parser set aside instead of placing — kept with its
 /// person-showable reason, never silently dropped ("the trip's pocket" in
 /// design round 8). Stored so the kept lines survive the confirmation screen
@@ -190,7 +220,7 @@ class PhotoOutbox extends Table {
   /// Where the push stands: `queued` (nothing is known to be durable
   /// remotely), `uploaded` (a PUT returned 200; never re-mint past this),
   /// `caption` (the row crossed but its word has changed since), or
-  /// `refused` (the server ruled; terminal, never retried).
+  /// `refused` (the server ruled; terminal for this version).
   TextColumn get state => text()();
 
   /// How many attempts have failed. Drives the backoff and never
@@ -401,6 +431,7 @@ class PlanDrafts extends Table {
   tables: [
     ItineraryDays,
     ItineraryStops,
+    ItineraryDayTombstones,
     ItinerarySetAsides,
     Photos,
     PhotoOutbox,
@@ -421,7 +452,7 @@ class AppDatabase extends _$AppDatabase {
   final TripId Function() mint;
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -571,6 +602,25 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(itineraryStops, itineraryStops.areaSource);
         await m.createTable(appPreferences);
       }
+      if (from < 11) {
+        // The mid-flight merge needs a durable record of local day
+        // deletions; see [ItineraryDayTombstones]. Nothing to backfill —
+        // a deletion made before this version has already been pushed or
+        // lost, and inventing tombstones would delete days retroactively.
+        await m.createTable(itineraryDayTombstones);
+        // Older clients treated every upload-function 4xx as terminal. The
+        // hosted gateway answered 404 while that function was absent, so
+        // photographs from those clients may be stranded in `refused` even
+        // though no photo-specific ruling was made. Give each old refusal
+        // one fresh attempt under the narrower classification in the current
+        // client. Genuine 403/409/validation refusals simply settle back to
+        // `refused`; a previously poisoned row can finally cross.
+        await customStatement(
+          "update photo_outbox set state = 'queued', "
+          "next_attempt_at_utc_iso = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
+          "where state = 'refused'",
+        );
+      }
     },
   );
 
@@ -699,6 +749,26 @@ class AppDatabase extends _$AppDatabase {
               ),
           ]);
 
+      // A day the save no longer carries was deleted on this phone: record
+      // it, durably, so an answer already in flight cannot resurrect it
+      // ([ItineraryDayTombstones]). A number the save does carry clears any
+      // old tombstone — re-paste numbers past the current maximum, so a
+      // deleted number can come back, and a live day and its tombstone must
+      // never coexist.
+      for (final number in storedRevisions.keys) {
+        if (!revisions.containsKey(number)) {
+          await into(itineraryDayTombstones).insertOnConflictUpdate(
+            ItineraryDayTombstonesCompanion.insert(
+              number: Value(number),
+              deletedAtUtcIso: nowUtcIso,
+            ),
+          );
+        }
+      }
+      await (delete(
+        itineraryDayTombstones,
+      )..where((t) => t.number.isIn(revisions.keys.toList()))).go();
+
       await _writeItinerary(
         days: [
           for (final day in days)
@@ -725,13 +795,25 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Writes the itinerary the *server* handed back, carrying its revisions
-  /// rather than stamping new ones.
+  /// Merges the itinerary the *server* handed back with the local copy as it
+  /// exists at apply time, carrying revisions rather than stamping new ones.
   ///
   /// The counterpart of [replaceItinerary] and deliberately a second method:
   /// a local save decides what changed and stamps it, while an applied merge
   /// has already been decided — re-stamping it here would make every pull
   /// look like a local edit and start a push storm between two phones.
+  ///
+  /// The re-read belongs inside this transaction. A person may edit after the
+  /// sync took its upload snapshot but before the server answers; comparing
+  /// against that old snapshot would overwrite the edit. An incoming day
+  /// replaces the current one only when its clock is at least as new. A day
+  /// absent from the answer is deleted only when the answer's shape clock is
+  /// at least as new as the day, so a newly added or edited local day survives
+  /// for the queued follow-up push. A day *deleted* locally is guarded by its
+  /// tombstone ([ItineraryDayTombstones]): an incoming copy older than the
+  /// deletion is refused rather than resurrected, while a copy somebody
+  /// edited after the deletion wins it back, per-day last-write-wins as
+  /// everywhere else. The pocket follows its own single clock.
   Future<void> applyRemoteItinerary({
     required List<SyncedDayRecord> days,
     required List<ItineraryStopRecord> stops,
@@ -741,11 +823,136 @@ class AppDatabase extends _$AppDatabase {
     required String syncedAtUtcIso,
   }) {
     return transaction(() async {
-      await _writeItinerary(days: days, stops: stops, setAsides: setAsides);
+      final localDays = await readItineraryDays();
+      final localStops = await readItineraryStops();
+      final localAsides = await readItinerarySetAsides();
+      final localState = await _syncStateRow();
+      final tombstones = {
+        for (final tombstone in await select(itineraryDayTombstones).get())
+          tombstone.number: DateTime.parse(tombstone.deletedAtUtcIso),
+      };
+      final incomingPlanAt = DateTime.parse(planRevisedAtUtcIso);
+      final incomingPocketAt = DateTime.parse(pocketRevisedAtUtcIso);
+      final incomingByNumber = {for (final day in days) day.number: day};
+      final localByNumber = {for (final day in localDays) day.number: day};
+      final keepLocal = <int>{};
+      final mergedDays = <SyncedDayRecord>[];
+
+      for (final local in localDays) {
+        final incoming = incomingByNumber[local.number];
+        final localAt = DateTime.parse(local.revisedAtUtcIso);
+        if (incoming != null) {
+          if (localAt.isAfter(DateTime.parse(incoming.revisedAtUtcIso))) {
+            keepLocal.add(local.number);
+            mergedDays.add((
+              number: local.number,
+              dateIso: local.dateIso,
+              place: local.place,
+              revisedAtUtcIso: local.revisedAtUtcIso,
+            ));
+          } else {
+            mergedDays.add(incoming);
+          }
+        } else if (localAt.isAfter(incomingPlanAt)) {
+          keepLocal.add(local.number);
+          mergedDays.add((
+            number: local.number,
+            dateIso: local.dateIso,
+            place: local.place,
+            revisedAtUtcIso: local.revisedAtUtcIso,
+          ));
+        }
+      }
+      final outEditedTombstones = <int>{};
+      for (final incoming in days) {
+        if (localByNumber.containsKey(incoming.number)) continue;
+        final deletedAt = tombstones[incoming.number];
+        if (deletedAt != null &&
+            deletedAt.isAfter(DateTime.parse(incoming.revisedAtUtcIso))) {
+          // Deleted here after the round trip's snapshot was taken: the
+          // answer carries the older copy, and the deletion wins. The
+          // tombstone stands until an answer acknowledges the deletion.
+          continue;
+        }
+        if (deletedAt != null) outEditedTombstones.add(incoming.number);
+        mergedDays.add(incoming);
+      }
+      mergedDays.sort((a, b) => a.number.compareTo(b.number));
+
+      final mergedStops = <ItineraryStopRecord>[];
+      for (final day in mergedDays) {
+        if (keepLocal.contains(day.number)) {
+          mergedStops.addAll([
+            for (final stop in localStops)
+              if (stop.dayNumber == day.number)
+                (
+                  dayNumber: stop.dayNumber,
+                  position: stop.position,
+                  text: stop.stopText,
+                  timeIso: stop.timeIso,
+                  kind: stop.kind,
+                  areaText: stop.areaText,
+                  areaSource: stop.areaSource,
+                ),
+          ]);
+        } else {
+          mergedStops.addAll([
+            for (final stop in stops)
+              if (stop.dayNumber == day.number) stop,
+          ]);
+        }
+      }
+      final localPocketWins = DateTime.parse(localState.pocketRevisedAtUtcIso)
+          .isAfter(incomingPocketAt);
+      final mergedAsides = localPocketWins
+          ? <ItinerarySetAsideRecord>[
+              for (final line in localAsides)
+                (
+                  position: line.position,
+                  sourceLineNumber: line.sourceLineNumber,
+                  text: line.lineText,
+                  explanation: line.explanation,
+                ),
+            ]
+          : setAsides;
+
+      // Retire the tombstones this answer has settled: a day out-edited
+      // after its deletion is live again, and a deletion the answer already
+      // reflects (the day absent, the shape clock at least the tombstone's)
+      // needs no further defending. A tombstone for a day the answer still
+      // carries under an older shape clock stays, because the next answer
+      // may carry the same stale copy.
+      final settledTombstones = <int>{
+        ...outEditedTombstones,
+        for (final entry in tombstones.entries)
+          if (!incomingByNumber.containsKey(entry.key) &&
+              !incomingPlanAt.isBefore(entry.value))
+            entry.key,
+      };
+      if (settledTombstones.isNotEmpty) {
+        await (delete(
+          itineraryDayTombstones,
+        )..where((t) => t.number.isIn(settledTombstones.toList()))).go();
+      }
+
+      await _writeItinerary(
+        days: mergedDays,
+        stops: mergedStops,
+        setAsides: mergedAsides,
+      );
       await _writeSyncState(
         SyncStatesCompanion(
-          planRevisedAtUtcIso: Value(planRevisedAtUtcIso),
-          pocketRevisedAtUtcIso: Value(pocketRevisedAtUtcIso),
+          planRevisedAtUtcIso: Value(
+            DateTime.parse(localState.planRevisedAtUtcIso)
+                    .isAfter(incomingPlanAt)
+                ? localState.planRevisedAtUtcIso
+                : planRevisedAtUtcIso,
+          ),
+          pocketRevisedAtUtcIso: Value(
+            localPocketWins
+                ? localState.pocketRevisedAtUtcIso
+                : pocketRevisedAtUtcIso,
+          ),
           itinerarySyncedAtUtcIso: Value(syncedAtUtcIso),
         ),
       );
@@ -1055,21 +1262,33 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Files one failed attempt: back to `queued`, the ticket forgotten, the
-  /// next try pushed out to [nextAttemptAtUtcIso].
+  /// Files one failed attempt and pushes the next try out to
+  /// [nextAttemptAtUtcIso]. An uploaded row stays uploaded: a retryable
+  /// PostgREST schema error happens after the bytes crossed, and forgetting
+  /// that fact would mint a second ticket for an already durable object.
   Future<void> delayOutboxRetry({
     required String photoId,
     required int attempts,
     required String nextAttemptAtUtcIso,
     required String lastError,
-  }) => (update(photoOutbox)..where((t) => t.photoId.equals(photoId))).write(
-    PhotoOutboxCompanion(
-      state: const Value('queued'),
-      attempts: Value(attempts),
-      nextAttemptAtUtcIso: Value(nextAttemptAtUtcIso),
-      lastError: Value(lastError),
-    ),
-  );
+  }) {
+    return transaction(() async {
+      final row = await (select(
+        photoOutbox,
+      )..where((t) => t.photoId.equals(photoId))).getSingleOrNull();
+      if (row == null) return;
+      await (update(
+        photoOutbox,
+      )..where((t) => t.photoId.equals(photoId))).write(
+        PhotoOutboxCompanion(
+          state: Value(row.state == 'uploaded' ? 'uploaded' : 'queued'),
+          attempts: Value(attempts),
+          nextAttemptAtUtcIso: Value(nextAttemptAtUtcIso),
+          lastError: Value(lastError),
+        ),
+      );
+    });
+  }
 
   /// The server ruled, so the push is over. Kept rather than deleted:
   /// "record only real state" cuts both ways, and a photograph that silently
@@ -1212,17 +1431,26 @@ class AppDatabase extends _$AppDatabase {
         ),
       );
 
-  /// Applies the name the server's revision comparison returned. The merge
-  /// decision lives in `TripSync`; this write only persists its answer.
+  /// Applies the name the server's revision comparison returned, unless a
+  /// newer local rename landed while that comparison was in flight.
   Future<int> applySharedTripName({
     required String? name,
     required DateTime revisedAt,
-  }) => (update(tripFacts)..where((t) => t.id.equals(_theOneTrip))).write(
-    TripFactsCompanion(
-      name: Value(name),
-      nameRevisedAtUtcIso: Value(revisedAt.toUtc().toIso8601String()),
-    ),
-  );
+  }) {
+    return transaction(() async {
+      final current = await select(tripFacts).getSingleOrNull();
+      if (current == null ||
+          DateTime.parse(current.nameRevisedAtUtcIso).isAfter(revisedAt)) {
+        return 0;
+      }
+      return (update(tripFacts)..where((t) => t.id.equals(_theOneTrip))).write(
+        TripFactsCompanion(
+          name: Value(name),
+          nameRevisedAtUtcIso: Value(revisedAt.toUtc().toIso8601String()),
+        ),
+      );
+    });
+  }
 
   /// Records one minted code.
   Future<int> insertInviteCode(InviteCodeRecord invite) =>
@@ -1354,6 +1582,8 @@ class AppDatabase extends _$AppDatabase {
       await delete(itineraryStops).go();
       await delete(itinerarySetAsides).go();
       await delete(itineraryDays).go();
+      // A tombstone defends a deletion within a trip; it dies with the trip.
+      await delete(itineraryDayTombstones).go();
       // The debt to push a photo dies with the trip it was owed to.
       await delete(photoOutbox).go();
       await delete(photos).go();

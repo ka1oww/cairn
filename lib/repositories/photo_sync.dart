@@ -181,10 +181,12 @@ class PhotoSync {
         // (an `uploaded` mark) is already written. The poll retries.
         return;
       } on UploadTicketRejected catch (e) {
-        // The ticket died, not the photograph: back to `queued`, ticket
-        // discarded, one attempt on the meter. A persistent rejection
-        // climbs the backoff to its ceiling, visible in `lastError`,
-        // rather than terminating wrongly.
+        // A retryable failure on this photograph: a dead PUT ticket, an
+        // unavailable upload function, an aborted size-bounded transfer, or
+        // a PostgREST schema-cache miss after the bytes crossed. The store
+        // keeps `uploaded` progress when there is any; otherwise the ticket
+        // is discarded. Either way the failure is visible in `lastError`
+        // and climbs the backoff rather than terminating wrongly.
         final attempts = item.outbox.attempts + 1;
         await database.delayOutboxRetry(
           photoId: item.outbox.photoId,

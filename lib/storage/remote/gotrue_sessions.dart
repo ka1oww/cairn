@@ -34,7 +34,6 @@
 // [SessionVault] and the same account comes back — and the account's *id* is
 // kept beside it, because that is what lets a phone with no signal still know
 // who it is (`bootstrap.dart`, `resolveMemberId`).
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -123,6 +122,7 @@ class FileSessionVault implements SessionVault {
     // A phone that cannot write here still works for this launch; it just
     // mints a new account on the next one. Failing the sign-in outright would
     // be worse.
+    File? temporary;
     try {
       final file = await _resolve();
       if (session == null) {
@@ -131,13 +131,25 @@ class FileSessionVault implements SessionVault {
         }
         return;
       }
-      await file.writeAsString(
+      await file.parent.create(recursive: true);
+      temporary = File(
+        '${file.path}.${DateTime.now().microsecondsSinceEpoch}.$pid.tmp',
+      );
+      await temporary.writeAsString(
         jsonEncode({
           'user_id': session.userId,
           'refresh_token': session.refreshToken,
         }),
+        flush: true,
       );
+      await temporary.rename(file.path);
     } on Exception {
+      try {
+        if (temporary?.existsSync() ?? false) await temporary!.delete();
+      } on Exception {
+        // The credential target was never replaced; a stale temp file is not
+        // allowed to turn that recoverable outcome into a launch failure.
+      }
       return;
     }
   }
@@ -210,17 +222,20 @@ class GotrueSessions implements SessionSource {
     return _keep(minted);
   }
 
-  SharedFactsSession? _keep(Map<String, dynamic> body) {
+  Future<SharedFactsSession?> _keep(Map<String, dynamic> body) async {
     final token = body['access_token'];
     final id = (body['user'] as Map?)?['id'];
     if (token is! String || id is! String) return null;
     final seconds = (body['expires_in'] as num?)?.toInt() ?? 3600;
-    _held = SharedFactsSession(accessToken: token, userId: MemberId(id));
-    _heldUntil = now().add(Duration(seconds: seconds));
     final refresh = body['refresh_token'];
     if (refresh is String && refresh.isNotEmpty) {
-      unawaited(vault.write(StoredSession(userId: id, refreshToken: refresh)));
+      // A rotated refresh token becomes the only way back to this account.
+      // Persist it before exposing the access token, so a process exit after
+      // [current] completes cannot leave the vault naming the spent token.
+      await vault.write(StoredSession(userId: id, refreshToken: refresh));
     }
+    _held = SharedFactsSession(accessToken: token, userId: MemberId(id));
+    _heldUntil = now().add(Duration(seconds: seconds));
     return _held;
   }
 
@@ -255,11 +270,27 @@ class GotrueSessions implements SessionSource {
           )
           .timeout(timeout);
       if (response.statusCode >= 500) return _unreachable;
-      if (response.statusCode >= 400) return null;
+      if (response.statusCode >= 400) {
+        // Only GoTrue's explicit dead-refresh-token verdict spends the saved
+        // account. A gateway 401, rate limit, bad request unrelated to the
+        // token, or any other 4xx is an unreachable auth service, not proof
+        // that this person no longer owns the stored account.
+        return _isDeadRefreshToken(response) ? null : _unreachable;
+      }
       final decoded = jsonDecode(response.body);
       return decoded is Map<String, dynamic> ? decoded : null;
     } on Exception {
       return _unreachable;
     }
+  }
+
+  static bool _isDeadRefreshToken(http.Response response) {
+    if (response.statusCode != 400) return false;
+    final lower = response.body.toLowerCase();
+    return const {
+      'invalid_grant',
+      'refresh_token_not_found',
+      'refresh_token_already_used',
+    }.any(lower.contains);
   }
 }
