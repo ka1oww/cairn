@@ -512,6 +512,31 @@ import what is written there, not here.
   review. `todayProvider` derives today from the *device* date because no
   trip clock is stored yet — it is the one place that changes when one is,
   and `bootstrapApp(today:)` pins it in tests.
+- **The app's clock is a function to ask, and the app root is the only thing
+  that makes anybody ask again.** `nowProvider`
+  (`lib/app_state/ping_schedule.dart`) is a `Provider<Clock>`, so every
+  consumer calls it — `ref.watch(nowProvider)()` — and gets the wall clock as
+  it is at the asking. It was a `Provider<DateTime>` until 2026-09-03, and
+  that cached a single reading for the life of the launch: every window,
+  every trip ending and every invite standing was decided against a clock
+  that had stopped when the app started. The type change is the easy half.
+  **The trap is that the clock is live and the verdicts drawn from it are
+  not** — a provider that asked once keeps that answer until something
+  invalidates it, and watching the clock invalidates nothing, because the
+  closure's identity never changes. So `CairnApp` (`lib/app.dart`) is the one
+  place invalidation happens: `ref.invalidate(nowProvider)` on
+  `AppLifecycleState.resumed`, and again every `clockRefresh` while the app
+  is in front, because no lifecycle event fires for a minute that arrives
+  while you are already looking at the trip. A surface that grows a refresh
+  of its own is the thing to refuse in review, and the capture screen's
+  second hand is the one deliberate exception — it is there for the *grain*,
+  a two-minute window counted down to the second, not for the freshness.
+  Tests pin the clock with `bootstrapApp(now:)`, composed through
+  `pinnedClock(from:, moving:)`: `now:` alone is a clock that has stopped,
+  which is what almost every test wants, and a test that walks a window down
+  hands in `elapsed:` as well — a `StartElapsed` it drives off the faked
+  clock, refused without `now:` because an interval added to a base that
+  already moves would count twice.
 - The Trail draws **one node per day of the plan and no others**: a date the
   plan skips gets a `GapDay` page but never a node, because every drawing
   numbers the path over the plan's own days ("Day 4 of 8"). The winding

@@ -446,11 +446,11 @@ void main() {
     /// Wall time that passed while none of the app's timers ran.
     ///
     /// The countdown measures elapsed time rather than counting its own ticks
-    /// (`elapsedSourceProvider` says why), and this is the only way to say so
-    /// in a test: `tester.pump(d)` fires every tick it skips over, so a phone
-    /// suspended for ninety seconds cannot be written as a pump — a countdown
-    /// that merely added a second per tick would come back looking right.
-    /// Set this instead and nothing of the app's runs at all.
+    /// (`ping_schedule.dart`'s clock says why), and this is the only way to
+    /// say so in a test: `tester.pump(d)` fires every tick it skips over, so
+    /// a phone suspended for ninety seconds cannot be written as a pump — a
+    /// countdown that merely added a second per tick would come back looking
+    /// right. Set this instead and nothing of the app's runs at all.
     late Duration suspended;
 
     setUp(() {
@@ -850,6 +850,17 @@ void main() {
       expect(textOf(const Key('capture-call')), 'Your minute. Look up.');
 
       await tester.pump(const Duration(minutes: 3));
+
+      // The day page has to let go of it too, and by itself: the whole app's
+      // time-derived verdicts are asked again on the root's cadence, so a
+      // call to action nobody touched stops being an invitation to be
+      // punctual once the window has shut.
+      expect(
+        textOf(const Key('capture-call')),
+        "Your minute came and went. The door's open till midnight.",
+        reason: 'the day page was still offering a window that had shut',
+      );
+
       await openTheCamera(tester);
 
       expect(
@@ -875,6 +886,66 @@ void main() {
           reason: 'retake $attempt came back punctual',
         );
       }
+    });
+
+    testWidgets('a window that shut in a pocket is shut on the day page when '
+        'the phone comes back', (tester) async {
+      // The resume half of the same asking. Nothing of the app's runs while a
+      // backgrounded phone is suspended, so the cadence covers none of this
+      // interval — the whole flip has to come from the lifecycle event, which
+      // is why nothing below pumps any time at all.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      expect(textOf(const Key('capture-call')), 'Your minute. Look up.');
+
+      suspended = const Duration(minutes: 3);
+      await awayAndBack(tester);
+
+      expect(
+        textOf(const Key('capture-call')),
+        "Your minute came and went. The door's open till midnight.",
+        reason: 'the phone came back to a window it thought was still open',
+      );
+    });
+
+    testWidgets('a minute that arrives while you are looking at the trip is '
+        'offered without a relaunch', (tester) async {
+      // The other direction of the same defect, and the one no lifecycle
+      // event covers: the app that was already open, in front of you, when
+      // your minute came. A clock asked once at launch left the day page on
+      // 'somewhere in today' for the whole two minutes, so the moment could
+      // be reached only by a cold launch from the notification.
+      final ping = pingOn(day(14));
+      final beforehand = ping.at.subtract(const Duration(minutes: 3));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at);
+      await launch(tester, today: day(14), now: beforehand, camera: camera);
+      await accept(tester, tripPaste);
+
+      expect(
+        textOf(const Key('capture-call')),
+        'Your minute is somewhere in today.',
+      );
+      expect(find.byKey(const Key('capture-call-action')), findsNothing);
+
+      // Four minutes of sitting on the trip. No relaunch, no resume, and
+      // nothing tapped — only the root's own asking.
+      await tester.pump(const Duration(minutes: 4));
+
+      expect(
+        textOf(const Key('capture-call')),
+        'Your minute. Look up.',
+        reason: 'the minute arrived and the day page never heard about it',
+      );
+      expect(find.byKey(const Key('capture-call-action')), findsOneWidget);
+
+      // And it is a door rather than a changed sentence: what it opens on is
+      // the window as it really stands, a minute of it already spent.
+      await openTheCamera(tester);
+      expect(countdown(), '1:00 left');
+      expect(textOf(const Key('capture-window')), 'a while yet');
     });
 
     testWidgets('a window that ran down in somebody else\'s app is run down '

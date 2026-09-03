@@ -170,7 +170,7 @@ ButtonStyle get _quiet => TextButton.styleFrom(
 // The clock.
 // ---------------------------------------------------------------------------
 
-/// The capture route's own second hand, and the only ticking thing in the app.
+/// The capture route's own second hand, and the one surface allowed one.
 ///
 /// **The tick redraws the sheet; it never tells it the time.** `nowProvider`
 /// is the app's one clock and it is live at every ask (ping_schedule.dart
@@ -184,10 +184,13 @@ ButtonStyle get _quiet => TextButton.styleFrom(
 /// defect: a phone away in a pocket for ninety seconds came back reading
 /// `2:00 left / a while yet` half a minute after the window had shut.
 ///
-/// The tick is here rather than in the clock because the clock notifies
-/// nobody: pushing a new instant once a second would rebuild every surface in
-/// the app for the sake of this one screen. So the asking is local, for
-/// exactly as long as the camera is open, and `dispose` stops it.
+/// The tick is here rather than at the app root because of its *grain*. The
+/// root asks the clock again on every resume and every `clockRefresh`, which
+/// is what keeps the day page's call honest, and it is deliberately too
+/// coarse to run a countdown: a whole app rebuilt once a second for the sake
+/// of one screen is a price only this screen should pay. So the finer asking
+/// is local, for exactly as long as the camera is open, and `dispose` stops
+/// it.
 ///
 /// It knows [until] only so that it can *stop*: once there is nothing left to
 /// count it cancels itself rather than rebuilding the sheet once a second for
