@@ -501,8 +501,10 @@ are the ones that stand between Cairn and being a group at all.
 - Real sign-in: an account somebody owns and a display name that is theirs. The
   anonymous GoTrue account is real and its id *is* this phone's member id, so
   the roster and the gate ask about the right person; what is still a local
-  constant is the display name (`'You'`), and a trip started offline under
-  `'me'` can never become a `trips` row and is a local trip for good.
+  constant is the display name (`'You'`); a trip started offline under `'me'`
+  is healed to the account on the next launch that knows one
+  (`MembershipStore.adoptAccountIdentity`), so only a phone that never signs
+  in keeps a local trip.
 - **Put the refresh token in the Keychain.** `gotrue_sessions.dart` writes
   `cairn_session.json` — `user_id` and `refresh_token` as plain JSON — into
   Application Support, which is in iCloud and iTunes backups and is not the
@@ -628,7 +630,8 @@ Each of these has already cost time, or is certain to.
   the gate ask about the right person. The display name is still the constant
   `'You'`, and a trip started before any account exists is credited to `'me'` —
   visibly not an `auth.users` id, so a push carrying it is refused loudly
-  rather than writing a stranger's row.
+  rather than writing a stranger's row, and the next launch that knows its
+  account heals the roster to it (`MembershipStore.adoptAccountIdentity`).
 - **A photo row is an index; the photograph is a file beside it.** Locally that
   is Drift plus a file in the app's documents directory, mirroring Postgres
   plus R2 on the server. Deleting the row does not delete the photograph, and

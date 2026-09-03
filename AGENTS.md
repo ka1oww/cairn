@@ -281,7 +281,13 @@ import what is written there, not here.
   the vault keeps the account's id beside its refresh token, so `main()` reads
   it off a local file and only a first-ever launch waits (three seconds, then
   the stand-in). The identity is fixed for the launch — a session that lands
-  late is stored for the next one, never adopted mid-session. `flutter test` never reaches out: every widget test binds
+  late is stored for the next one, with one narrow exception and one repair,
+  both `bootstrap.dart`'s (its docs are the authority): accepting a plan may
+  adopt a late-landing account, bounded, only while no trip exists yet
+  (`lateAccountResolverProvider`), and a roster a previous launch left under
+  the stand-in is healed to the account on the next launch
+  (`MembershipStore.adoptAccountIdentity`,
+  `test/stand_in_identity_test.dart`). `flutter test` never reaches out: every widget test binds
   `NoSession`, and the live check is
   `flutter test test/hosted_smoke_test.dart --dart-define=CAIRN_HOSTED_SMOKE=true`.
   **A green suite is still no evidence the hosted project behaves** — that is

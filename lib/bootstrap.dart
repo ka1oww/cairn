@@ -4,6 +4,8 @@
 // governs the layers; this file is where the layers are put together, and
 // confining that knowledge here is what keeps it out of everywhere else.
 // See lib/README.md.
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -71,6 +73,18 @@ import 'storage/remote/shared_facts.dart';
 /// session, reads the id off it and hands both in; a test hands in neither
 /// and gets [NoSession] and the local stand-in, which is the same pair.
 ///
+/// Two things follow from that pair, both about the stand-in. When
+/// [memberId] is a real account id, the launch also **heals** a roster a
+/// previous launch left under the stand-in
+/// ([MembershipStore.adoptAccountIdentity]) — one-shot, non-blocking and
+/// idempotent, because a trip started before the account resolved would
+/// otherwise never ping this phone again. And when [memberId] is null on a
+/// build whose backend may still answer, the accept path gets one bounded
+/// last chance to adopt the account before it starts a trip
+/// (`lateAccountResolverProvider`); [lateAccountId] is how a test stands in
+/// for that answer without a server, and the app builds its own from
+/// [sessions].
+///
 /// [gazetteer] is the same seam once more, for the area gazetteer's one
 /// load: the app passes nothing and gets `Isolate.run`, and a test injects
 /// the direct call. A test that pumps an import and leaves this unbound
@@ -97,13 +111,37 @@ Widget bootstrapApp({
   TextRecognitionEdge? textRecognition,
   SessionSource? sessions,
   String? memberId,
+  Future<String?> Function()? lateAccountId,
   Stream<SyncOutcome>? sharing,
   LinkOpenerEdge? linkOpener,
 }) {
   final db = database ?? openAppDatabase();
   final store = PhotoStore(db);
   final roster = MembershipStore(db);
-  final sync = _startSharedFactsSync(db, sessions ?? const NoSession());
+  final source = sessions ?? const NoSession();
+  final sync = _startSharedFactsSync(db, source);
+  if (memberId != null && memberId != localMemberId) {
+    // The heal for a trip started before the account resolved: a roster a
+    // previous launch wrote under the stand-in is rewritten to this launch's
+    // account, or nothing is written at all. Fire-and-forget on purpose —
+    // the person never waits on it, the roster's own stream repaints every
+    // surface when it lands, and a launch it fails on is a launch the next
+    // one heals (the same absorb-and-carry-on the session vault does).
+    unawaited(
+      roster
+          .adoptAccountIdentity(standInId: localMemberId, accountId: memberId)
+          .catchError((Object _) {}),
+    );
+  }
+  // The accept path's one bounded chance to start the trip under the real
+  // account instead of the stand-in: only a build that is configured for a
+  // backend which simply had not answered by the boot budget gets one. A
+  // build with no backend at all keeps the stand-in unconditionally.
+  final lateArrival =
+      lateAccountId ??
+      (memberId == null && source is! NoSession
+          ? () => _lateAccountIdFrom(source)
+          : null);
   // Always bound, and never conditionally: Riverpod refuses to update a scope
   // whose override *count* changed, and a test that pumps its own scope over
   // this one would break on a binding that came and went.
@@ -135,10 +173,37 @@ Widget bootstrapApp({
         gazetteerRunnerProvider.overrideWithValue(gazetteer),
       if (textRecognition != null)
         textRecognitionEdgeProvider.overrideWithValue(textRecognition),
-      if (memberId != null) localMemberIdProvider.overrideWithValue(memberId),
+      if (memberId != null)
+        localMemberIdProvider.overrideWithValue(memberId)
+      // While the account is pending, who this launch is may still move once
+      // — from the stand-in to the account, at the moment a trip is started
+      // (`launchIdentityProvider` says when, and why only then). Everywhere
+      // else the identity stays the fixed value it is bound to above.
+      else if (lateArrival != null) ...[
+        localMemberIdProvider.overrideWith(
+          (ref) => ref.watch(launchIdentityProvider) ?? localMemberId,
+        ),
+        lateAccountResolverProvider.overrideWithValue(lateArrival),
+      ],
     ],
     child: const CairnApp(),
   );
+}
+
+/// Asks the running sign-in whether the account has landed since boot.
+///
+/// [GotrueSessions] serialises its calls, so this joins the request the boot
+/// path started rather than minting a second account, and answers from
+/// memory once a session is held. Bounded by the same budget the boot path
+/// used, because it is awaited under an accept tap: past it, null — the trip
+/// starts under the stand-in and the next launch heals, exactly as a build
+/// that never got an answer at all.
+Future<String?> _lateAccountIdFrom(SessionSource sessions) async {
+  final session = await sessions.current().timeout(
+    _startupSignInBudget,
+    onTimeout: () => null,
+  );
+  return session?.userId.value;
 }
 
 /// Starts keeping the trip's shared facts in step with the server's, if there
@@ -264,7 +329,10 @@ const _startupSignInBudget = Duration(seconds: 3);
 /// uuid would have credited a photo to a member the roster does not hold. That
 /// is also why nothing here adopts an id that arrives *later*: the identity is
 /// fixed for the life of the launch, and a session that lands after the budget
-/// is picked up next time.
+/// is picked up next time. The one exception is the accept path's bounded
+/// last chance (`lateAccountResolverProvider`), taken only while no trip
+/// exists yet — before anything has been credited to anybody — so the fixed
+/// identity above still holds everywhere a roster or a photograph does.
 ///
 /// The vault is asked first and it usually answers: a phone that has signed in
 /// before knows its own id from a local file, with no network in it at all, so

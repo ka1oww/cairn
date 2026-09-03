@@ -69,6 +69,56 @@ final membershipStoreProvider = Provider<MembershipStore>(
   ),
 );
 
+/// The account id this launch adopted after it began, or null while the
+/// launch is still the offline stand-in.
+///
+/// Normally who this phone is never moves for the life of a launch
+/// (`bootstrap.dart`, `resolveMemberId`): the id is resolved before the app
+/// is built, and a session that lands late is kept for the next launch. This
+/// provider is the one narrow exception, and the accept path is its only
+/// writer: a configured build whose sign-in had not answered by the boot
+/// budget may adopt the id at the moment a trip is about to be started —
+/// while **no trip exists yet**, so nothing has been credited to anybody and
+/// there is no roster to disagree with. Once a trip holds an identity the
+/// launch keeps it, and the composition root's heal repairs a stand-in
+/// roster on the next launch instead.
+///
+/// The composition root binds `localMemberIdProvider` over this exactly when
+/// that window is open (no resolved id, but a backend that may still
+/// answer); everywhere else the identity stays the fixed value it has today.
+final launchIdentityProvider = NotifierProvider<LaunchIdentity, String?>(
+  LaunchIdentity.new,
+);
+
+/// The holder of that one move. [adopt] is called from exactly one place —
+/// the accept path's starter decision — and nothing ever moves it back.
+class LaunchIdentity extends Notifier<String?> {
+  @override
+  String? build() {
+    // Who this launch is must survive a moment with no listeners: providers
+    // are auto-dispose under Riverpod 3, and an adopted id dropped between
+    // the accept and the trip's surfaces mounting would quietly hand the
+    // launch back to the stand-in — the very split this exists to prevent.
+    ref.keepAlive();
+    return null;
+  }
+
+  void adopt(String accountId) => state = accountId;
+}
+
+/// Asks the backend, bounded, whether the account has answered since boot —
+/// or null on every build where the question cannot arise.
+///
+/// Bound by the composition root only on a configured build that began as
+/// the stand-in: it joins the sign-in already running behind the first frame
+/// rather than starting a second one, and answers null rather than waiting
+/// when the phone still cannot reach the server. Left unbound — no backend,
+/// a resolved account, every ordinary test — it is null, and the accept path
+/// starts the trip exactly as it always has.
+final lateAccountResolverProvider = Provider<Future<String?> Function()?>(
+  (ref) => null,
+);
+
 /// Where the last reconcile with the server got to, or nothing while no
 /// reconcile has happened.
 ///

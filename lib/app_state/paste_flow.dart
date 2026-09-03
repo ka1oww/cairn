@@ -1067,6 +1067,12 @@ class PasteFlow extends Notifier<PasteFlowState> {
           ),
       ],
     );
+    // Who the trip is started under is [_tripStarter]'s one decision: a
+    // stand-in launch whose account has answered by now adopts it here
+    // rather than writing a roster the account is not on. Asked before the
+    // first write, so its bounded wait never sits between the saved plan
+    // and the roster that goes with it.
+    final starter = await _tripStarter();
     await ref.read(tripRepositoryProvider).saveItinerary(itinerary);
     // Accepting the plan is what starts the trip: it is the only door, and
     // the person who accepted it is its starter — a fact about the trip
@@ -1080,7 +1086,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
     await ref
         .read(membershipStoreProvider)
         .startTrip(
-          starter: model.MemberId(ref.read(localMemberIdProvider)),
+          starter: starter,
           starterDisplayName: localMemberName,
           now: ref.read(nowProvider),
         );
@@ -1093,6 +1099,36 @@ class PasteFlow extends Notifier<PasteFlowState> {
     _mergeBaseline = null;
     _mergeBaselineAside = null;
     ref.read(planEditorProvider.notifier).close();
+  }
+
+  /// Who the trip about to be started belongs to.
+  ///
+  /// Usually just who this launch is — but a launch that began as the
+  /// stand-in on a build whose backend simply had not answered yet
+  /// (`lateAccountResolverProvider` is bound exactly then) gets one bounded
+  /// last chance here, at the only moment adoption is still free: **before
+  /// any trip exists**, so nothing has been credited to anybody and no
+  /// roster can disagree with the new identity. If the account has landed,
+  /// the launch adopts it (`launchIdentityProvider`) and the trip is started
+  /// under it, so the stand-in roster is never written at all. If it has
+  /// not — offline, or no backend — the trip starts under the stand-in
+  /// exactly as before, and the composition root's heal repairs it on the
+  /// next launch. Once a trip holds an identity, this never runs again for
+  /// the life of the trip: the launch stays coherent with the roster it has.
+  Future<model.MemberId> _tripStarter() async {
+    final starter = ref.read(localMemberIdProvider);
+    if (starter != localMemberId) return model.MemberId(starter);
+    final resolve = ref.read(lateAccountResolverProvider);
+    if (resolve == null) return model.MemberId(starter);
+    if (await ref.read(membershipStoreProvider).hasTrip()) {
+      return model.MemberId(starter);
+    }
+    final landed = await resolve();
+    if (landed == null || landed.isEmpty || landed == localMemberId) {
+      return model.MemberId(starter);
+    }
+    ref.read(launchIdentityProvider.notifier).adopt(landed);
+    return model.MemberId(landed);
   }
 
   // -- internals -----------------------------------------------------------

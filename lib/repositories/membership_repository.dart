@@ -194,6 +194,64 @@ class MembershipStore implements MembershipRepository {
     return tripId;
   }
 
+  /// Whether a trip has been started on this phone. One read, no stream —
+  /// what the accept path asks before it may adopt a late-arriving account
+  /// id (`paste_flow.dart`): once a trip holds an identity, the launch that
+  /// wrote it keeps it, and only the next launch's heal may change it.
+  Future<bool> hasTrip() async => await _db.readTripFacts() != null;
+
+  /// Rewrites a roster still holding [standInId] to name [accountId] instead.
+  ///
+  /// The repair for a trip started before the phone's account had resolved:
+  /// such a trip is started under the offline stand-in (`localMemberId` in
+  /// `ping_schedule.dart`), and on every later launch the signed-in id is not
+  /// a member of its own trip — so the ping deal (`pingsForPlan`) hands this
+  /// phone nothing for the rest of the trip, the day page never offers a
+  /// capture, and the sync can never create the shared `trips` row (a
+  /// `created_by` of `me` is not a uuid). The composition root runs this once
+  /// per launch, non-blocking, as soon as it knows who the launch is.
+  ///
+  /// Idempotent, and **a heal that changes nothing writes nothing**: the
+  /// roster's stream is what asks the sync for work, so an unconditional
+  /// rewrite here would be a write asking for a sync on every launch. If the
+  /// roster somehow already names [accountId] beside the stand-in, the
+  /// stand-in row is dropped rather than renamed into a duplicate.
+  ///
+  /// What it deliberately does not touch: an invite code's `mintedBy` (the
+  /// starter may revoke any code regardless — `canRevokeInvite` — so a code
+  /// minted by the stand-in is still revocable after the heal) and a photo's
+  /// contributor (every sealed day is open to everyone, so a stand-in credit
+  /// changes no gate answer that matters by the next launch; rewriting the
+  /// pool is the photo store's business, not the roster's).
+  Future<void> adoptAccountIdentity({
+    required String standInId,
+    required String accountId,
+  }) async {
+    if (accountId.isEmpty || accountId == standInId) return;
+    final facts = await _db.readTripFacts();
+    if (facts == null) return;
+    final members = await _db.readTripMembers();
+    final starterIsStandIn = facts.startedByMemberId == standInId;
+    final rosterHoldsStandIn = members.any((row) => row.id == standInId);
+    if (!starterIsStandIn && !rosterHoldsStandIn) return;
+    final healed = <String, TripMemberRecord>{};
+    for (final row in members) {
+      final id = row.id == standInId ? accountId : row.id;
+      healed.putIfAbsent(
+        id,
+        () => (
+          id: id,
+          displayName: row.displayName,
+          joinedOnDay: row.joinedOnDay,
+        ),
+      );
+    }
+    await _db.replaceRoster(
+      members: [...healed.values],
+      startedByMemberId: starterIsStandIn ? accountId : null,
+    );
+  }
+
   /// Renames the trip, or clears the name with a blank. Any member may
   /// (docs/decisions/2026-08-22-starter-and-container.md §2); *who* is asking
   /// is checked above this layer, where the roster is known.

@@ -55,8 +55,10 @@ Three files sit outside the bands, deliberately:
   silently stops reaching the screen that reads it.
 - **`main.dart`** imports nothing but `bootstrap.dart`. What it holds is an
   order, not logic: it resolves who this phone is signed in as *before* it
-  builds the app, so nothing is ever credited to the offline stand-in and then
-  re-credited (the file's own header says why).
+  builds the app, so an ordinary launch never credits the offline stand-in and
+  then re-credits (`bootstrap.dart`'s own docs say why, and own the two
+  bounded exceptions: adoption at accept while no trip exists, and the
+  next-launch heal of a stand-in roster).
 - **`acknowledgements.dart`** is plain data — third-party attribution text,
   no Flutter, nothing decided from it — so it sits beside `bootstrap.dart`
   and `main.dart` rather than inside any band. `screens/trip_sheet.dart`
