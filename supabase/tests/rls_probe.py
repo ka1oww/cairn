@@ -10,6 +10,7 @@ filtering to zero rows, not by raising, so "the statement errored" is the wrong
 assertion almost every time. Assert on the state of the table afterwards.
 """
 
+import datetime
 import json
 import os
 import re
@@ -440,6 +441,62 @@ def main():
           "a photograph on a day with no date records an unlock all the same")
     d.run("delete from public.photos where id = :id", id=undated_photo)
 
+    print("\n== an unlock follows a photograph instead of opening every day it visits ==")
+    walked_photo = "eeeeeeee-0000-0000-0000-000000000002"
+    d.run("""insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                        content_type, byte_size, day_number, trip_day, captured_at)
+             values (:id, :t, :u, :k, 'image/jpeg', 100, :n, :d, now())""",
+          id=walked_photo, t=japan, u=dave, n=TODAY_DAY, d=today,
+          k=photo_key(japan, walked_photo))
+    check(d.run(is_open, t=japan, d=TODAY_DAY, u=dave)[0][0] is True,
+          "the photograph opens the day where it currently lives")
+    d.run("update public.photos set day_number = :n where id = :id",
+          n=FUTURE_DAY, id=walked_photo)
+    check(d.run(is_open, t=japan, d=TODAY_DAY, u=dave)[0][0] is False,
+          "moving the only photograph away closes the old current day again")
+    check(db.run("""select count(*) from public.day_unlocks
+                    where trip_id = :t and user_id = :u and day_number = :n""",
+                 t=japan, u=dave, n=TODAY_DAY)[0][0] == 0,
+          "and no stale unlock remains for the old day")
+    check(d.run(is_open, t=japan, d=FUTURE_DAY, u=dave)[0][0] is True,
+          "while the unlock follows the photograph to its new day")
+    d.run("delete from public.photos where id = :id", id=walked_photo)
+
+    print("\n== changing a date cannot turn a shut day into a walked one ==")
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :past
+            where trip_id = :t and day_number = :n""",
+        past=today - datetime.timedelta(days=1),
+        t=japan, n=TODAY_DAY)
+    check(status == "ok",
+          "a member may still correct today's itinerary date", repr(rows)[:90])
+    check(d.run(is_open, t=japan, d=TODAY_DAY, u=dave)[0][0] is False,
+          "but re-dating it into the past does not open the gate early")
+    db.run("""update public.trip_itinerary_days set day_date = :today
+              where trip_id = :t and day_number = :n""",
+           today=today, t=japan, n=TODAY_DAY)
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = null
+            where trip_id = :t and day_number = :n""",
+        t=japan, n=TODAY_DAY)
+    check(status == "ok",
+          "and may still leave that date open", repr(rows)[:90])
+    check(d.run(is_open, t=japan, d=TODAY_DAY, u=dave)[0][0] is False,
+          "but un-dating it does not reach the permissive default early")
+    status, _ = d.try_run(
+        "delete from public.day_gate_date_guards where trip_id = :t and day_number = :n",
+        t=japan, n=TODAY_DAY)
+    check(status == "ok" and db.run(
+        """select count(*) from public.day_gate_date_guards
+            where trip_id = :t and day_number = :n""",
+        t=japan, n=TODAY_DAY)[0][0] == 1,
+        "and no member can erase the date guard that keeps the gate shut")
+    db.run("""update public.trip_itinerary_days set day_date = :today
+              where trip_id = :t and day_number = :n""",
+           today=today, t=japan, n=TODAY_DAY)
+    check(d.run(is_open, t=japan, d=TODAY_DAY, u=dave)[0][0] is False,
+          "and the restored current day remains shut for that member")
+
     print("\n== you can delete your own photo, and the day stays open ==")
     status, _ = c.try_run("delete from public.photos where id = :id", id=PHOTO_C)
     check(status == "ok" and db.run("select count(*) from public.photos where id = :id",
@@ -558,6 +615,7 @@ def main():
           "a key built from the row's own trip and its own id is what the outbox mints",
           repr(rows)[:80])
 
+    bad = "ffffffff-0000-0000-0000-0000000000b1"
     forgeries = (
         (photo_key(iceland, own),
          "another trip's folder, even for a photo id that is genuinely mine"),
@@ -569,9 +627,12 @@ def main():
          "the folder itself rather than something inside it"),
         (f"x/trips/{japan}/photos/{own}/original.jpg",
          "the right folder with something prefixed in front of it"),
+        (f"trips/{japan}/photos/{bad}/../../../../secret.jpg",
+         "traversal segments that escape its own pinned folder"),
+        (f"trips/{japan}/photos/{bad}//original.jpg",
+         "an empty segment inside its own pinned folder"),
     )
     for key, what in forgeries:
-        bad = "ffffffff-0000-0000-0000-0000000000b1"
         status, rows = d.try_run(
             """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
                                           content_type, byte_size, day_number)
@@ -613,6 +674,15 @@ def main():
         id=own, k=photo_key(iceland, own, "thumbnail.jpg"))
     check(status == "err" and "photos_thumbnail_key_own_prefix_check" in str(rows),
           "a thumbnail cannot be filled in with another trip's object", repr(rows)[:90])
+    for key, what in (
+        (photo_key(japan, own, "../stolen.jpg"), "a traversal segment"),
+        (photo_key(japan, own, "/thumbnail.jpg"), "an empty segment"),
+    ):
+        status, rows = d.try_run(
+            "update public.photos set r2_thumbnail_key = :k where id = :id",
+            id=own, k=key)
+        check(status == "err" and "photos_thumbnail_key_own_prefix_check" in str(rows),
+              f"nor can a thumbnail contain {what}", repr(rows)[:90])
     status, rows = d.try_run(
         "update public.photos set r2_thumbnail_key = :k where id = :id",
         id=own, k=photo_key(japan, own, "thumbnail.jpg"))
@@ -922,6 +992,14 @@ def main():
         p=page, ph=PHOTO_B)
     check(status == "err", "but not one from another trip, even one it is also a member of",
           repr(rows)[:80])
+
+    status, rows = c.try_run(
+        "update public.day_pages set trip_id = :t where id = :p",
+        t=iceland, p=page)
+    check(status == "err" and "day_pages.trip_id cannot be changed" in str(rows),
+          "and a composed page cannot be moved to another trip", repr(rows)[:90])
+    check(str(db.run("select trip_id from public.day_pages where id = :p", p=page)[0][0])
+          == str(japan), "so it remains in the trip where it was composed")
 
     print("\n== an invite cannot be repointed to another trip ==")
     before_trip = db.run("select trip_id from public.trip_invites where code = 'cedar willow 27'")[0][0]

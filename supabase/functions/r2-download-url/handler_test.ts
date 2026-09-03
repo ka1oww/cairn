@@ -213,7 +213,9 @@ Deno.test("§7.3.2 and declaring the other trip does not help without a readable
   // no, and the stand-in above only returns rows for trips it was given --
   // so a caller who is not on that trip still gets nothing.
   const { handler, recorded } = harness({ rows: [] });
-  const body = await verdicts(await handler(ask(OTHER_TRIP, [OTHER_TRIP_PHOTO])));
+  const body = await verdicts(
+    await handler(ask(OTHER_TRIP, [OTHER_TRIP_PHOTO])),
+  );
 
   assertEquals(body.refused, [OTHER_TRIP_PHOTO]);
   assertEquals(recorded.signed, []);
@@ -334,6 +336,41 @@ Deno.test("§7.3.4 only the row's own object key is ever signed", async () => {
 
   assertEquals(recorded.signed, [stored]);
   assertStringIncludes(body.urls[OPEN_DAY_PHOTO], stored);
+});
+
+Deno.test("a stored key with traversal or empty segments is refused before signing", async () => {
+  const unsafe = [
+    `trips/${TRIP}/photos/${OPEN_DAY_PHOTO}/../secret.jpg`,
+    `trips/${TRIP}/photos/${OPEN_DAY_PHOTO}//original.jpg`,
+    `trips/${TRIP}/photos/${OPEN_DAY_PHOTO}/%2e%2e/secret.jpg`,
+    `trips/${TRIP}/photos/${OPEN_DAY_PHOTO}/..\\secret.jpg`,
+  ];
+
+  for (const r2ObjectKey of unsafe) {
+    const { handler, recorded } = harness({
+      rows: [row(OPEN_DAY_PHOTO, { r2ObjectKey })],
+    });
+    const body = await verdicts(await handler(ask(TRIP, [OPEN_DAY_PHOTO])));
+
+    assertEquals(body.urls, {});
+    assertEquals(body.refused, [OPEN_DAY_PHOTO]);
+    assertEquals(recorded.gateAsked, []);
+    assertEquals(recorded.signed, []);
+  }
+});
+
+Deno.test("a stored key outside the row's own folder is refused before signing", async () => {
+  const { handler, recorded } = harness({
+    rows: [row(OPEN_DAY_PHOTO, {
+      r2ObjectKey: `trips/${TRIP}/pages/secret.jpg`,
+    })],
+  });
+  const body = await verdicts(await handler(ask(TRIP, [OPEN_DAY_PHOTO])));
+
+  assertEquals(body.urls, {});
+  assertEquals(body.refused, [OPEN_DAY_PHOTO]);
+  assertEquals(recorded.gateAsked, []);
+  assertEquals(recorded.signed, []);
 });
 
 // ---------------------------------------------------------------------------
