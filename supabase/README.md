@@ -40,9 +40,10 @@ the real sign-in providers are still untouched.
 | `trip_members` | The root of every access-control check in this schema. A row is reachable by a user if and only if they have a matching `(trip_id, user_id)` row here. Carries **no role column**; see [Roles are flat](#roles-are-flat-except-one-thing). |
 | `trip_invites` | Invite codes — three spoken words each — kept in their own table rather than a column on `trips` so a code can be rotated, revoked, or usage-limited without touching trip identity, and a trip can have more than one outstanding code. Carries **no expiry column**; a code dies when its trip closes and at no other time. See [How someone joins](#how-someone-joins-a-trip). |
 | `photos` | One row per photo in the pool. The bytes live in R2; this row is the index the app queries and the thing RLS protects. Since `0011` it carries **`day_number`** — the photograph's home on the trail, and what the gate keys on — beside the retained `trip_day` date, and an optional **`caption`**. |
-| `day_unlocks` | The gate, as a durable fact: "this person contributed to this day". Keyed on `(trip_id, day_number, user_id)` since `0011`. Written only by a trigger on `photos`, and never deleted by anything. See [The gate](#the-gate). |
+| `day_unlocks` | The gate, as a durable fact: "this person contributed to this day". Keyed on `(trip_id, day_number, user_id)` since `0011`. Since `0015`, an unlock follows its photograph when it is moved, while `retained_after_delete` preserves the separate rule that deleting a photograph never re-locks its day. Clients cannot write either state. See [The gate](#the-gate). |
+| `day_gate_date_guards` | The previous date of a day that was re-dated or un-dated while still current or future. `0015` makes the gate honour that date until it naturally passes, so a plan edit cannot forge an early unlock while an honestly undated or not-yet-synced day stays permissive. RLS on, no client policies. |
 | `photo_tombstones` | The R2 keys of deleted photographs, so the bytes can be swept later. RLS on and **no policies at all**: no client reads or writes it, only the delete trigger and a service-role sweeper. A tombstone is a *candidate*, not an instruction — a sweeper must re-check that no `photos` row claims the key before deleting an object. |
-| `day_pages` | A day's finished, composed page — one image per trip per day, made lazily at share or bind time. This was `daily_moments` and modelled a four-up panel; the four-up is retired. |
+| `day_pages` | A day's finished, composed page — one image per trip per day, made lazily at share or bind time. This was `daily_moments` and modelled a four-up panel; the four-up is retired. `day_pages_lock_trip_id` (`0015`) keeps a composed row in the trip where it was created. |
 | `day_page_photos` | Which photos went into a composed page, and in what order. Ordered by `ordinal`, not seated in a 1-to-4 slot. |
 | `trip_itineraries` | One row per trip, holding the plan's two clocks: when its *shape* last moved, and when the set-aside pocket last did. Not columns on `trips`, because a phone holds a plan revision before the trip's shared row exists. See [The itinerary](#the-itinerary-a-shared-fact-merged-per-day). |
 | `trip_itinerary_days` | One row per day of the plan: its number, its date if the person has resolved one, its place, and **the instant it was last changed and by whom**. That instant is the merge atom. |
@@ -159,8 +160,13 @@ contain the row's own id cannot be written by a client waiting on
 `gen_random_uuid()`; the app already does (`PhotoId.mint`). And the comparison
 is case-insensitive on purpose: both edge functions' `UUID_RE` carries the `i`
 flag, so a strict check would take the PUT and then refuse the row, stranding an
-object and a retry that re-mints the same rejected key forever. Everything past
-the prefix stays free — naming the file is `objectKeyFor`'s business.
+object and a retry that re-mints the same rejected key forever. `0015` closes
+the path inside that prefix too: both constraints reject empty or dot segments,
+backslashes, percent escapes, and URL query or fragment delimiters. Otherwise a
+key such as `.../<photo_id>/../pages/secret.jpg` passes the prefix check and is
+normalised outside the photo's folder before it is signed. The download handler
+re-checks the complete folder and segment grammar immediately before signing,
+so a malformed legacy row fails shut as the same flat refusal as any other id.
 `day_pages.r2_object_key` is deliberately **not** constrained: nothing signs a
 day-page key yet, and a shape no writer has agreed to is a guess.
 
@@ -226,6 +232,12 @@ wanted, which is also how `day_page_is_open` decides whether a day has been
 walked. A day the itinerary has no row for, or one whose row has no date, reads
 as **walked** — see [The gate](#the-gate) for why that direction and not the
 other.
+
+Since `0015`, moving a photograph also moves the unlock it created instead of
+leaving every visited day permanently open. If another current photograph or a
+past deleted contribution supports the old day, its unlock remains. Deletion is
+still deliberately different: removing a disliked photograph retains the
+unlock, exactly as the decision record requires.
 
 `photos.caption` (`0011`) is a person's own word under their own photograph. It
 travels because it is the cheapest thing in the pool that is worth having, and
@@ -404,10 +416,10 @@ directions.
 | **…except that the person who started the trip can remove someone** | `trip_members_delete_self_or_starter` (`0004`): `user_id = auth.uid() or is_trip_starter(...)`. The starter is `trips.created_by`, a fact about the trip rather than a row that can be deleted. |
 | **Nobody edits anyone else's photos or placements** | `photos_update_contributor` and `photos_delete_contributor` (`0006`) test `contributor_id = auth.uid()` and nothing else — the trip's starter included. |
 | **A person can delete their own photo** | `photos_delete_contributor` (`0006`). A hard delete, no tombstone row: the day leaves no visible gap. |
-| **…and the day stays open** | `day_unlocks` (`0007`, re-keyed by `0011`) has **no DELETE policy and no INSERT policy**. An unlock is written by a trigger when a photo lands and cannot be removed by anyone — not its owner, not the starter. "No re-lock" is the only behaviour the table permits, rather than a rule the app has to remember. |
-| **The gate holds a day's page shut until you have contributed to it** | `day_page_is_open(trip_id, day_number, user)` (`0007`, re-keyed onto the day number by `0011`). Not an RLS policy, on purpose — see below. |
+| **…and the day stays open** | `day_unlocks` (`0007`, re-keyed by `0011`) has **no client write policies**. `record_day_unlock` (`0015`) marks an unlock retained before a photograph is deleted, so no client can re-lock that day; the same trigger removes a non-retained unlock when its last supporting photograph moves away. |
+| **The gate holds a day's page shut until you have contributed to it** | `day_page_is_open(trip_id, day_number, user)` (`0007`, re-keyed onto the day number by `0011`). `day_gate_date_guards` and its trigger (`0015`) prevent a member from opening a current or future day early by changing its date, without changing the permissive default for a genuinely undated day. Not an RLS policy, on purpose — see below. |
 | **Every photograph read asks one question, so the leaver rule has one seat** | `may_read_trip_photos(trip_id, user)` (`0011`). Today it answers exactly `is_trip_member`. Both the `photos` SELECT policy and `r2-download-url` go through it from day one, so when leaving and being removed land, changing what a leaver may still see is a change to one function body and to nothing else. |
-| **A row can only point at its own object** | `photos_object_key_own_prefix_check` and `photos_thumbnail_key_own_prefix_check` (`0011`) bound both keys to `trips/<this trip>/photos/<this row>/…`, and `photos_lock_object_keys` (`0011`) stops either changing afterwards. The pair is what `r2-download-url` rests on: it signs the row's own stored key, so what may be stored is the whole of the invariant. |
+| **A row can only point at its own object** | `photos_object_key_own_prefix_check` and `photos_thumbnail_key_own_prefix_check` (`0011`, tightened by `0015`) bind both keys to `trips/<this trip>/photos/<this row>/…` with literal, non-empty, non-traversing segments, and `photos_lock_object_keys` (`0011`) stops either changing afterwards. `r2-download-url` repeats that validation before it signs the row's stored key. |
 | **A caption is its own contributor's** | `photos_update_contributor` (`0006`) already restricted every UPDATE to the contributor, so `caption` (`0011`) needed no new policy. Worth watching refuse rather than assuming: `tests/rls_probe.py` does. |
 | **A member joining mid-trip sees every past day freely** | The *absence* of any day predicate in `photos_select_trip_member` (`0006`), plus the first branch of `day_page_is_open`: any day already finished on the trip's clock is open to every member. |
 | **Credit survives the person** | `profile_is_visible_to` (`0009`) resolves a name for anyone you travel with **or** anyone credited on a photo or trip in a trip you are in — because membership is exactly the thing that ends. |
@@ -415,6 +427,7 @@ directions.
 | **Naming is flat without making the trip row flat** | `trips_update_member_rename`, `guard_member_trip_rename` and `sync_trip_name` (`0014`) admit any current member to `(name, name_revised_at)` only. The starter policy over every other mutable trip column is unchanged; strictly newer name revisions win. |
 | **A closed trip keeps the name it closed under** | `guard_member_trip_rename` (`0014`) asks `trip_closes_at` whenever `name` or `name_revised_at` moves, *before* it lets the starter past — so the refusal is a property of the record and not of one function, and a bare `PATCH /rest/v1/trips` round `sync_trip_name` is refused with it. Deliberately scoped to the rename: nothing else the starter could already do to a closed trip changes. |
 | **The plan is the trip's, and any member may change it** | Every policy on the four itinerary tables (`0010`) is plain membership through `is_trip_member`, with no starter branch and no contributor branch. Editing the plan is flat, like inviting and like naming: a trip is a thing eight people are on, not a thing one of them owns. |
+| **A composed page stays with its trip** | `day_pages_lock_trip_id` (`0015`) compares the old and proposed rows in a `BEFORE UPDATE` trigger, so membership in two trips cannot be composed into moving a page between them. |
 | **A closed trip takes no new photographs** | `photos_insert_trip_member` (`0006`) also requires `now() < trip_closes_at(...)`, and the `photos_lock_trip_id` trigger (`0006`) stops a row being repointed at a closed trip round it. Deliberately *not* on the update and delete policies: a person's hold on their own photograph — correcting its day, removing it — survives the close ([the ending](../docs/decisions/2026-08-26-the-ending.md)). |
 | **A closed trip's plan is the record** | `sync_trip_itinerary` (`0010`) raises on `trip_closes_at` before its first write, so neither half of the round trip runs and the stored plan is unchanged rather than merely un-returned. The phone refuses first (`TripSync._reconcile`); this is the half that holds when one of eight phones has a wrong clock. |
 | **A phone can only reach the plan through the merge** | `sync_trip_itinerary` is `security invoker` and re-checks membership itself, so it grants nothing the tables do not; the tables' own policies are what stop a non-member writing round it. |
@@ -442,6 +455,14 @@ has no shut days at all.** The other direction is worse — a plan that has not
 synced would shut every day of a live trip against everyone including the
 people who took the photographs, and the phone would show what the server
 refuses.
+
+That permissive default does not trust a date that was just changed out from
+under the gate. When a current or future day is re-dated into the past or set
+back to null, `0015` records its former date in `day_gate_date_guards`; the edit
+still propagates, but the walked branch stays shut until that former date has
+actually passed. A photograph's unlock still wins immediately. The guard table
+has RLS and no client policies, so the member making the change cannot erase or
+shorten the hold.
 
 Knowing an `r2_object_key` is useless on its own — the bucket is private and
 every read needs a signature — which is what makes gating the signature rather
@@ -734,7 +755,7 @@ person signing in with both providers on the same address gets one
    *is* the revocation granularity, and fifteen minutes is what a person can
    forward before it stops working.
 
-   Four properties, in the order they matter:
+   Five properties, in the order they matter:
 
    - **The row decides, not the caller.** A request names a trip and up to 64
      photo ids. Every id is looked up server-side and only that row's own
@@ -742,6 +763,10 @@ person signing in with both providers on the same address gets one
      is not read at all. The R2 keys are derivable from ids that flow through
      sync, so a function that signed a key it was handed would let any
      authenticated user read every trip's photographs.
+   - **The stored key is validated again before signing.** It must name the
+     row's own photo folder using literal, non-empty, non-traversing path
+     segments. A malformed legacy row is refused before the gate is asked or
+     the signer is called.
    - **Authorisation is inherited, not re-decided.** The row is read *as the
      caller*, with the anon key and the caller's own `Authorization` header, so
      RLS answers — which means it goes through `may_read_trip_photos` without
@@ -902,12 +927,14 @@ throwaway Postgres; see that directory's README. It has been run green on two
 independently built clusters — 17.10 and a Homebrew 17.11 — so the results are
 not an artefact of one machine's setup.
 
-- All fourteen migrations apply cleanly, and apply again cleanly on a second
+- All fifteen migrations apply cleanly, and apply again cleanly on a second
   run.
-- 167 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 183 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
-  asymmetry, photo edit/delete ownership, the gate opening and never
-  re-locking, a mid-trip joiner's access to past days, credit surviving both
+  asymmetry, photo edit/delete ownership, an unlock following a moved photo but
+  surviving a deleted one, re-dating and un-dating attacks staying shut, object
+  keys refusing traversal and empty segments, composed pages staying in their
+  original trip, a mid-trip joiner's access to past days, credit surviving both
   departure and account deletion, invite enumeration, timezone validation, and
   `updated_at` bumping on edit — plus the three-word invite grammar: the
   server's vocabulary compared word for word against the Dart the phone uses,
@@ -938,6 +965,10 @@ not an artefact of one machine's setup.
   and the declared type and size are what reach the signer. That is possible
   only because the function is split — see the section above. It proves
   nothing about R2 or about the PostgREST queries in `index.ts`.
+- The download half has 24 offline checks
+  (`deno test supabase/functions/r2-download-url/handler_test.ts`), including
+  malformed stored keys with raw and encoded traversal, empty segments and
+  backslashes all reaching neither the gate nor the signer.
 - The recursion fix is checked at the mechanism level
   (`tests/recursion_mechanism.py`): the whole schema is applied by an ordinary
   role that is neither superuser nor `BYPASSRLS`, the policies resolve, and
@@ -946,10 +977,12 @@ not an artefact of one machine's setup.
   makes the helper functions safe.
 
 **What the hosted project has actually done** (2026-08-26; migration state
-current to 2026-09-01). Migrations `0001` through `0010`, `0012` and `0014`
+current to 2026-09-03). Migrations `0001` through `0010`, `0012` and `0014`
 are applied to it. `0014` ran twice: once as first written, and again on
 1 September once review added the closed-trip refusal, the allowlist guard and
-the starter half of that refusal.
+the starter half of that refusal. `0011`, `0013` and `0015` are not applied;
+the hosted project's stored object keys therefore do not yet carry either
+prefix constraint, and this migration was not applied as part of this change.
 
 **That second run had to be hand-driven, and it leaves a trap worth stating
 before anything else.** `db push` skips a migration it has already recorded

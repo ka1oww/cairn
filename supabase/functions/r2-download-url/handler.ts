@@ -106,6 +106,27 @@ export interface DownloadPhotoRow {
   r2ObjectKey: string;
 }
 
+/// A stored key is still untrusted input: a member supplied it when the photo
+/// row was inserted. Dot and empty segments are especially dangerous because
+/// the URL constructor in `index.ts` normalises them before aws4fetch signs
+/// the request. URL metacharacters and percent escapes are rejected too, so
+/// the text checked here is the literal path the signer receives.
+///
+/// This deliberately repeats the database constraint added by migration
+/// 0015. The constraint is the durable invariant; this check is the last wall
+/// before a malformed legacy row can reach the bucket signer.
+export function isSafePhotoObjectKey(row: DownloadPhotoRow): boolean {
+  if (typeof row.r2ObjectKey !== "string") return false;
+
+  const expectedPrefix = `trips/${row.tripId}/photos/${row.id}/`.toLowerCase();
+  if (!row.r2ObjectKey.toLowerCase().startsWith(expectedPrefix)) return false;
+  if (/[%?#\\]/.test(row.r2ObjectKey)) return false;
+
+  return row.r2ObjectKey.split("/").every((segment) =>
+    segment !== "" && segment !== "." && segment !== ".."
+  );
+}
+
 /// The two questions this function asks Postgres, plus who is asking.
 ///
 /// An interface rather than a `SupabaseClient` because the answers are what
@@ -245,6 +266,15 @@ export function createHandler(
     for (const id of asked) {
       const row = byId.get(id);
       if (!row) {
+        refused.push(id);
+        continue;
+      }
+
+      // The key came from a client-written row. Refuse malformed legacy rows
+      // before asking the gate, and most importantly before signing anything.
+      // It gets the same flat answer as every other refusal so this check does
+      // not become an object-key oracle.
+      if (!isSafePhotoObjectKey(row)) {
         refused.push(id);
         continue;
       }
