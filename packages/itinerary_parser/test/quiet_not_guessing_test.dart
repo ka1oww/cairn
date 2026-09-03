@@ -28,8 +28,7 @@ void main() {
       expect(day.stops.single.text, 'Dotonbori');
     });
 
-    test('29 February in a non-leap year is refused, in a leap year kept',
-        () {
+    test('29 February in a non-leap year is refused, in a leap year kept', () {
       final refused = firstDayOf('29 February 2027 - Sapporo\n- Snow');
       expect(refused.date, isNull);
       expect(refused.uncertainty, DayUncertainty.impossibleDate);
@@ -39,8 +38,7 @@ void main() {
       expect(kept.uncertainty, isNull);
     });
 
-    test('a year-less impossible date is refused whatever the trip start',
-        () {
+    test('a year-less impossible date is refused whatever the trip start', () {
       final day = firstDayOf('31 June - Osaka\n- Dotonbori',
           tripStartDate: DateTime(2027, 6, 1));
       expect(day.date, isNull);
@@ -169,18 +167,16 @@ void main() {
         '1 January - Kyoto\n'
         '- Hatsumode at Fushimi Inari';
 
-    test('the first year-less date is reported for the year chip to seed',
-        () {
+    test('the first year-less date is reported for the year chip to seed', () {
       final result = parseItinerary(newYearPlan);
-      expect(result.firstYearlessDate,
-          const YearlessDate(day: 30, month: 12));
+      expect(result.firstYearlessDate, const YearlessDate(day: 30, month: 12));
       expect(result.days.every((d) => d.date == null), isTrue,
           reason: 'no year anywhere, so nothing binds yet');
     });
 
     test('seeded with the plan\'s own first date, January rolls forward', () {
-      final result = parseItinerary(newYearPlan,
-          tripStartDate: DateTime(2026, 12, 30));
+      final result =
+          parseItinerary(newYearPlan, tripStartDate: DateTime(2026, 12, 30));
       expect(result.days[0].date, DateTime(2026, 12, 30));
       expect(result.days[1].date, DateTime(2026, 12, 31));
       expect(result.days[2].date, DateTime(2027, 1, 1),

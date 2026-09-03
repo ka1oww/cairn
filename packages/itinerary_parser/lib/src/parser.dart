@@ -545,8 +545,8 @@ ParseResult _buildHeaderModeResult(
         // `31 June` names a day its month never has, in any year. The date
         // stays open and the doubt says why — sliding to 1 July would be a
         // confident guess the person never made.
-        final impossible = m.hasFullDate &&
-            !dayExistsInMonth(m.day!, m.month!, m.year);
+        final impossible =
+            m.hasFullDate && !dayExistsInMonth(m.day!, m.month!, m.year);
         if (m.hasFullDate && m.year == null && !impossible) {
           firstYearlessDate ??= YearlessDate(day: m.day!, month: m.month!);
         }

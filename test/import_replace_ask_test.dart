@@ -103,10 +103,16 @@ void main() {
     await tester.tap(find.byKey(const Key('import-replace-keep')));
     await tester.pumpAndSettle();
 
-    expect(boxText(tester), typedPlan,
-        reason: 'declining must cost nothing — the typed plan stays');
-    expect(await db.readPlanDraft(), isNull,
-        reason: 'a declined import must not start a draft over typed text');
+    expect(
+      boxText(tester),
+      typedPlan,
+      reason: 'declining must cost nothing — the typed plan stays',
+    );
+    expect(
+      await db.readPlanDraft(),
+      isNull,
+      reason: 'a declined import must not start a draft over typed text',
+    );
   });
 
   testWidgets('confirming replaces the box and starts the draft', (
@@ -131,8 +137,11 @@ void main() {
 
     await importAFile(tester);
 
-    expect(find.byKey(const Key('import-replace-ask')), findsNothing,
-        reason: 'nothing would be lost, so there is nothing to ask about');
+    expect(
+      find.byKey(const Key('import-replace-ask')),
+      findsNothing,
+      reason: 'nothing would be lost, so there is nothing to ask about',
+    );
     expect(boxText(tester), typedPlan);
   });
 

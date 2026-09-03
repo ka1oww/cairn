@@ -46,7 +46,8 @@ for (final line in result.unplacedLines) {
 That's the entire public API: one function, `parseItinerary`, and the
 result types it returns (`ParseResult`, `ParsedDay`, `Stop`, `StopKind`,
 `AreaHint`, `AreaSource`, `SourceLine`, `UnplacedLine`, `UnplacedReason`,
-`ParsedTime`, `DateCandidate`, `Confidence`, `DayUncertainty`).
+`ParsedTime`, `DateCandidate`, `YearlessDate`, `Confidence`,
+`DayUncertainty`).
 `ItineraryParser.parse(...)` is a thin static-method alternative to
 `parseItinerary(...)` for callers who prefer that style; they behave
 identically.
@@ -66,6 +67,14 @@ numbers the person wrote, so a confirmation screen can teach the flip with
 their own date rather than an invented one. It is null when no date would
 move, i.e. when the offer is not worth showing at all;
 `ParseResult.hasAmbiguousNumericDates` is a getter over exactly that.
+
+`ParseResult.firstYearlessDate` hands back the first date header that
+named a day and a month but no year, as a `YearlessDate` (the two numbers
+only — resolving them against a year stays the caller's decision). It
+exists so a "which year?" answer can seed a re-read's `tripStartDate`
+with the plan's own first date in the chosen year rather than a guessed
+1 January, which would date a year-straddling plan's January days a year
+early.
 
 ## The star rule
 
@@ -87,6 +96,15 @@ anywhere in the same comma-separated clause before the time (`maybe`,
 `ideally`, `tbc`, `tbd`, or a `~`), or `ish` / `?` / `or …` right after
 it, suppresses the time entirely. A hedge in a *different* clause does
 not: `Dinner at 7pm, maybe karaoke after` still stars the dinner.
+
+A *price* wearing a time's shape does not count either: an `H.MM`/`H:MM`
+or bare 4-digit match with a currency symbol immediately before it
+(`$12.50`, `¥1200`) or a currency code immediately after it (`12.50 SGD`,
+`1200 JPY`) is skipped, and so is a bare 4-digit number whose preceding
+word labels it (`room 1204`, `gate 2130`, `flight`, `platform`, `bus`,
+`train`, `no.`, `#`). Both lists are deliberately short — going wider
+would be guessing in the other direction — and a later real time on the
+same line still stars the stop.
 
 ## Stop kind and area (tap-to-Maps)
 
@@ -160,7 +178,8 @@ screen, not just decorate it:
 
 - **`high`** — the source line was unambiguous: an explicit `Day N`
   header (even with no date resolved), or a date header that resolved to
-  a full calendar date. Pre-fill and let the user glance past it.
+  a full calendar date with nothing on the line contradicting it.
+  Pre-fill and let the user glance past it.
 - **`medium`** — the parser had to infer structure from a weaker signal,
   or resolved the structure but not the date: a bare place name acting
   as a header, a weekday with no day/month, a date missing a year with
@@ -182,16 +201,30 @@ A confirmation screen that varies its copy by *why* a day is doubtful —
 should not have to re-parse the header text to find out. So every day
 below `high` also carries `ParsedDay.uncertainty`, a `DayUncertainty`
 naming the cause (`weekdayWithoutDate`, `dateWithoutYear`,
-`barePlaceName`, `noStops`, `headerlessBlock`), and each cause carries a
-person-showable `explanation` sentence stating what the parser saw and
-what it refused to guess. `uncertainty` is null exactly when the day's
-confidence is `high`.
+`barePlaceName`, `noStops`, `headerlessBlock`, `impossibleDate`,
+`weekdayDisagrees`), and each cause carries a person-showable
+`explanation` sentence stating what the parser saw and what it refused
+to guess. `uncertainty` is null exactly when the day's confidence is
+`high`.
+
+Two of those causes are the parser refusing a header it *did* read.
+`impossibleDate` — the header names a day its month doesn't have
+(`31 June`): the day's `date` stays null rather than `DateTime`
+silently sliding it to a neighbouring day, because a confident
+neighbour is a guess wearing a date's clothes. `weekdayDisagrees` — the
+header names both a weekday and a full date and they disagree
+(`Tue 14 June 2027`, when that date is a Monday): the date is *kept* as
+written (numbers are harder to mistype than a weekday word), confidence
+drops to `medium`, and the disagreement is surfaced rather than
+silently corrected.
 
 When a header names a weekday (`Monday`, `Mon 3 Nov`), the ISO weekday
 it named is exposed as `ParsedDay.headerWeekday` — for a
 weekday-without-date day this is the only structured record of what the
 plan called the day, and it lets the UI check the named weekday against
-whatever date the day would land on.
+whatever date the day would land on. A weekday beside a date the parser
+*did* resolve is already checked (that is `weekdayDisagrees` above), so
+the UI only has to do this for dates it binds itself.
 
 A leading weekday may be followed by a comma, and the day and the month
 may come in either order after it: `Mon 3 Nov`, `Sat, Jun 14th`,
@@ -212,7 +245,14 @@ The fragment is lifted out of `ParsedDay.place` and reported as
 the year *if the title spelled one*, and the fragment exactly as written.
 It is a suggestion for the confirmation screen to offer in one tap, never
 a date the parser chose: `DateCandidate.resolved` is null whenever the
-title named no year, because this package does not guess years. A day can
+title named no year, because this package does not guess years — and null
+when the named date does not exist in that year (`31 June 2027`), because
+a candidate must never offer a date the plan does not say. An impossible
+fragment (`31 June`, any year) is refused at recognition
+(`findDateFragment`), so a candidate never carries one; the one slide
+left is 29 February resolved into a non-leap year through
+`DateCandidate.inYear`, which the caller shows before anything binds. A
+day can
 carry both a bound `date` and a candidate that disagrees with it; only
 the person can settle that.
 

@@ -634,15 +634,13 @@ class PasteFlow extends Notifier<PasteFlowState> {
   /// roll window) and land every `Day N` header on N January.
   void useYear(int year) {
     final first = _firstYearlessDate;
-    final start = first == null
-        ? null
-        : DateTime(year, first.month, first.day);
+    final start = first == null ? null : DateTime(year, first.month, first.day);
     // The plan's own date, when it exists in the chosen year (29 February
     // may not be); the year's first day only as the fallback of last resort.
     _tripStartHint =
         (start != null && start.year == year && start.month == first!.month)
-            ? start
-            : DateTime(year, 1, 1);
+        ? start
+        : DateTime(year, 1, 1);
     _readAgain();
   }
 

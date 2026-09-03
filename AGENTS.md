@@ -83,7 +83,11 @@ import what is written there, not here.
   parser's seven provenances to the domain's three
   (`travellerOwn` > `human` > `parser`, which is also the priority order),
   and both `paste_flow.dart` and `repaste_merge.dart` go through it.
-  `area_edit.dart` is main's phase-1 scaffolding and is still called from
+  `calendar_days.dart` is the one spelling of "n days later" over a
+  date-only value (`calendarPlusDays`, `DateTime` component arithmetic —
+  never `add(Duration(days: n))`, which lands a day early across a DST
+  fall-back); every app-side date-chip and date-fill arithmetic goes
+  through it. `area_edit.dart` is main's phase-1 scaffolding and is still called from
   nowhere: the frontend resolves a running area onto every stop's own
   `area` instead of re-deriving it from headings, and correcting a run
   rewrites each stop in it, so nothing needs the re-derivation. Delete it or
@@ -120,7 +124,10 @@ import what is written there, not here.
   *tracks the box*, which is what makes "never resurrect over something the
   person has since typed by hand" true by construction instead of by a
   timestamp; there is deliberately **no expiry**. Emptying the box discards
-  it, `PasteFlow.accept` forgets it, a fresh import replaces it. The restore
+  it, `PasteFlow.accept` forgets it, a fresh import replaces it — though
+  over a box already holding different text the paste screen asks one
+  question first, and declining keeps the text and writes no draft
+  (`test/import_replace_ask_test.dart`). The restore
   rule is the paste screen's, because only it knows what is in the box: a
   draft is put back **only into a box that would otherwise open empty**, so
   it never lands over a re-paste's pre-filled live plan, and the read

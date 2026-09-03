@@ -113,9 +113,13 @@ void main() {
     expect(find.byKey(const Key('paste-input')), findsNothing);
 
     final corrected = await storedStop('Senso-ji');
-    expect(corrected.areaText, 'Asakusa',
-        reason: 'the merge baseline must carry the stored area — a baseline '
-            'built from text and time alone strips it on Save');
+    expect(
+      corrected.areaText,
+      'Asakusa',
+      reason:
+          'the merge baseline must carry the stored area — a baseline '
+          'built from text and time alone strips it on Save',
+    );
     expect(corrected.areaSource, 'human');
   });
 
@@ -153,8 +157,10 @@ void main() {
     expect(corrected.areaText, 'Ueno');
     expect(corrected.areaSource, 'human');
     // And the added line really landed, so this was a genuine merge.
-    expect((await db.readItineraryStops()).map((s) => s.stopText),
-        contains('Kiyomizu-dera'));
+    expect(
+      (await db.readItineraryStops()).map((s) => s.stopText),
+      contains('Kiyomizu-dera'),
+    );
   });
 
   testWidgets('a plain editor save keeps areas too, without any re-paste', (
@@ -184,8 +190,11 @@ void main() {
     await tester.pumpAndSettle();
 
     final days = await db.readItineraryDays();
-    expect(days.firstWhere((d) => d.number == 2).place, 'Nara',
-        reason: 'the rename proves the save rewrote day 2');
+    expect(
+      days.firstWhere((d) => d.number == 2).place,
+      'Nara',
+      reason: 'the rename proves the save rewrote day 2',
+    );
     final corrected = await storedStop('Fushimi Inari');
     expect(corrected.areaText, 'Fushimi');
     expect(corrected.areaSource, 'human');

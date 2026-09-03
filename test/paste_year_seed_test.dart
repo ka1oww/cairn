@@ -44,22 +44,31 @@ void main() {
   test('a year-straddling plan dates January next year, not eleven months '
       'ago', () {
     flow().parse(newYearPlan);
-    expect(read().days.every((d) => d.date == null), isTrue,
-        reason: 'no year anywhere, so nothing binds before the answer');
+    expect(
+      read().days.every((d) => d.date == null),
+      isTrue,
+      reason: 'no year anywhere, so nothing binds before the answer',
+    );
 
     flow().useYear(2026);
 
     final days = read().days;
     expect(days[0].date, DateTime(2026, 12, 30));
     expect(days[1].date, DateTime(2026, 12, 31));
-    expect(days[2].date, DateTime(2027, 1, 1),
-        reason: 'the January day rolls forward past the year end; the old '
-            '1 January seed dated it 1 January 2026');
+    expect(
+      days[2].date,
+      DateTime(2027, 1, 1),
+      reason:
+          'the January day rolls forward past the year end; the old '
+          '1 January seed dated it 1 January 2026',
+    );
   });
 
   test('a mid-year plan is unchanged by the honest seed', () {
-    flow().parse('14 June - Tokyo\n- Senso-ji\n15 June - Kyoto\n- Fushimi '
-        'Inari');
+    flow().parse(
+      '14 June - Tokyo\n- Senso-ji\n15 June - Kyoto\n- Fushimi '
+      'Inari',
+    );
     flow().useYear(2027);
 
     final days = read().days;
