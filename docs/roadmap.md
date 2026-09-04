@@ -175,7 +175,9 @@ pool eight people share. **What no state of it can say yet is that somebody
 else took a photograph**, because nothing moves one (see the tripwire above).
 
 **Capture fills it, back-camera-only** — which is the line's own scope and not
-a shortcut, since the front inset is explicitly after the line. The whole loop
+a shortcut: the front inset is drawn on the review, and what is explicitly
+after the line is *keeping* the front frame, so the pool holds one frame per
+photograph. The whole loop
 is real: the schedule is dealt from `trip_moments` for every dated day of the
 plan, the day you are standing in says where your moment stands, an open or a
 late window offers the way in, the shutter takes a frame, the breath offers

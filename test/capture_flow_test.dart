@@ -856,6 +856,50 @@ void main() {
       expect(find.byKey(const Key('capture-call-action')), findsOneWidget);
     });
 
+    testWidgets('leaving while the keep is in flight lets the keep finish', (
+      tester,
+    ) async {
+      // The breath renders no leave control and disables both its buttons
+      // while the day is turning over, so `abandon` was unreachable mid-keep
+      // until the route pop reached it. Discarding then would delete the back
+      // frame between the row's write and its return, and `photo_sync`
+      // refuses a missing frame terminally — the photograph would never
+      // cross. The flow is where that is settled, so this drives the flow.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+
+      final flow = ProviderScope.containerOf(
+        tester.element(find.byKey(const Key('capture-back-frame'))),
+        listen: false,
+      ).read(captureFlowProvider.notifier);
+
+      // Not awaited: the keep runs synchronously as far as its first await,
+      // so the flow is holding `isKeeping` when the leaving arrives.
+      final keeping = flow.turnTheDayOver();
+      await flow.abandon();
+      await keeping;
+      await tester.pumpAndSettle();
+
+      final kept = await db.readPhotos();
+      expect(kept.single.filePath, camera.taken.single);
+      expect(
+        camera.discarded,
+        isNot(contains(camera.taken.single)),
+        reason: 'the row would point at a file the leaving had deleted',
+      );
+      expect(
+        camera.discarded,
+        camera.frontTaken,
+        reason: 'the keep still lets its own front frame go',
+      );
+    });
+
     testWidgets('a retake throws away both halves of the event', (
       tester,
     ) async {

@@ -518,8 +518,21 @@ class CaptureFlow extends Notifier<CaptureState> {
 
   /// Leaves without keeping anything. The frame is thrown away with it —
   /// an unkept photograph is not a photograph.
+  ///
+  /// **A keep already in flight is not abandonable**, which is why this
+  /// early-return matches `onceMore`'s and `turnTheDayOver`'s rather than
+  /// being the one exit without it. The breath renders no leave control and
+  /// disables both of its buttons while keeping, so this used to be
+  /// unreachable mid-keep; the route pop reaches it. Discarding then would
+  /// delete the back frame *between* `PhotoStore.keep`'s write and its
+  /// return, leaving a `photos` row and a `photo_outbox` row pointing at a
+  /// file that is gone — and `photo_sync.dart` refuses a missing frame
+  /// terminally, so that photograph would never cross and its tile would
+  /// wait for bytes forever. Letting the keep finish costs nothing: it
+  /// closes the flow itself and discards the front frame on its way out.
   Future<void> abandon() async {
     final breath = state;
+    if (breath is TheBreath && breath.isKeeping) return;
     state = const CaptureClosed();
     if (breath is TheBreath) {
       await _discard([breath.framePath, breath.frontFramePath]);
