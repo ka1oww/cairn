@@ -10,9 +10,12 @@
 //
 //  - **The ping** is one a day, at your own minute, dealt by
 //    `packages/trip_moments`. See `ping_schedule.dart`.
-//  - **The camera** is the back camera and nothing else in the first release
-//    (docs/decisions/2026-08-22-camera-like-bereal.md). It sits behind
-//    `camera_source.dart` so this file never names a lens.
+//  - **The camera** hands up one capture event of two frames, back then
+//    front (docs/decisions/2026-08-22-camera-like-bereal.md). It sits behind
+//    `camera_source.dart` so this file never names a lens. [TheBreath]
+//    carries both paths for the review to compose; what the first release
+//    *keeps* is the back frame alone, so every exit from the breath discards
+//    the frames it no longer needs through `_discard`.
 //  - **Two minutes, and late is always allowed.** The window is two minutes,
 //    which narrows the thirty of design-calls §7 and changes nothing else.
 //    There is no lockout: a photo taken at 23:40 carries its real hour and is
