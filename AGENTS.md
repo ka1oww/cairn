@@ -467,8 +467,15 @@ import what is written there, not here.
   discards *both* frames (`onceMore`, `abandon`), and turning the day over
   discards the front one — the kept photograph is still the back frame alone,
   the row points at that file where it lies, and storing the front one is a
-  later slice. A path out of the breath that leaves a frame on disk is the
-  thing to refuse in review. Three refusals are load-bearing and
+  later slice. **A route pop is one of those exits**: `CaptureScreen` is a
+  `MaterialPageRoute` and the iOS back swipe pops it, so a `PopScope` reports
+  the pop to `abandon()` rather than letting the state that holds the two
+  paths be overwritten by the next `open()`. The route drives the flow, the
+  flow drives the route (the screen's `CaptureClosed` listener), and a flag
+  keeps the two directions from meeting in the middle and popping the day page
+  as well — a second pop, or an exit that does not reach the flow, is the
+  thing to refuse in review. A path out of the breath that leaves a frame on
+  disk is the thing to refuse in review. Three refusals are load-bearing and
   all three are `CameraRefused`: no
   back camera, no *front* camera, and a failure of the second shot — and the
   last one **discards the back file it already copied**, because a half-taken

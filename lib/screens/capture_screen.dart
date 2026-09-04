@@ -37,21 +37,54 @@ import '../app_state/ping_schedule.dart';
 import 'house_style.dart';
 import 'photo_frame.dart';
 
-class CaptureScreen extends ConsumerWidget {
+class CaptureScreen extends ConsumerStatefulWidget {
   const CaptureScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CaptureScreen> createState() => _CaptureScreenState();
+}
+
+class _CaptureScreenState extends ConsumerState<CaptureScreen> {
+  // **A pop is an exit, and the flow owns every exit.** Leaving this route by
+  // the back swipe is the same leaving as the abandon control would be, and
+  // an exit that does not reach the flow leaves the whole capture event —
+  // two full-resolution frames — orphaned in the documents directory with no
+  // sweeper behind it, because the next `open()` overwrites the state that
+  // held their paths. So the route drives the flow here, and the flow drives
+  // the route in the listener below; this flag is what keeps the two
+  // directions from meeting in the middle and popping the day page as well.
+  bool _leavingByRoute = false;
+
+  @override
+  Widget build(BuildContext context) {
     // The flow closes itself — after the day turns over, or when the moment
     // was never open. The screen follows it rather than deciding; there is
     // one place that knows whether a capture is live and it is not here.
     ref.listen<CaptureState>(captureFlowProvider, (_, next) {
+      if (_leavingByRoute) return;
       if (next is CaptureClosed && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
     });
 
     final state = ref.watch(captureFlowProvider);
+    return PopScope(
+      // The pop itself is never refused — the person may always leave — but
+      // it is reported, and what it reports is an abandonment. `abandon` is
+      // safe from every state: from the framing there is nothing to throw
+      // away yet, and from a capture the flow has already closed there is
+      // nothing left to throw away either, so the pop the listener above
+      // starts costs nothing when it arrives back here.
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) return;
+        _leavingByRoute = true;
+        unawaited(ref.read(captureFlowProvider.notifier).abandon());
+      },
+      child: _sheet(state),
+    );
+  }
+
+  Widget _sheet(CaptureState state) {
     return Scaffold(
       backgroundColor: housePaper,
       body: SafeArea(
