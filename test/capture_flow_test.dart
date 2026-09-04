@@ -90,13 +90,22 @@ tm.Ping pingOn(DateTime date, {Duration utcOffset = Duration.zero}) => tm
     .pingFor(localMemberId)!;
 
 /// A camera that hands back a real image file without a device.
+///
+/// `bothLenses` makes it the two-lens source a phone is: one `takeOne()` is
+/// one capture *event*, and it delivers a back frame and a front one.
 class FakeCamera implements CameraSource {
-  FakeCamera(this.directory, {required this.takenAtUtc});
+  FakeCamera(
+    this.directory, {
+    required this.takenAtUtc,
+    this.bothLenses = false,
+  });
 
   final Directory directory;
   DateTime takenAtUtc;
+  final bool bothLenses;
 
   final List<String> taken = [];
+  final List<String> frontTaken = [];
   final List<String> discarded = [];
 
   @override
@@ -107,7 +116,17 @@ class FakeCamera implements CameraSource {
     final path = '${directory.path}/frame-${taken.length + 1}.png';
     File(path).writeAsBytesSync(standInFrameBytes(taken.length + 1));
     taken.add(path);
-    return CapturedFrame(path: path, takenAtUtc: takenAtUtc);
+    if (!bothLenses) {
+      return CapturedFrame(path: path, takenAtUtc: takenAtUtc);
+    }
+    final frontPath = '${directory.path}/front-${taken.length}.png';
+    File(frontPath).writeAsBytesSync(standInFrameBytes(taken.length));
+    frontTaken.add(frontPath);
+    return CapturedFrame(
+      path: path,
+      frontPath: frontPath,
+      takenAtUtc: takenAtUtc,
+    );
   }
 
   @override
@@ -739,6 +758,59 @@ void main() {
       expect(find.byKey(const Key('pool-day-1')), findsOneWidget);
       // The bytes are on this phone — this one it took itself.
       expect(find.byKey(Key('pool-photo-$id-awaiting')), findsNothing);
+    });
+
+    testWidgets('turning the day over keeps the back frame and lets the '
+        'front one go', (tester) async {
+      // A capture event is two files and the day keeps one of them. The row
+      // points at the back frame where it lies, and nothing reads the front
+      // one past the review — so the exit that keeps must let it go, exactly
+      // as `once more` and leaving do. It used to keep neither and delete
+      // neither, orphaning a full-resolution frame per photograph.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      // Both halves are on the review before anything is decided.
+      expect(find.byKey(const Key('capture-back-frame')), findsOneWidget);
+      expect(find.byKey(const Key('capture-front-frame')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('capture-keep')));
+      await tester.pumpAndSettle();
+
+      final kept = await db.readPhotos();
+      expect(kept.single.filePath, camera.taken.single);
+      expect(
+        camera.discarded,
+        camera.frontTaken,
+        reason: 'the front frame is nobody\'s once the day has turned over',
+      );
+      expect(
+        camera.discarded,
+        isNot(contains(camera.taken.single)),
+        reason: 'the kept row points at the back frame where it lies',
+      );
+    });
+
+    testWidgets('a retake throws away both halves of the event', (
+      tester,
+    ) async {
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('capture-once-more')));
+      await tester.pumpAndSettle();
+
+      expect(camera.discarded, [...camera.taken, ...camera.frontTaken]);
     });
 
     testWidgets('the word is skippable, and blank is stored as no word', (

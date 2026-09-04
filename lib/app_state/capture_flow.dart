@@ -173,8 +173,8 @@ class TheBreath extends CaptureState {
   /// Where the front frame is, when the capture event took one, for the
   /// screen to draw as the inset. The source composes nothing — it delivers
   /// two files, and the inset's layout is the capture screen's
-  /// (camera_source.dart). Null on a source with one lens, and the breath
-  /// simply has no inset then.
+  /// (`lib/screens/capture_screen.dart`). Null on a source with one lens,
+  /// and the breath simply has no inset then.
   final String? frontFramePath;
 
   /// When the shutter fired, in UTC.
@@ -460,9 +460,7 @@ class CaptureFlow extends Notifier<CaptureState> {
     if (breath is! TheBreath || breath.isKeeping) return;
     // Both halves of the capture event go: an attempt is one moment, and a
     // retake that kept its front frame would leave an orphan on disk.
-    await ref.read(cameraSourceProvider).discard(breath.framePath);
-    final front = breath.frontFramePath;
-    if (front != null) await ref.read(cameraSourceProvider).discard(front);
+    await _discard([breath.framePath, breath.frontFramePath]);
     // The same instant it came in with. A retake never re-opens a closed
     // window and never closes an open one — it is the same moment, so the
     // sheet it returns to is the sheet it left, still late if the moment was
@@ -510,6 +508,12 @@ class CaptureFlow extends Notifier<CaptureState> {
           word: breath.word,
         );
     state = const CaptureClosed();
+    // The kept photograph is the back frame alone, and the row above points
+    // at that file where it lies. Nothing reads the front frame past the
+    // review, so the day turning over is where its half of the event goes —
+    // the same rule `onceMore` and `abandon` apply, at the one exit that
+    // used to leak.
+    await _discard([breath.frontFramePath]);
   }
 
   /// Leaves without keeping anything. The frame is thrown away with it —
@@ -518,9 +522,20 @@ class CaptureFlow extends Notifier<CaptureState> {
     final breath = state;
     state = const CaptureClosed();
     if (breath is TheBreath) {
-      await ref.read(cameraSourceProvider).discard(breath.framePath);
-      final front = breath.frontFramePath;
-      if (front != null) await ref.read(cameraSourceProvider).discard(front);
+      await _discard([breath.framePath, breath.frontFramePath]);
+    }
+  }
+
+  /// The one spelling of "these files of the capture event go".
+  ///
+  /// Every path out of the breath ends here, because a capture event must
+  /// leave no orphan on disk and three copies of that rule is how one of
+  /// them comes to be forgotten. Nulls are skipped, so a one-lens source
+  /// asks for nothing special.
+  Future<void> _discard(Iterable<String?> paths) async {
+    final camera = ref.read(cameraSourceProvider);
+    for (final path in paths) {
+      if (path != null) await camera.discard(path);
     }
   }
 }

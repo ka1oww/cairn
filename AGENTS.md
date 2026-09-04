@@ -462,9 +462,13 @@ import what is written there, not here.
   composes nothing** — it delivers two files, `TheBreath.frontFramePath`
   carries the front one up, and the capture review's inset
   (`capture_screen.dart`, keys `capture-back-frame` / `capture-front-frame`)
-  is the composition's one home. A discarded attempt discards *both* frames
-  (`onceMore`, `abandon`); the kept photograph is still the back frame alone —
-  storing the front one is a later slice. Three refusals are load-bearing and
+  is the composition's one home. **Every exit from the breath discards what it
+  no longer needs, through the flow's one `_discard`**: a discarded attempt
+  discards *both* frames (`onceMore`, `abandon`), and turning the day over
+  discards the front one — the kept photograph is still the back frame alone,
+  the row points at that file where it lies, and storing the front one is a
+  later slice. A path out of the breath that leaves a frame on disk is the
+  thing to refuse in review. Three refusals are load-bearing and
   all three are `CameraRefused`: no
   back camera, no *front* camera, and a failure of the second shot — and the
   last one **discards the back file it already copied**, because a half-taken
