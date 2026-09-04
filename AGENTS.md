@@ -458,10 +458,14 @@ import what is written there, not here.
   (`learning/dual-camera-spike/`), and `BackCameraSource` opens and disposes
   one controller per lens through `CameraCaptureEdge`, so two lenses are
   never live at once. `CapturedFrame.path` still *is* `backPath`, deliberately,
-  so the single-frame callers above the seam keep working while
-  `frontPath` / `hasFrontFrame` wait for a consumer; **the source composes
-  nothing** — it delivers two files and the inset's layout is somebody else's
-  slice. Three refusals are load-bearing and all three are `CameraRefused`: no
+  so the single-frame callers above the seam keep working; **the source
+  composes nothing** — it delivers two files, `TheBreath.frontFramePath`
+  carries the front one up, and the capture review's inset
+  (`capture_screen.dart`, keys `capture-back-frame` / `capture-front-frame`)
+  is the composition's one home. A discarded attempt discards *both* frames
+  (`onceMore`, `abandon`); the kept photograph is still the back frame alone —
+  storing the front one is a later slice. Three refusals are load-bearing and
+  all three are `CameraRefused`: no
   back camera, no *front* camera, and a failure of the second shot — and the
   last one **discards the back file it already copied**, because a half-taken
   event must leave no orphan on disk. `CameraCaptureEdge` and the injectable

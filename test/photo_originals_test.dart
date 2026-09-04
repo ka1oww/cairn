@@ -346,7 +346,7 @@ void main() {
         await keepOnePhoto(tester, camera);
 
         final image = tester.widget<Image>(
-          find.byKey(const Key('capture-frame')),
+          find.byKey(const Key('capture-back-frame')),
         );
         expect(image.image, isA<ResizeImage>());
         // `BoxFit.contain` in a tall sheet: the width governs, so the decode

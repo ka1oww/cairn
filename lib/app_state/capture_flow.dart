@@ -166,8 +166,16 @@ class Framing extends CaptureState {
 /// The breath before the flip (surface 10d): the frame taken, the line to
 /// write on it, and a retake for as long as the window is open.
 class TheBreath extends CaptureState {
-  /// Where the frame is, for the screen to show.
+  /// Where the back frame is, for the screen to show. This is the frame the
+  /// day keeps.
   final String framePath;
+
+  /// Where the front frame is, when the capture event took one, for the
+  /// screen to draw as the inset. The source composes nothing — it delivers
+  /// two files, and the inset's layout is the capture screen's
+  /// (camera_source.dart). Null on a source with one lens, and the breath
+  /// simply has no inset then.
+  final String? frontFramePath;
 
   /// When the shutter fired, in UTC.
   final DateTime takenAtUtc;
@@ -190,6 +198,7 @@ class TheBreath extends CaptureState {
 
   const TheBreath({
     required this.framePath,
+    this.frontFramePath,
     required this.takenAtUtc,
     required this.hourLabel,
     this.word = '',
@@ -199,6 +208,7 @@ class TheBreath extends CaptureState {
 
   TheBreath _with({String? word, bool? isKeeping}) => TheBreath(
     framePath: framePath,
+    frontFramePath: frontFramePath,
     takenAtUtc: takenAtUtc,
     hourLabel: hourLabel,
     word: word ?? this.word,
@@ -421,6 +431,7 @@ class CaptureFlow extends Notifier<CaptureState> {
       final frame = await ref.read(cameraSourceProvider).takeOne();
       state = TheBreath(
         framePath: frame.path,
+        frontFramePath: frame.frontPath,
         takenAtUtc: frame.takenAtUtc,
         hourLabel: clockLabel(
           frame.takenAtUtc,
@@ -447,7 +458,11 @@ class CaptureFlow extends Notifier<CaptureState> {
   Future<void> onceMore() async {
     final breath = state;
     if (breath is! TheBreath || breath.isKeeping) return;
+    // Both halves of the capture event go: an attempt is one moment, and a
+    // retake that kept its front frame would leave an orphan on disk.
     await ref.read(cameraSourceProvider).discard(breath.framePath);
+    final front = breath.frontFramePath;
+    if (front != null) await ref.read(cameraSourceProvider).discard(front);
     // The same instant it came in with. A retake never re-opens a closed
     // window and never closes an open one — it is the same moment, so the
     // sheet it returns to is the sheet it left, still late if the moment was
@@ -504,6 +519,8 @@ class CaptureFlow extends Notifier<CaptureState> {
     state = const CaptureClosed();
     if (breath is TheBreath) {
       await ref.read(cameraSourceProvider).discard(breath.framePath);
+      final front = breath.frontFramePath;
+      if (front != null) await ref.read(cameraSourceProvider).discard(front);
     }
   }
 }

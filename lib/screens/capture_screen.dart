@@ -360,18 +360,64 @@ class _Breath extends ConsumerWidget {
         Expanded(
           child: Align(
             alignment: Alignment.topLeft,
-            // The frame on disk is the full-size original the pool will
-            // keep; the breath shows a screen's worth of it and leaves the
-            // file alone. See lib/screens/photo_frame.dart.
-            child: PhotoFrame(
-              file: File(breath.framePath),
-              imageKey: const Key('capture-frame'),
-              fit: BoxFit.contain,
-              // A frame that will not decode is still a real capture and
-              // still has an hour; losing the sheet over it would lose the
-              // moment as well.
-              errorBuilder: (context, _, _) =>
-                  const SizedBox(key: Key('capture-frame-unreadable')),
+            // The two frames of the one capture event, composed here and
+            // nowhere lower: the seam delivers two files and the inset's
+            // layout is this screen's (camera_source.dart). The back frame
+            // sizes the stack; the front frame rides its corner, the way the
+            // moment's composition was decided
+            // (docs/decisions/2026-08-22-camera-like-bereal.md).
+            child: Stack(
+              children: [
+                // The frame on disk is the full-size original the pool will
+                // keep; the breath shows a screen's worth of it and leaves
+                // the file alone. See lib/screens/photo_frame.dart.
+                PhotoFrame(
+                  file: File(breath.framePath),
+                  imageKey: const Key('capture-back-frame'),
+                  fit: BoxFit.contain,
+                  // A frame that will not decode is still a real capture and
+                  // still has an hour; losing the sheet over it would lose
+                  // the moment as well.
+                  errorBuilder: (context, _, _) =>
+                      const SizedBox(key: Key('capture-back-frame-unreadable')),
+                ),
+                if (breath.frontFramePath case final frontPath?)
+                  Positioned(
+                    left: 10,
+                    top: 10,
+                    child: Container(
+                      width: 88,
+                      height: 116,
+                      // The sticker's own edge, so the inset reads as laid on
+                      // the photograph rather than cut out of it.
+                      decoration: BoxDecoration(
+                        color: houseSticker,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: houseSticker, width: 3),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: houseStickerShadow,
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(9),
+                        child: PhotoFrame(
+                          file: File(frontPath),
+                          imageKey: const Key('capture-front-frame'),
+                          fit: BoxFit.cover,
+                          // Same rule as the back frame: an inset that will
+                          // not decode costs the inset, never the sheet.
+                          errorBuilder: (context, _, _) => const SizedBox(
+                            key: Key('capture-front-frame-unreadable'),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
