@@ -76,11 +76,13 @@ can join). Joining, buzzing, and the shared pool are all unwritten.
   each person's own phone. The grace window means nothing is lost by it
   arriving after the first trip starts — but it is the highest-severity blank
   in the backend and lands early in version two.
-- **The two-frame camera.** The camera edge's half has landed — one
-  `takeOne()` now takes the back frame and then the front one, sequentially —
-  but nothing above the seam reads the second file, so the first release still
-  *keeps* back-only, the accepted fallback. What follows is composing the
-  inset and keeping it. See
+- **The two-frame camera.** Both halves above the seam have landed — one
+  `takeOne()` takes the back frame and then the front one, sequentially, and
+  the capture review composes them, the back frame full with the front one as
+  the inset at its corner. What the first release still *keeps* is back-only,
+  the accepted fallback: nothing stores, syncs or uploads the front file, and
+  every exit from the breath throws away the frames it no longer needs. What
+  follows is keeping it. See
   [the camera decision](decisions/2026-08-22-camera-like-bereal.md).
 - **The countdown.** The *drawn* one — the dashed thread burning down the edge
   with its coral bead (10a/10b). The reading itself came forward with the
@@ -173,7 +175,9 @@ pool eight people share. **What no state of it can say yet is that somebody
 else took a photograph**, because nothing moves one (see the tripwire above).
 
 **Capture fills it, back-camera-only** — which is the line's own scope and not
-a shortcut, since the front inset is explicitly after the line. The whole loop
+a shortcut: the front inset is drawn on the review, and what is explicitly
+after the line is *keeping* the front frame, so the pool holds one frame per
+photograph. The whole loop
 is real: the schedule is dealt from `trip_moments` for every dated day of the
 plan, the day you are standing in says where your moment stands, an open or a
 late window offers the way in, the shutter takes a frame, the breath offers
@@ -373,8 +377,8 @@ project is live. No secret is ever committed (`supabase/README.md`).*
 
 The day page's *other* half — the photo timeline that makes the day an
 artefact, its plan half having landed early with Today — and with it the gate's
-face on that page, the rule itself having landed early too; the back-only
-capture, and the late-photo path for a missed ping. The Trail's own path landed early alongside Today;
+face on that page, the rule itself having landed early too; capture, which
+landed early too, and the late-photo path for a missed ping. The Trail's own path landed early alongside Today;
 what is left of it here is the node a day's photos fill, which is the whole
 reward of that screen and cannot be drawn before photos exist. The Pool's
 structure landed early the same way, over a read seam with nothing behind it;
@@ -549,7 +553,9 @@ are the ones that stand between Cairn and being a group at all.
 - The book (automatic; photograph-fronted cover), and the printed page design
   that must be drawn in parallel before it.
 - The end-of-trip handover of the book and everyone's photos.
-- The two-frame camera (the front inset).
+- The two-frame camera's *kept* second frame. The inset itself is drawn on
+  the capture review; what is after the line is storing, syncing and handing
+  over the front frame rather than discarding it with the breath.
 - The cat.
 - The countdown's drawn treatment (the burning thread). The reading itself
   came forward with the two-minute window and is built.

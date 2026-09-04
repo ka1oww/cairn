@@ -6,9 +6,12 @@
 // asks for one capture event and is handed file paths and an instant; nothing
 // above it names a lens, a controller, or a plugin.
 //
-// The composition is back-full-bleed with the front inset following after the
-// line (docs/decisions/2026-08-22-camera-like-bereal.md, and the first
-// release's list in docs/roadmap.md). The spike at
+// The composition is back-full-bleed with the front inset
+// (docs/decisions/2026-08-22-camera-like-bereal.md), and it is drawn on the
+// capture review — this source composes nothing, it delivers two files and
+// the inset's layout is lib/screens/capture_screen.dart's. What is still
+// after the line is *keeping* the front frame; the first release stores the
+// back one alone (docs/roadmap.md). The spike at
 // learning/dual-camera-spike/ established that the inset is a
 // back-*then*-front sequence and never a simultaneous capture. This source
 // therefore opens and closes one camera at a time.
@@ -24,8 +27,9 @@ import 'stand_in_frame.dart';
 class CapturedFrame {
   /// Where the back-frame bytes landed on this device.
   ///
-  /// This name is retained for the existing capture flow, which currently
-  /// stores one path. New consumers should use [backPath] and [frontPath].
+  /// This name is retained so the single-frame callers above the seam keep
+  /// working — the kept photograph is the back frame alone. New consumers
+  /// should use [backPath] and [frontPath].
   final String path;
 
   /// Where the front-frame bytes landed, when a front frame was taken.

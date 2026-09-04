@@ -90,13 +90,22 @@ tm.Ping pingOn(DateTime date, {Duration utcOffset = Duration.zero}) => tm
     .pingFor(localMemberId)!;
 
 /// A camera that hands back a real image file without a device.
+///
+/// `bothLenses` makes it the two-lens source a phone is: one `takeOne()` is
+/// one capture *event*, and it delivers a back frame and a front one.
 class FakeCamera implements CameraSource {
-  FakeCamera(this.directory, {required this.takenAtUtc});
+  FakeCamera(
+    this.directory, {
+    required this.takenAtUtc,
+    this.bothLenses = false,
+  });
 
   final Directory directory;
   DateTime takenAtUtc;
+  final bool bothLenses;
 
   final List<String> taken = [];
+  final List<String> frontTaken = [];
   final List<String> discarded = [];
 
   @override
@@ -107,7 +116,17 @@ class FakeCamera implements CameraSource {
     final path = '${directory.path}/frame-${taken.length + 1}.png';
     File(path).writeAsBytesSync(standInFrameBytes(taken.length + 1));
     taken.add(path);
-    return CapturedFrame(path: path, takenAtUtc: takenAtUtc);
+    if (!bothLenses) {
+      return CapturedFrame(path: path, takenAtUtc: takenAtUtc);
+    }
+    final frontPath = '${directory.path}/front-${taken.length}.png';
+    File(frontPath).writeAsBytesSync(standInFrameBytes(taken.length));
+    frontTaken.add(frontPath);
+    return CapturedFrame(
+      path: path,
+      frontPath: frontPath,
+      takenAtUtc: takenAtUtc,
+    );
   }
 
   @override
@@ -739,6 +758,163 @@ void main() {
       expect(find.byKey(const Key('pool-day-1')), findsOneWidget);
       // The bytes are on this phone — this one it took itself.
       expect(find.byKey(Key('pool-photo-$id-awaiting')), findsNothing);
+    });
+
+    testWidgets('turning the day over keeps the back frame and lets the '
+        'front one go', (tester) async {
+      // A capture event is two files and the day keeps one of them. The row
+      // points at the back frame where it lies, and nothing reads the front
+      // one past the review — so the exit that keeps must let it go, exactly
+      // as `once more` and leaving do. It used to keep neither and delete
+      // neither, orphaning a full-resolution frame per photograph.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      // Both halves are on the review before anything is decided.
+      expect(find.byKey(const Key('capture-back-frame')), findsOneWidget);
+      expect(find.byKey(const Key('capture-front-frame')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('capture-keep')));
+      await tester.pumpAndSettle();
+
+      final kept = await db.readPhotos();
+      expect(kept.single.filePath, camera.taken.single);
+      // One route left, and only one: the pop the flow asks for and the pop
+      // the route reports back to the flow are the same pop.
+      expect(find.byKey(const Key('day-title')), findsOneWidget);
+      expect(
+        camera.discarded,
+        camera.frontTaken,
+        reason: 'the front frame is nobody\'s once the day has turned over',
+      );
+      expect(
+        camera.discarded,
+        isNot(contains(camera.taken.single)),
+        reason: 'the kept row points at the back frame where it lies',
+      );
+    });
+
+    testWidgets('leaving by the route throws away both halves of the event', (
+      tester,
+    ) async {
+      // A pop is an exit, and the flow owns every exit. `CaptureScreen` is a
+      // plain `MaterialPageRoute`, so on iOS the back swipe pops it with no
+      // control of its own — and a pop that did not reach the flow left both
+      // full-resolution frames on disk forever, because the next `open()`
+      // overwrites the only state that held their paths.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('capture-back-frame')), findsOneWidget);
+
+      // The route's own pop, not a control's — the same call the back swipe
+      // and the system back both end in.
+      Navigator.of(tester.element(find.byKey(const Key('capture-back-frame'))))
+          .pop();
+      await tester.pumpAndSettle();
+
+      expect(camera.discarded, [
+        ...camera.taken,
+        ...camera.frontTaken,
+      ], reason: 'a pop out of the breath must leave no orphan on disk');
+      expect(await db.readPhotos(), isEmpty);
+      // Back on the day page, and only one route was popped: the trip is
+      // still on screen with its call to the moment.
+      expect(find.byKey(const Key('capture-call-action')), findsOneWidget);
+    });
+
+    testWidgets('leaving by the route from the framing costs nothing', (
+      tester,
+    ) async {
+      // The same exit before a frame exists. `abandon` is safe from every
+      // state, which is what lets the route report every pop rather than
+      // deciding which ones matter.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      expect(find.byKey(const Key('capture-shutter')), findsOneWidget);
+
+      Navigator.of(tester.element(find.byKey(const Key('capture-shutter'))))
+          .pop();
+      await tester.pumpAndSettle();
+
+      expect(camera.taken, isEmpty);
+      expect(camera.discarded, isEmpty);
+      expect(find.byKey(const Key('capture-call-action')), findsOneWidget);
+    });
+
+    testWidgets('leaving while the keep is in flight lets the keep finish', (
+      tester,
+    ) async {
+      // The breath renders no leave control and disables both its buttons
+      // while the day is turning over, so `abandon` was unreachable mid-keep
+      // until the route pop reached it. Discarding then would delete the back
+      // frame between the row's write and its return, and `photo_sync`
+      // refuses a missing frame terminally — the photograph would never
+      // cross. The flow is where that is settled, so this drives the flow.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+
+      final flow = ProviderScope.containerOf(
+        tester.element(find.byKey(const Key('capture-back-frame'))),
+        listen: false,
+      ).read(captureFlowProvider.notifier);
+
+      // Not awaited: the keep runs synchronously as far as its first await,
+      // so the flow is holding `isKeeping` when the leaving arrives.
+      final keeping = flow.turnTheDayOver();
+      await flow.abandon();
+      await keeping;
+      await tester.pumpAndSettle();
+
+      final kept = await db.readPhotos();
+      expect(kept.single.filePath, camera.taken.single);
+      expect(
+        camera.discarded,
+        isNot(contains(camera.taken.single)),
+        reason: 'the row would point at a file the leaving had deleted',
+      );
+      expect(
+        camera.discarded,
+        camera.frontTaken,
+        reason: 'the keep still lets its own front frame go',
+      );
+    });
+
+    testWidgets('a retake throws away both halves of the event', (
+      tester,
+    ) async {
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('capture-once-more')));
+      await tester.pumpAndSettle();
+
+      expect(camera.discarded, [...camera.taken, ...camera.frontTaken]);
     });
 
     testWidgets('the word is skippable, and blank is stored as no word', (

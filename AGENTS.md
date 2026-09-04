@@ -458,10 +458,25 @@ import what is written there, not here.
   (`learning/dual-camera-spike/`), and `BackCameraSource` opens and disposes
   one controller per lens through `CameraCaptureEdge`, so two lenses are
   never live at once. `CapturedFrame.path` still *is* `backPath`, deliberately,
-  so the single-frame callers above the seam keep working while
-  `frontPath` / `hasFrontFrame` wait for a consumer; **the source composes
-  nothing** — it delivers two files and the inset's layout is somebody else's
-  slice. Three refusals are load-bearing and all three are `CameraRefused`: no
+  so the single-frame callers above the seam keep working; **the source
+  composes nothing** — it delivers two files, `TheBreath.frontFramePath`
+  carries the front one up, and the capture review's inset
+  (`capture_screen.dart`, keys `capture-back-frame` / `capture-front-frame`)
+  is the composition's one home. **Every exit from the breath discards what it
+  no longer needs, through the flow's one `_discard`**: a discarded attempt
+  discards *both* frames (`onceMore`, `abandon`), and turning the day over
+  discards the front one — the kept photograph is still the back frame alone,
+  the row points at that file where it lies, and storing the front one is a
+  later slice. **A route pop is one of those exits**: `CaptureScreen` is a
+  `MaterialPageRoute` and the iOS back swipe pops it, so a `PopScope` reports
+  the pop to `abandon()` rather than letting the state that holds the two
+  paths be overwritten by the next `open()`. The route drives the flow, the
+  flow drives the route (the screen's `CaptureClosed` listener), and a flag
+  keeps the two directions from meeting in the middle and popping the day page
+  as well — a second pop, or an exit that does not reach the flow, is the
+  thing to refuse in review. A path out of the breath that leaves a frame on
+  disk is the thing to refuse in review. Three refusals are load-bearing and
+  all three are `CameraRefused`: no
   back camera, no *front* camera, and a failure of the second shot — and the
   last one **discards the back file it already copied**, because a half-taken
   event must leave no orphan on disk. `CameraCaptureEdge` and the injectable

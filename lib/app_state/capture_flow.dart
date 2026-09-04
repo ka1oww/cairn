@@ -10,9 +10,12 @@
 //
 //  - **The ping** is one a day, at your own minute, dealt by
 //    `packages/trip_moments`. See `ping_schedule.dart`.
-//  - **The camera** is the back camera and nothing else in the first release
-//    (docs/decisions/2026-08-22-camera-like-bereal.md). It sits behind
-//    `camera_source.dart` so this file never names a lens.
+//  - **The camera** hands up one capture event of two frames, back then
+//    front (docs/decisions/2026-08-22-camera-like-bereal.md). It sits behind
+//    `camera_source.dart` so this file never names a lens. [TheBreath]
+//    carries both paths for the review to compose; what the first release
+//    *keeps* is the back frame alone, so every exit from the breath discards
+//    the frames it no longer needs through `_discard`.
 //  - **Two minutes, and late is always allowed.** The window is two minutes,
 //    which narrows the thirty of design-calls §7 and changes nothing else.
 //    There is no lockout: a photo taken at 23:40 carries its real hour and is
@@ -166,8 +169,16 @@ class Framing extends CaptureState {
 /// The breath before the flip (surface 10d): the frame taken, the line to
 /// write on it, and a retake for as long as the window is open.
 class TheBreath extends CaptureState {
-  /// Where the frame is, for the screen to show.
+  /// Where the back frame is, for the screen to show. This is the frame the
+  /// day keeps.
   final String framePath;
+
+  /// Where the front frame is, when the capture event took one, for the
+  /// screen to draw as the inset. The source composes nothing — it delivers
+  /// two files, and the inset's layout is the capture screen's
+  /// (`lib/screens/capture_screen.dart`). Null on a source with one lens,
+  /// and the breath simply has no inset then.
+  final String? frontFramePath;
 
   /// When the shutter fired, in UTC.
   final DateTime takenAtUtc;
@@ -190,6 +201,7 @@ class TheBreath extends CaptureState {
 
   const TheBreath({
     required this.framePath,
+    this.frontFramePath,
     required this.takenAtUtc,
     required this.hourLabel,
     this.word = '',
@@ -199,6 +211,7 @@ class TheBreath extends CaptureState {
 
   TheBreath _with({String? word, bool? isKeeping}) => TheBreath(
     framePath: framePath,
+    frontFramePath: frontFramePath,
     takenAtUtc: takenAtUtc,
     hourLabel: hourLabel,
     word: word ?? this.word,
@@ -421,6 +434,7 @@ class CaptureFlow extends Notifier<CaptureState> {
       final frame = await ref.read(cameraSourceProvider).takeOne();
       state = TheBreath(
         framePath: frame.path,
+        frontFramePath: frame.frontPath,
         takenAtUtc: frame.takenAtUtc,
         hourLabel: clockLabel(
           frame.takenAtUtc,
@@ -447,7 +461,9 @@ class CaptureFlow extends Notifier<CaptureState> {
   Future<void> onceMore() async {
     final breath = state;
     if (breath is! TheBreath || breath.isKeeping) return;
-    await ref.read(cameraSourceProvider).discard(breath.framePath);
+    // Both halves of the capture event go: an attempt is one moment, and a
+    // retake that kept its front frame would leave an orphan on disk.
+    await _discard([breath.framePath, breath.frontFramePath]);
     // The same instant it came in with. A retake never re-opens a closed
     // window and never closes an open one — it is the same moment, so the
     // sheet it returns to is the sheet it left, still late if the moment was
@@ -495,15 +511,47 @@ class CaptureFlow extends Notifier<CaptureState> {
           word: breath.word,
         );
     state = const CaptureClosed();
+    // The kept photograph is the back frame alone, and the row above points
+    // at that file where it lies. Nothing reads the front frame past the
+    // review, so the day turning over is where its half of the event goes —
+    // the same rule `onceMore` and `abandon` apply, at the one exit that
+    // used to leak.
+    await _discard([breath.frontFramePath]);
   }
 
   /// Leaves without keeping anything. The frame is thrown away with it —
   /// an unkept photograph is not a photograph.
+  ///
+  /// **A keep already in flight is not abandonable**, which is why this
+  /// early-return matches `onceMore`'s and `turnTheDayOver`'s rather than
+  /// being the one exit without it. The breath renders no leave control and
+  /// disables both of its buttons while keeping, so this used to be
+  /// unreachable mid-keep; the route pop reaches it. Discarding then would
+  /// delete the back frame *between* `PhotoStore.keep`'s write and its
+  /// return, leaving a `photos` row and a `photo_outbox` row pointing at a
+  /// file that is gone — and `photo_sync.dart` refuses a missing frame
+  /// terminally, so that photograph would never cross and its tile would
+  /// wait for bytes forever. Letting the keep finish costs nothing: it
+  /// closes the flow itself and discards the front frame on its way out.
   Future<void> abandon() async {
     final breath = state;
+    if (breath is TheBreath && breath.isKeeping) return;
     state = const CaptureClosed();
     if (breath is TheBreath) {
-      await ref.read(cameraSourceProvider).discard(breath.framePath);
+      await _discard([breath.framePath, breath.frontFramePath]);
+    }
+  }
+
+  /// The one spelling of "these files of the capture event go".
+  ///
+  /// Every path out of the breath ends here, because a capture event must
+  /// leave no orphan on disk and three copies of that rule is how one of
+  /// them comes to be forgotten. Nulls are skipped, so a one-lens source
+  /// asks for nothing special.
+  Future<void> _discard(Iterable<String?> paths) async {
+    final camera = ref.read(cameraSourceProvider);
+    for (final path in paths) {
+      if (path != null) await camera.discard(path);
     }
   }
 }
