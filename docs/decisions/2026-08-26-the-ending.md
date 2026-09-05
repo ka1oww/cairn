@@ -90,7 +90,21 @@ curates anybody — not even themselves out of the record's shape.
 
 The end is midnight on the trip's own clock, not UTC's: the phone works it out
 as the last dated day plus a day minus the trip's offset, and the server reads
-`(end_date + 1) at time zone t.timezone`. This slice has one offset for the
+`(the plan's last day + 1) at time zone t.timezone`.
+
+**Which day is the last one is read off the plan, on both sides.** The server
+did read `trips.end_date` for a while — a column written once at the trip's
+first sync and never again — and so refused every photograph, join, push and
+rename on any trip postponed or extended afterwards, from the *old* last day
+plus the grace onward, while every phone still drew it as live. Migration
+`0016` derives it from `trip_itinerary_days` instead, which is
+`cairn_model`'s `tripEndsAtFrom` said in SQL. The one place the two halves
+still differ is an ending nobody knows: the phone reads that as `underway`
+forever, and the server bounds it with the trip's recorded end date, because
+an unbounded close is an invite code that never dies. `supabase/README.md`'s
+*The close follows the plan* owns the detail, and the invariant that keeps the
+two honest is that the server's close is never earlier than the phone's
+ending. This slice has one offset for the
 whole trip, read off the device — the same acknowledged approximation as
 `todayProvider`, and the same one place that changes when a stored trip clock
 lands. Two travellers sixteen hours apart therefore see the archive shut

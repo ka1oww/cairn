@@ -523,10 +523,11 @@ are the ones that stand between Cairn and being a group at all.
 - The trip's close at trip end + 72 hours as a *stored* rule. Both halves
   derive it correctly now — `cairn_model`'s `tripStandingAt` on the phone, and
   `trip_closes_at()` on the server, which is what kills an invite code and
-  what shuts `photos_insert_trip_member` — but each derives it from what it
-  holds rather than from a fact of the trip everybody's phone agrees on. The
-  phone's half reads the *device's* offset, so two travellers in different
-  zones can disagree about the hour it shuts.
+  what shuts `photos_insert_trip_member` — and since `0016` both read the same
+  plan rather than the server reading a snapshot frozen at first sync. What is
+  left is the *clock*: the phone's half reads the **device's** offset while the
+  server reads `trips.timezone`, so two travellers in different zones can still
+  disagree about the hour it shuts.
 - **Finish the trip's own clock.** The shared `trips` row now carries one — the
   creating phone's IANA zone, or a zone the build pinned
   ([the trip's clock](decisions/2026-08-27-the-trip-clock-is-the-phones.md)) —

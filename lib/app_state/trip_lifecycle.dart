@@ -30,8 +30,9 @@
 //    device, because no trip clock is stored yet. It is why a trip that
 //    crosses a border still closes on the evening its travellers lived, to
 //    within the one offset this slice has; the server's half
-//    (`trip_closes_at` in `0005_trip_invites.sql`) reads the trip's real zone
-//    and has the same shape.
+//    (`trip_closes_at`, `0005_trip_invites.sql`, derived from the itinerary
+//    since `0016`) reads the trip's real zone and asks `tripEndsAtFrom`'s
+//    question of the same plan.
 import 'package:cairn_model/cairn_model.dart' as model;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
