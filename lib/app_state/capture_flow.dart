@@ -57,6 +57,8 @@
 // Deliberately absent: any surface that shows *when* your minute is. A ping
 // you can see coming is a ping you can pose for, and the entire value of the
 // mechanic is that the photograph is one nobody planned.
+import 'dart:async';
+
 import 'package:cairn_model/cairn_model.dart' as model;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trip_moments/trip_moments.dart' as tm;
@@ -149,7 +151,9 @@ sealed class CaptureState {
 
 /// Not capturing. The screen closes itself on this.
 class CaptureClosed extends CaptureState {
-  const CaptureClosed();
+  final bool isRestoring;
+
+  const CaptureClosed({this.isRestoring = false});
 }
 
 /// Ready to take one, or taking it.
@@ -387,6 +391,13 @@ final captureFlowProvider = NotifierProvider<CaptureFlow, CaptureState>(
   CaptureFlow.new,
 );
 
+final pendingCaptureStoreProvider = Provider<PendingCaptureStore>(
+  (ref) => throw StateError(
+    'pendingCaptureStoreProvider is bound in bootstrap.dart '
+    '(or a test override)',
+  ),
+);
+
 class CaptureFlow extends Notifier<CaptureState> {
   // No field here holds anything about the window, and that is deliberate.
   // The moment's deadline rides in the state itself ([Framing.closesAt],
@@ -397,7 +408,41 @@ class CaptureFlow extends Notifier<CaptureState> {
   // it took, so no count is kept in state, in the store, or anywhere else.
 
   @override
-  CaptureState build() => const CaptureClosed();
+  CaptureState build() {
+    unawaited(_restorePending());
+    return const CaptureClosed(isRestoring: true);
+  }
+
+  Future<void> _restorePending() async {
+    final pending = await ref.read(pendingCaptureStoreProvider).read();
+    if (!ref.mounted) return;
+    final closed = state;
+    if (closed is! CaptureClosed || !closed.isRestoring) return;
+    if (pending == null) {
+      state = const CaptureClosed();
+      return;
+    }
+
+    final stillToday = ref.read(todaysPlanDayProvider) == pending.dayNumber;
+    if (!stillToday || !ref.read(tripStandingProvider).takesPhotos) {
+      await ref.read(pendingCaptureStoreProvider).clear();
+      await _discard([pending.framePath, pending.frontFramePath]);
+      if (ref.mounted) state = const CaptureClosed();
+      return;
+    }
+
+    state = TheBreath(
+      framePath: pending.framePath,
+      frontFramePath: pending.frontFramePath,
+      takenAtUtc: pending.takenAtUtc,
+      hourLabel: clockLabel(
+        pending.takenAtUtc,
+        ref.read(tripUtcOffsetProvider),
+      ),
+      word: pending.word,
+      closesAt: pending.closesAt,
+    );
+  }
 
   /// Opens the camera, if the moment is yours to answer.
   ///
@@ -406,6 +451,8 @@ class CaptureFlow extends Notifier<CaptureState> {
   /// screen that opens whenever it is tapped is a second interruption
   /// wearing a button.
   void open() {
+    if (state is TheBreath) return;
+    if (state case CaptureClosed(isRestoring: true)) return;
     // The pool's own door, asked before the moment's. `captureCallProvider`
     // answers `NoMomentHere` on a closed trip too, so this is belt and
     // braces on purpose: `open()` is the one method a new screen would call,
@@ -432,6 +479,29 @@ class CaptureFlow extends Notifier<CaptureState> {
     state = Framing(closesAt: framing.closesAt, isTaking: true);
     try {
       final frame = await ref.read(cameraSourceProvider).takeOne();
+      final stillTaking = state;
+      if (stillTaking is! Framing || !stillTaking.isTaking) {
+        await _discard([frame.path, frame.frontPath]);
+        return;
+      }
+      final dayNumber = ref.read(todaysPlanDayProvider);
+      if (dayNumber == null) {
+        await _discard([frame.path, frame.frontPath]);
+        state = const CaptureClosed();
+        return;
+      }
+      await ref
+          .read(pendingCaptureStoreProvider)
+          .write(
+            PendingCapture(
+              framePath: frame.path,
+              frontFramePath: frame.frontPath,
+              takenAtUtc: frame.takenAtUtc,
+              dayNumber: dayNumber,
+              word: '',
+              closesAt: framing.closesAt,
+            ),
+          );
       state = TheBreath(
         framePath: frame.path,
         frontFramePath: frame.frontPath,
@@ -463,6 +533,7 @@ class CaptureFlow extends Notifier<CaptureState> {
     if (breath is! TheBreath || breath.isKeeping) return;
     // Both halves of the capture event go: an attempt is one moment, and a
     // retake that kept its front frame would leave an orphan on disk.
+    await ref.read(pendingCaptureStoreProvider).clear();
     await _discard([breath.framePath, breath.frontFramePath]);
     // The same instant it came in with. A retake never re-opens a closed
     // window and never closes an open one — it is the same moment, so the
@@ -477,6 +548,7 @@ class CaptureFlow extends Notifier<CaptureState> {
     final breath = state;
     if (breath is! TheBreath) return;
     state = breath._with(word: word);
+    unawaited(ref.read(pendingCaptureStoreProvider).updateWord(word));
   }
 
   /// "Turn the day over": keeps the frame and whatever is on the line.
@@ -498,7 +570,10 @@ class CaptureFlow extends Notifier<CaptureState> {
       return;
     }
     final dayNumber = ref.read(todaysPlanDayProvider);
-    if (dayNumber == null) return;
+    if (dayNumber == null) {
+      await abandon();
+      return;
+    }
     state = breath._with(isKeeping: true);
     await ref
         .read(photoStoreProvider)
@@ -509,6 +584,7 @@ class CaptureFlow extends Notifier<CaptureState> {
           origin: model.PhotoOrigin.pinged,
           filePath: breath.framePath,
           word: breath.word,
+          clearPendingCapture: true,
         );
     state = const CaptureClosed();
     // The kept photograph is the back frame alone, and the row above points
@@ -538,6 +614,7 @@ class CaptureFlow extends Notifier<CaptureState> {
     if (breath is TheBreath && breath.isKeeping) return;
     state = const CaptureClosed();
     if (breath is TheBreath) {
+      await ref.read(pendingCaptureStoreProvider).clear();
       await _discard([breath.framePath, breath.frontFramePath]);
     }
   }

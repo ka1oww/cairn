@@ -463,8 +463,9 @@ class _Breath extends ConsumerWidget {
           key: const Key('capture-hour'),
           style: _line,
         ),
-        TextField(
+        TextFormField(
           key: const Key('capture-word'),
+          initialValue: breath.word,
           // Nothing is corrected into tidiness: caps stay caps, lowercase
           // stays lowercase, and no full stop is added (round 10, 18b).
           textCapitalization: TextCapitalization.none,

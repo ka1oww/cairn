@@ -29,7 +29,7 @@ import what is written there, not here.
 - Drift's generated code (`lib/**/*.g.dart`) is not checked in (root
   `.gitignore`): run `dart run build_runner build` after checkout, before
   analyzing or testing the app.
-- Schema is at v11. A test that stands up an *old* schema by winding
+- Schema is at v12. A test that stands up an *old* schema by winding
   `user_version` back must also drop everything later versions added
   (`test/trip_id_test.dart`'s `windBackToV4` is the pattern) -- an upgrade that
   finds its own column already there fails outright, and the failure reads like
@@ -475,7 +475,13 @@ import what is written there, not here.
   keeps the two directions from meeting in the middle and popping the day page
   as well — a second pop, or an exit that does not reach the flow, is the
   thing to refuse in review. A path out of the breath that leaves a frame on
-  disk is the thing to refuse in review. Three refusals are load-bearing and
+  disk is the thing to refuse in review. **The breath itself is durable**:
+  schema v12's one-row `pending_captures` stores relative `frames/...` paths,
+  the original shutter instant, day, deadline and word; `shoot()` writes it
+  before showing the review, and keep clears it atomically with the photo and
+  outbox insert. All persisted frame paths are relative to Documents and
+  resolve through `FramePaths` at read/upload time, because iOS changes the
+  absolute app-container prefix on update. Three refusals are load-bearing and
   all three are `CameraRefused`: no
   back camera, no *front* camera, and a failure of the second shot — and the
   last one **discards the back file it already copied**, because a half-taken

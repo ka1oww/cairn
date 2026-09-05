@@ -187,25 +187,33 @@ class _CaptureCall extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final call = ref.watch(captureCallProvider(date));
+    final capture = ref.watch(captureFlowProvider);
     if (call is NoMomentHere) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
-    final (String line, String? action) = switch (call) {
-      MomentAhead() => ('Your minute is somewhere in today.', null),
-      MomentOpen(isLastStretch: true) => (
-        'Your minute. Last stretch.',
-        'Take it',
-      ),
-      MomentOpen() => ('Your minute. Look up.', 'Take it'),
-      // Surface 12a's wash card, and design-calls §7: no lockout, ever. A
-      // photo taken now carries its real hour and sits visibly late on the
-      // page, which is the only pressure the system applies.
-      MomentLate() => (
-        "Your minute came and went. The door's open till midnight.",
-        'Take it now',
-      ),
-      MomentAnswered(:final hourLabel) => ('Yours landed at $hourLabel.', null),
-      NoMomentHere() => ('', null),
+    final (String line, String? action) = switch (capture) {
+      TheBreath() => ('Your moment is waiting.', 'Finish your moment'),
+      CaptureClosed(isRestoring: true) => ('Your minute. One moment.', null),
+      _ => switch (call) {
+        MomentAhead() => ('Your minute is somewhere in today.', null),
+        MomentOpen(isLastStretch: true) => (
+          'Your minute. Last stretch.',
+          'Take it',
+        ),
+        MomentOpen() => ('Your minute. Look up.', 'Take it'),
+        // Surface 12a's wash card, and design-calls §7: no lockout, ever. A
+        // photo taken now carries its real hour and sits visibly late on the
+        // page, which is the only pressure the system applies.
+        MomentLate() => (
+          "Your minute came and went. The door's open till midnight.",
+          'Take it now',
+        ),
+        MomentAnswered(:final hourLabel) => (
+          'Yours landed at $hourLabel.',
+          null,
+        ),
+        NoMomentHere() => ('', null),
+      },
     };
 
     return Padding(
@@ -223,7 +231,9 @@ class _CaptureCall extends ConsumerWidget {
             FilledButton(
               key: const Key('capture-call-action'),
               onPressed: () {
-                ref.read(captureFlowProvider.notifier).open();
+                if (capture is! TheBreath) {
+                  ref.read(captureFlowProvider.notifier).open();
+                }
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (context) => const CaptureScreen(),

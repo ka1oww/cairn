@@ -246,6 +246,7 @@ void main() {
   late AppDatabase db;
   late FakePool pool;
   late Directory frames;
+  late FramePaths framePaths;
   late DateTime clock;
 
   /// The bytes every test's frame carries, distinctive enough to compare.
@@ -260,6 +261,7 @@ void main() {
     db = inMemory();
     pool = FakePool();
     frames = Directory.systemTemp.createTempSync('cairn-outbox');
+    framePaths = FramePaths(() async => frames.path);
     clock = DateTime.utc(2027, 6, 15, 12);
   });
 
@@ -268,12 +270,17 @@ void main() {
     frames.deleteSync(recursive: true);
   });
 
-  PhotoStore store({String Function()? mintId}) =>
-      PhotoStore(db, mintId: mintId ?? (() => 'photo-1'), now: () => clock);
+  PhotoStore store({String Function()? mintId}) => PhotoStore(
+    db,
+    framePaths: framePaths,
+    mintId: mintId ?? (() => 'photo-1'),
+    now: () => clock,
+  );
 
   PhotoSync driver({Random? jitter}) => PhotoSync(
     database: db,
     facts: pool,
+    framePaths: framePaths,
     now: () => clock,
     utcOffset: () => Duration.zero,
     jitter: jitter ?? FixedRandom(0.5),
@@ -348,6 +355,50 @@ void main() {
             'terminal success is row deletion; an empty outbox means '
             'nothing pending',
       );
+    });
+
+    test('a kept frame survives the Documents container moving', () async {
+      await startTrip();
+      final container = Directory.systemTemp.createTempSync(
+        'cairn-container-move',
+      );
+      addTearDown(() {
+        if (container.existsSync()) container.deleteSync(recursive: true);
+      });
+      final oldFrames = Directory('${container.path}/old/Documents/frames')
+        ..createSync(recursive: true);
+      final newFrames = Directory('${container.path}/new/Documents/frames')
+        ..createSync(recursive: true);
+      final original = File('${oldFrames.path}/kept.jpg')
+        ..writeAsBytesSync(frameBytes);
+      final oldPaths = FramePaths(() async => oldFrames.path);
+
+      await PhotoStore(
+        db,
+        framePaths: oldPaths,
+        mintId: () => 'photo-1',
+        now: () => clock,
+      ).keep(
+        dayNumber: 1,
+        contributor: MemberId(anna),
+        takenAt: DateTime.utc(2027, 6, 14, 9),
+        origin: PhotoOrigin.pinged,
+        filePath: original.path,
+      );
+      expect((await db.readPhotos()).single.filePath, 'frames/kept.jpg');
+
+      original.renameSync('${newFrames.path}/kept.jpg');
+      await PhotoSync(
+        database: db,
+        facts: pool,
+        framePaths: FramePaths(() async => newFrames.path),
+        now: () => clock,
+        utcOffset: () => Duration.zero,
+        jitter: FixedRandom(0.5),
+      ).syncNow();
+
+      expect(pool.recorded, contains('photo-1'));
+      expect(await db.readOutboxRows(), isEmpty);
     });
 
     test('the recorded key is in the shape the database now enforces, '
@@ -494,7 +545,8 @@ void main() {
       // The frame file is gone — a crash-then-cleared-cache shaped world.
       // Recovery must not need it: `uploaded` durably means "the bytes are
       // at this key, this big".
-      File((await db.readPhotos()).single.filePath!).deleteSync();
+      File(await framePaths.resolve((await db.readPhotos()).single.filePath!))
+          .deleteSync();
 
       await driver().syncNow();
 
@@ -785,6 +837,7 @@ void main() {
       await PhotoSync(
         database: db,
         facts: pool,
+        framePaths: framePaths,
         now: () => clock,
         utcOffset: () => Duration.zero,
         jitter: FixedRandom(0.0),
@@ -1029,6 +1082,7 @@ void main() {
     test('a v7 phone upgrades with its photographs intact and no debts '
         'invented', () async {
       Future<void> windBackToV7(AppDatabase db) async {
+        await db.customStatement('DROP TABLE pending_captures');
         await db.customStatement('DROP TABLE photo_outbox');
         await db.customStatement(
           'ALTER TABLE sync_states DROP COLUMN photos_updated_cursor',
@@ -1119,12 +1173,16 @@ void main() {
 
       // And the upgraded schema does everything v8 promises: a new keep
       // writes both rows, and a null file path is storable.
-      await PhotoStore(upgraded, mintId: () => 'photo-after').keep(
+      await PhotoStore(
+        upgraded,
+        framePaths: FramePaths(() async => dir.path),
+        mintId: () => 'photo-after',
+      ).keep(
         dayNumber: 1,
         contributor: MemberId(anna),
         takenAt: DateTime.utc(2027, 6, 14, 10),
         origin: PhotoOrigin.pinged,
-        filePath: '${dir.path}/new-frame.jpg',
+        filePath: '${dir.path}/frames/new-frame.jpg',
       );
       expect(await upgraded.readOutboxRows(), hasLength(1));
       await upgraded.insertPhoto((
@@ -1167,6 +1225,7 @@ void main() {
           photoId: 'photo-1',
           lastError: '404: {"code":"NOT_FOUND"}',
         );
+        await db.customStatement('DROP TABLE pending_captures');
         await db.customStatement('PRAGMA user_version = 10');
         await db.close();
 
@@ -1182,6 +1241,67 @@ void main() {
 
         expect(pool.recorded, contains('photo-1'));
         expect(await db.readOutboxRows(), isEmpty);
+      },
+    );
+  });
+
+  group('the v12 photo durability migration', () {
+    test(
+      'rebases legacy paths and revives a false missing-file refusal',
+      () async {
+        final directory = Directory.systemTemp.createTempSync(
+          'cairn-path-recovery',
+        );
+        addTearDown(() => directory.deleteSync(recursive: true));
+        final file = File('${directory.path}/cairn.sqlite');
+
+        await db.close();
+        db = AppDatabase(
+          DatabaseConnection(
+            NativeDatabase(file),
+            closeStreamsSynchronously: true,
+          ),
+        );
+        await startTrip();
+        await db.insertPhotoWithOutbox((
+          id: 'photo-legacy-path',
+          dayNumber: 1,
+          contributorId: anna,
+          takenAtUtcIso: '2027-06-14T09:00:00.000Z',
+          origin: 'pinged',
+          word: null,
+          filePath:
+              '/var/mobile/Containers/Data/Application/OLD/Documents/'
+              'frames/kept.jpg',
+          contentType: 'image/jpeg',
+        ), nowUtcIso: clock.toIso8601String());
+        await db.markOutboxRefused(
+          photoId: 'photo-legacy-path',
+          lastError:
+              'the frame file is missing at /old/Documents/frames/kept.jpg',
+        );
+        await db.customStatement('DROP TABLE pending_captures');
+        await db.customStatement('PRAGMA user_version = 11');
+        await db.close();
+
+        db = AppDatabase(
+          DatabaseConnection(
+            NativeDatabase(file),
+            closeStreamsSynchronously: true,
+          ),
+        );
+
+        expect((await db.readPhotos()).single.filePath, 'frames/kept.jpg');
+        expect((await db.readOutboxRows()).single.state, 'queued');
+        await db.writePendingCapture((
+          filePath: 'frames/new.jpg',
+          frontFilePath: null,
+          takenAtUtcIso: '2027-06-14T09:00:00.000Z',
+          dayNumber: 1,
+          word: '',
+          closesAtUtcIso: '2027-06-14T09:02:00.000Z',
+        ));
+        expect(await db.readPendingCapture(), isNotNull);
       },
     );
   });

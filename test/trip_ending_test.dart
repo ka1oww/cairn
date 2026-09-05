@@ -391,12 +391,16 @@ void main() {
     lastDayOfTheTrip() async {
       var clock = june(16, 9);
       final camera = FakeCamera(frames, takenAtUtc: june(16, 9));
-      final store = PhotoStore(db);
+      final framePaths = FramePaths(() async => frames.path);
+      final store = PhotoStore(db, framePaths: framePaths);
       final container = ProviderContainer(
         overrides: [
           tripRepositoryProvider.overrideWithValue(TripRepository(db)),
           photoRepositoryProvider.overrideWithValue(store),
           photoStoreProvider.overrideWithValue(store),
+          pendingCaptureStoreProvider.overrideWithValue(
+            PendingCaptureStore(db, framePaths: framePaths),
+          ),
           membershipRepositoryProvider.overrideWithValue(MembershipStore(db)),
           membershipStoreProvider.overrideWithValue(MembershipStore(db)),
           todayProvider.overrideWithValue(june(16)),

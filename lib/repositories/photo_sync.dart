@@ -37,6 +37,7 @@ import 'package:cairn_model/cairn_model.dart';
 
 import '../storage/drift/app_database.dart';
 import '../storage/remote/shared_facts.dart';
+import 'photo_repository.dart';
 
 Duration _deviceOffset() => DateTime.now().timeZoneOffset;
 
@@ -52,6 +53,7 @@ class PhotoSync {
   PhotoSync({
     required this.database,
     required this.facts,
+    required this.framePaths,
     this.now = DateTime.now,
     this.utcOffset = _deviceOffset,
     Random? jitter,
@@ -59,6 +61,7 @@ class PhotoSync {
 
   final AppDatabase database;
   final SharedFacts facts;
+  final FramePaths framePaths;
 
   /// This phone's reading of now: what decides an item is due, and where the
   /// backoff counts from. Injected so a test can stand anywhere in time.
@@ -242,7 +245,10 @@ class PhotoSync {
         byteSize == null;
 
     if (needsBytes) {
-      final path = item.photo.filePath;
+      final storedPath = item.photo.filePath;
+      final path = storedPath == null
+          ? null
+          : await framePaths.resolve(storedPath);
       final frame = path == null ? null : File(path);
       if (frame == null || !frame.existsSync()) {
         // The bytes are gone from this device before they ever crossed.

@@ -28,6 +28,49 @@ import 'package:cairn_model/cairn_model.dart';
 
 import '../storage/drift/app_database.dart';
 
+/// The one spelling of a frame's durable and live locations.
+///
+/// SQLite keeps only `frames/<name>` because an iOS update moves the whole
+/// application container. Screens and upload code resolve that stable name
+/// against the Documents/frames directory of the process that is reading it.
+class FramePaths {
+  FramePaths(this._frameDirectoryPath);
+
+  final Future<String> Function() _frameDirectoryPath;
+  Future<String>? _directory;
+
+  Future<String> _frameDirectory() => _directory ??= _frameDirectoryPath().then(
+    (path) => path.replaceAll('\\', '/'),
+  );
+
+  Future<String> stored(String localPath) async {
+    final normal = localPath.replaceAll('\\', '/');
+    if (!normal.startsWith('/')) {
+      return normal.startsWith('frames/') ? normal : 'frames/$normal';
+    }
+
+    final directory = await _frameDirectory();
+    final prefix = directory.endsWith('/') ? directory : '$directory/';
+    if (normal.startsWith(prefix)) {
+      return 'frames/${normal.substring(prefix.length)}';
+    }
+
+    final marker = normal.lastIndexOf('/frames/');
+    if (marker >= 0) return normal.substring(marker + 1);
+    throw ArgumentError.value(
+      localPath,
+      'localPath',
+      'a kept frame must live in the Documents/frames directory',
+    );
+  }
+
+  Future<String> resolve(String storedPath) async {
+    final stable = await stored(storedPath);
+    final directory = await _frameDirectory();
+    return '$directory/${stable.substring('frames/'.length)}';
+  }
+}
+
 /// One photo in the trip's shared pool, as the seam hands it up.
 ///
 /// The [ref] is the domain's own word for a photo — which day it belongs to,
@@ -139,9 +182,15 @@ class PhotoStore implements PhotoRepository {
   /// one; every other caller takes the random minter. [now] likewise: it
   /// stamps when a queued push is due, and a test pins it so backoff
   /// assertions can name an instant.
-  PhotoStore(this._db, {this.mintId = mintPhotoId, this.now = DateTime.now});
+  PhotoStore(
+    this._db, {
+    required this.framePaths,
+    this.mintId = mintPhotoId,
+    this.now = DateTime.now,
+  });
 
   final AppDatabase _db;
+  final FramePaths framePaths;
   final PhotoIdMinter mintId;
   final DateTime Function() now;
 
@@ -152,8 +201,9 @@ class PhotoStore implements PhotoRepository {
   /// every itinerary question: two subscriptions are two chances to disagree
   /// about what the trip holds.
   @override
-  Stream<List<PooledPhoto>> watchTripPhotos() =>
-      _db.watchPhotos().map((rows) => [for (final row in rows) _toPhoto(row)]);
+  Stream<List<PooledPhoto>> watchTripPhotos() => _db.watchPhotos().asyncMap(
+    (rows) => Future.wait([for (final row in rows) _toPhoto(row)]),
+  );
 
   /// The photos on one day of the plan, oldest first.
   Stream<List<PooledPhoto>> watchPhotosForDay(int dayNumber) =>
@@ -187,6 +237,7 @@ class PhotoStore implements PhotoRepository {
     required PhotoOrigin origin,
     required String filePath,
     String? word,
+    bool clearPendingCapture = false,
   }) async {
     final ref = PhotoRef(
       id: PhotoId(mintId()),
@@ -196,16 +247,21 @@ class PhotoStore implements PhotoRepository {
       origin: origin,
     );
     final kept = word == null || word.trim().isEmpty ? null : word;
-    await _db.insertPhotoWithOutbox((
-      id: ref.id.value,
-      dayNumber: ref.dayNumber,
-      contributorId: ref.contributor.value,
-      takenAtUtcIso: ref.takenAt.toIso8601String(),
-      origin: ref.origin.name,
-      word: kept,
-      filePath: filePath,
-      contentType: contentTypeOfFrame(filePath),
-    ), nowUtcIso: now().toUtc().toIso8601String());
+    final storedPath = await framePaths.stored(filePath);
+    await _db.insertPhotoWithOutbox(
+      (
+        id: ref.id.value,
+        dayNumber: ref.dayNumber,
+        contributorId: ref.contributor.value,
+        takenAtUtcIso: ref.takenAt.toIso8601String(),
+        origin: ref.origin.name,
+        word: kept,
+        filePath: storedPath,
+        contentType: contentTypeOfFrame(filePath),
+      ),
+      nowUtcIso: now().toUtc().toIso8601String(),
+      clearPendingCapture: clearPendingCapture,
+    );
     return PooledPhoto(ref: ref, localPath: filePath, word: kept);
   }
 
@@ -227,7 +283,7 @@ class PhotoStore implements PhotoRepository {
         nowUtcIso: now().toUtc().toIso8601String(),
       );
 
-  static PooledPhoto _toPhoto(Photo row) => PooledPhoto(
+  Future<PooledPhoto> _toPhoto(Photo row) async => PooledPhoto(
     ref: PhotoRef(
       id: PhotoId(row.id),
       dayNumber: row.dayNumber,
@@ -241,7 +297,66 @@ class PhotoStore implements PhotoRepository {
         orElse: () => PhotoOrigin.imported,
       ),
     ),
-    localPath: row.filePath,
+    localPath: row.filePath == null
+        ? null
+        : await framePaths.resolve(row.filePath!),
     word: row.word,
   );
+}
+
+/// A shutter result that has not yet been turned into a pool photograph.
+class PendingCapture {
+  final String framePath;
+  final String? frontFramePath;
+  final DateTime takenAtUtc;
+  final int dayNumber;
+  final String word;
+  final DateTime closesAt;
+
+  const PendingCapture({
+    required this.framePath,
+    this.frontFramePath,
+    required this.takenAtUtc,
+    required this.dayNumber,
+    required this.word,
+    required this.closesAt,
+  });
+}
+
+/// The local-only breath between shutter and keep.
+class PendingCaptureStore {
+  const PendingCaptureStore(this._db, {required this.framePaths});
+
+  final AppDatabase _db;
+  final FramePaths framePaths;
+
+  Future<PendingCapture?> read() async {
+    final row = await _db.readPendingCapture();
+    if (row == null) return null;
+    return PendingCapture(
+      framePath: await framePaths.resolve(row.filePath),
+      frontFramePath: row.frontFilePath == null
+          ? null
+          : await framePaths.resolve(row.frontFilePath!),
+      takenAtUtc: DateTime.parse(row.takenAtUtcIso).toUtc(),
+      dayNumber: row.dayNumber,
+      word: row.word,
+      closesAt: DateTime.parse(row.closesAtUtcIso).toUtc(),
+    );
+  }
+
+  Future<void> write(PendingCapture capture) async => _db.writePendingCapture((
+    filePath: await framePaths.stored(capture.framePath),
+    frontFilePath: capture.frontFramePath == null
+        ? null
+        : await framePaths.stored(capture.frontFramePath!),
+    takenAtUtcIso: capture.takenAtUtc.toIso8601String(),
+    dayNumber: capture.dayNumber,
+    word: capture.word,
+    closesAtUtcIso: capture.closesAt.toIso8601String(),
+  ));
+
+  Future<void> updateWord(String word) => _db.updatePendingCaptureWord(word);
+
+  Future<void> clear() => _db.clearPendingCapture();
 }

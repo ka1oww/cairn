@@ -29,7 +29,11 @@ void main() {
         closeStreamsSynchronously: true,
       ),
     );
-    photos = PhotoStore(db, mintId: () => 'photo-${++minted}');
+    photos = PhotoStore(
+      db,
+      framePaths: FramePaths(() async => '/frames'),
+      mintId: () => 'photo-${++minted}',
+    );
   });
   tearDown(() => db.close());
 
@@ -53,6 +57,14 @@ void main() {
 
   test('a kept photo round-trips through the seam unchanged', () async {
     final kept = await keep(day: 4, taken: at(14, 50), word: 'we CAUGHT it');
+
+    expect(
+      (await db.readPhotos()).single.filePath,
+      'frames/${at(14, 50).microsecondsSinceEpoch}.png',
+      reason:
+          'an app update moves the iOS container, so its absolute prefix '
+          'must never become stored state',
+    );
 
     final pool = await photos.watchTripPhotos().first;
     expect(pool, hasLength(1));
@@ -192,6 +204,7 @@ void main() {
     // Wind the phone back to the itinerary slice's schema: everything a
     // later version added has to go, not only the version number, or the
     // upgrade re-adds what is already there.
+    await before.customStatement('DROP TABLE pending_captures');
     await before.customStatement('DROP TABLE photo_outbox');
     await before.customStatement('DROP TABLE photos');
     await before.customStatement('DROP TABLE sync_states');
@@ -219,7 +232,11 @@ void main() {
     expect(await after.watchItineraryDays().first, hasLength(1));
     expect(await after.readItineraryStops(), hasLength(1));
 
-    await PhotoStore(after, mintId: () => 'upgraded').keep(
+    await PhotoStore(
+      after,
+      framePaths: FramePaths(() async => '/frames'),
+      mintId: () => 'upgraded',
+    ).keep(
       dayNumber: 1,
       contributor: MemberId('me'),
       takenAt: at(11, 40),

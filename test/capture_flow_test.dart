@@ -42,6 +42,7 @@ import 'package:cairn/app_state/ping_schedule.dart';
 import 'package:cairn/app_state/stand_in_frame.dart';
 import 'package:cairn/app_state/trip_providers.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/repositories/photo_repository.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 
 /// Three dated days. (14 June 2027 really is a Monday.)
@@ -560,6 +561,7 @@ void main() {
           now: now,
           utcOffset: utcOffset,
           camera: camera ?? FakeCamera(frames, takenAtUtc: now),
+          framePaths: FramePaths(() async => frames.path),
           // The countdown's elapsed-time source, pinned exactly as `now:`
           // pins the instant it counts from — the real one is the wall clock,
           // and a countdown reading that here would pass or fail by how long
@@ -716,7 +718,7 @@ void main() {
       expect(kept.single.origin, 'pinged');
       expect(kept.single.word, 'we CAUGHT it');
       expect(kept.single.takenAtUtcIso, shutter.toIso8601String());
-      expect(kept.single.filePath, camera.taken.single);
+      expect(kept.single.filePath, 'frames/frame-1.png');
     });
 
     testWidgets('what you keep is what the Pool draws', (tester) async {
@@ -783,7 +785,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final kept = await db.readPhotos();
-      expect(kept.single.filePath, camera.taken.single);
+      expect(kept.single.filePath, 'frames/frame-1.png');
       // One route left, and only one: the pop the flow asks for and the pop
       // the route reports back to the flow are the same pop.
       expect(find.byKey(const Key('day-title')), findsOneWidget);
@@ -797,6 +799,75 @@ void main() {
         isNot(contains(camera.taken.single)),
         reason: 'the kept row points at the back frame where it lies',
       );
+    });
+
+    testWidgets('a process death at the breath restores the punctual frame', (
+      tester,
+    ) async {
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('capture-back-frame')), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('capture-word')),
+        'still here',
+      );
+      await tester.pump();
+      final pending = await db.readPendingCapture();
+      expect(pending, isNotNull);
+      expect(pending!.filePath, 'frames/frame-1.png');
+
+      // A new ProviderScope over the same database is a process relaunch:
+      // every in-memory notifier and Navigator is gone, while Drift and the
+      // filed frame remain exactly where the phone left them.
+      await launch(
+        tester,
+        today: day(14),
+        now: ping.at.add(const Duration(minutes: 10)),
+        camera: camera,
+      );
+
+      expect(textOf(const Key('capture-call')), 'Your moment is waiting.');
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('capture-call-action')),
+          matching: find.text('Finish your moment'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('capture-call-action')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('capture-back-frame')), findsOneWidget);
+      expect(
+        textOf(const Key('capture-hour')),
+        '${clockLabel(ping.at, Duration.zero)}, yours.',
+      );
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: find.byKey(const Key('capture-word')),
+                matching: find.byType(EditableText),
+              ),
+            )
+            .controller
+            .text,
+        'still here',
+      );
+
+      await tester.tap(find.byKey(const Key('capture-keep')));
+      await tester.pumpAndSettle();
+      final kept = (await db.readPhotos()).single;
+      expect(kept.takenAtUtcIso, ping.at.toIso8601String());
+      expect(kept.word, 'still here');
+      expect(File(camera.taken.single).existsSync(), isTrue);
+      expect(await db.readPendingCapture(), isNull);
     });
 
     testWidgets('leaving by the route throws away both halves of the event', (
@@ -828,6 +899,7 @@ void main() {
         ...camera.frontTaken,
       ], reason: 'a pop out of the breath must leave no orphan on disk');
       expect(await db.readPhotos(), isEmpty);
+      expect(await db.readPendingCapture(), isNull);
       // Back on the day page, and only one route was popped: the trip is
       // still on screen with its call to the moment.
       expect(find.byKey(const Key('capture-call-action')), findsOneWidget);
@@ -887,7 +959,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final kept = await db.readPhotos();
-      expect(kept.single.filePath, camera.taken.single);
+      expect(kept.single.filePath, 'frames/frame-1.png');
       expect(
         camera.discarded,
         isNot(contains(camera.taken.single)),
@@ -915,6 +987,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(camera.discarded, [...camera.taken, ...camera.frontTaken]);
+      expect(await db.readPendingCapture(), isNull);
     });
 
     testWidgets('the word is skippable, and blank is stored as no word', (
@@ -1022,7 +1095,7 @@ void main() {
 
       final kept = await db.readPhotos();
       expect(kept, hasLength(1), reason: 'one moment is one photograph');
-      expect(kept.single.filePath, camera.taken.last);
+      expect(kept.single.filePath, 'frames/frame-5.png');
       // The count of retakes is nobody's business but the person's: the
       // posted photograph never shows how many retakes it took, so it is not
       // stored and the pool has no column that could show it.

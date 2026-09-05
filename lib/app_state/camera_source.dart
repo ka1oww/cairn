@@ -119,7 +119,7 @@ class _PluginCameraCaptureEdge implements CameraCaptureEdge {
 /// The app's own documents directory, not the camera roll: a pinged photo is
 /// the trip's, and putting it in the roll before the pool exists would make
 /// the import sweep re-find the app's own photographs.
-Future<Directory> _frameDirectory() async {
+Future<Directory> frameDirectory() async {
   final base = await getApplicationDocumentsDirectory();
   final dir = Directory('${base.path}/frames');
   if (!await dir.exists()) await dir.create(recursive: true);
@@ -130,7 +130,7 @@ Future<Directory> _frameDirectory() async {
 class BackCameraSource implements CameraSource {
   const BackCameraSource({
     CameraCaptureEdge camera = const _PluginCameraCaptureEdge(),
-    Future<Directory> Function() directoryProvider = _frameDirectory,
+    Future<Directory> Function() directoryProvider = frameDirectory,
   }) : this._(camera, directoryProvider);
 
   const BackCameraSource._(this._camera, this._directoryProvider);
@@ -231,7 +231,7 @@ class StandInCameraSource implements CameraSource {
   @override
   Future<CapturedFrame> takeOne() async {
     final at = DateTime.now().toUtc();
-    final dir = await _frameDirectory();
+    final dir = await frameDirectory();
     final path = '${dir.path}/${at.microsecondsSinceEpoch}.png';
     await File(path).writeAsBytes(standInFrameBytes(at.millisecondsSinceEpoch));
     return CapturedFrame(path: path, takenAtUtc: at);

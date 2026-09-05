@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'app_state/camera_source.dart';
+import 'app_state/capture_flow.dart';
 import 'app_state/day_view.dart';
 import 'app_state/device_prefs.dart';
 import 'app_state/device_time_zone.dart';
@@ -117,6 +118,7 @@ Widget bootstrapApp({
   DateTime? now,
   Duration? utcOffset,
   CameraSource? camera,
+  FramePaths? framePaths,
   PhotoRepository? photos,
   MembershipRepository? membership,
   FilePickerEdge? picker,
@@ -139,10 +141,13 @@ Widget bootstrapApp({
   // `pinnedClock` composes it afresh every time the clock is asked again.
   final since = elapsed?.call();
   final db = database ?? openAppDatabase();
-  final store = PhotoStore(db);
+  final paths =
+      framePaths ?? FramePaths(() async => (await frameDirectory()).path);
+  final store = PhotoStore(db, framePaths: paths);
+  final pendingCapture = PendingCaptureStore(db, framePaths: paths);
   final roster = MembershipStore(db);
   final source = sessions ?? const NoSession();
-  final sync = _startSharedFactsSync(db, source);
+  final sync = _startSharedFactsSync(db, source, paths);
   if (memberId != null && memberId != localMemberId) {
     // The heal for a trip started before the account resolved: a roster a
     // previous launch wrote under the stand-in is rewritten to this launch's
@@ -183,6 +188,7 @@ Widget bootstrapApp({
       ),
       photoRepositoryProvider.overrideWithValue(photos ?? store),
       photoStoreProvider.overrideWithValue(store),
+      pendingCaptureStoreProvider.overrideWithValue(pendingCapture),
       membershipRepositoryProvider.overrideWithValue(membership ?? roster),
       membershipStoreProvider.overrideWithValue(roster),
       if (today != null) todayProvider.overrideWithValue(today),
@@ -251,7 +257,11 @@ Future<String?> _lateAccountIdFrom(SessionSource sessions) async {
 /// defect (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`).
 ///
 /// Returns null when nothing syncs, which is every test.
-TripSync? _startSharedFactsSync(AppDatabase db, SessionSource sessions) {
+TripSync? _startSharedFactsSync(
+  AppDatabase db,
+  SessionSource sessions,
+  FramePaths framePaths,
+) {
   const config = SharedFactsConfig.fromEnvironment;
   if (!config.isConfigured || sessions is NoSession) return null;
   final facts = PostgrestSharedFacts(config: config, sessions: sessions);
@@ -262,6 +272,7 @@ TripSync? _startSharedFactsSync(AppDatabase db, SessionSource sessions) {
   PhotoSync(
     database: db,
     facts: facts,
+    framePaths: framePaths,
   ).start(pollEvery: const Duration(minutes: 2));
   return TripSync(
     database: db,
