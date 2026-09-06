@@ -46,39 +46,56 @@
 -- close is an invite code that never dies, and a code outliving its trip opens
 -- the whole archive to whoever still remembers three words
 -- (`docs/decisions/2026-08-22-grill-round-one.md` section 5). So the server
--- bounds the unknown case with the only calendar fact it has left, and that
+-- keeps the only calendar fact it has left underneath the plan, and that
 -- choice is written out rather than left to be discovered:
 --
---   * **when the itinerary's last day carries a date**, that is the plan
---     stating its own end and it is authoritative in both directions -- a
---     postponed or extended plan closes later, a shortened one closes earlier;
---   * **when it does not** (a wholly undated plan, an undated tail, or a trip
---     whose itinerary has not reached the server at all), the close falls back
---     to whichever is later of the furthest date the itinerary does state and
---     `trips.end_date`. Never unbounded, and never earlier than the window
---     that trip already had.
+--     THE PLAN'S LAST DAY IS THE LATER OF THE FURTHEST DATE THE ITINERARY
+--     STATES AND `trips.end_date`.
 --
--- That fallback is what makes the invariant below true, and the invariant is
--- the point of the whole design:
+-- Always, for every trip, with no condition on the plan at all. `greatest`
+-- ignores nulls in Postgres, which is the mechanism: a plan that states no
+-- date anywhere falls through to `trips.end_date` alone. Bounded, never
+-- unbounded, and never earlier than the window the trip already had.
+--
+-- `trips.end_date` is therefore an UNCONDITIONAL FLOOR under the derivation,
+-- not a fallback the plan can withdraw. Two invariants come out of that, and
+-- together they are the point of the whole design:
 --
 --     THE SERVER'S CLOSE IS NEVER EARLIER THAN THE PHONE'S ENDING.
+--     THE SERVER'S CLOSE IS NEVER EARLIER THAN THE CLOSE BEFORE THIS MIGRATION.
 --
--- A trip a phone draws as live is never one the server refuses. Losing that is
--- how the defect above felt to a person, and it is the thing to refuse in
--- review.
+-- The first is what makes a trip a phone draws as live never one the server
+-- refuses; losing it is how the defect above felt to a person. The second is
+-- what makes every close-move REPAIRABLE, and it is the reason the floor is
+-- unconditional rather than withdrawn whenever the plan states its own end.
+-- `sync_trip_itinerary` asks `trip_closes_at` at the top of the function,
+-- before it merges a single day. So if a phone pushed a plan whose last day
+-- landed in the past -- a year mis-typed on day one, which `setDayDate`'s fill
+-- then carries down every day after it -- and the close followed the plan
+-- down, that push would succeed against the still-open stored plan and every
+-- push afterwards would be refused, including another phone's correction.
+-- Delete-and-repaste would be the only way back, which is the recovery this
+-- work exists to avoid. With the floor unconditional the server is never more
+-- closed than it was before 0016, so a correcting push always gets through.
 --
--- It is also why the fallback is a *floor* rather than a replacement.
--- `greatest` ignores nulls in Postgres -- the opposite of `+` -- so a trip with
--- no itinerary rows falls through to `trips.end_date` alone and closes exactly
--- where it closed before this migration. That is deliberate, and it is what
--- makes this migration need no backfill and survive a live trip: every trip
--- that has never synced an itinerary, and every trip mid-flight, keeps the
--- answer it had until its own plan says otherwise.
+-- The cost of that, stated plainly and not buried: A PLAN THAT IS SHORTENED NO
+-- LONGER CLOSES THE TRIP EARLIER. The close follows the plan upward only.
+-- Shortening is deliberately not supported by this derivation, because letting
+-- the close move earlier is the same one-way door -- there is no way to tell a
+-- plan somebody shortened on purpose from a plan somebody mis-dated, and only
+-- one of those two is recoverable once the gate has shut. A trip cut short
+-- keeps the window its frozen `end_date` already gave it and closes there.
 --
--- What this does hand a member is the ability to move the close by editing the
--- plan, since editing the plan is flat (0010's policies) and always has been.
--- That is the decision, not an oversight: the plan is the trip, and the person
--- who can postpone the trip is the person who can postpone the trip.
+-- The floor is also what makes this migration need no backfill and survive a
+-- live trip: every trip that has never synced an itinerary, and every trip
+-- mid-flight, keeps exactly the answer it had until its own plan says a later
+-- one.
+--
+-- What this does hand a member is the ability to move the close LATER by
+-- editing the plan, since editing the plan is flat (0010's policies) and
+-- always has been. That is the decision, not an oversight: the plan is the
+-- trip, and the person who can postpone the trip is the person who can
+-- postpone the trip.
 --
 -- ---------------------------------------------------------------------------
 -- THE ZONE, STATED
@@ -103,19 +120,19 @@
 --
 -- `trip_closes_at` is called inside `photos_insert_trip_member`'s WITH CHECK,
 -- so it runs once per photograph inserted. The derivation reads
--- `trip_itinerary_days` twice: the furthest date the plan states, and whether
--- the highest-numbered day carries one.
---
---   * the second reads `(trip_id, day_number desc) limit 1`, which is the
---     table's primary key walked backwards -- one row, no sort;
---   * the first is `max(day_date)` filtered on `trip_id`, and the index below
---     is what turns it into an index-only scan over that one trip's days
---     instead of a scan of every trip's.
+-- `trip_itinerary_days` once -- `max(day_date)` filtered on `trip_id` -- and
+-- the index below is what turns that into an index-only scan over one trip's
+-- days instead of a scan of every trip's.
 --
 -- Without the index the primary key still confines the scan to the trip (its
 -- leading column is `trip_id`), so this is a narrowing rather than a rescue --
 -- but the aggregate reads every day of the trip through the heap to get there,
 -- and a `max` deserves the one row it is entitled to.
+--
+-- The other read of this table on the ending's path is not the derivation's:
+-- the plan's last day *in plan order* is `(trip_id, day_number desc) limit 1`,
+-- the primary key walked backwards, and it is what the phone's half compares
+-- against. The probe plans both.
 create index if not exists trip_itinerary_days_day_date_idx
   on public.trip_itinerary_days (trip_id, day_date);
 
@@ -135,20 +152,10 @@ as $$
     (select max(d.day_date)
        from public.trip_itinerary_days d
       where d.trip_id = t.id),
-    -- The floor, and only while the plan does not state its own end. When the
-    -- highest-numbered day carries a date the plan has said where it ends and
-    -- the frozen column has no vote -- which is what lets a shortened plan
-    -- actually close earlier. `greatest` ignores nulls, so this arm simply
-    -- disappears when the plan is authoritative.
-    case
-      when (select d.day_date
-              from public.trip_itinerary_days d
-             where d.trip_id = t.id
-             order by d.day_number desc
-             limit 1) is not null
-      then null::date
-      else t.end_date
-    end
+    -- The floor, unconditionally. `trips.end_date` is not null (0003), so the
+    -- close can never fall below the one this migration replaced, and a
+    -- mis-dated plan is always repairable by a later push.
+    t.end_date
   )
   from public.trips t
   where t.id = p_trip_id;

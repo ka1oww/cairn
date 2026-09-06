@@ -101,10 +101,14 @@ plus the grace onward, while every phone still drew it as live. Migration
 `cairn_model`'s `tripEndsAtFrom` said in SQL. The one place the two halves
 still differ is an ending nobody knows: the phone reads that as `underway`
 forever, and the server bounds it with the trip's recorded end date, because
-an unbounded close is an invite code that never dies. `supabase/README.md`'s
-*The close follows the plan* owns the detail, and the invariant that keeps the
-two honest is that the server's close is never earlier than the phone's
-ending. This slice has one offset for the
+an unbounded close is an invite code that never dies. That recorded end date
+is an *unconditional* floor, so the server's close follows the plan **upward
+only** — a plan somebody shortens keeps the window it had, because a plan
+shortened on purpose and a plan mis-dated by a year are the same push, and a
+close that moved earlier would refuse the correction. `supabase/README.md`'s
+*The close follows the plan* owns the detail, and the invariants that keep the
+two honest are that the server's close is never earlier than the phone's
+ending, and never earlier than the close before `0016`. This slice has one offset for the
 whole trip, read off the device — the same acknowledged approximation as
 `todayProvider`, and the same one place that changes when a stored trip clock
 lands. Two travellers sixteen hours apart therefore see the archive shut

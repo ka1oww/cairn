@@ -1406,19 +1406,23 @@ def main():
                    [offset(-8), offset(-4), offset(0), offset(3)],
                    "kestrel juniper 12", expect_open=True)
 
-    # ---- shortened ---------------------------------------------------------
-    # The other direction, and the reason the fallback below is a floor rather
-    # than a replacement: when the plan states its own end, the frozen column
-    # has no vote at all, so a trip cut short really does close earlier.
+    # ---- shortened: the floor holds, by design -----------------------------
+    # The close follows the plan upward only. `trips.end_date` is an
+    # unconditional floor under the derivation (0016), so a plan cut short
+    # keeps the window it froze with rather than closing on its new last day.
+    # That is what makes a mis-dated plan repairable: `sync_trip_itinerary`
+    # asks `trip_closes_at` before it merges a day, so a close that could move
+    # earlier would refuse the very push that corrects it -- including another
+    # phone's. This shape is the regression test for that floor.
     shortened = trip_with("shortened", offset(-2), offset(14),
                           [offset(-2), offset(-1)],
                           "narwhal orchard 11")
-    check(closes_on(shortened, offset(-1)),
-          "a plan cut short closes on its new last day, not on the fortnight it froze with")
-    check(db.run("select public.trip_closes_at(:t) < "
-                 "(((current_date + 14 + 1)::timestamp at time zone 'Europe/Oslo')"
+    check(closes_on(shortened, offset(14)),
+          "a plan cut short does not close earlier -- the frozen end is a floor, by design")
+    check(db.run("select public.trip_closes_at(:t) > "
+                 "(((current_date - 1 + 1)::timestamp at time zone 'Europe/Oslo')"
                  " + make_interval(hours => :g))", t=shortened, g=grace_hours)[0][0] is True,
-          "which is strictly earlier than the frozen end_date would have given")
+          "which is strictly later than the shortened plan's own last day would have given")
     all_four_gates("shortened", shortened, [offset(-2), offset(-1)],
                    "narwhal orchard 12", expect_open=True)
 
@@ -1442,10 +1446,10 @@ def main():
                    "velvet zephyr 12", expect_open=False)
 
     # ---- an undated tail ---------------------------------------------------
-    # The plan does not state its end, so the frozen column is a floor again --
-    # but the dated days it does carry are evidence too, and the later of the
-    # two wins. Never shortening on an absence of evidence is what keeps the
-    # server's close from ever landing before the phone's ending.
+    # The plan does not state its end, and the dated days it does carry are
+    # evidence too, so the later of those and the frozen floor wins. Both
+    # directions of that `greatest` are exercised below, because the floor is
+    # unconditional and either arm may be the one that answers.
     tail = trip_with("undated tail", offset(-11), offset(-7),
                      [offset(-1), offset(0), None], "urchin yarrow 11")
     check(closes_on(tail, offset(0)),
@@ -1508,25 +1512,50 @@ def main():
         check(verdict is True,
               f"[{label}] the close is at or after the phone's own ending plus the grace")
 
+    # ---- and never earlier than the close 0016 replaced ---------------------
+    # The second invariant, and the one that makes every close-move repairable:
+    # `trips.end_date` is an unconditional floor, so no push can ever leave the
+    # server more closed than 0005's formula did -- which is what keeps a
+    # mis-dated plan from shutting `sync_trip_itinerary` against its own
+    # correction. This holds for every shape, undated ones included, so nothing
+    # is skipped here.
+    for label, trip in plan_shapes + [("no plan yet", bare)]:
+        check(db.run(
+            """select public.trip_closes_at(t.id)
+                      >= (((t.end_date + 1)::timestamp at time zone t.timezone)
+                          + make_interval(hours => :g))
+               from public.trips t where t.id = :t""",
+            t=trip, g=grace_hours)[0][0] is True,
+            f"[{label}] and at or after the close the frozen end_date gave before 0016")
+
     # ---- the access path ---------------------------------------------------
     # `trip_closes_at` runs inside `photos_insert_trip_member`'s WITH CHECK, so
     # it is asked once per photograph. What it must never become is a scan of
     # every trip's days.
+    #
+    # Both plans are taken as a *member*, not over `db`: the hot path runs as
+    # `authenticated`, where `trip_itinerary_days` carries an `is_trip_member`
+    # security qual on top of the trip filter, and a plan taken as the
+    # migration-owning superuser is not the plan that path produces. The
+    # statistics are settled first, because a never-analyzed table plans off a
+    # made-up ten pages and the answer would then be luck rather than evidence.
     print("\n== the derivation reads one row per trip, not the whole table ==")
     check(db.run("""select count(*) from pg_indexes
                     where schemaname = 'public' and tablename = 'trip_itinerary_days'
                       and indexname = 'trip_itinerary_days_day_date_idx'""")[0][0] == 1,
           "the index the furthest-date read is entitled to exists")
-    plan = "\n".join(row[0] for row in db.run(
+    db.run("analyze public.trip_itinerary_days")
+    plan = "\n".join(row[0] for row in b.run(
         "explain (costs off) select max(d.day_date) from public.trip_itinerary_days d "
         "where d.trip_id = :t", t=postponed))
     check("Seq Scan" not in plan,
-          "and the furthest-date read is not a sequential scan", plan.replace("\n", " | ")[:120])
-    plan = "\n".join(row[0] for row in db.run(
+          "and the furthest-date read is not a sequential scan under RLS",
+          plan.replace("\n", " | ")[:120])
+    plan = "\n".join(row[0] for row in b.run(
         "explain (costs off) select d.day_date from public.trip_itinerary_days d "
         "where d.trip_id = :t order by d.day_number desc limit 1", t=postponed))
     check("Seq Scan" not in plan,
-          "nor is the last-day read -- that one is the primary key walked backwards",
+          "nor is the plan-order last-day read the invariant above compares against",
           plan.replace("\n", " | ")[:120])
 
     print("\n== the roster reads as one statement, and only for the party ==")

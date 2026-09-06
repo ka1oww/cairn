@@ -710,18 +710,24 @@ Sharp edges worth knowing before touching this directory again:
   `trip_itinerary_days` through `trip_last_planned_day`, which is
   `cairn_model`'s `tripEndsAtFrom` said in SQL -- the plan's own last day, in
   `trips.timezone`, never UTC and never the caller's zone. Three things to
-  keep. The fallback for an ending nobody knows (an undated last day, or no
-  itinerary at all) is the later of the furthest date the plan states and
-  `trips.end_date`: **bounded, never "never"**, because an unbounded close is
-  an invite code that never dies -- and being a *floor* rather than a
-  replacement is what lets a live trip and an un-synced trip cross the
-  migration with no backfill. The invariant that holds it together is that
-  **the server's close is never earlier than the phone's ending**; losing it
-  re-creates the defect. And the derivation runs inside a WITH CHECK on the
-  photo path, so both halves must stay index-only
-  (`trip_itinerary_days_day_date_idx` and the primary key walked backwards) --
-  `rls_probe.py` asserts the plans, and `supabase/README.md`'s *The close
-  follows the plan* is the authority.
+  keep. It is the later of the furthest date the plan states and
+  `trips.end_date`, always and for every trip -- `trips.end_date` is an
+  **unconditional floor**, not a fallback the plan can withdraw, which makes
+  the close **bounded, never "never"** (an unbounded close is an invite code
+  that never dies), lets a live trip and an un-synced trip cross the migration
+  with no backfill, and is the reason **a shortened plan does not close the
+  trip earlier**: the close follows the plan upward only. That last one is the
+  decision, not a gap. `sync_trip_itinerary` asks `trip_closes_at` before it
+  merges a day, so a close that could move earlier would let a mis-dated plan
+  refuse the very push that corrects it, another phone's included, leaving
+  delete-and-repaste as the only way back. Two invariants say it: **the
+  server's close is never earlier than the phone's ending**, and **never
+  earlier than the close before `0016`**; losing either re-creates a defect.
+  And the derivation runs inside a WITH CHECK on the photo path, so it must
+  stay index-only (`trip_itinerary_days_day_date_idx`; the plan-order last-day
+  read the invariant compares against is the primary key walked backwards) --
+  `rls_probe.py` asserts both plans as a *member*, and
+  `supabase/README.md`'s *The close follows the plan* is the authority.
 - **The invite grammar exists twice, and the probe is what keeps the two
   copies honest.** A code is three spoken words, forgiving of order and of one
   letter per word, and it dies at the trip's close -- the plan's last day plus

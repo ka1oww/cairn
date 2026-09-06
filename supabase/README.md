@@ -393,39 +393,57 @@ then the grace" can be read — and asserted — separately.
 
 **The rule is `cairn_model`'s `tripEndsAtFrom` said in SQL.** A trip ends at the
 end of its last day, and a last day with no date is an ending nobody knows yet.
-So:
+So the derivation is:
 
-- **when the itinerary's highest-numbered day carries a date**, that is the plan
-  stating its own end and it is authoritative in both directions — postponing or
-  extending pushes the close later, shortening pulls it earlier, and the frozen
-  column has no vote at all;
-- **when it does not** — a wholly undated plan, an undated tail, or a trip whose
-  itinerary has never reached the server — the close falls back to whichever is
-  later of the furthest date the itinerary *does* state and `trips.end_date`.
+> `trip_last_planned_day` = the later of the furthest date the itinerary states
+> and `trips.end_date`.
 
-The fallback is the one place the two halves of the seam cannot say the same
-thing, so it is written down rather than left to be found. The phone reads an
-unknown ending as `TripStanding.underway` — open forever, which is harmless on a
-screen. The server cannot: an unbounded close is an invite code that never dies,
-and a code outliving its trip opens the whole archive to whoever still remembers
-three words ([the grill](../docs/decisions/2026-08-22-grill-round-one.md) §5).
-So the unknown case is **bounded by the trip's own recorded end date**, never by
-"never".
+That is the whole of it, for every trip and with no condition on the plan.
+`greatest` ignores nulls in Postgres — the opposite of `+` — which is the
+mechanism: a plan that states no date anywhere, or a trip whose itinerary has
+never reached the server, falls straight through to `trips.end_date` alone.
+Bounded, never "never", because an unbounded close is an invite code that never
+dies and a code outliving its trip opens the whole archive to whoever still
+remembers three words ([the grill](../docs/decisions/2026-08-22-grill-round-one.md) §5).
 
-That fallback is what makes the invariant hold, and the invariant is the point:
+**`trips.end_date` is an unconditional floor**, not a fallback the plan can
+withdraw. Two invariants come out of that, and together they are the point:
 
 > **The server's close is never earlier than the phone's ending.**
+>
+> **The server's close is never earlier than the close before `0016`.**
 
-A trip a phone draws as live is never one the server refuses. Losing that is how
-the defect above felt to a person, and it is the thing to refuse in review. It is
-also why the fallback is a *floor* rather than a replacement — `greatest` ignores
-nulls in Postgres, the opposite of `+`, so a trip with no itinerary rows falls
-straight through to `trips.end_date` and closes exactly where it closed before
-`0016`. **No backfill, and a live trip survives the migration untouched** until
-its own plan says otherwise.
+The first is what makes a trip a phone draws as live never one the server
+refuses — losing it is how the defect above felt to a person. The second is what
+makes every close-move **repairable**, and it is why the floor is unconditional.
+`sync_trip_itinerary` asks `trip_closes_at` at the top of the function, before it
+merges a single day. So if a phone pushed a plan whose last day landed in the
+past — a year mis-typed on day one, which `setDayDate`'s fill then carries down
+every day after it — and the close followed the plan down, that push would
+succeed against the still-open stored plan and every push afterwards would be
+refused, another phone's correction included. Delete-and-repaste would be the
+only way back, which is the recovery this work exists to avoid.
 
-What this does hand a member is the ability to move the close by editing the
-plan. That is the decision and not an oversight: editing the plan is flat
+The cost, stated rather than buried: **a plan that is shortened no longer closes
+the trip earlier.** The close follows the plan upward only. Shortening is
+deliberately not supported by this derivation, because there is no way to tell a
+plan somebody shortened on purpose from a plan somebody mis-dated, and only one
+of those two is recoverable once the gate has shut. A trip cut short keeps the
+window its frozen `end_date` already gave it. `tests/rls_probe.py` builds that
+shape and asserts the floor holds, so it is a pinned decision rather than a
+tolerated gap.
+
+The unknown ending is also the one place the two halves of the seam cannot say
+the same thing, and it is written down rather than left to be found: the phone
+reads it as `TripStanding.underway` — open forever, harmless on a screen — while
+the server bounds it at the recorded end date.
+
+The floor is what makes the migration need **no backfill**: a trip with no
+itinerary rows closes exactly where it closed before `0016`, and a live trip
+survives untouched until its own plan says a later one.
+
+What this does hand a member is the ability to move the close *later* by editing
+the plan. That is the decision and not an oversight: editing the plan is flat
 (`0010`'s policies), the plan is the trip, and the person who can postpone the
 trip is the person who can postpone the trip.
 
@@ -438,11 +456,16 @@ carries no zone of its own, so this is the same one-clock-per-trip approximation
 the section above documents, now applied to a date that is allowed to move.
 
 **The access path.** `trip_closes_at` runs inside `photos_insert_trip_member`'s
-`WITH CHECK`, so it is asked once per photograph. The furthest-date read is an
-index-only scan over `trip_itinerary_days_day_date_idx` (`0016`) returning one
-row; the last-day read is the primary key walked backwards, also one row.
-`tests/rls_probe.py` asserts both plans are free of a sequential scan rather than
-trusting the planner to stay well behaved.
+`WITH CHECK`, so it is asked once per photograph. It reads
+`trip_itinerary_days` once — `max(day_date)` filtered on `trip_id` — and that is
+an index-only scan over `trip_itinerary_days_day_date_idx` (`0016`) returning one
+row. The plan's last day *in plan order* is not the derivation's read but the
+phone's half of the invariant above, and it is the primary key walked backwards,
+also one row. `tests/rls_probe.py` plans both **as a member**, not as the
+migration-owning superuser, since the hot path carries `trip_itinerary_days`'
+`is_trip_member` security qual and a superuser plan is not the plan that path
+produces; it settles the statistics first and asserts neither is a sequential
+scan, rather than trusting the planner to stay well behaved.
 
 ## Row-level security
 
@@ -500,7 +523,7 @@ directions.
 | **A caption is its own contributor's** | `photos_update_contributor` (`0006`) already restricted every UPDATE to the contributor, so `caption` (`0011`) needed no new policy. Worth watching refuse rather than assuming: `tests/rls_probe.py` does. |
 | **A member joining mid-trip sees every past day freely** | The *absence* of any day predicate in `photos_select_trip_member` (`0006`), plus the first branch of `day_page_is_open`: any day already finished on the trip's clock is open to every member. |
 | **Credit survives the person** | `profile_is_visible_to` (`0009`) resolves a name for anyone you travel with **or** anyone credited on a photo or trip in a trip you are in — because membership is exactly the thing that ends. |
-| **The trip's clock is one shared clock** | `trips_update_starter` / `trips_delete_starter` (`0004`) keep retiming and deletion with the person who authored the trip, and `validate_trip_timezone` (`0003`) refuses a zone that is not real. Since `0016` the trip's *ending* is no longer one of the things that retiming decides: it comes off `trip_itinerary_days`, which any member may edit, exactly as any member may edit the plan. |
+| **The trip's clock is one shared clock** | `trips_update_starter` / `trips_delete_starter` (`0004`) keep retiming and deletion with the person who authored the trip, and `validate_trip_timezone` (`0003`) refuses a zone that is not real. Since `0016` the trip's *ending* is no longer the starter's alone to decide: it comes off `trip_itinerary_days`, which any member may edit, exactly as any member may edit the plan. The starter's `end_date` remains the unconditional floor under it, so retiming can still only lengthen the window, never cut it. |
 | **Naming is flat without making the trip row flat** | `trips_update_member_rename`, `guard_member_trip_rename` and `sync_trip_name` (`0014`) admit any current member to `(name, name_revised_at)` only. The starter policy over every other mutable trip column is unchanged; strictly newer name revisions win. |
 | **A closed trip keeps the name it closed under** | `guard_member_trip_rename` (`0014`) asks `trip_closes_at` — since `0016` derived from the itinerary, not from a frozen `end_date` — whenever `name` or `name_revised_at` moves, *before* it lets the starter past — so the refusal is a property of the record and not of one function, and a bare `PATCH /rest/v1/trips` round `sync_trip_name` is refused with it. Deliberately scoped to the rename: nothing else the starter could already do to a closed trip changes. |
 | **The plan is the trip's, and any member may change it** | Every policy on the four itinerary tables (`0010`) is plain membership through `is_trip_member`, with no starter branch and no contributor branch. Editing the plan is flat, like inviting and like naming: a trip is a thing eight people are on, not a thing one of them owns. |
@@ -1004,9 +1027,9 @@ throwaway Postgres; see that directory's README. It has been run green on two
 independently built clusters — 17.10 and a Homebrew 17.11 — so the results are
 not an artefact of one machine's setup.
 
-- All fifteen migrations apply cleanly, and apply again cleanly on a second
+- All sixteen migrations apply cleanly, and apply again cleanly on a second
   run.
-- 240 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 249 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, an unlock following a moved photo but
   surviving a deleted one, re-dating and un-dating attacks staying shut, object
@@ -1035,9 +1058,11 @@ not an artefact of one machine's setup.
   member and returns null to a stranger, which is a refusal and not "never
   closes"; and the close following the plan (`0016`) — a trip postponed,
   extended, shortened, left wholly undated or left with an undated tail after
-  its first sync, each asked at all four gates at once, plus the invariant that
-  the server's close never lands before the phone's own ending and the two
-  access-path plans staying free of a sequential scan.
+  its first sync, each asked at all four gates at once (the shortened one
+  pinning that the unconditional floor holds and the close does *not* move
+  earlier), plus the two invariants — the server's close never lands before the
+  phone's own ending, nor before the close `0005`'s formula gave — and the two
+  access-path plans, taken as a member, staying free of a sequential scan.
 - **The edge function's own refusals are tested, offline**
   (`deno test supabase/functions/r2-upload-url/handler_test.ts`, 22 checks):
   a non-member and a closed trip get no URL and nothing is signed, a photo id
