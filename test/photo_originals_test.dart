@@ -34,6 +34,7 @@ import 'package:cairn/app_state/camera_source.dart';
 import 'package:cairn/app_state/ping_schedule.dart';
 import 'package:cairn/app_state/stand_in_frame.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/repositories/photo_repository.dart';
 import 'package:cairn/screens/photo_frame.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 
@@ -205,6 +206,7 @@ void main() {
           now: ping.at,
           utcOffset: Duration.zero,
           camera: camera,
+          framePaths: FramePaths(() async => frames.path),
           // The app's clock is live at every ask, so a capture surface left
           // unpinned here would read the machine's wall clock and any window
           // assertion added later would pass or fail by how long the suite
@@ -246,14 +248,16 @@ void main() {
       // The column is nullable for rows whose bytes live on another phone;
       // a row capture just wrote always has a path, and a null here should
       // fail as loudly as a missing file would.
-      final onDisk = File(row.filePath!);
+      final resolvedPath = await FramePaths(() async => frames.path)
+          .resolve(row.filePath!);
+      final onDisk = File(resolvedPath);
       expect(
         onDisk.existsSync(),
         isTrue,
         reason: 'the row points at a file that is not there',
       );
 
-      final original = camera.written[row.filePath];
+      final original = camera.written[resolvedPath];
       expect(
         original,
         isNotNull,
@@ -293,10 +297,12 @@ void main() {
       await tester.pumpAndSettle();
 
       final row = (await db.readPhotos()).single;
+      final resolvedPath = await FramePaths(() async => frames.path)
+          .resolve(row.filePath!);
       expect(camera.written, hasLength(2));
       expect(
-        File(row.filePath!).readAsBytesSync(),
-        camera.written[row.filePath],
+        File(resolvedPath).readAsBytesSync(),
+        camera.written[resolvedPath],
         reason: 'the kept frame is not the second frame, byte for byte',
       );
     });

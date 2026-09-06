@@ -37,6 +37,7 @@ import 'package:cairn/app_state/capture_flow.dart';
 import 'package:cairn/app_state/ping_schedule.dart';
 import 'package:cairn/app_state/stand_in_frame.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/repositories/photo_repository.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 
 const _tripPaste = '''
@@ -213,6 +214,7 @@ void main() {
         today: today,
         utcOffset: Duration.zero,
         camera: camera,
+        framePaths: FramePaths(() async => frames.path),
       ) as ProviderScope;
       await tester.pumpWidget(
         ProviderScope(

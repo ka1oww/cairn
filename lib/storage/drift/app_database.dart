@@ -427,6 +427,31 @@ class PlanDrafts extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// The one shutter result waiting for the person to turn the day over.
+///
+/// Local-only, like [PlanDrafts]. The files already exist when this row is
+/// written; the row preserves their stable relative names and the original
+/// shutter instant across a process death.
+///
+/// The generated data class is named away from the seam's own
+/// `PendingCapture`: one library already imports both, and two types of one
+/// name resolve only by shadowing until the first file names it outright.
+@DataClassName('PendingCaptureRow')
+class PendingCaptures extends Table {
+  /// Always 1.
+  IntColumn get id => integer()();
+
+  TextColumn get filePath => text()();
+  TextColumn get frontFilePath => text().nullable()();
+  TextColumn get takenAtUtcIso => text()();
+  IntColumn get dayNumber => integer()();
+  TextColumn get word => text().withDefault(const Constant(''))();
+  TextColumn get closesAtUtcIso => text()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     ItineraryDays,
@@ -440,6 +465,7 @@ class PlanDrafts extends Table {
     TripInviteCodes,
     SyncStates,
     PlanDrafts,
+    PendingCaptures,
     AppPreferences,
   ],
 )
@@ -452,7 +478,7 @@ class AppDatabase extends _$AppDatabase {
   final TripId Function() mint;
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -619,6 +645,27 @@ class AppDatabase extends _$AppDatabase {
           "update photo_outbox set state = 'queued', "
           "next_attempt_at_utc_iso = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
           "where state = 'refused'",
+        );
+      }
+      if (from < 12) {
+        // A breath used to live only in Riverpod state. From this version it
+        // has one durable row, initially absent on an upgraded phone.
+        await m.createTable(pendingCaptures);
+
+        // Container ids move on iOS updates. Keep only the part beneath the
+        // Documents directory so the next process resolves it against its
+        // own container. Rows without `/frames/` predate the camera path and
+        // are left alone rather than guessed at.
+        await customStatement(
+          "update photos set file_path = substr(file_path, "
+          "instr(file_path, '/frames/') + 1) "
+          "where file_path is not null and instr(file_path, '/frames/') > 0",
+        );
+        await customStatement(
+          "update photo_outbox set state = 'queued', "
+          "next_attempt_at_utc_iso = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
+          "where state = 'refused' and "
+          "last_error like 'the frame file is missing at %'",
         );
       }
     },
@@ -1170,6 +1217,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> insertPhotoWithOutbox(
     PhotoRecord photo, {
     required String nowUtcIso,
+    bool clearPendingCapture = false,
   }) {
     return transaction(() async {
       await insertPhoto(photo);
@@ -1180,6 +1228,7 @@ class AppDatabase extends _$AppDatabase {
           nextAttemptAtUtcIso: nowUtcIso,
         ),
       );
+      if (clearPendingCapture) await this.clearPendingCapture();
     });
   }
 
@@ -1544,6 +1593,34 @@ class AppDatabase extends _$AppDatabase {
   Future<void> clearPlanDraft() =>
       (delete(planDrafts)..where((t) => t.id.equals(_theOneDraft))).go();
 
+  // -- the pending shutter breath ------------------------------------------
+
+  Future<PendingCaptureRow?> readPendingCapture() => (select(
+    pendingCaptures,
+  )..where((t) => t.id.equals(_theOnePendingCapture))).getSingleOrNull();
+
+  Future<void> writePendingCapture(PendingCaptureRecord capture) =>
+      into(pendingCaptures).insertOnConflictUpdate(
+        PendingCapturesCompanion.insert(
+          id: const Value(_theOnePendingCapture),
+          filePath: capture.filePath,
+          frontFilePath: Value(capture.frontFilePath),
+          takenAtUtcIso: capture.takenAtUtcIso,
+          dayNumber: capture.dayNumber,
+          word: Value(capture.word),
+          closesAtUtcIso: capture.closesAtUtcIso,
+        ),
+      );
+
+  Future<void> updatePendingCaptureWord(String word) =>
+      (update(pendingCaptures)
+            ..where((t) => t.id.equals(_theOnePendingCapture)))
+          .write(PendingCapturesCompanion(word: Value(word)));
+
+  Future<void> clearPendingCapture() => (delete(
+    pendingCaptures,
+  )..where((t) => t.id.equals(_theOnePendingCapture))).go();
+
   // ------------------------------------------------------ app preferences
 
   /// The maps app a handoff opens in, as stored (`google` | `apple` | `waze`).
@@ -1632,6 +1709,8 @@ class AppDatabase extends _$AppDatabase {
       await delete(syncStates).go();
       // A pending import belongs to the box the deleted trip came out of.
       await delete(planDrafts).go();
+      // A shutter breath cannot outlive the trip it was answering.
+      await delete(pendingCaptures).go();
     });
   }
 }
@@ -1641,6 +1720,9 @@ const _theOneTrip = 1;
 
 /// The one row of [PlanDrafts]: a phone has one paste box.
 const _theOneDraft = 1;
+
+/// The one row of [PendingCaptures]: only one shutter can await a keep.
+const _theOnePendingCapture = 1;
 
 /// The one preferences row.
 const _theOnePreferences = 1;
@@ -1666,6 +1748,16 @@ typedef PhotoRecord = ({
   String? word,
   String? filePath,
   String? contentType,
+});
+
+/// The write-side shape of the local-only shutter breath.
+typedef PendingCaptureRecord = ({
+  String filePath,
+  String? frontFilePath,
+  String takenAtUtcIso,
+  int dayNumber,
+  String word,
+  String closesAtUtcIso,
 });
 
 /// One pending push and the photograph it is about, as

@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'app_state/camera_source.dart';
+import 'app_state/capture_flow.dart';
 import 'app_state/day_view.dart';
 import 'app_state/device_prefs.dart';
 import 'app_state/device_time_zone.dart';
@@ -111,13 +112,29 @@ import 'storage/remote/shared_facts.dart';
 /// test hands in a stream of its own. Passing nothing means nothing is ever
 /// said about sharing, which is exactly right for a suite in which no sync
 /// runs — the trip's surfaces stay silent rather than claiming either way.
+///
+/// [pendingCapture] is the durable breath's store, on the seam every other
+/// backend sits behind: passing nothing binds the real one over [database],
+/// and a test hands in one of its own to say what a store that fails or
+/// stalls does to the flow above it.
+///
+/// [framePaths] is the one resolver both photo paths and that breath's paths
+/// go through — stored as `frames/<name>`, resolved against the running
+/// process's Documents directory (`photo_repository.dart` says why). The app
+/// passes nothing and gets the real `frameDirectory()`; a test hands in a
+/// fixed directory, since `path_provider`'s channel answers nothing under
+/// `flutter test`. It is built once here and shared by the store, the
+/// breath's store and the photo push, because two resolvers are two readings
+/// of where a frame is.
 Widget bootstrapApp({
   AppDatabase? database,
   DateTime? today,
   DateTime? now,
   Duration? utcOffset,
   CameraSource? camera,
+  FramePaths? framePaths,
   PhotoRepository? photos,
+  PendingCaptureStore? pendingCapture,
   MembershipRepository? membership,
   FilePickerEdge? picker,
   ExtractionRunner? extraction,
@@ -139,10 +156,13 @@ Widget bootstrapApp({
   // `pinnedClock` composes it afresh every time the clock is asked again.
   final since = elapsed?.call();
   final db = database ?? openAppDatabase();
-  final store = PhotoStore(db);
+  final paths =
+      framePaths ?? FramePaths(() async => (await frameDirectory()).path);
+  final store = PhotoStore(db, framePaths: paths);
+  final breath = pendingCapture ?? PendingCaptureStore(db, framePaths: paths);
   final roster = MembershipStore(db);
   final source = sessions ?? const NoSession();
-  final sync = _startSharedFactsSync(db, source);
+  final sync = _startSharedFactsSync(db, source, paths);
   if (memberId != null && memberId != localMemberId) {
     // The heal for a trip started before the account resolved: a roster a
     // previous launch wrote under the stand-in is rewritten to this launch's
@@ -183,6 +203,7 @@ Widget bootstrapApp({
       ),
       photoRepositoryProvider.overrideWithValue(photos ?? store),
       photoStoreProvider.overrideWithValue(store),
+      pendingCaptureStoreProvider.overrideWithValue(breath),
       membershipRepositoryProvider.overrideWithValue(membership ?? roster),
       membershipStoreProvider.overrideWithValue(roster),
       if (today != null) todayProvider.overrideWithValue(today),
@@ -251,7 +272,11 @@ Future<String?> _lateAccountIdFrom(SessionSource sessions) async {
 /// defect (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`).
 ///
 /// Returns null when nothing syncs, which is every test.
-TripSync? _startSharedFactsSync(AppDatabase db, SessionSource sessions) {
+TripSync? _startSharedFactsSync(
+  AppDatabase db,
+  SessionSource sessions,
+  FramePaths framePaths,
+) {
   const config = SharedFactsConfig.fromEnvironment;
   if (!config.isConfigured || sessions is NoSession) return null;
   final facts = PostgrestSharedFacts(config: config, sessions: sessions);
@@ -262,6 +287,7 @@ TripSync? _startSharedFactsSync(AppDatabase db, SessionSource sessions) {
   PhotoSync(
     database: db,
     facts: facts,
+    framePaths: framePaths,
   ).start(pollEvery: const Duration(minutes: 2));
   return TripSync(
     database: db,

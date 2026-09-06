@@ -42,6 +42,8 @@ import 'package:cairn/app_state/ping_schedule.dart';
 import 'package:cairn/app_state/stand_in_frame.dart';
 import 'package:cairn/app_state/trip_providers.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/repositories/membership_repository.dart';
+import 'package:cairn/repositories/photo_repository.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 
 /// Three dated days. (14 June 2027 really is a Monday.)
@@ -131,6 +133,33 @@ class FakeCamera implements CameraSource {
 
   @override
   Future<void> discard(String path) async => discarded.add(path);
+}
+
+/// A breath store whose row cannot be read back.
+///
+/// A malformed instant, a path the resolver cannot place, a database that
+/// will not answer: the flow above sees one thing, a restore that throws.
+class UnreadablePendingCaptureStore extends PendingCaptureStore {
+  UnreadablePendingCaptureStore(super._db, {required super.framePaths});
+
+  @override
+  Future<PendingCapture?> read() async =>
+      throw StateError('the pending row cannot be read');
+}
+
+/// A breath store that lets a test act in the window the write holds open.
+class InterruptedPendingCaptureStore extends PendingCaptureStore {
+  InterruptedPendingCaptureStore(super._db, {required super.framePaths});
+
+  Future<void> Function()? onWritten;
+
+  @override
+  Future<void> write(PendingCapture capture) async {
+    await super.write(capture);
+    final interruption = onWritten;
+    onWritten = null;
+    if (interruption != null) await interruption();
+  }
 }
 
 /// The recording edge, plus a tally of how often it was asked.
@@ -549,10 +578,19 @@ void main() {
       required DateTime now,
       Duration utcOffset = Duration.zero,
       CameraSource? camera,
+      PendingCaptureStore? pendingCapture,
+      MembershipRepository? membership,
     }) async {
       tester.view.physicalSize = const Size(800, 2600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
+      // A relaunch has to tear the tree down first. `bootstrapApp` returns an
+      // unkeyed `ProviderScope`, so pumping a second one over the first
+      // *updates* that element: the container, every notifier in it and the
+      // pinned clock all survive, and a test that called this twice would be
+      // asserting against the state it never lost. Unmounting is what makes
+      // the second call a process death rather than a rebuild.
+      await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         bootstrapApp(
           database: db,
@@ -560,6 +598,9 @@ void main() {
           now: now,
           utcOffset: utcOffset,
           camera: camera ?? FakeCamera(frames, takenAtUtc: now),
+          framePaths: FramePaths(() async => frames.path),
+          pendingCapture: pendingCapture,
+          membership: membership,
           // The countdown's elapsed-time source, pinned exactly as `now:`
           // pins the instant it counts from — the real one is the wall clock,
           // and a countdown reading that here would pass or fail by how long
@@ -716,7 +757,7 @@ void main() {
       expect(kept.single.origin, 'pinged');
       expect(kept.single.word, 'we CAUGHT it');
       expect(kept.single.takenAtUtcIso, shutter.toIso8601String());
-      expect(kept.single.filePath, camera.taken.single);
+      expect(kept.single.filePath, 'frames/frame-1.png');
     });
 
     testWidgets('what you keep is what the Pool draws', (tester) async {
@@ -783,7 +824,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final kept = await db.readPhotos();
-      expect(kept.single.filePath, camera.taken.single);
+      expect(kept.single.filePath, 'frames/frame-1.png');
       // One route left, and only one: the pop the flow asks for and the pop
       // the route reports back to the flow are the same pop.
       expect(find.byKey(const Key('day-title')), findsOneWidget);
@@ -796,6 +837,188 @@ void main() {
         camera.discarded,
         isNot(contains(camera.taken.single)),
         reason: 'the kept row points at the back frame where it lies',
+      );
+    });
+
+    testWidgets('a process death at the breath restores the punctual frame', (
+      tester,
+    ) async {
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('capture-back-frame')), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('capture-word')),
+        'still here',
+      );
+      await tester.pump();
+      final pending = await db.readPendingCapture();
+      expect(pending, isNotNull);
+      expect(pending!.filePath, 'frames/frame-1.png');
+
+      // A new ProviderScope over the same database is a process relaunch:
+      // every in-memory notifier and Navigator is gone, while Drift and the
+      // filed frame remain exactly where the phone left them.
+      await launch(
+        tester,
+        today: day(14),
+        now: ping.at.add(const Duration(minutes: 10)),
+        camera: camera,
+      );
+
+      expect(textOf(const Key('capture-call')), 'Your moment is waiting.');
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('capture-call-action')),
+          matching: find.text('Finish your moment'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('capture-call-action')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('capture-back-frame')), findsOneWidget);
+      expect(
+        textOf(const Key('capture-hour')),
+        '${clockLabel(ping.at, Duration.zero)}, yours.',
+      );
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: find.byKey(const Key('capture-word')),
+                matching: find.byType(EditableText),
+              ),
+            )
+            .controller
+            .text,
+        'still here',
+      );
+
+      await tester.tap(find.byKey(const Key('capture-keep')));
+      await tester.pumpAndSettle();
+      final kept = (await db.readPhotos()).single;
+      expect(kept.takenAtUtcIso, ping.at.toIso8601String());
+      expect(kept.word, 'still here');
+      expect(File(camera.taken.single).existsSync(), isTrue);
+      expect(await db.readPendingCapture(), isNull);
+    });
+
+    testWidgets('a restore that cannot read its row leaves the camera '
+        'reachable', (tester) async {
+      // `isRestoring` gates `open()` and draws the day page with no button.
+      // A throw inside the restore used to leave that flag standing for the
+      // rest of the launch, so the ping could not be answered at all — and
+      // silently. No lockout, ever: a restore that fails settles on "no
+      // pending capture" instead.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at);
+      await launch(
+        tester,
+        today: day(14),
+        now: ping.at,
+        camera: camera,
+        pendingCapture: UnreadablePendingCaptureStore(
+          db,
+          framePaths: FramePaths(() async => frames.path),
+        ),
+      );
+      await accept(tester, tripPaste);
+
+      expect(
+        textOf(const Key('capture-call')),
+        'Your minute. Look up.',
+        reason: 'the day page was left saying the restore was still running',
+      );
+      expect(find.byKey(const Key('capture-call-action')), findsOneWidget);
+
+      // And the door really opens: `open()` refuses while `isRestoring`
+      // stands, so the button alone is not the assertion.
+      await openTheCamera(tester);
+      expect(find.byKey(const Key('capture-shutter')), findsOneWidget);
+    });
+
+    testWidgets('a restored breath is offered even when today deals no '
+        'moment', (tester) async {
+      // `captureCallProvider` answers `NoMomentHere` while the roster has not
+      // emitted, and again when the party grew past the day's slots. This
+      // button is the only route back into the capture screen, so deferring
+      // to the call stranded the frames on disk with no way to keep them.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(tester, today: day(14), now: ping.at, camera: camera);
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+      expect(await db.readPendingCapture(), isNotNull);
+
+      // The relaunch finds a plan, a day and an open trip — and no party, so
+      // nothing is dealt for today.
+      await launch(
+        tester,
+        today: day(14),
+        now: ping.at.add(const Duration(minutes: 5)),
+        camera: camera,
+        membership: InMemoryMembership(null),
+      );
+
+      expect(textOf(const Key('capture-call')), 'Your moment is waiting.');
+      await tester.tap(find.byKey(const Key('capture-call-action')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('capture-back-frame')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('capture-keep')));
+      await tester.pumpAndSettle();
+      expect((await db.readPhotos()).single.filePath, 'frames/frame-1.png');
+      expect(await db.readPendingCapture(), isNull);
+    });
+
+    testWidgets('leaving while the pending row is being written keeps the '
+        'breath abandoned', (tester) async {
+      // The write is the shutter's second await, and a route pop landing in
+      // it reaches `abandon()` while the state still reads `Framing` — so the
+      // abandon clears nothing, and the shutter used to resume and raise a
+      // breath over the closed state the person had just chosen.
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      final breaths = InterruptedPendingCaptureStore(
+        db,
+        framePaths: FramePaths(() async => frames.path),
+      );
+      await launch(
+        tester,
+        today: day(14),
+        now: ping.at,
+        camera: camera,
+        pendingCapture: breaths,
+      );
+      await accept(tester, tripPaste);
+
+      await openTheCamera(tester);
+      final flow = ProviderScope.containerOf(
+        tester.element(find.byKey(const Key('capture-shutter'))),
+        listen: false,
+      ).read(captureFlowProvider.notifier);
+      breaths.onWritten = flow.abandon;
+
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+
+      expect(await db.readPendingCapture(), isNull);
+      expect(await db.readPhotos(), isEmpty);
+      expect(camera.discarded, [...camera.taken, ...camera.frontTaken]);
+      expect(find.byKey(const Key('capture-back-frame')), findsNothing);
+      expect(
+        textOf(const Key('capture-call')),
+        'Your minute. Look up.',
+        reason: 'a breath the person left must not be raised behind them',
       );
     });
 
@@ -828,6 +1051,7 @@ void main() {
         ...camera.frontTaken,
       ], reason: 'a pop out of the breath must leave no orphan on disk');
       expect(await db.readPhotos(), isEmpty);
+      expect(await db.readPendingCapture(), isNull);
       // Back on the day page, and only one route was popped: the trip is
       // still on screen with its call to the moment.
       expect(find.byKey(const Key('capture-call-action')), findsOneWidget);
@@ -887,7 +1111,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final kept = await db.readPhotos();
-      expect(kept.single.filePath, camera.taken.single);
+      expect(kept.single.filePath, 'frames/frame-1.png');
       expect(
         camera.discarded,
         isNot(contains(camera.taken.single)),
@@ -915,6 +1139,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(camera.discarded, [...camera.taken, ...camera.frontTaken]);
+      expect(await db.readPendingCapture(), isNull);
     });
 
     testWidgets('the word is skippable, and blank is stored as no word', (
@@ -1022,7 +1247,7 @@ void main() {
 
       final kept = await db.readPhotos();
       expect(kept, hasLength(1), reason: 'one moment is one photograph');
-      expect(kept.single.filePath, camera.taken.last);
+      expect(kept.single.filePath, 'frames/frame-5.png');
       // The count of retakes is nobody's business but the person's: the
       // posted photograph never shows how many retakes it took, so it is not
       // stored and the pool has no column that could show it.

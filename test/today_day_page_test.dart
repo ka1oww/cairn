@@ -19,6 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:cairn/app_state/day_view.dart';
+import 'package:cairn/app_state/capture_flow.dart';
 import 'package:cairn/app_state/trip_providers.dart';
 import 'package:cairn/bootstrap.dart';
 import 'package:cairn/repositories/photo_repository.dart';
@@ -108,13 +109,22 @@ void main() {
   /// binds a provider this helper does not, which is exactly what happened
   /// when the Pool's seam arrived — and again when capture's did.
   Widget dayPageAt(DateTime date, {required DateTime today}) {
-    final photos = PhotoStore(db);
+    final photos = PhotoStore(
+      db,
+      framePaths: FramePaths(() async => '/frames'),
+    );
     return ProviderScope(
       key: UniqueKey(),
       overrides: [
         tripRepositoryProvider.overrideWithValue(TripRepository(db)),
         photoRepositoryProvider.overrideWithValue(photos),
         photoStoreProvider.overrideWithValue(photos),
+        pendingCaptureStoreProvider.overrideWithValue(
+          PendingCaptureStore(
+            db,
+            framePaths: FramePaths(() async => '/frames'),
+          ),
+        ),
         todayProvider.overrideWithValue(today),
       ],
       child: MaterialApp(home: DayPage(date: date)),

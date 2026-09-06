@@ -1538,6 +1538,7 @@ void main() {
     /// Winds a freshly built database back to schema v5 — the shape a phone
     /// had when the itinerary was still one phone's private business.
     Future<void> windBackToV5(AppDatabase db) async {
+      await db.customStatement('DROP TABLE pending_captures');
       await db.customStatement('DROP TABLE sync_states');
       await db.customStatement(
         'ALTER TABLE itinerary_days DROP COLUMN revised_at_utc_iso',

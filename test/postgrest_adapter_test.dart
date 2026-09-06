@@ -575,21 +575,28 @@ void main() {
       );
     });
 
-    test('a gateway 404 at the mint is retryable, not a refusal', () async {
-      final sync = facts(
-        MockClient((_) async => http.Response('{"code":"NOT_FOUND"}', 404)),
-      );
+    for (final status in const [401, 404, 408, 429]) {
+      test(
+        'a gateway $status at the mint is retryable, not a refusal',
+        () async {
+          final sync = facts(
+            MockClient(
+              (_) async => http.Response('{"code":"GATEWAY"}', status),
+            ),
+          );
 
-      await expectLater(
-        sync.photoUploadTicket(
-          tripId: trip,
-          photoId: 'photo-9',
-          contentType: 'image/jpeg',
-          byteSize: 1,
-        ),
-        throwsA(isA<UploadTicketRejected>()),
+          await expectLater(
+            sync.photoUploadTicket(
+              tripId: trip,
+              photoId: 'photo-9',
+              contentType: 'image/jpeg',
+              byteSize: 1,
+            ),
+            throwsA(isA<UploadTicketRejected>()),
+          );
+        },
       );
-    });
+    }
 
     test('a 5xx at the mint is later, stopping the pass', () async {
       final sync = facts(

@@ -49,7 +49,9 @@ Three files sit outside the bands, deliberately:
   all the others: `app_state/` declares `tripRepositoryProvider`,
   `photoRepositoryProvider` and `membershipRepositoryProvider` as unbound —
   each throws if read — and only `bootstrap.dart` (and tests) may bind them.
-  Two of those seams have a write half as well (`photoStoreProvider`,
+  So is `pendingCaptureStoreProvider`, the durable shutter breath's store,
+  which has no read half to pair with.
+  Two of the seams above have a write half as well (`photoStoreProvider`,
   `membershipStoreProvider`), and the app must bind each pair to the *same*
   object; binding them apart is how a captured photo or a renamed trip
   silently stops reaching the screen that reads it.

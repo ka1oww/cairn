@@ -29,7 +29,11 @@ void main() {
         closeStreamsSynchronously: true,
       ),
     );
-    photos = PhotoStore(db, mintId: () => 'photo-${++minted}');
+    photos = PhotoStore(
+      db,
+      framePaths: FramePaths(() async => '/frames'),
+      mintId: () => 'photo-${++minted}',
+    );
   });
   tearDown(() => db.close());
 
@@ -53,6 +57,14 @@ void main() {
 
   test('a kept photo round-trips through the seam unchanged', () async {
     final kept = await keep(day: 4, taken: at(14, 50), word: 'we CAUGHT it');
+
+    expect(
+      (await db.readPhotos()).single.filePath,
+      'frames/${at(14, 50).microsecondsSinceEpoch}.png',
+      reason:
+          'an app update moves the iOS container, so its absolute prefix '
+          'must never become stored state',
+    );
 
     final pool = await photos.watchTripPhotos().first;
     expect(pool, hasLength(1));
@@ -192,6 +204,7 @@ void main() {
     // Wind the phone back to the itinerary slice's schema: everything a
     // later version added has to go, not only the version number, or the
     // upgrade re-adds what is already there.
+    await before.customStatement('DROP TABLE pending_captures');
     await before.customStatement('DROP TABLE photo_outbox');
     await before.customStatement('DROP TABLE photos');
     await before.customStatement('DROP TABLE sync_states');
@@ -219,7 +232,11 @@ void main() {
     expect(await after.watchItineraryDays().first, hasLength(1));
     expect(await after.readItineraryStops(), hasLength(1));
 
-    await PhotoStore(after, mintId: () => 'upgraded').keep(
+    await PhotoStore(
+      after,
+      framePaths: FramePaths(() async => '/frames'),
+      mintId: () => 'upgraded',
+    ).keep(
       dayNumber: 1,
       contributor: MemberId('me'),
       takenAt: at(11, 40),
@@ -228,6 +245,46 @@ void main() {
     );
     expect(await after.readPhotos(), hasLength(1));
   });
+
+  test('a legacy absolute path the migration left alone reads back whole '
+      'rather than blanking the pool', () async {
+    // Schema v12 rewrites paths under `/frames/` and deliberately leaves
+    // every other absolute path exactly as it stands. Such a row used to
+    // throw out of the path resolver, and the throw travelled through the
+    // pool's own `asyncMap` — so one unreadable row took the Pool, the day
+    // page's timeline and the Trail's filled nodes down together.
+    await keep(taken: at(9));
+    await db.insertPhoto((
+      id: 'legacy',
+      dayNumber: 1,
+      contributorId: 'me',
+      takenAtUtcIso: at(10).toIso8601String(),
+      origin: 'pinged',
+      word: null,
+      filePath: '/var/mobile/Containers/Old/Documents/legacy.png',
+      contentType: 'image/png',
+    ));
+
+    final pool = await photos.watchTripPhotos().first;
+    expect(pool, hasLength(2));
+    expect(
+      pool.singleWhere((p) => p.ref.id.value == 'legacy').localPath,
+      '/var/mobile/Containers/Old/Documents/legacy.png',
+      reason: 'a path the resolver cannot place is handed back as it stands',
+    );
+  });
+
+  test(
+    'an unplaceable path is stored as it stands rather than refused',
+    () async {
+      final paths = FramePaths(() async => '/frames');
+      expect(await paths.stored('/elsewhere/x.png'), '/elsewhere/x.png');
+      expect(await paths.resolve('/elsewhere/x.png'), '/elsewhere/x.png');
+      // The frames directory itself still rebases, in both directions.
+      expect(await paths.stored('/frames/x.png'), 'frames/x.png');
+      expect(await paths.resolve('frames/x.png'), '/frames/x.png');
+    },
+  );
 
   test('every photo the seam keeps is a photo the store already had', () async {
     // Guards the one thing an id minter can silently break: two photos
