@@ -193,3 +193,106 @@ $$;
 
 revoke all on function public.trip_closes_at(uuid) from public;
 grant execute on function public.trip_closes_at(uuid) to authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- A CLOSED TRIP'S PLAN IS THE RECORD, AND THAT IS A PROPERTY OF THE RECORD
+-- ---------------------------------------------------------------------------
+--
+-- Tying the close to `trip_itinerary_days` puts it on a table clients may
+-- write. 0010's four policies there are plain `is_trip_member` with no close
+-- condition, because until now the close could not be moved from that table at
+-- all -- it was a pure function of columns only the starter could write. It can
+-- be now, so the refusal has to move with it: a member of a closed trip could
+-- otherwise `PATCH /rest/v1/trip_itinerary_days?trip_id=eq.<t>&day_number=eq.3`
+-- with a future date, watch `greatest` lift the close, and re-open an archived
+-- record -- photographs on to it, pushes accepted again, the name changeable,
+-- and an invite code minted before the close (which has no `expires_at` and
+-- dies only at `trip_closes_at`) admitting a stranger to the whole archive,
+-- which is what `docs/decisions/2026-08-22-grill-round-one.md` section 5 exists
+-- to prevent.
+--
+-- So the refusal sits on the table, exactly as 0014 put the rename's refusal on
+-- `trips` rather than inside `sync_trip_name`: a bare PATCH round
+-- `sync_trip_itinerary` is refused with it, and the rule is a property of the
+-- record instead of a property of one function. `sync_trip_itinerary` is
+-- SECURITY INVOKER, so it passes through this trigger and an open trip is
+-- unaffected -- including the merge's own day deletions.
+--
+-- BEFORE ROW is the whole mechanism: the trigger sees the close as it stood
+-- *before* this write, so a trip that has already closed is refused while a
+-- trip that is still open is left alone, whatever the write would do to the
+-- close afterwards. The message and code are `sync_trip_itinerary`'s own
+-- ('this trip has closed', P0001) so the phone's existing handling --
+-- `SyncStanding.refused` -- is unchanged and no app change is needed.
+--
+-- Two branches allow rather than refuse, and neither is obvious.
+--
+--   * **A null close allows.** `trips.id` is guaranteed by this table's own
+--     foreign key, so null means the caller cannot see the trip (RLS) rather
+--     than "never closes"; the SELECT policy already refuses them, and
+--     refusing here as well would invent a failure mode 0005's readers never
+--     had.
+--   * **A DELETE whose parent trip is already gone allows**, which is what
+--     keeps `canDeleteTrip` working. Discarding a record is not editing it
+--     (`trip_powers.dart`, and `docs/decisions/2026-08-26-the-ending.md`), and
+--     the starter may delete a *closed* trip -- but `trip_itinerary_days` goes
+--     by `on delete cascade`, so that deletion arrives here as a DELETE on a
+--     closed trip, which is the one shape this trigger exists to refuse. Two
+--     independent things let it through, and both were measured rather than
+--     assumed: PostgreSQL's referential-integrity trigger switches to the
+--     referencing table's owner before it runs the cascade, so `current_user`
+--     is no longer `authenticated` and the first branch returns; and the
+--     `trips` row is already gone by then, so the derivation is null anyway.
+--     Either alone would do. This is written down because the next reader
+--     will otherwise take both branches for dead code and tidy one away.
+--
+-- The cost, plainly: this runs once per row on the itinerary merge's own write
+-- path, so pushing a fourteen-day plan asks the derivation fourteen times. It
+-- is the same one-row read `photos_insert_trip_member` already makes per
+-- photograph, over the same index this migration adds, and `rls_probe.py`
+-- plans the trigger's own read as a member alongside the other two.
+create or replace function public.guard_closed_trip_itinerary_day()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public, pg_temp
+as $$
+declare
+  v_trip_id uuid;
+  v_closes_at timestamptz;
+begin
+  -- Migrations and service-role maintenance continue to bypass client RLS and
+  -- must not acquire a narrower power through this trigger. 0014's guard opens
+  -- the same way, and for the same reason.
+  if current_user <> 'authenticated' then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
+  end if;
+
+  -- `new` is unassigned on DELETE in PL/pgSQL, so this cannot be a coalesce
+  -- over both.
+  if tg_op = 'DELETE' then
+    v_trip_id := old.trip_id;
+  else
+    v_trip_id := new.trip_id;
+  end if;
+
+  v_closes_at := public.trip_closes_at(v_trip_id);
+  if v_closes_at is not null and now() >= v_closes_at then
+    raise exception 'this trip has closed';
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trip_itinerary_days_guard_closed_trip
+  on public.trip_itinerary_days;
+create trigger trip_itinerary_days_guard_closed_trip
+  before insert or update or delete on public.trip_itinerary_days
+  for each row execute function public.guard_closed_trip_itinerary_day();

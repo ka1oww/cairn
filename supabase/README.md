@@ -447,6 +447,33 @@ the plan. That is the decision and not an oversight: editing the plan is flat
 (`0010`'s policies), the plan is the trip, and the person who can postpone the
 trip is the person who can postpone the trip.
 
+**The refusal is a property of the record, not of one function.** Deriving the
+close from `trip_itinerary_days` puts it on a table clients write, and `0010`'s
+four policies there are plain `is_trip_member` with no close condition — they
+had no reason for one while the close was a pure function of columns only the
+starter could write. So `0016` adds
+**`trip_itinerary_days_guard_closed_trip`**, a `BEFORE INSERT OR UPDATE OR
+DELETE ... FOR EACH ROW` trigger that raises the same `this trip has closed`
+(P0001) `sync_trip_itinerary` raises. This is the move `0014` made for the
+rename, for the same reason: without it a member of an archived trip could
+`PATCH /rest/v1/trip_itinerary_days` with a future date, watch `greatest` lift
+the close, and re-open the record — photographs on to it, pushes accepted
+again, the name changeable, and an invite code minted before the close (which
+has no `expires_at` and dies only at `trip_closes_at`) admitting a stranger to
+the whole archive.
+
+`BEFORE ROW` is the mechanism: the trigger sees the close as it stood *before*
+the write, so an open trip is untouched — `sync_trip_itinerary` is `security
+invoker` and passes straight through it, the merge's own day deletions
+included — and a trip that has already closed is refused whatever the write
+would have done to the close. Two branches allow rather than refuse, and both
+are measured rather than assumed: a null close means "a trip this caller cannot
+see", never "never closes"; and **deleting a trip still works**, because
+`canDeleteTrip` is the deliberate exception to the read-only rule and the
+`on delete cascade` into `trip_itinerary_days` runs as the referencing table's
+owner with the `trips` row already gone, so it falls through both allowing
+branches at once.
+
 **The zone is `trips.timezone`, stated.** The derived date resolves in the trip's
 own IANA clock — validated against `pg_timezone_names` where it is written
 (`0003`) — and in nothing else. Not UTC, which would close a Tokyo trip nine
@@ -456,7 +483,9 @@ carries no zone of its own, so this is the same one-clock-per-trip approximation
 the section above documents, now applied to a date that is allowed to move.
 
 **The access path.** `trip_closes_at` runs inside `photos_insert_trip_member`'s
-`WITH CHECK`, so it is asked once per photograph. It reads
+`WITH CHECK`, so it is asked once per photograph — and, since the guard above,
+once per itinerary day written, so pushing a fourteen-day plan asks it fourteen
+times. It reads
 `trip_itinerary_days` once — `max(day_date)` filtered on `trip_id` — and that is
 an index-only scan over `trip_itinerary_days_day_date_idx` (`0016`) returning one
 row. The plan's last day *in plan order* is not the derivation's read but the
@@ -465,7 +494,9 @@ also one row. `tests/rls_probe.py` plans both **as a member**, not as the
 migration-owning superuser, since the hot path carries `trip_itinerary_days`'
 `is_trip_member` security qual and a superuser plan is not the plan that path
 produces; it settles the statistics first and asserts neither is a sequential
-scan, rather than trusting the planner to stay well behaved.
+scan, rather than trusting the planner to stay well behaved. The trigger's read
+is the same `max(day_date)`, over the same index, so the first of those plans is
+its plan too.
 
 ## Row-level security
 
@@ -526,10 +557,10 @@ directions.
 | **The trip's clock is one shared clock** | `trips_update_starter` / `trips_delete_starter` (`0004`) keep retiming and deletion with the person who authored the trip, and `validate_trip_timezone` (`0003`) refuses a zone that is not real. Since `0016` the trip's *ending* is no longer the starter's alone to decide: it comes off `trip_itinerary_days`, which any member may edit, exactly as any member may edit the plan. The starter's `end_date` remains the unconditional floor under it, so retiming can still only lengthen the window, never cut it. |
 | **Naming is flat without making the trip row flat** | `trips_update_member_rename`, `guard_member_trip_rename` and `sync_trip_name` (`0014`) admit any current member to `(name, name_revised_at)` only. The starter policy over every other mutable trip column is unchanged; strictly newer name revisions win. |
 | **A closed trip keeps the name it closed under** | `guard_member_trip_rename` (`0014`) asks `trip_closes_at` — since `0016` derived from the itinerary, not from a frozen `end_date` — whenever `name` or `name_revised_at` moves, *before* it lets the starter past — so the refusal is a property of the record and not of one function, and a bare `PATCH /rest/v1/trips` round `sync_trip_name` is refused with it. Deliberately scoped to the rename: nothing else the starter could already do to a closed trip changes. |
-| **The plan is the trip's, and any member may change it** | Every policy on the four itinerary tables (`0010`) is plain membership through `is_trip_member`, with no starter branch and no contributor branch. Editing the plan is flat, like inviting and like naming: a trip is a thing eight people are on, not a thing one of them owns. |
+| **The plan is the trip's, and any member may change it** | Every policy on the four itinerary tables (`0010`) is plain membership through `is_trip_member`, with no starter branch and no contributor branch. Editing the plan is flat, like inviting and like naming: a trip is a thing eight people are on, not a thing one of them owns. Bounded on one side only, and since `0016`: `trip_itinerary_days_guard_closed_trip` refuses every insert, update and delete on the days of a trip that has already closed. |
 | **A composed page stays with its trip** | `day_pages_lock_trip_id` (`0015`) compares the old and proposed rows in a `BEFORE UPDATE` trigger, so membership in two trips cannot be composed into moving a page between them. |
 | **A closed trip takes no new photographs** | `photos_insert_trip_member` (`0006`) also requires `now() < trip_closes_at(...)` — the close following the plan since `0016` — and the `photos_lock_trip_id` trigger (`0006`) stops a row being repointed at a closed trip round it. Deliberately *not* on the update and delete policies: a person's hold on their own photograph — correcting its day, removing it — survives the close ([the ending](../docs/decisions/2026-08-26-the-ending.md)). |
-| **A closed trip's plan is the record** | `sync_trip_itinerary` (`0010`) raises on `trip_closes_at` — `0016`'s derivation — before its first write, so neither half of the round trip runs and the stored plan is unchanged rather than merely un-returned. The phone refuses first (`TripSync._reconcile`); this is the half that holds when one of eight phones has a wrong clock. |
+| **A closed trip's plan is the record** | `sync_trip_itinerary` (`0010`) raises on `trip_closes_at` — `0016`'s derivation — before its first write, so neither half of the round trip runs and the stored plan is unchanged rather than merely un-returned. The phone refuses first (`TripSync._reconcile`); this is the half that holds when one of eight phones has a wrong clock. And since `0016` the refusal is a property of the record rather than of that one function: the `trip_itinerary_days_guard_closed_trip` trigger asks the same question per row, so a bare `PATCH /rest/v1/trip_itinerary_days` round the merge is refused with it — which is what stops a member re-opening an archived trip by dating one of its days forward. Deleting the trip still works: the cascade is not an edit. |
 | **A phone can only reach the plan through the merge** | `sync_trip_itinerary` is `security invoker` and re-checks membership itself, so it grants nothing the tables do not; the tables' own policies are what stop a non-member writing round it. |
 
 ### Why the gate is not an RLS policy
@@ -1029,7 +1060,7 @@ not an artefact of one machine's setup.
 
 - All sixteen migrations apply cleanly, and apply again cleanly on a second
   run.
-- 249 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
+- 266 adversarial checks pass (`tests/rls_probe.py`), covering: trip creation
   with `RETURNING`, cross-trip isolation in both directions, the removal
   asymmetry, photo edit/delete ownership, an unlock following a moved photo but
   surviving a deleted one, re-dating and un-dating attacks staying shut, object

@@ -697,7 +697,7 @@ Sharp edges worth knowing before touching this directory again:
   reason, never add `force row level security` to any table here -- it
   re-enables the recursion. Both directions are demonstrated by
   `supabase/tests/recursion_mechanism.py`.
-- **The trip's close follows the plan, and it is one function.**
+- **The trip's close follows the plan, and one function derives it.**
   `trip_closes_at` gates four paths -- `sync_trip_itinerary`,
   `photos_insert_trip_member`, `redeem_trip_invite` and
   `guard_member_trip_rename` / `sync_trip_name` -- plus `r2-upload-url` over
@@ -709,7 +709,7 @@ Sharp edges worth knowing before touching this directory again:
   *old* last day plus the grace. The close now comes off
   `trip_itinerary_days` through `trip_last_planned_day`, which is
   `cairn_model`'s `tripEndsAtFrom` said in SQL -- the plan's own last day, in
-  `trips.timezone`, never UTC and never the caller's zone. Three things to
+  `trips.timezone`, never UTC and never the caller's zone. Four things to
   keep. It is the later of the furthest date the plan states and
   `trips.end_date`, always and for every trip -- `trips.end_date` is an
   **unconditional floor**, not a fallback the plan can withdraw, which makes
@@ -723,10 +723,22 @@ Sharp edges worth knowing before touching this directory again:
   delete-and-repaste as the only way back. Two invariants say it: **the
   server's close is never earlier than the phone's ending**, and **never
   earlier than the close before `0016`**; losing either re-creates a defect.
-  And the derivation runs inside a WITH CHECK on the photo path, so it must
-  stay index-only (`trip_itinerary_days_day_date_idx`; the plan-order last-day
-  read the invariant compares against is the primary key walked backwards) --
-  `rls_probe.py` asserts both plans as a *member*, and
+  **The close is derived in one function but enforced in two places**, because
+  the derivation now reads a table clients write: `0010`'s policies on
+  `trip_itinerary_days` are plain membership with no close condition, so
+  `0016` adds the `trip_itinerary_days_guard_closed_trip` trigger, raising
+  `sync_trip_itinerary`'s own `this trip has closed` on every insert, update
+  and delete against a trip that has already closed. Without it a member could
+  `PATCH` a day forward and re-open an archived record, invite code and all --
+  the same move `0014` made for the rename, so the refusal is a property of
+  the record and not of one function. `BEFORE ROW` is why an open trip is
+  untouched, and **deleting a trip still works**: the `on delete cascade` runs
+  as the table's owner with the `trips` row already gone, which is not an
+  edit. And the derivation runs inside a WITH CHECK on the photo path *and*
+  once per itinerary day written, so it must stay index-only
+  (`trip_itinerary_days_day_date_idx`; the plan-order last-day read the
+  invariant compares against is the primary key walked backwards) --
+  `rls_probe.py` asserts the plans as a *member*, and
   `supabase/README.md`'s *The close follows the plan* is the authority.
 - **The invite grammar exists twice, and the probe is what keeps the two
   copies honest.** A code is three spoken words, forgiving of order and of one

@@ -1528,10 +1528,122 @@ def main():
             t=trip, g=grace_hours)[0][0] is True,
             f"[{label}] and at or after the close the frozen end_date gave before 0016")
 
+    # ---- the close is a property of the record, not of one function --------
+    # Deriving the close from `trip_itinerary_days` puts it on a table clients
+    # write, and 0010's policies there carry no close condition. Without a
+    # guard on the table itself a member of an archived trip could date one of
+    # its days forward, watch `greatest` lift the close, and re-open the
+    # record. 0016's `trip_itinerary_days_guard_closed_trip` is the refusal,
+    # and it is asked here through the table rather than through
+    # `sync_trip_itinerary`, because a bare PATCH is the door it exists to
+    # shut.
+    print("\n== a closed trip's plan is the record, and the table says so ==")
+    closed = str(b.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('The record', :u, 'Europe/Oslo', current_date, current_date + 4)
+           returning id""", u=bob)[0][0])
+    # Minted while the trip is still open, which is the only interesting case:
+    # a code carries no expiry of its own and dies at `trip_closes_at`.
+    b.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, :c, :u)",
+          t=closed, c="beacon lantern 11", u=bob)
+    status, rows = sync(b, closed, "2027-07-01T00:00:00Z",
+                        [dated(1, offset(-11)), dated(2, offset(-9)), dated(3, offset(-7))])
+    check(status == "ok", "[the record] the plan reaches the server while the trip is open",
+          repr(rows)[:90])
+    db.run("update public.trips set start_date = :s, end_date = :e where id = :t",
+           s=offset(-11), e=offset(-7), t=closed)
+    check(closes_on(closed, offset(-7)), "[the record] and the trip is closed afterwards")
+
+    status, rows = b.try_run(
+        "update public.trip_itinerary_days set day_date = :d "
+        "where trip_id = :t and day_number = 3", d=offset(30), t=closed)
+    check(status == "err" and "this trip has closed" in str(rows),
+          "a member cannot re-open a closed trip by dating one of its days forward",
+          repr(rows)[:90])
+    check(closes_on(closed, offset(-7)), "and the close is exactly where it was")
+
+    status, rows = b.try_run(
+        """insert into public.trip_itinerary_days (trip_id, day_number, day_date, place, revised_at)
+           values (:t, 4, :d, 'Somewhere', now())""", t=closed, d=offset(30))
+    check(status == "err" and "this trip has closed" in str(rows),
+          "nor by adding a day past the close", repr(rows)[:90])
+
+    status, rows = b.try_run(
+        "delete from public.trip_itinerary_days where trip_id = :t and day_number = 1", t=closed)
+    check(status == "err" and "this trip has closed" in str(rows),
+          "and a closed trip's days cannot be deleted either -- the plan is the record",
+          repr(rows)[:90])
+    check(db.run("select count(*) from public.trip_itinerary_days where trip_id = :t",
+                 t=closed)[0][0] == 3,
+          "so the stored plan is unchanged by all three attempts")
+
+    # What the refusal is actually protecting, asked after the attempt rather
+    # than instead of it.
+    d.try_run("select public.redeem_trip_invite('beacon lantern 11')")
+    check(db.run("select count(*) from public.trip_members where trip_id = :t and user_id = :u",
+                 t=closed, u=dave)[0][0] == 0,
+          "a code minted before the close still admits nobody after it")
+    reopen_photo = "0016dead-0000-0000-0000-000000000001"
+    b.try_run(
+        """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                      content_type, byte_size, day_number)
+           values (:id, :t, :u, :k, 'image/jpeg', 10, 1)""",
+        id=reopen_photo, t=closed, u=bob, k=photo_key(closed, reopen_photo))
+    check(db.run("select count(*) from public.photos where id = :id",
+                 id=reopen_photo)[0][0] == 0,
+          "and the archived record still takes no new photograph")
+
+    # The other half: an open trip is untouched, including the merge's own
+    # deletions, which now pass through the same trigger.
+    live = str(b.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Still going', :u, 'Europe/Oslo', current_date, current_date + 4)
+           returning id""", u=bob)[0][0])
+    status, rows = sync(b, live, "2027-07-01T00:00:00Z",
+                        [dated(1, offset(0)), dated(2, offset(1))])
+    check(status == "ok", "[still going] an open trip's plan syncs exactly as before",
+          repr(rows)[:90])
+    status, rows = b.try_run(
+        """insert into public.trip_itinerary_days (trip_id, day_number, day_date, place, revised_at)
+           values (:t, 3, :d, 'Somewhere', now())""", t=live, d=offset(2))
+    check(status == "ok", "a member of an open trip may still insert a day", repr(rows)[:90])
+    status, rows = b.try_run(
+        "update public.trip_itinerary_days set day_date = :d "
+        "where trip_id = :t and day_number = 3", t=live, d=offset(3))
+    check(status == "ok", "and may still re-date one", repr(rows)[:90])
+    status, rows = sync(b, live, "2027-08-01T00:00:00Z",
+                        [dated(1, offset(0), revised="2027-08-01T00:00:00Z"),
+                         dated(2, offset(1), revised="2027-08-01T00:00:00Z")])
+    check(status == "ok" and db.run(
+              "select count(*) from public.trip_itinerary_days where trip_id = :t",
+              t=live)[0][0] == 2,
+          "and the merge's own day deletion still runs through the trigger", repr(rows)[:90])
+    status, rows = b.try_run(
+        "delete from public.trip_itinerary_days where trip_id = :t and day_number = 2", t=live)
+    check(status == "ok" and db.run(
+              "select count(*) from public.trip_itinerary_days where trip_id = :t",
+              t=live)[0][0] == 1,
+          "as does a member's own delete", repr(rows)[:90])
+
+    # Discarding a record is not editing it: `canDeleteTrip` is the deliberate
+    # exception to the read-only rule, and the cascade into
+    # `trip_itinerary_days` arrives at this trigger as a delete on a closed
+    # trip -- the one shape it refuses. Both of the trigger's allowing branches
+    # are what keep this working, and neither is obvious, so it is asserted.
+    status, rows = b.try_run("delete from public.trips where id = :t", t=closed)
+    check(status == "ok" and db.run(
+              "select count(*) from public.trips where id = :t", t=closed)[0][0] == 0,
+          "a closed trip can still be discarded -- the cascade is not an edit",
+          repr(rows)[:90])
+    check(db.run("select count(*) from public.trip_itinerary_days where trip_id = :t",
+                 t=closed)[0][0] == 0,
+          "and it takes its itinerary days with it")
+
     # ---- the access path ---------------------------------------------------
     # `trip_closes_at` runs inside `photos_insert_trip_member`'s WITH CHECK, so
-    # it is asked once per photograph. What it must never become is a scan of
-    # every trip's days.
+    # it is asked once per photograph -- and, since the guard above, once per
+    # itinerary day written, so a fourteen-day push asks it fourteen times.
+    # What it must never become is a scan of every trip's days.
     #
     # Both plans are taken as a *member*, not over `db`: the hot path runs as
     # `authenticated`, where `trip_itinerary_days` carries an `is_trip_member`
@@ -1549,8 +1661,16 @@ def main():
         "explain (costs off) select max(d.day_date) from public.trip_itinerary_days d "
         "where d.trip_id = :t", t=postponed))
     check("Seq Scan" not in plan,
-          "and the furthest-date read is not a sequential scan under RLS",
+          "and the furthest-date read -- the WITH CHECK's and the trigger's alike -- "
+          "is not a sequential scan under RLS",
           plan.replace("\n", " | ")[:120])
+    check(sorted(row[0] for row in db.run(
+              """select t.tgname from pg_trigger t
+                 where t.tgrelid = 'public.trip_itinerary_days'::regclass
+                   and not t.tgisinternal""")) ==
+          ["trip_itinerary_days_guard_closed_trip",
+           "trip_itinerary_days_record_gate_date_guard"],
+          "and the guard that asks it per row is the only trigger 0016 adds here")
     plan = "\n".join(row[0] for row in b.run(
         "explain (costs off) select d.day_date from public.trip_itinerary_days d "
         "where d.trip_id = :t order by d.day_number desc limit 1", t=postponed))
