@@ -24,7 +24,7 @@ once review added the closed-trip refusal, so the hosted function bodies match
 this repo). `0011`, the photo
 transport delta, and
 `0013`, which teaches `sync_trip_itinerary` those columns, exist only here and
-in the local probe. The app
+in the local probe, as do `0015`, `0016` and `0017`. The app
 points at it by default — see
 [Pointing the app at it](#pointing-the-app-at-it) — and
 [Verification](#verification-what-was-actually-run) at the bottom says what has
@@ -474,6 +474,27 @@ see", never "never closes"; and **deleting a trip still works**, because
 owner with the `trips` row already gone, so it falls through both allowing
 branches at once.
 
+**And the plan is four tables, not one.** `0016`'s guard was written for the
+re-opening attack and covers exactly the table that attack goes through, which
+left the other three writable on an archived trip: a member could rewrite a
+`trip_itinerary_stops` row and change what the trip did that afternoon, empty
+`trip_itinerary_set_asides` — where "nothing the person pasted is ever deleted"
+is actually kept — or wind `trip_itineraries.plan_revised_at` forward and make
+every phone lose the next merge it is offered. None of those can move the close,
+which is the point: *a closed trip's plan is the record* is a statement about
+the plan, not about the close. `0017` renames the guard to
+`guard_closed_trip_itinerary_write` and hangs all four triggers off that one
+body — one rule, four tables, no second copy — so the days' trigger keeps its
+name and changes only what it executes. Two consequences worth stating.
+`trip_itinerary_stops` reaches the guard through a *cascade* whenever a day is
+deleted, which takes the `current_user <> 'authenticated'` branch, and discarding
+a closed trip therefore still works through two cascades rather than one. And
+`trip_itineraries` has no DELETE policy at all (`0010`), so that one path is
+already filtered to zero rows before the guard is asked; the trigger takes it
+regardless, because a missing policy is a thing a later migration adds. The cost
+is the derivation once per itinerary *row* written rather than once per day —
+the same index-only read, over `trip_itinerary_days_day_date_idx`.
+
 **The zone is `trips.timezone`, stated.** The derived date resolves in the trip's
 own IANA clock — validated against `pg_timezone_names` where it is written
 (`0003`) — and in nothing else. Not UTC, which would close a Tokyo trip nine
@@ -557,10 +578,10 @@ directions.
 | **The trip's clock is one shared clock** | `trips_update_starter` / `trips_delete_starter` (`0004`) keep retiming and deletion with the person who authored the trip, and `validate_trip_timezone` (`0003`) refuses a zone that is not real. Since `0016` the trip's *ending* is no longer the starter's alone to decide: it comes off `trip_itinerary_days`, which any member may edit, exactly as any member may edit the plan. The starter's `end_date` remains the unconditional floor under it, so retiming can still only lengthen the window, never cut it. |
 | **Naming is flat without making the trip row flat** | `trips_update_member_rename`, `guard_member_trip_rename` and `sync_trip_name` (`0014`) admit any current member to `(name, name_revised_at)` only. The starter policy over every other mutable trip column is unchanged; strictly newer name revisions win. |
 | **A closed trip keeps the name it closed under** | `guard_member_trip_rename` (`0014`) asks `trip_closes_at` — since `0016` derived from the itinerary, not from a frozen `end_date` — whenever `name` or `name_revised_at` moves, *before* it lets the starter past — so the refusal is a property of the record and not of one function, and a bare `PATCH /rest/v1/trips` round `sync_trip_name` is refused with it. Deliberately scoped to the rename: nothing else the starter could already do to a closed trip changes. |
-| **The plan is the trip's, and any member may change it** | Every policy on the four itinerary tables (`0010`) is plain membership through `is_trip_member`, with no starter branch and no contributor branch. Editing the plan is flat, like inviting and like naming: a trip is a thing eight people are on, not a thing one of them owns. Bounded on one side only, and since `0016`: `trip_itinerary_days_guard_closed_trip` refuses every insert, update and delete on the days of a trip that has already closed. |
+| **The plan is the trip's, and any member may change it** | Every policy on the four itinerary tables (`0010`) is plain membership through `is_trip_member`, with no starter branch and no contributor branch. Editing the plan is flat, like inviting and like naming: a trip is a thing eight people are on, not a thing one of them owns. Bounded on one side only, and since `0016`/`0017`: `guard_closed_trip_itinerary_write` refuses every insert, update and delete on **all four** itinerary tables of a trip that has already closed. |
 | **A composed page stays with its trip** | `day_pages_lock_trip_id` (`0015`) compares the old and proposed rows in a `BEFORE UPDATE` trigger, so membership in two trips cannot be composed into moving a page between them. |
 | **A closed trip takes no new photographs** | `photos_insert_trip_member` (`0006`) also requires `now() < trip_closes_at(...)` — the close following the plan since `0016` — and the `photos_lock_trip_id` trigger (`0006`) stops a row being repointed at a closed trip round it. Deliberately *not* on the update and delete policies: a person's hold on their own photograph — correcting its day, removing it — survives the close ([the ending](../docs/decisions/2026-08-26-the-ending.md)). |
-| **A closed trip's plan is the record** | `sync_trip_itinerary` (`0010`) raises on `trip_closes_at` — `0016`'s derivation — before its first write, so neither half of the round trip runs and the stored plan is unchanged rather than merely un-returned. The phone refuses first (`TripSync._reconcile`); this is the half that holds when one of eight phones has a wrong clock. And since `0016` the refusal is a property of the record rather than of that one function: the `trip_itinerary_days_guard_closed_trip` trigger asks the same question per row, so a bare `PATCH /rest/v1/trip_itinerary_days` round the merge is refused with it — which is what stops a member re-opening an archived trip by dating one of its days forward. Deleting the trip still works: the cascade is not an edit. |
+| **A closed trip's plan is the record** | `sync_trip_itinerary` (`0010`) raises on `trip_closes_at` — `0016`'s derivation — before its first write, so neither half of the round trip runs and the stored plan is unchanged rather than merely un-returned. The phone refuses first (`TripSync._reconcile`); this is the half that holds when one of eight phones has a wrong clock. And since `0016` the refusal is a property of the record rather than of that one function: the `*_guard_closed_trip` triggers ask the same question per row on all four itinerary tables (`0016` for the days, `0017` for the stops, the set-aside pocket and the header), so a bare `PATCH /rest/v1/trip_itinerary_stops` round the merge is refused with it — which is what stops a member re-opening an archived trip by dating one of its days forward, and what stops them rewriting what the trip did once it has. Deleting the trip still works: the cascade is not an edit. |
 | **A phone can only reach the plan through the merge** | `sync_trip_itinerary` is `security invoker` and re-checks membership itself, so it grants nothing the tables do not; the tables' own policies are what stop a non-member writing round it. |
 
 ### Why the gate is not an RLS policy
@@ -1117,7 +1138,7 @@ not an artefact of one machine's setup.
 current to 2026-09-05). Migrations `0001` through `0010`, `0012` and `0014`
 are applied to it. `0014` ran twice: once as first written, and again on
 1 September once review added the closed-trip refusal, the allowlist guard and
-the starter half of that refusal. `0011`, `0013`, `0015` and `0016` are not
+the starter half of that refusal. `0011`, `0013`, `0015`, `0016` and `0017` are not
 applied; the hosted project's stored object keys therefore do not yet carry
 either prefix constraint, and **hosted still closes every trip on the frozen
 `trips.end_date`** — the defect `0016` repairs is live there until `0016` runs.

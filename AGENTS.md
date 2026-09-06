@@ -739,7 +739,19 @@ Sharp edges worth knowing before touching this directory again:
   `trip_itinerary_days` are plain membership with no close condition, so
   `0016` adds the `trip_itinerary_days_guard_closed_trip` trigger, raising
   `sync_trip_itinerary`'s own `this trip has closed` on every insert, update
-  and delete against a trip that has already closed. Without it a member could
+  and delete against a trip that has already closed. **`0017` widens that from
+  the days to all four itinerary tables** (`trip_itineraries`,
+  `trip_itinerary_stops`, `trip_itinerary_set_asides`), because *a closed
+  trip's plan is the record* is a statement about the plan and not about the
+  close -- none of the other three can move the close, and all three were
+  writable on an archived trip until then. One body serves all four triggers
+  (`guard_closed_trip_itinerary_write`, `0016`'s function renamed and dropped
+  under its old name); a second copy of that rule is the thing to refuse in
+  review. Two things a reader would take for dead code and are not:
+  `trip_itinerary_stops` reaches the guard through a *cascade* when a day is
+  deleted (the `current_user` branch), and `trip_itineraries` has no DELETE
+  policy at all, so that path is filtered to zero rows before the guard is
+  asked and the probe pins it on the row's survival rather than on an error. Without it a member could
   `PATCH` a day forward and re-open an archived record, invite code and all --
   the same move `0014` made for the rename, so the refusal is a property of
   the record and not of one function. `BEFORE ROW` is why an open trip is
@@ -788,8 +800,9 @@ Sharp edges worth knowing before touching this directory again:
   in place rather than re-pushed, per the bullet above;
   `0011`, the photo transport delta, `0013`, which teaches
   `sync_trip_itinerary` those columns, `0015`, the day-gate and tenancy
-  hardening, and `0016`, the close derived from the itinerary, are written and
-  locally probed but
+  hardening, `0016`, the close derived from the itinerary, and `0017`, which
+  widens `0016`'s closed-trip guard to all four itinerary tables, are written
+  and locally probed but
   applied nowhere else — until `0013` runs, an area correction is stripped on
   push and absent on pull, so it never leaves the phone that made it, and
   until `0016` runs hosted still closes every trip on the frozen

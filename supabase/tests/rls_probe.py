@@ -1546,8 +1546,18 @@ def main():
     # a code carries no expiry of its own and dies at `trip_closes_at`.
     b.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, :c, :u)",
           t=closed, c="beacon lantern 11", u=bob)
+    # The plan is pushed complete -- days, a stop under one of them and a line
+    # in the set-aside pocket -- because 0017 widened the refusal from the days
+    # to all four of the itinerary's tables, and a record with nothing but days
+    # in it could not tell whether the other three were fixed or merely empty.
+    kept_line = [{"position": 0, "source_line_number": 9,
+                  "line_text": "book the cabin", "explanation": "no day named"}]
     status, rows = sync(b, closed, "2027-07-01T00:00:00Z",
-                        [dated(1, offset(-11)), dated(2, offset(-9)), dated(3, offset(-7))])
+                        [dated(1, offset(-11)), dated(2, offset(-9)),
+                         {**dated(3, offset(-7)),
+                          "stops": [{"position": 0, "stop_text": "Bryggen",
+                                     "time_of_day": None}]}],
+                        pocket_at="2027-07-01T00:00:00Z", pocket=kept_line)
     check(status == "ok", "[the record] the plan reaches the server while the trip is open",
           repr(rows)[:90])
     db.run("update public.trips set start_date = :s, end_date = :e where id = :t",
@@ -1576,6 +1586,99 @@ def main():
     check(db.run("select count(*) from public.trip_itinerary_days where trip_id = :t",
                  t=closed)[0][0] == 3,
           "so the stored plan is unchanged by all three attempts")
+
+    # ---- and the other three tables of the plan, since 0017 ----------------
+    # None of these can move the close -- only `day_date` does that -- so the
+    # refusal here is not about the re-opening attack at all. It is the plainer
+    # half of the same sentence: a closed trip's plan is the record, and the
+    # record is what the trip did, which is the stops and the lines nobody
+    # placed as much as the dates.
+    for table, sql, params, what in (
+        ("trip_itinerary_stops",
+         "update public.trip_itinerary_stops set stop_text = 'Somewhere else' "
+         "where trip_id = :t and day_number = 3 and position = 0", {},
+         "a member cannot rewrite what a closed trip's afternoon was"),
+        ("trip_itinerary_stops",
+         """insert into public.trip_itinerary_stops
+              (trip_id, day_number, position, stop_text, time_of_day)
+            values (:t, 3, 1, 'Never happened', null)""", {},
+         "nor add a stop the trip never made"),
+        ("trip_itinerary_stops",
+         "delete from public.trip_itinerary_stops "
+         "where trip_id = :t and day_number = 3 and position = 0", {},
+         "nor take one out of the record"),
+        ("trip_itinerary_set_asides",
+         "update public.trip_itinerary_set_asides set line_text = 'rewritten' "
+         "where trip_id = :t and position = 0", {},
+         "a member cannot reword a line the parser could not place"),
+        ("trip_itinerary_set_asides",
+         """insert into public.trip_itinerary_set_asides
+              (trip_id, position, source_line_number, line_text, explanation)
+            values (:t, 1, 12, 'invented', 'no day named')""", {},
+         "nor add one to the pocket after the fact"),
+        ("trip_itinerary_set_asides",
+         "delete from public.trip_itinerary_set_asides where trip_id = :t and position = 0", {},
+         "nor empty the pocket -- 'nothing the person pasted is ever deleted' "
+         "outlives the trip"),
+        ("trip_itineraries",
+         "update public.trip_itineraries set plan_revised_at = :r where trip_id = :t",
+         {"r": "2099-01-01T00:00:00Z"},
+         "a member cannot wind the plan's merge clock forward"),
+    ):
+        status, rows = b.try_run(sql, t=closed, **params)
+        check(status == "err" and "this trip has closed" in str(rows),
+              f"[{table}] {what}", repr(rows)[:90])
+
+    # The header row's DELETE is the one write of the eight that RLS refuses
+    # before the guard is ever asked: 0010 gives `trip_itineraries` a SELECT, an
+    # INSERT and an UPDATE policy and no DELETE policy at all. RLS refuses by
+    # filtering to zero rows rather than raising, so this comes back "ok" with
+    # nothing deleted -- which is why it is asserted on the row's survival and
+    # not on the error the other seven raise. The trigger covers DELETE anyway,
+    # because a policy is a thing a later migration can add and the guard should
+    # not have to be remembered when it does.
+    status, rows = b.try_run("delete from public.trip_itineraries where trip_id = :t", t=closed)
+    check(db.run("select count(*) from public.trip_itineraries where trip_id = :t",
+                 t=closed)[0][0] == 1,
+          "[trip_itineraries] and nobody throws a closed trip's revision clocks away -- "
+          "there is no DELETE policy to reach the guard through",
+          repr(rows)[:90])
+
+    survived = db.run(
+        """select (select count(*) from public.trip_itinerary_stops
+                    where trip_id = :t and stop_text = 'Bryggen'),
+                  (select count(*) from public.trip_itinerary_set_asides
+                    where trip_id = :t and line_text = 'book the cabin'),
+                  (select count(*) from public.trip_itineraries
+                    where trip_id = :t and plan_revised_at = :r::timestamptz)
+        """, t=closed, r="2027-07-01T00:00:00Z")[0]
+    check(list(survived) == [1, 1, 1],
+          "and every one of those tables still says exactly what the trip left behind",
+          repr(survived))
+
+    # The header row's INSERT, which the trip above cannot show because it
+    # already has one. A closed trip that never synced a plan must not gain one
+    # afterwards either -- that is the same door, standing open on an emptier
+    # room.
+    never_synced = str(b.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Never told anyone', :u, 'Europe/Oslo', current_date, current_date + 4)
+           returning id""", u=bob)[0][0])
+    db.run("update public.trips set start_date = :s, end_date = :e where id = :t",
+           s=offset(-11), e=offset(-7), t=never_synced)
+    status, rows = b.try_run(
+        "insert into public.trip_itineraries (trip_id, plan_revised_at) values (:t, now())",
+        t=never_synced)
+    check(status == "err" and "this trip has closed" in str(rows),
+          "[trip_itineraries] and a closed trip that never synced gains no plan now",
+          repr(rows)[:90])
+    status, rows = b.try_run(
+        """insert into public.trip_itinerary_set_asides
+             (trip_id, position, source_line_number, line_text, explanation)
+           values (:t, 0, 1, 'after the fact', 'no day named')""", t=never_synced)
+    check(status == "err" and "this trip has closed" in str(rows),
+          "[trip_itinerary_set_asides] nor a pocket", repr(rows)[:90])
+    b.run("delete from public.trips where id = :t", t=never_synced)
 
     # What the refusal is actually protecting, asked after the attempt rather
     # than instead of it.
@@ -1625,6 +1728,62 @@ def main():
               t=live)[0][0] == 1,
           "as does a member's own delete", repr(rows)[:90])
 
+    # The same half for the three tables 0017 added, one write of each shape.
+    # Nothing about an open trip may have changed: the guard is asked, answers
+    # "still open", and gets out of the way.
+    for table, sql, params, what in (
+        ("trip_itinerary_stops",
+         """insert into public.trip_itinerary_stops
+              (trip_id, day_number, position, stop_text, time_of_day)
+            values (:t, 1, 0, 'Holmenkollen', null)""", {},
+         "a member of an open trip may still add a stop"),
+        ("trip_itinerary_stops",
+         "update public.trip_itinerary_stops set stop_text = 'Bryggen' "
+         "where trip_id = :t and day_number = 1 and position = 0", {},
+         "and reword it"),
+        ("trip_itinerary_stops",
+         "delete from public.trip_itinerary_stops "
+         "where trip_id = :t and day_number = 1 and position = 0", {},
+         "and take it out again"),
+        ("trip_itinerary_set_asides",
+         """insert into public.trip_itinerary_set_asides
+              (trip_id, position, source_line_number, line_text, explanation)
+            values (:t, 0, 3, 'book the cabin', 'no day named')""", {},
+         "may still set a line aside"),
+        ("trip_itinerary_set_asides",
+         "update public.trip_itinerary_set_asides set explanation = 'taken out by hand' "
+         "where trip_id = :t and position = 0", {},
+         "and say why differently"),
+        ("trip_itinerary_set_asides",
+         "delete from public.trip_itinerary_set_asides where trip_id = :t and position = 0", {},
+         "and empty the pocket"),
+        ("trip_itineraries",
+         "update public.trip_itineraries set plan_revised_at = :r where trip_id = :t",
+         {"r": "2027-09-01T00:00:00Z"},
+         "and the plan's merge clock still moves"),
+    ):
+        status, rows = b.try_run(sql, t=live, **params)
+        check(status == "ok", f"[still going] [{table}] {what}", repr(rows)[:90])
+
+    # The one path that reaches the stops' trigger without being a member's own
+    # write: deleting a day cascades into its stops, and the cascade runs as the
+    # referencing table's owner rather than as `authenticated`. Asserted on an
+    # open trip because that is where it actually happens; the closed trip's
+    # own discard below asserts the other end of the same branch.
+    b.run("""insert into public.trip_itinerary_days
+               (trip_id, day_number, day_date, place, revised_at)
+             values (:t, 9, :d, 'Cascade', now())""", t=live, d=offset(4))
+    b.run("""insert into public.trip_itinerary_stops
+               (trip_id, day_number, position, stop_text, time_of_day)
+             values (:t, 9, 0, 'Under a day about to go', null)""", t=live)
+    status, rows = b.try_run(
+        "delete from public.trip_itinerary_days where trip_id = :t and day_number = 9", t=live)
+    check(status == "ok" and db.run(
+              "select count(*) from public.trip_itinerary_stops "
+              "where trip_id = :t and day_number = 9", t=live)[0][0] == 0,
+          "and deleting an open trip's day still cascades into its stops through the guard",
+          repr(rows)[:90])
+
     # Discarding a record is not editing it: `canDeleteTrip` is the deliberate
     # exception to the read-only rule, and the cascade into
     # `trip_itinerary_days` arrives at this trigger as a delete on a closed
@@ -1635,9 +1794,16 @@ def main():
               "select count(*) from public.trips where id = :t", t=closed)[0][0] == 0,
           "a closed trip can still be discarded -- the cascade is not an edit",
           repr(rows)[:90])
-    check(db.run("select count(*) from public.trip_itinerary_days where trip_id = :t",
-                 t=closed)[0][0] == 0,
-          "and it takes its itinerary days with it")
+    left_behind = db.run(
+        """select (select count(*) from public.trip_itinerary_days where trip_id = :t),
+                  (select count(*) from public.trip_itinerary_stops where trip_id = :t),
+                  (select count(*) from public.trip_itinerary_set_asides where trip_id = :t),
+                  (select count(*) from public.trip_itineraries where trip_id = :t)
+        """, t=closed)[0]
+    check(list(left_behind) == [0, 0, 0, 0],
+          "and it takes all four of its itinerary tables with it -- the stops through "
+          "two cascades, not one",
+          repr(left_behind))
 
     # ---- the access path ---------------------------------------------------
     # `trip_closes_at` runs inside `photos_insert_trip_member`'s WITH CHECK, so
@@ -1671,6 +1837,30 @@ def main():
           ["trip_itinerary_days_guard_closed_trip",
            "trip_itinerary_days_record_gate_date_guard"],
           "and the guard that asks it per row is the only trigger 0016 adds here")
+
+    # 0017: four tables, four triggers, ONE body. A second copy of this rule is
+    # the thing to refuse in review, so the probe asserts there is not one --
+    # and that 0016's day-shaped name is gone rather than left behind for a
+    # fifth trigger to attach itself to.
+    guards = db.run(
+        """select c.relname, p.proname from pg_trigger t
+             join pg_class c on c.oid = t.tgrelid
+             join pg_proc p on p.oid = t.tgfoid
+            where not t.tgisinternal and t.tgname like '%_guard_closed_trip'
+            order by c.relname""")
+    check([list(row) for row in guards] == [
+              ["trip_itineraries", "guard_closed_trip_itinerary_write"],
+              ["trip_itinerary_days", "guard_closed_trip_itinerary_write"],
+              ["trip_itinerary_set_asides", "guard_closed_trip_itinerary_write"],
+              ["trip_itinerary_stops", "guard_closed_trip_itinerary_write"],
+          ],
+          "every one of the itinerary's four tables carries the guard, and all four "
+          "execute the same body",
+          repr([list(row) for row in guards]))
+    check(db.run("""select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                    where n.nspname = 'public'
+                      and p.proname = 'guard_closed_trip_itinerary_day'""")[0][0] == 0,
+          "and 0016's day-shaped name is gone, not left beside the one that is maintained")
     plan = "\n".join(row[0] for row in b.run(
         "explain (costs off) select d.day_date from public.trip_itinerary_days d "
         "where d.trip_id = :t order by d.day_number desc limit 1", t=postponed))
