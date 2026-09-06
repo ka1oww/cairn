@@ -78,8 +78,8 @@ phones and one of them has a wrong clock:
 |---|---|---|
 | No new photographs | `CaptureFlow.turnTheDayOver` / `open` | `photos_insert_trip_member` |
 | Codes die | `TripInvite.standingAt` | `redeem_trip_invite` via `trip_closes_at` |
-| The plan cannot be replaced | `PasteFlow.accept` | — (the phone owns the plan's shape) |
-| No sync at all | `TripSync._reconcile` → `SyncStanding.archived` | `sync_trip_itinerary` via `trip_closes_at` |
+| The plan cannot be replaced | `PasteFlow.accept` | the phone owns the plan's shape, but since `0016` a closed trip's days take no write at all: `trip_itinerary_days_guard_closed_trip` |
+| No sync at all | `TripSync._reconcile` → `SyncStanding.archived` | `sync_trip_itinerary` via `trip_closes_at`, and the same guard on the table under it |
 
 What the close does **not** take is a person's hold on their own photograph:
 correcting which day it landed on, or removing it, stays theirs afterwards, on

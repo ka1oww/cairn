@@ -677,8 +677,11 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   Free-tier limits section is the authority on it. (CI exists since #13 and covers the
   packages, the JS-safety golden, the RLS probe, the learning demo and the app.)
 - **The hosted Supabase project is real; a real R2 bucket still is not.**
-  Migrations `0001`-`0010` are applied to the hosted project and an ordinary
-  build points at it (`0011` is applied nowhere but the local probe), but only the permitted paths have ever been walked there — the
+  An ordinary build points at it, but not every migration has been applied
+  there — `supabase/README.md`'s *What the hosted project has actually done*
+  is the authority on which have, and `0016`'s derived close is one of those
+  that has not, so hosted still closes every trip on the frozen
+  `trips.end_date`. Only the permitted paths have ever been walked there — the
   adversarial verification (the RLS probe) still runs against a throwaway
   local Postgres, and must keep running there. No R2 bucket exists.
 
