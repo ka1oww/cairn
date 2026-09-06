@@ -78,8 +78,8 @@ phones and one of them has a wrong clock:
 |---|---|---|
 | No new photographs | `CaptureFlow.turnTheDayOver` / `open` | `photos_insert_trip_member` |
 | Codes die | `TripInvite.standingAt` | `redeem_trip_invite` via `trip_closes_at` |
-| The plan cannot be replaced | `PasteFlow.accept` | — (the phone owns the plan's shape) |
-| No sync at all | `TripSync._reconcile` → `SyncStanding.archived` | `sync_trip_itinerary` via `trip_closes_at` |
+| The plan cannot be replaced | `PasteFlow.accept` | the phone owns the plan's shape, but since `0016` a closed trip's days take no write at all: `trip_itinerary_days_guard_closed_trip` |
+| No sync at all | `TripSync._reconcile` → `SyncStanding.archived` | `sync_trip_itinerary` via `trip_closes_at`, and the same guard on the table under it |
 
 What the close does **not** take is a person's hold on their own photograph:
 correcting which day it landed on, or removing it, stays theirs afterwards, on
@@ -90,7 +90,25 @@ curates anybody — not even themselves out of the record's shape.
 
 The end is midnight on the trip's own clock, not UTC's: the phone works it out
 as the last dated day plus a day minus the trip's offset, and the server reads
-`(end_date + 1) at time zone t.timezone`. This slice has one offset for the
+`(the plan's last day + 1) at time zone t.timezone`.
+
+**Which day is the last one is read off the plan, on both sides.** The server
+did read `trips.end_date` for a while — a column written once at the trip's
+first sync and never again — and so refused every photograph, join, push and
+rename on any trip postponed or extended afterwards, from the *old* last day
+plus the grace onward, while every phone still drew it as live. Migration
+`0016` derives it from `trip_itinerary_days` instead, which is
+`cairn_model`'s `tripEndsAtFrom` said in SQL. The one place the two halves
+still differ is an ending nobody knows: the phone reads that as `underway`
+forever, and the server bounds it with the trip's recorded end date, because
+an unbounded close is an invite code that never dies. That recorded end date
+is an *unconditional* floor, so the server's close follows the plan **upward
+only** — a plan somebody shortens keeps the window it had, because a plan
+shortened on purpose and a plan mis-dated by a year are the same push, and a
+close that moved earlier would refuse the correction. `supabase/README.md`'s
+*The close follows the plan* owns the detail, and the invariants that keep the
+two honest are that the server's close is never earlier than the phone's
+ending, and never earlier than the close before `0016`. This slice has one offset for the
 whole trip, read off the device — the same acknowledged approximation as
 `todayProvider`, and the same one place that changes when a stored trip clock
 lands. Two travellers sixteen hours apart therefore see the archive shut

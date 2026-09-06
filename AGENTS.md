@@ -708,10 +708,53 @@ Sharp edges worth knowing before touching this directory again:
   reason, never add `force row level security` to any table here -- it
   re-enables the recursion. Both directions are demonstrated by
   `supabase/tests/recursion_mechanism.py`.
+- **The trip's close follows the plan, and one function derives it.**
+  `trip_closes_at` gates four paths -- `sync_trip_itinerary`,
+  `photos_insert_trip_member`, `redeem_trip_invite` and
+  `guard_member_trip_rename` / `sync_trip_name` -- plus `r2-upload-url` over
+  RPC, and all of them ask that one function, which is why `0016` repaired
+  every one of them with no app change. What it repaired: `trips.end_date` is
+  written **once**, by `_createSharedTrip`, and `TripSync._reconcile` never
+  sends the dates again, so a trip postponed or extended after its first sync
+  read as live on every phone while the server refused all four paths from the
+  *old* last day plus the grace. The close now comes off
+  `trip_itinerary_days` through `trip_last_planned_day`, which is
+  `cairn_model`'s `tripEndsAtFrom` said in SQL -- the plan's own last day, in
+  `trips.timezone`, never UTC and never the caller's zone. Four things to
+  keep. It is the later of the furthest date the plan states and
+  `trips.end_date`, always and for every trip -- `trips.end_date` is an
+  **unconditional floor**, not a fallback the plan can withdraw, which makes
+  the close **bounded, never "never"** (an unbounded close is an invite code
+  that never dies), lets a live trip and an un-synced trip cross the migration
+  with no backfill, and is the reason **a shortened plan does not close the
+  trip earlier**: the close follows the plan upward only. That last one is the
+  decision, not a gap. `sync_trip_itinerary` asks `trip_closes_at` before it
+  merges a day, so a close that could move earlier would let a mis-dated plan
+  refuse the very push that corrects it, another phone's included, leaving
+  delete-and-repaste as the only way back. Two invariants say it: **the
+  server's close is never earlier than the phone's ending**, and **never
+  earlier than the close before `0016`**; losing either re-creates a defect.
+  **The close is derived in one function but enforced in two places**, because
+  the derivation now reads a table clients write: `0010`'s policies on
+  `trip_itinerary_days` are plain membership with no close condition, so
+  `0016` adds the `trip_itinerary_days_guard_closed_trip` trigger, raising
+  `sync_trip_itinerary`'s own `this trip has closed` on every insert, update
+  and delete against a trip that has already closed. Without it a member could
+  `PATCH` a day forward and re-open an archived record, invite code and all --
+  the same move `0014` made for the rename, so the refusal is a property of
+  the record and not of one function. `BEFORE ROW` is why an open trip is
+  untouched, and **deleting a trip still works**: the `on delete cascade` runs
+  as the table's owner with the `trips` row already gone, which is not an
+  edit. And the derivation runs inside a WITH CHECK on the photo path *and*
+  once per itinerary day written, so it must stay index-only
+  (`trip_itinerary_days_day_date_idx`; the plan-order last-day read the
+  invariant compares against is the primary key walked backwards) --
+  `rls_probe.py` asserts the plans as a *member*, and
+  `supabase/README.md`'s *The close follows the plan* is the authority.
 - **The invite grammar exists twice, and the probe is what keeps the two
   copies honest.** A code is three spoken words, forgiving of order and of one
-  letter per word, and it dies at the trip's close -- end date plus the grace,
-  in the trip's own clock, never a stored `expires_at`. The phone's half
+  letter per word, and it dies at the trip's close -- the plan's last day plus
+  the grace, in the trip's own clock, never a stored `expires_at`. The phone's half
   is `cairn_model`'s `invite_code.dart` / `trip_close.dart`; the server's is
   `0005_trip_invites.sql`, and a code minted on one side is typed into the
   other, so they have to agree letter for letter. `tests/rls_probe.py` reads
@@ -744,10 +787,13 @@ Sharp edges worth knowing before touching this directory again:
   refusal and allowlist guard, so the hosted bodies match the repo — patched
   in place rather than re-pushed, per the bullet above;
   `0011`, the photo transport delta, `0013`, which teaches
-  `sync_trip_itinerary` those columns, and `0015`, the day-gate and tenancy
-  hardening, are written and locally probed but
+  `sync_trip_itinerary` those columns, `0015`, the day-gate and tenancy
+  hardening, and `0016`, the close derived from the itinerary, are written and
+  locally probed but
   applied nowhere else — until `0013` runs, an area correction is stripped on
-  push and absent on pull, so it never leaves the phone that made it), and an
+  push and absent on pull, so it never leaves the phone that made it, and
+  until `0016` runs hosted still closes every trip on the frozen
+  `trips.end_date`), and an
   ordinary build points at it (`supabase/README.md` is the authority on the
   defines and on what the hosted project has and has not actually done). The
   adversarial checks still run somewhere else and must: `supabase/tests/`

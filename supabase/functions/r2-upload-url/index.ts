@@ -65,7 +65,10 @@ function databaseAs(authHeader: string): UploadDatabase {
     async tripClosesAt(tripId: string): Promise<Date | null> {
       // `trip_closes_at` is `stable` and `security invoker`, so `trips`' own
       // RLS decides whether this caller sees the trip at all; it returns null
-      // when they do not (`0005_trip_invites.sql`).
+      // when they do not (`0005_trip_invites.sql`). Since `0016` it derives
+      // the trip's last day from `trip_itinerary_days` rather than from the
+      // `trips.end_date` the first sync froze, so this call follows a
+      // postponed or extended plan with no change here.
       const { data, error } = await userClient.rpc("trip_closes_at", {
         p_trip_id: tripId,
       });

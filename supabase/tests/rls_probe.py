@@ -861,11 +861,18 @@ def main():
           == grace * 3600,
           f"the grace after a trip is the phone's {grace} hours, not a second number",
           repr(db.run("select public.trip_grace_after_end()")[0][0]))
+    # Japan has no itinerary rows, so this is 0016's fallback arm: a trip whose
+    # plan has never reached the server closes exactly where `trips.end_date`
+    # put it. The arm that reads the plan is its own section further down.
     check(db.run("""select public.trip_closes_at(t.id)
-                           = ((t.end_date + 1)::timestamp at time zone t.timezone)
+                           = ((public.trip_last_planned_day(t.id) + 1)::timestamp
+                              at time zone t.timezone)
                              + make_interval(hours => :g)
                     from public.trips t where t.id = :t""", t=japan, g=grace)[0][0] is True,
           "and a trip closes a grace after its last day ends, in its own clock, not UTC")
+    check(db.run("select public.trip_last_planned_day(t.id) = t.end_date "
+                 "from public.trips t where t.id = :t", t=japan)[0][0] is True,
+          "with a trip that has never synced a plan taking its recorded end date")
 
     stale = str(b.run(
         """insert into public.trips (name, created_by, timezone, start_date, end_date)
@@ -1262,6 +1269,414 @@ def main():
     status, rows = sync(c, norway, "-infinity", [])
     check(status == "ok", "while the same call on the same trip, still open, goes through",
           repr(rows)[:90])
+
+    # ---------------------------------------------- the close follows the plan
+    #
+    # 0016. `trips.start_date`/`end_date`/`timezone` are written once by
+    # `_createSharedTrip` and never again, so before 0016 a trip postponed or
+    # extended after its first sync was refused by every one of the four gated
+    # paths from its OLD last day plus the grace onward, while every phone drew
+    # it as live. The close is now derived from `trip_itinerary_days`, which is
+    # the same sentence `cairn_model`'s `tripEndsAtFrom` says on the phone.
+    #
+    # Each shape below is built the only way the gate permits: the trip is
+    # created open, a member pushes the plan through the real function, and
+    # then the frozen columns are moved to what they were at creation. That
+    # last step stands in for the days passing since first sync -- it writes
+    # nothing the app would not already have written, because the app writes
+    # those columns once and the itinerary is what moves afterwards.
+    print("\n== the close follows the plan, not the snapshot the trip was created with ==")
+
+    grace_hours = dart_grace_hours()
+
+    def offset(n):
+        """A bare calendar date n days from today, as the plan would carry it."""
+        return (db.run("select (current_date + (:n)::integer)::text", n=n)[0][0])
+
+    def dated(n, date, revised="2027-07-01T00:00:00Z", place="Somewhere"):
+        return {"day_number": n, "day_date": date, "place": place,
+                "revised_at": revised, "stops": []}
+
+    plan_shapes = []
+
+    def trip_with(label, frozen_start, frozen_end, day_dates, code):
+        """A trip whose `trips` row froze at one span while its plan says another."""
+        trip = str(b.run(
+            """insert into public.trips (name, created_by, timezone, start_date, end_date)
+               values (:n, :u, 'Europe/Oslo', current_date, current_date + 4)
+               returning id""", n=label, u=bob)[0][0])
+        b.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, :c, :u)",
+              t=trip, c=code, u=bob)
+        c.run("select public.redeem_trip_invite(:c)", c=code)
+        status, rows = sync(b, trip, "2027-07-01T00:00:00Z",
+                            [dated(i + 1, d) for i, d in enumerate(day_dates)])
+        check(status == "ok", f"[{label}] the plan reaches the server while the trip is open",
+              repr(rows)[:90])
+        db.run("update public.trips set start_date = :s, end_date = :e where id = :t",
+               s=frozen_start, e=frozen_end, t=trip)
+        plan_shapes.append((label, trip))
+        return trip
+
+    def all_four_gates(label, trip, day_dates, joiner_code, expect_open):
+        """Every path `trip_closes_at` gates, asked at once.
+
+        The four are `sync_trip_itinerary` (0010), `photos_insert_trip_member`
+        (0006), `redeem_trip_invite` (0005) and `guard_member_trip_rename` /
+        `sync_trip_name` (0014). Fixing one and leaving three reading the old
+        column is exactly the failure this asks about, so they are asked
+        together and never one at a time.
+        """
+        word = "still open" if expect_open else "refused"
+
+        # The trip's own shape, re-pushed with a newer clock. Pushing a
+        # *shorter* plan here would delete the days that make this shape what it
+        # is (0010's deletion rule) and quietly turn every later check into a
+        # check about one day.
+        status, rows = sync(b, trip, "2027-08-01T00:00:00Z",
+                            [dated(i + 1, d, revised="2027-08-01T00:00:00Z")
+                             for i, d in enumerate(day_dates)])
+        check((status == "ok") == expect_open,
+              f"[{label}] pushing the itinerary is {word}", repr(rows)[:90])
+
+        photo = "0016%s-0000-0000-0000-%012d" % ("0000", len(plan_shapes) * 10 + 1)
+        status, rows = b.try_run(
+            """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                          content_type, byte_size, day_number)
+               values (:id, :t, :u, :k, 'image/jpeg', 10, 1)""",
+            id=photo, t=trip, u=bob, k=photo_key(trip, photo))
+        landed = db.run("select count(*) from public.photos where id = :id", id=photo)[0][0]
+        check((landed == 1) == expect_open,
+              f"[{label}] taking a photograph is {word}", repr(rows)[:90])
+
+        b.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, :c, :u)",
+              t=trip, c=joiner_code, u=bob)
+        d.try_run("select public.redeem_trip_invite(:c)", c=joiner_code)
+        joined = db.run("select count(*) from public.trip_members where trip_id = :t and user_id = :u",
+                        t=trip, u=dave)[0][0]
+        check((joined == 1) == expect_open,
+              f"[{label}] redeeming a code is {word}",
+              f"members with dave: {joined}")
+
+        wanted = label + " renamed"
+        c.try_run("select public.sync_trip_name(:t, :n, now())", t=trip, n=wanted)
+        named = db.run("select name from public.trips where id = :t", t=trip)[0][0]
+        check((named == wanted) == expect_open,
+              f"[{label}] renaming through sync_trip_name is {word}", repr(named))
+
+        patched = label + " patched"
+        b.try_run("update public.trips set name = :n, name_revised_at = now() where id = :t",
+                  t=trip, n=patched)
+        named = db.run("select name from public.trips where id = :t", t=trip)[0][0]
+        check((named == patched) == expect_open,
+              f"[{label}] and the bare PATCH round it is {word} too", repr(named))
+
+    def closes_on(trip, expected_date):
+        """The close is that date's next midnight in the *trip's* zone, plus the grace.
+
+        Asserted in SQL against `trips.timezone` rather than recomputed in
+        Python, because the zone the derivation resolves in is the whole of
+        what 0016 had to state: not UTC, and not the caller's.
+        """
+        return db.run(
+            """select public.trip_closes_at(t.id)
+                      = (((:d)::date + 1)::timestamp at time zone t.timezone)
+                        + make_interval(hours => :g)
+               from public.trips t where t.id = :t""",
+            t=trip, d=expected_date, g=grace_hours)[0][0] is True
+
+    # ---- postponed by a week ------------------------------------------------
+    # The plan the trips row froze ran 11 to 7 days ago; the itinerary now runs
+    # 4 days ago to today. Before 0016 every gate below was shut.
+    postponed = trip_with("postponed", offset(-11), offset(-7),
+                          [offset(-4), offset(-3), offset(-2), offset(-1), offset(0)],
+                          "dolphin lagoon 11")
+    check(closes_on(postponed, offset(0)),
+          "a plan postponed after first sync closes a grace after its NEW last day")
+    all_four_gates("postponed", postponed,
+                   [offset(-4), offset(-3), offset(-2), offset(-1), offset(0)],
+                   "dolphin lagoon 12", expect_open=True)
+
+    # ---- extended ----------------------------------------------------------
+    extended = trip_with("extended", offset(-8), offset(-4),
+                         [offset(-8), offset(-4), offset(0), offset(3)],
+                         "kestrel juniper 11")
+    check(closes_on(extended, offset(3)),
+          "and days added past the frozen end keep the trip open to the end of them")
+    all_four_gates("extended", extended,
+                   [offset(-8), offset(-4), offset(0), offset(3)],
+                   "kestrel juniper 12", expect_open=True)
+
+    # ---- shortened: the floor holds, by design -----------------------------
+    # The close follows the plan upward only. `trips.end_date` is an
+    # unconditional floor under the derivation (0016), so a plan cut short
+    # keeps the window it froze with rather than closing on its new last day.
+    # That is what makes a mis-dated plan repairable: `sync_trip_itinerary`
+    # asks `trip_closes_at` before it merges a day, so a close that could move
+    # earlier would refuse the very push that corrects it -- including another
+    # phone's. This shape is the regression test for that floor.
+    shortened = trip_with("shortened", offset(-2), offset(14),
+                          [offset(-2), offset(-1)],
+                          "narwhal orchard 11")
+    check(closes_on(shortened, offset(14)),
+          "a plan cut short does not close earlier -- the frozen end is a floor, by design")
+    check(db.run("select public.trip_closes_at(:t) > "
+                 "(((current_date - 1 + 1)::timestamp at time zone 'Europe/Oslo')"
+                 " + make_interval(hours => :g))", t=shortened, g=grace_hours)[0][0] is True,
+          "which is strictly later than the shortened plan's own last day would have given")
+    all_four_gates("shortened", shortened, [offset(-2), offset(-1)],
+                   "narwhal orchard 12", expect_open=True)
+
+    # ---- a wholly undated plan ---------------------------------------------
+    # The documented fallback (0016): an itinerary that states no date at all
+    # says nothing about when the trip ends, so the close falls back to
+    # `trips.end_date` -- bounded, never unbounded, and the same answer the
+    # trip had before this migration. That is what makes 0016 need no backfill.
+    undated_open = trip_with("undated and open", offset(-2), offset(2),
+                             [None, None, None], "pebble thistle 11")
+    check(closes_on(undated_open, offset(2)),
+          "an undated plan falls back to the trip's own recorded end -- not to never")
+    all_four_gates("undated and open", undated_open, [None, None, None],
+                   "pebble thistle 12", expect_open=True)
+
+    undated_past = trip_with("undated and over", offset(-11), offset(-7),
+                             [None, None, None], "velvet zephyr 11")
+    check(closes_on(undated_past, offset(-7)),
+          "and an undated plan whose recorded end is long past is closed, exactly as before")
+    all_four_gates("undated and over", undated_past, [None, None, None],
+                   "velvet zephyr 12", expect_open=False)
+
+    # ---- an undated tail ---------------------------------------------------
+    # The plan does not state its end, and the dated days it does carry are
+    # evidence too, so the later of those and the frozen floor wins. Both
+    # directions of that `greatest` are exercised below, because the floor is
+    # unconditional and either arm may be the one that answers.
+    tail = trip_with("undated tail", offset(-11), offset(-7),
+                     [offset(-1), offset(0), None], "urchin yarrow 11")
+    check(closes_on(tail, offset(0)),
+          "an undated tail takes the furthest date the plan does state, over a stale frozen end")
+    all_four_gates("undated tail", tail, [offset(-1), offset(0), None],
+                   "urchin yarrow 12", expect_open=True)
+
+    tail_floor = trip_with("undated tail, later floor", offset(-2), offset(6),
+                           [offset(-2), offset(-1), None], "tapir quokka 11")
+    check(closes_on(tail_floor, offset(6)),
+          "and keeps the frozen end when that is the later of the two -- a floor, never a cut")
+
+    # ---- a trip with no itinerary at all -----------------------------------
+    # Every trip that has never synced a plan, which on the hosted project is
+    # most of them, and the reason a live trip survives this migration.
+    bare = str(b.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('No plan yet', :u, 'Europe/Oslo', current_date, current_date + 4)
+           returning id""", u=bob)[0][0])
+    check(db.run("select count(*) from public.trip_itinerary_days where trip_id = :t",
+                 t=bare)[0][0] == 0,
+          "a trip whose itinerary has never reached the server has no days at all")
+    check(closes_on(bare, offset(4)),
+          "and closes exactly where it closed before 0016 -- no backfill, nothing to survive")
+
+    # ---- one rule, written twice -------------------------------------------
+    # `tripEndsAtFrom` takes the LAST day in plan order and this takes the
+    # furthest date in the plan. They agree on every plan a person can build by
+    # dating one and letting the fill run down it, and where they can differ --
+    # a middle day dated past the last one -- the server is deliberately the
+    # later of the two. The server refusing a trip a phone draws as live is the
+    # defect 0016 exists to end, so the asymmetry only ever runs this way.
+    print("\n== the server's close is never earlier than the phone's ending ==")
+    crooked = trip_with("out of order", offset(-2), offset(1),
+                        [offset(-2), offset(6), offset(0)], "summit ribbon 11")
+    check(closes_on(crooked, offset(6)),
+          "a middle day dated past the last one lengthens the window, never shortens it")
+    for label, trip in plan_shapes:
+        # `tripEndsAtFrom` takes the last day in plan order and reads an undated
+        # one as an ending nobody knows, so the comparison is null there rather
+        # than false: that is the one place the two halves deliberately differ,
+        # and 0016's comment says so out loud.
+        verdict = db.run(
+            """select case
+                        when (select d.day_date
+                                from public.trip_itinerary_days d
+                               where d.trip_id = t.id
+                               order by d.day_number desc limit 1) is null
+                          then null
+                        else public.trip_closes_at(t.id)
+                             >= ((select (d.day_date + 1)::timestamp at time zone t.timezone
+                                    from public.trip_itinerary_days d
+                                   where d.trip_id = t.id
+                                   order by d.day_number desc limit 1)
+                                 + make_interval(hours => :g))
+                      end
+               from public.trips t where t.id = :t""", t=trip, g=grace_hours)[0][0]
+        if verdict is None:
+            continue
+        check(verdict is True,
+              f"[{label}] the close is at or after the phone's own ending plus the grace")
+
+    # ---- and never earlier than the close 0016 replaced ---------------------
+    # The second invariant, and the one that makes every close-move repairable:
+    # `trips.end_date` is an unconditional floor, so no push can ever leave the
+    # server more closed than 0005's formula did -- which is what keeps a
+    # mis-dated plan from shutting `sync_trip_itinerary` against its own
+    # correction. This holds for every shape, undated ones included, so nothing
+    # is skipped here.
+    for label, trip in plan_shapes + [("no plan yet", bare)]:
+        check(db.run(
+            """select public.trip_closes_at(t.id)
+                      >= (((t.end_date + 1)::timestamp at time zone t.timezone)
+                          + make_interval(hours => :g))
+               from public.trips t where t.id = :t""",
+            t=trip, g=grace_hours)[0][0] is True,
+            f"[{label}] and at or after the close the frozen end_date gave before 0016")
+
+    # ---- the close is a property of the record, not of one function --------
+    # Deriving the close from `trip_itinerary_days` puts it on a table clients
+    # write, and 0010's policies there carry no close condition. Without a
+    # guard on the table itself a member of an archived trip could date one of
+    # its days forward, watch `greatest` lift the close, and re-open the
+    # record. 0016's `trip_itinerary_days_guard_closed_trip` is the refusal,
+    # and it is asked here through the table rather than through
+    # `sync_trip_itinerary`, because a bare PATCH is the door it exists to
+    # shut.
+    print("\n== a closed trip's plan is the record, and the table says so ==")
+    closed = str(b.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('The record', :u, 'Europe/Oslo', current_date, current_date + 4)
+           returning id""", u=bob)[0][0])
+    # Minted while the trip is still open, which is the only interesting case:
+    # a code carries no expiry of its own and dies at `trip_closes_at`.
+    b.run("insert into public.trip_invites (trip_id, code, created_by) values (:t, :c, :u)",
+          t=closed, c="beacon lantern 11", u=bob)
+    status, rows = sync(b, closed, "2027-07-01T00:00:00Z",
+                        [dated(1, offset(-11)), dated(2, offset(-9)), dated(3, offset(-7))])
+    check(status == "ok", "[the record] the plan reaches the server while the trip is open",
+          repr(rows)[:90])
+    db.run("update public.trips set start_date = :s, end_date = :e where id = :t",
+           s=offset(-11), e=offset(-7), t=closed)
+    check(closes_on(closed, offset(-7)), "[the record] and the trip is closed afterwards")
+
+    status, rows = b.try_run(
+        "update public.trip_itinerary_days set day_date = :d "
+        "where trip_id = :t and day_number = 3", d=offset(30), t=closed)
+    check(status == "err" and "this trip has closed" in str(rows),
+          "a member cannot re-open a closed trip by dating one of its days forward",
+          repr(rows)[:90])
+    check(closes_on(closed, offset(-7)), "and the close is exactly where it was")
+
+    status, rows = b.try_run(
+        """insert into public.trip_itinerary_days (trip_id, day_number, day_date, place, revised_at)
+           values (:t, 4, :d, 'Somewhere', now())""", t=closed, d=offset(30))
+    check(status == "err" and "this trip has closed" in str(rows),
+          "nor by adding a day past the close", repr(rows)[:90])
+
+    status, rows = b.try_run(
+        "delete from public.trip_itinerary_days where trip_id = :t and day_number = 1", t=closed)
+    check(status == "err" and "this trip has closed" in str(rows),
+          "and a closed trip's days cannot be deleted either -- the plan is the record",
+          repr(rows)[:90])
+    check(db.run("select count(*) from public.trip_itinerary_days where trip_id = :t",
+                 t=closed)[0][0] == 3,
+          "so the stored plan is unchanged by all three attempts")
+
+    # What the refusal is actually protecting, asked after the attempt rather
+    # than instead of it.
+    d.try_run("select public.redeem_trip_invite('beacon lantern 11')")
+    check(db.run("select count(*) from public.trip_members where trip_id = :t and user_id = :u",
+                 t=closed, u=dave)[0][0] == 0,
+          "a code minted before the close still admits nobody after it")
+    reopen_photo = "0016dead-0000-0000-0000-000000000001"
+    b.try_run(
+        """insert into public.photos (id, trip_id, contributor_id, r2_object_key,
+                                      content_type, byte_size, day_number)
+           values (:id, :t, :u, :k, 'image/jpeg', 10, 1)""",
+        id=reopen_photo, t=closed, u=bob, k=photo_key(closed, reopen_photo))
+    check(db.run("select count(*) from public.photos where id = :id",
+                 id=reopen_photo)[0][0] == 0,
+          "and the archived record still takes no new photograph")
+
+    # The other half: an open trip is untouched, including the merge's own
+    # deletions, which now pass through the same trigger.
+    live = str(b.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Still going', :u, 'Europe/Oslo', current_date, current_date + 4)
+           returning id""", u=bob)[0][0])
+    status, rows = sync(b, live, "2027-07-01T00:00:00Z",
+                        [dated(1, offset(0)), dated(2, offset(1))])
+    check(status == "ok", "[still going] an open trip's plan syncs exactly as before",
+          repr(rows)[:90])
+    status, rows = b.try_run(
+        """insert into public.trip_itinerary_days (trip_id, day_number, day_date, place, revised_at)
+           values (:t, 3, :d, 'Somewhere', now())""", t=live, d=offset(2))
+    check(status == "ok", "a member of an open trip may still insert a day", repr(rows)[:90])
+    status, rows = b.try_run(
+        "update public.trip_itinerary_days set day_date = :d "
+        "where trip_id = :t and day_number = 3", t=live, d=offset(3))
+    check(status == "ok", "and may still re-date one", repr(rows)[:90])
+    status, rows = sync(b, live, "2027-08-01T00:00:00Z",
+                        [dated(1, offset(0), revised="2027-08-01T00:00:00Z"),
+                         dated(2, offset(1), revised="2027-08-01T00:00:00Z")])
+    check(status == "ok" and db.run(
+              "select count(*) from public.trip_itinerary_days where trip_id = :t",
+              t=live)[0][0] == 2,
+          "and the merge's own day deletion still runs through the trigger", repr(rows)[:90])
+    status, rows = b.try_run(
+        "delete from public.trip_itinerary_days where trip_id = :t and day_number = 2", t=live)
+    check(status == "ok" and db.run(
+              "select count(*) from public.trip_itinerary_days where trip_id = :t",
+              t=live)[0][0] == 1,
+          "as does a member's own delete", repr(rows)[:90])
+
+    # Discarding a record is not editing it: `canDeleteTrip` is the deliberate
+    # exception to the read-only rule, and the cascade into
+    # `trip_itinerary_days` arrives at this trigger as a delete on a closed
+    # trip -- the one shape it refuses. Both of the trigger's allowing branches
+    # are what keep this working, and neither is obvious, so it is asserted.
+    status, rows = b.try_run("delete from public.trips where id = :t", t=closed)
+    check(status == "ok" and db.run(
+              "select count(*) from public.trips where id = :t", t=closed)[0][0] == 0,
+          "a closed trip can still be discarded -- the cascade is not an edit",
+          repr(rows)[:90])
+    check(db.run("select count(*) from public.trip_itinerary_days where trip_id = :t",
+                 t=closed)[0][0] == 0,
+          "and it takes its itinerary days with it")
+
+    # ---- the access path ---------------------------------------------------
+    # `trip_closes_at` runs inside `photos_insert_trip_member`'s WITH CHECK, so
+    # it is asked once per photograph -- and, since the guard above, once per
+    # itinerary day written, so a fourteen-day push asks it fourteen times.
+    # What it must never become is a scan of every trip's days.
+    #
+    # Both plans are taken as a *member*, not over `db`: the hot path runs as
+    # `authenticated`, where `trip_itinerary_days` carries an `is_trip_member`
+    # security qual on top of the trip filter, and a plan taken as the
+    # migration-owning superuser is not the plan that path produces. The
+    # statistics are settled first, because a never-analyzed table plans off a
+    # made-up ten pages and the answer would then be luck rather than evidence.
+    print("\n== the derivation reads one row per trip, not the whole table ==")
+    check(db.run("""select count(*) from pg_indexes
+                    where schemaname = 'public' and tablename = 'trip_itinerary_days'
+                      and indexname = 'trip_itinerary_days_day_date_idx'""")[0][0] == 1,
+          "the index the furthest-date read is entitled to exists")
+    db.run("analyze public.trip_itinerary_days")
+    plan = "\n".join(row[0] for row in b.run(
+        "explain (costs off) select max(d.day_date) from public.trip_itinerary_days d "
+        "where d.trip_id = :t", t=postponed))
+    check("Seq Scan" not in plan,
+          "and the furthest-date read -- the WITH CHECK's and the trigger's alike -- "
+          "is not a sequential scan under RLS",
+          plan.replace("\n", " | ")[:120])
+    check(sorted(row[0] for row in db.run(
+              """select t.tgname from pg_trigger t
+                 where t.tgrelid = 'public.trip_itinerary_days'::regclass
+                   and not t.tgisinternal""")) ==
+          ["trip_itinerary_days_guard_closed_trip",
+           "trip_itinerary_days_record_gate_date_guard"],
+          "and the guard that asks it per row is the only trigger 0016 adds here")
+    plan = "\n".join(row[0] for row in b.run(
+        "explain (costs off) select d.day_date from public.trip_itinerary_days d "
+        "where d.trip_id = :t order by d.day_number desc limit 1", t=postponed))
+    check("Seq Scan" not in plan,
+          "nor is the plan-order last-day read the invariant above compares against",
+          plan.replace("\n", " | ")[:120])
 
     print("\n== the roster reads as one statement, and only for the party ==")
     status, rows = b.try_run(
