@@ -117,6 +117,15 @@ import 'storage/remote/shared_facts.dart';
 /// backend sits behind: passing nothing binds the real one over [database],
 /// and a test hands in one of its own to say what a store that fails or
 /// stalls does to the flow above it.
+///
+/// [framePaths] is the one resolver both photo paths and that breath's paths
+/// go through — stored as `frames/<name>`, resolved against the running
+/// process's Documents directory (`photo_repository.dart` says why). The app
+/// passes nothing and gets the real `frameDirectory()`; a test hands in a
+/// fixed directory, since `path_provider`'s channel answers nothing under
+/// `flutter test`. It is built once here and shared by the store, the
+/// breath's store and the photo push, because two resolvers are two readings
+/// of where a frame is.
 Widget bootstrapApp({
   AppDatabase? database,
   DateTime? today,

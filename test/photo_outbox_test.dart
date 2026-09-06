@@ -409,19 +409,16 @@ void main() {
       // that throw escaped the loop and every queued photograph behind it
       // stopped crossing.
       await startTrip();
-      await db.insertPhotoWithOutbox(
-        (
-          id: 'photo-legacy',
-          dayNumber: 1,
-          contributorId: anna,
-          takenAtUtcIso: DateTime.utc(2027, 6, 14, 9).toIso8601String(),
-          origin: 'pinged',
-          word: null,
-          filePath: '/var/mobile/Containers/Gone/Documents/legacy.jpg',
-          contentType: 'image/jpeg',
-        ),
-        nowUtcIso: clock.toUtc().toIso8601String(),
-      );
+      await db.insertPhotoWithOutbox((
+        id: 'photo-legacy',
+        dayNumber: 1,
+        contributorId: anna,
+        takenAtUtcIso: DateTime.utc(2027, 6, 14, 9).toIso8601String(),
+        origin: 'pinged',
+        word: null,
+        filePath: '/var/mobile/Containers/Gone/Documents/legacy.jpg',
+        contentType: 'image/jpeg',
+      ), nowUtcIso: clock.toUtc().toIso8601String());
       await store(mintId: () => 'photo-2').keep(
         dayNumber: 1,
         contributor: MemberId(anna),

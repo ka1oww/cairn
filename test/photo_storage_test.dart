@@ -274,15 +274,17 @@ void main() {
     );
   });
 
-  test('an unplaceable path is stored as it stands rather than refused',
-      () async {
-    final paths = FramePaths(() async => '/frames');
-    expect(await paths.stored('/elsewhere/x.png'), '/elsewhere/x.png');
-    expect(await paths.resolve('/elsewhere/x.png'), '/elsewhere/x.png');
-    // The frames directory itself still rebases, in both directions.
-    expect(await paths.stored('/frames/x.png'), 'frames/x.png');
-    expect(await paths.resolve('frames/x.png'), '/frames/x.png');
-  });
+  test(
+    'an unplaceable path is stored as it stands rather than refused',
+    () async {
+      final paths = FramePaths(() async => '/frames');
+      expect(await paths.stored('/elsewhere/x.png'), '/elsewhere/x.png');
+      expect(await paths.resolve('/elsewhere/x.png'), '/elsewhere/x.png');
+      // The frames directory itself still rebases, in both directions.
+      expect(await paths.stored('/frames/x.png'), 'frames/x.png');
+      expect(await paths.resolve('frames/x.png'), '/frames/x.png');
+    },
+  );
 
   test('every photo the seam keeps is a photo the store already had', () async {
     // Guards the one thing an id minter can silently break: two photos
