@@ -413,7 +413,26 @@ class CaptureFlow extends Notifier<CaptureState> {
     return const CaptureClosed(isRestoring: true);
   }
 
+  /// Reads the durable breath back, and can only ever end the restore.
+  ///
+  /// Every failure below — a malformed instant on the row, an unreadable
+  /// path, a database that will not answer, an unbound store — settles on
+  /// "no pending capture" rather than leaving `isRestoring` standing.
+  /// That flag gates `open()` and draws a day page with no button, so a
+  /// throw escaping here would make the camera unreachable for the rest of
+  /// the launch: the standing rule is no lockout, ever.
   Future<void> _restorePending() async {
+    try {
+      await _readPendingBreath();
+    } catch (_) {
+      if (!ref.mounted) return;
+      if (state case CaptureClosed(isRestoring: true)) {
+        state = const CaptureClosed();
+      }
+    }
+  }
+
+  Future<void> _readPendingBreath() async {
     final pending = await ref.read(pendingCaptureStoreProvider).read();
     if (!ref.mounted) return;
     final closed = state;
@@ -502,6 +521,17 @@ class CaptureFlow extends Notifier<CaptureState> {
               closesAt: framing.closesAt,
             ),
           );
+      // The write is the second await, and a route pop landing in it reaches
+      // `abandon()` while the state still reads `Framing` — so the abandon
+      // clears nothing, and an unguarded assignment below would raise a
+      // breath the person has already left. Guarded exactly like the first
+      // await, plus the row this call had just written.
+      final stillFraming = state;
+      if (stillFraming is! Framing || !stillFraming.isTaking) {
+        await ref.read(pendingCaptureStoreProvider).clear();
+        await _discard([frame.path, frame.frontPath]);
+        return;
+      }
       state = TheBreath(
         framePath: frame.path,
         frontFramePath: frame.frontPath,

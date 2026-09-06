@@ -57,15 +57,16 @@ class FramePaths {
 
     final marker = normal.lastIndexOf('/frames/');
     if (marker >= 0) return normal.substring(marker + 1);
-    throw ArgumentError.value(
-      localPath,
-      'localPath',
-      'a kept frame must live in the Documents/frames directory',
-    );
+    // An absolute path naming no frames directory is a row from before the
+    // camera path — exactly the shape the v12 migration deliberately leaves
+    // alone. It is handed back as it stands, because one unreadable row must
+    // never blank every photo surface or abort a whole outbox pass.
+    return normal;
   }
 
   Future<String> resolve(String storedPath) async {
     final stable = await stored(storedPath);
+    if (!stable.startsWith('frames/')) return stable;
     final directory = await _frameDirectory();
     return '$directory/${stable.substring('frames/'.length)}';
   }

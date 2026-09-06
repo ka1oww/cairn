@@ -188,7 +188,15 @@ class _CaptureCall extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final call = ref.watch(captureCallProvider(date));
     final capture = ref.watch(captureFlowProvider);
-    if (call is NoMomentHere) return const SizedBox.shrink();
+    // A breath restored from the durable row is drawn whatever the call
+    // says. `captureCallProvider` answers `NoMomentHere` while the roster
+    // stream has not emitted yet, and again when the party grew past the
+    // day's slots — and this button is the only route back into the
+    // capture screen, so deferring to the call would strand the frames on
+    // disk with no way to keep them. No lockout, ever.
+    if (call is NoMomentHere && capture is! TheBreath) {
+      return const SizedBox.shrink();
+    }
 
     final theme = Theme.of(context);
     final (String line, String? action) = switch (capture) {

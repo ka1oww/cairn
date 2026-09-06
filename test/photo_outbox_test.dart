@@ -401,6 +401,49 @@ void main() {
       expect(await db.readOutboxRows(), isEmpty);
     });
 
+    test('a row the migration left absolute refuses alone rather than '
+        'aborting the whole pass', () async {
+      // The v12 migration rewrites paths under `/frames/` and leaves every
+      // other absolute path exactly as it stands. Resolving one used to
+      // throw, and `_pass` catches only the three shared-facts refusals — so
+      // that throw escaped the loop and every queued photograph behind it
+      // stopped crossing.
+      await startTrip();
+      await db.insertPhotoWithOutbox(
+        (
+          id: 'photo-legacy',
+          dayNumber: 1,
+          contributorId: anna,
+          takenAtUtcIso: DateTime.utc(2027, 6, 14, 9).toIso8601String(),
+          origin: 'pinged',
+          word: null,
+          filePath: '/var/mobile/Containers/Gone/Documents/legacy.jpg',
+          contentType: 'image/jpeg',
+        ),
+        nowUtcIso: clock.toUtc().toIso8601String(),
+      );
+      await store(mintId: () => 'photo-2').keep(
+        dayNumber: 1,
+        contributor: MemberId(anna),
+        takenAt: DateTime.utc(2027, 6, 14, 10),
+        origin: PhotoOrigin.pinged,
+        filePath: writeFrame('second.jpg'),
+      );
+
+      await driver().syncNow();
+
+      expect(
+        pool.recorded,
+        contains('photo-2'),
+        reason: 'the photograph behind the unreadable row still crossed',
+      );
+      final stranded = (await db.readOutboxRows()).singleWhere(
+        (row) => row.photoId == 'photo-legacy',
+      );
+      expect(stranded.state, 'refused');
+      expect(stranded.lastError, contains('the frame file is missing'));
+    });
+
     test('the recorded key is in the shape the database now enforces, '
         'relayed from the mint and never derived here', () async {
       // `photos.r2_object_key` carries a check constraint:

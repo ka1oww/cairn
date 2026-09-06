@@ -112,6 +112,11 @@ import 'storage/remote/shared_facts.dart';
 /// test hands in a stream of its own. Passing nothing means nothing is ever
 /// said about sharing, which is exactly right for a suite in which no sync
 /// runs — the trip's surfaces stay silent rather than claiming either way.
+///
+/// [pendingCapture] is the durable breath's store, on the seam every other
+/// backend sits behind: passing nothing binds the real one over [database],
+/// and a test hands in one of its own to say what a store that fails or
+/// stalls does to the flow above it.
 Widget bootstrapApp({
   AppDatabase? database,
   DateTime? today,
@@ -120,6 +125,7 @@ Widget bootstrapApp({
   CameraSource? camera,
   FramePaths? framePaths,
   PhotoRepository? photos,
+  PendingCaptureStore? pendingCapture,
   MembershipRepository? membership,
   FilePickerEdge? picker,
   ExtractionRunner? extraction,
@@ -144,7 +150,7 @@ Widget bootstrapApp({
   final paths =
       framePaths ?? FramePaths(() async => (await frameDirectory()).path);
   final store = PhotoStore(db, framePaths: paths);
-  final pendingCapture = PendingCaptureStore(db, framePaths: paths);
+  final breath = pendingCapture ?? PendingCaptureStore(db, framePaths: paths);
   final roster = MembershipStore(db);
   final source = sessions ?? const NoSession();
   final sync = _startSharedFactsSync(db, source, paths);
@@ -188,7 +194,7 @@ Widget bootstrapApp({
       ),
       photoRepositoryProvider.overrideWithValue(photos ?? store),
       photoStoreProvider.overrideWithValue(store),
-      pendingCaptureStoreProvider.overrideWithValue(pendingCapture),
+      pendingCaptureStoreProvider.overrideWithValue(breath),
       membershipRepositoryProvider.overrideWithValue(membership ?? roster),
       membershipStoreProvider.overrideWithValue(roster),
       if (today != null) todayProvider.overrideWithValue(today),

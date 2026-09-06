@@ -432,6 +432,11 @@ class PlanDrafts extends Table {
 /// Local-only, like [PlanDrafts]. The files already exist when this row is
 /// written; the row preserves their stable relative names and the original
 /// shutter instant across a process death.
+///
+/// The generated data class is named away from the seam's own
+/// `PendingCapture`: one library already imports both, and two types of one
+/// name resolve only by shadowing until the first file names it outright.
+@DataClassName('PendingCaptureRow')
 class PendingCaptures extends Table {
   /// Always 1.
   IntColumn get id => integer()();
@@ -1590,7 +1595,7 @@ class AppDatabase extends _$AppDatabase {
 
   // -- the pending shutter breath ------------------------------------------
 
-  Future<PendingCapture?> readPendingCapture() => (select(
+  Future<PendingCaptureRow?> readPendingCapture() => (select(
     pendingCaptures,
   )..where((t) => t.id.equals(_theOnePendingCapture))).getSingleOrNull();
 
