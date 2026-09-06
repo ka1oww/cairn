@@ -584,6 +584,13 @@ void main() {
       tester.view.physicalSize = const Size(800, 2600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
+      // A relaunch has to tear the tree down first. `bootstrapApp` returns an
+      // unkeyed `ProviderScope`, so pumping a second one over the first
+      // *updates* that element: the container, every notifier in it and the
+      // pinned clock all survive, and a test that called this twice would be
+      // asserting against the state it never lost. Unmounting is what makes
+      // the second call a process death rather than a rebuild.
+      await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         bootstrapApp(
           database: db,
