@@ -1,4 +1,4 @@
-# Traveling App
+# Cairn
 
 A shared trip companion for a group of friends — eight of them, on one trip —
 travelling together.
