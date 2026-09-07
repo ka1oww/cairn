@@ -861,9 +861,13 @@ def main():
           == grace * 3600,
           f"the grace after a trip is the phone's {grace} hours, not a second number",
           repr(db.run("select public.trip_grace_after_end()")[0][0]))
-    # Japan has no itinerary rows, so this is 0016's fallback arm: a trip whose
+    # Iceland has no itinerary rows, so it is 0016's fallback arm: a trip whose
     # plan has never reached the server closes exactly where `trips.end_date`
-    # put it. The arm that reads the plan is its own section further down.
+    # put it. Japan is no good for that here -- the gate section above has
+    # already given it plan days dated off Asia/Tokyo's calendar, which runs a
+    # day ahead of `current_date` for part of every UTC day, so pinning the
+    # fallback on it fails whenever the probe runs late enough in the UTC day.
+    # The arm that reads the plan is its own section further down.
     check(db.run("""select public.trip_closes_at(t.id)
                            = ((public.trip_last_planned_day(t.id) + 1)::timestamp
                               at time zone t.timezone)
@@ -871,7 +875,7 @@ def main():
                     from public.trips t where t.id = :t""", t=japan, g=grace)[0][0] is True,
           "and a trip closes a grace after its last day ends, in its own clock, not UTC")
     check(db.run("select public.trip_last_planned_day(t.id) = t.end_date "
-                 "from public.trips t where t.id = :t", t=japan)[0][0] is True,
+                 "from public.trips t where t.id = :t", t=iceland)[0][0] is True,
           "with a trip that has never synced a plan taking its recorded end date")
 
     stale = str(b.run(
