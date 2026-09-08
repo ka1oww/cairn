@@ -131,4 +131,43 @@ void main() {
     final blind = parseItinerary(plan).days.single.stops;
     expect(blind[0].area?.text, 'nagano');
   });
+
+  test('a stop names its own area out of the plan\'s own vocabulary', () {
+    // Self-evidence used to need a gazetteer, so a plan read phase-1 sent
+    // `Hakuba Happo Bus Terminal` to the day's heading and nowhere near
+    // Hakuba. The plan corroborates `hakuba` by itself, twice and as a
+    // station name, which is the same bar the anchor vocabulary uses for
+    // everything else it admits.
+    const plan = 'Trip to Nagano\n'
+        'Day 1 - Nagano\n'
+        '- Hakuba Happo Bus Terminal\n'
+        '- SKY CAFE HAKUBA\n'
+        '- Walk to Hakuba Station\n'
+        '- Bus from Hakuba Station\n'
+        '- Zenkoji Temple\n';
+
+    final stops = parseItinerary(plan).days.single.stops;
+    expect(stops[0].area?.text, 'hakuba');
+    expect(stops[1].area?.text, 'hakuba');
+    expect(stops.last.area?.text, 'nagano',
+        reason: 'a stop that declares nothing still takes the heading');
+  });
+
+  test('a name after a lodging word is the hotel, not a district', () {
+    // `HOTEL COURTLAND` is written five times in one real plan and
+    // capitalised every time, so the anchor vocabulary admits `courtland`
+    // exactly as it admits a district. Lodging is the one venue word that
+    // takes the establishment's own name after it, and reading that name as
+    // an area sent five stops to a place that does not exist.
+    const plan = 'Trip to Nagano\n'
+        'Day 1 - Nagano\n'
+        '- HOTEL COURTLAND\n'
+        '- Walk to Nagano Station\n'
+        'Day 2 - Nagano\n'
+        '- HOTEL COURTLAND\n';
+
+    for (final day in parseItinerary(plan).days) {
+      expect(day.stops.first.area?.text, 'nagano');
+    }
+  });
 }

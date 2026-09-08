@@ -105,6 +105,25 @@ const Set<String> venueGenericWords = {
   'lane',
 };
 
+/// The venue words a name follows rather than precedes.
+///
+/// Every other venue-generic word takes the specific half in front of it --
+/// `Ueno Park`, `Shibuya Station`, `Nishiki Market` -- so what comes *after*
+/// one can be a locality. Lodging is the exception: `Hotel Courtland`,
+/// `Ryokan Yamazaki`, `Inn Nakamura` all name the establishment, and reading
+/// the word after them as a district sends a whole trip to a place that does
+/// not exist. These are a subset of [venueGenericWords], not an addition:
+/// removing one from there without removing it here would leave a word that
+/// is refused as a descriptor and never counted as a venue.
+const Set<String> lodgingWords = {
+  'hotel',
+  'hostel',
+  'ryokan',
+  'guesthouse',
+  'inn',
+  'resort',
+};
+
 const Set<String> transitLeadWords = {
   'walk',
   'take',

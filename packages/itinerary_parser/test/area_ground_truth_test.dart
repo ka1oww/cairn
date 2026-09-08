@@ -244,8 +244,13 @@ void main() {
         s,
         minSentRight: {
           Genre.handwritten: 65,
-          Genre.aiWritten: 31,
-          Genre.wanderlog: 78,
+          // Raised when stop-line self-evidence stopped being gazetteer-only:
+          // without one it now reads the plan's own anchor vocabulary, which
+          // is what lets `Hakuba Happo Bus Terminal` and `Shinjuku Gyoen
+          // National Garden` answer for themselves instead of taking the
+          // running heading sixty miles away.
+          Genre.aiWritten: 32,
+          Genre.wanderlog: 85,
         },
         maxSentWrong: {
           Genre.handwritten: 4,
@@ -255,7 +260,7 @@ void main() {
           // without a gazetteer. The gazetteer had already refused it, so
           // C10 below is unchanged.
           Genre.aiWritten: 0,
-          Genre.wanderlog: 11,
+          Genre.wanderlog: 7,
         },
         maxNoneWrong: {
           Genre.handwritten: 1,

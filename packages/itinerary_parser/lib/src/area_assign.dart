@@ -67,6 +67,20 @@ Map<int, AreaAssignment> anchorAssign(
   }
 
   bool hasGaz() => gazetteerObj != null || gazetteer != null;
+  // What counts as a known area, in the two modes. With a gazetteer the
+  // window has to be an entry, and any word may sit inside one. Without a
+  // gazetteer the plan's own anchor vocabulary is the evidence, so a window
+  // qualifies exactly when every word of it is a vocabulary word -- which
+  // makes `mayJoin` the whole test and lets the window walk stop at the
+  // first word the plan has not corroborated.
+  bool gazNames(List<String> ws) => gazContains(ws.join(' '));
+  bool anyWord(String _) => true;
+  bool anyWindow(List<String> ws) => ws.isNotEmpty;
+
+  // The two passes read the same lines, so the tokenizer runs over each
+  // segment once rather than twice.
+  final segmentTokens = <String, List<String>>{};
+
   final out = <int, AreaAssignment>{};
   String? running;
   int? runningSetBy;
@@ -216,13 +230,17 @@ Map<int, AreaAssignment> anchorAssign(
           }
         }
 
-        // stop-line self-evidence (gazetteer only): a unique gazetteer-listed
-        // area named by the line itself beats the running heading
-        if (assignedOwn == null && hasGaz()) {
+        // stop-line self-evidence: a unique known area named by the line
+        // itself beats the running heading. What counts as known is the
+        // gazetteer where there is one and the plan's own anchor vocabulary
+        // where there is not.
+        if (assignedOwn == null) {
           final selfArea = _gazetteerAreaInStop(
             clean,
             trustedSelfAreas,
-            gazContains,
+            hasGaz() ? gazNames : anyWindow,
+            hasGaz() ? anyWord : vocab.contains,
+            segmentTokens,
           );
           if (selfArea != null) {
             assignedOwn = selfArea;
@@ -327,44 +345,78 @@ bool _destinationInGazetteer(
 /// a venue/meal/furniture word, standing alone, as a `Name -` prefix, or
 /// already trusted earlier the same day — and the line must name exactly one
 /// distinct area: two candidates, or none, is designed silence, never a pick.
+final RegExp _segmentSplit = RegExp(r'[/,+&;]');
+
 String? _gazetteerAreaInStop(
   String clean,
   Set<String> trustedSelfAreas,
-  bool Function(String normalizedName) contains,
+  bool Function(List<String> normalizedWords) names,
+  bool Function(String word) mayJoin,
+  Map<String, List<String>> tokenCache,
 ) {
   final matches = <String, String>{};
-  for (final segment in clean.split(RegExp(r'[/,+&;]'))) {
-    final words = areaTokens(segment);
+  for (final segment in clean.split(_segmentSplit)) {
+    final words = tokenCache.putIfAbsent(segment, () => areaTokens(segment));
     for (var start = 0; start < words.length; start++) {
+      // `Hotel Courtland` names the hotel Courtland. Lodging is the one venue
+      // word English (and a Japan plan's English) puts *before* the
+      // establishment's own name, which is why `hotelPrefixRegExp` reads the
+      // locality on the other side of it; a word after it is a name, never a
+      // district, and `Courtland` is written five times in one plan and
+      // capitalised every time, so the anchor vocabulary cannot tell on its
+      // own.
+      final afterLodging = start > 0 && lodgingWords.contains(words[start - 1]);
+      final precededByDescriptor = start > 0 &&
+          !afterLodging &&
+          (venueGenericWords.contains(words[start - 1]) ||
+              mealPrefixWords.contains(words[start - 1]) ||
+              furnitureWords.contains(words[start - 1]));
       for (var end = start; end < words.length && end < start + 5; end++) {
+        // A word the evidence has never heard of cannot appear inside a name
+        // the evidence knows, so no longer window from this start can work
+        // either. Without the anchor vocabulary to say so this was five
+        // windows built and discarded per word of every line of the plan,
+        // twice over, and it is what the parse budget actually measures.
+        if (!mayJoin(words[end])) break;
+        if (venueGenericWords.contains(words[end]) ||
+            furnitureWords.contains(words[end])) {
+          continue;
+        }
         final candidateWords = words.sublist(start, end + 1);
-        final candidate = candidateWords.join(' ');
-        if (areaWords(candidate).isEmpty) continue;
-        final precededByDescriptor = start > 0 &&
-            (venueGenericWords.contains(words[start - 1]) ||
-                mealPrefixWords.contains(words[start - 1]) ||
-                furnitureWords.contains(words[start - 1]));
+        // The order of the tests below is the parse budget. This runs over
+        // every window of every stop of a plan, twice, and doc 02 alone is
+        // 855 stops: asking whether the words name anything at all rejects
+        // almost every window for a handful of set lookups, where building
+        // the joined strings first cost eleven seconds against a budget of
+        // two. `areaWords` and `joinedAreaWords` are said inline for the
+        // same reason -- these words are already `areaTokens` output, so
+        // running the tokenizer over them again buys nothing.
+        if (!names(candidateWords)) continue;
+        var contentWords = 0;
+        final buffer = StringBuffer();
+        for (final w in candidateWords) {
+          if (genericStopWords.contains(w) || venueGenericWords.contains(w)) {
+            continue;
+          }
+          buffer.write(w);
+          if (w.length >= 2) contentWords++;
+        }
+        if (contentWords == 0) continue;
+        final joined = buffer.toString();
         final isStandalone = start == 0 && end == words.length - 1;
-        final isHyphenatedSuffix = RegExp(
-          r'(^|\s)' + RegExp.escape(candidate) + r'\s*[-–—](?:\s|$)',
-          caseSensitive: false,
-        ).hasMatch(segment);
-        final isPreviouslyTrusted = trustedSelfAreas.contains(
-          joinedAreaWords(candidate),
-        );
         if (!precededByDescriptor &&
             !isStandalone &&
-            !isHyphenatedSuffix &&
-            !isPreviouslyTrusted) {
-          continue;
+            !trustedSelfAreas.contains(joined)) {
+          final candidate = candidateWords.join(' ');
+          final isHyphenatedSuffix = RegExp(
+            r'(^|\s)' +
+                RegExp.escape(candidate) +
+                r'\s*[-\u2013\u2014](?:\s|$)',
+            caseSensitive: false,
+          ).hasMatch(segment);
+          if (!isHyphenatedSuffix) continue;
         }
-        if (venueGenericWords.contains(candidateWords.last) ||
-            furnitureWords.contains(candidateWords.last)) {
-          continue;
-        }
-        if (contains(candidate)) {
-          matches[joinedAreaWords(candidate)] = candidate;
-        }
+        matches[joined] = candidateWords.join(' ');
       }
     }
   }
