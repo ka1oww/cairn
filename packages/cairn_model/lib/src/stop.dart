@@ -10,6 +10,20 @@ enum StopKind {
   /// Somewhere a person could be sent: the line opens a Maps search.
   place,
 
+  /// `Activities` or `Food`: visible plan structure, never a Maps search.
+  sectionLabel,
+
+  /// A conditional or optional place branch that has not been committed to.
+  alternative,
+
+  /// An instruction that carries a place fact, such as `Fly to Prague`.
+  /// It remains inert until the separately parsed place expression is carried
+  /// through the app's persisted model.
+  placeInstruction,
+
+  /// One source line that carries several candidate places or purposes.
+  multiPlace,
+
   /// A line that sets the running area for the stops under it.
   areaHeading,
 
@@ -65,6 +79,15 @@ final class Stop {
   /// in the editor is tappable without anything having to say so.
   final StopKind kind;
 
+  /// The parser-extracted place expression, kept apart from the verbatim
+  /// [text]. Null means the parser did not find one.
+  final String? placeText;
+
+  /// Parser-extracted place expressions in source order. This keeps a
+  /// compound or alternative line's choices without turning it into several
+  /// committed stops.
+  final List<String> placeCandidates;
+
   /// The area in force for this stop — what a Maps search appends.
   /// Null means "send the stop's own words alone" (rule 3: a miss sends
   /// nothing rather than guessing).
@@ -77,6 +100,8 @@ final class Stop {
     required this.text,
     this.time,
     this.kind = StopKind.place,
+    this.placeText,
+    this.placeCandidates = const [],
     this.area,
     this.areaSource,
   }) {
@@ -115,14 +140,32 @@ final class Stop {
       other.text == text &&
       other.time == time &&
       other.kind == kind &&
+      other.placeText == placeText &&
+      _sameStrings(other.placeCandidates, placeCandidates) &&
       other.area == area &&
       other.areaSource == areaSource;
 
   @override
-  int get hashCode => Object.hash(text, time, kind, area, areaSource);
+  int get hashCode => Object.hash(
+        text,
+        time,
+        kind,
+        placeText,
+        Object.hashAll(placeCandidates),
+        area,
+        areaSource,
+      );
 
   @override
   String toString() => 'Stop(${time == null ? '' : '${time!.iso} '}$text'
       '${kind == StopKind.place ? '' : ' <${kind.name}>'}'
       '${area == null ? '' : ' [$area:${areaSource?.name}]'})';
+}
+
+bool _sameStrings(List<String> left, List<String> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }

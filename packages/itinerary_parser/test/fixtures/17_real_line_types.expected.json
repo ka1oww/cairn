@@ -1,0 +1,249 @@
+{
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "place": null,
+      "stops": [
+        {
+          "text": "Activities",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 2,
+            "text": "Activities"
+          },
+          "kind": "sectionLabel",
+          "area": null,
+          "placeText": null
+        },
+        {
+          "text": "Food",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 3,
+            "text": "Food"
+          },
+          "kind": "sectionLabel",
+          "area": null,
+          "placeText": null
+        },
+        {
+          "text": "Check in at Hotel near Roma Termini at 2:00pm.",
+          "time": {
+            "hour": 14,
+            "minute": 0
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 4,
+            "text": "Check in at Hotel near Roma Termini at 2:00pm."
+          },
+          "kind": "placeInstruction",
+          "area": null,
+          "placeText": "Hotel near Roma Termini"
+        },
+        {
+          "text": "Trevi Fountain",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 5,
+            "text": "Trevi Fountain"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Trevi Fountain"
+        },
+        {
+          "text": "If we love Pompeii and weather permits remain there for a few additional hours.",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 6,
+            "text": "If we love Pompeii and weather permits remain there for a few additional hours."
+          },
+          "kind": "alternative",
+          "area": null,
+          "placeText": "Pompeii"
+        },
+        {
+          "text": "If it is time to move on perhaps Castle Ovo in Naples? Or the National Archeological Museum?",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 7,
+            "text": "If it is time to move on perhaps Castle Ovo in Naples? Or the National Archeological Museum?"
+          },
+          "kind": "alternative",
+          "area": null,
+          "placeText": "Castle Ovo in Naples; National Archeological Museum"
+        },
+        {
+          "text": "Return to Roma Termini from Napoli Centrale at 17:35 arriving 18:46.",
+          "time": {
+            "hour": 17,
+            "minute": 35
+          },
+          "isStarred": true,
+          "sourceLine": {
+            "lineNumber": 8,
+            "text": "Return to Roma Termini from Napoli Centrale at 17:35 arriving 18:46."
+          },
+          "kind": "placeInstruction",
+          "area": null,
+          "placeText": "Roma Termini"
+        },
+        {
+          "text": "Short day due to significant time change",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 9,
+            "text": "Short day due to significant time change"
+          },
+          "kind": "note",
+          "area": null,
+          "placeText": null
+        },
+        {
+          "text": "Alternatively, keep the outbound trip with Italo Treno and book a return trip with Trenitalia? Their Frecciafamily fare is a bit more expensive but appears to allow easy time changes with many trip options.",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 10,
+            "text": "Alternatively, keep the outbound trip with Italo Treno and book a return trip with Trenitalia? Their Frecciafamily fare is a bit more expensive but appears to allow easy time changes with many trip options."
+          },
+          "kind": "note",
+          "area": null,
+          "placeText": null
+        },
+        {
+          "text": "Plearn Cafe Bang Pu on the way back for snacks?",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 11,
+            "text": "Plearn Cafe Bang Pu on the way back for snacks?"
+          },
+          "kind": "alternative",
+          "area": null,
+          "placeText": "Plearn Cafe Bang Pu"
+        },
+        {
+          "text": "Flight to Milan, train to Como, evening in Como (Varenna)",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 12,
+            "text": "Flight to Milan, train to Como, evening in Como (Varenna)"
+          },
+          "kind": "multiPlace",
+          "area": {
+            "text": "Como",
+            "source": "inlineLocality",
+            "setBy": null
+          },
+          "placeText": "Milan; Como; Varenna"
+        },
+        {
+          "text": "Day trip to Sitges. Take the train to Sitges, explore the old town and beaches, then return to Barcelona.",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 13,
+            "text": "Day trip to Sitges. Take the train to Sitges, explore the old town and beaches, then return to Barcelona."
+          },
+          "kind": "multiPlace",
+          "area": null,
+          "placeText": "Sitges; Barcelona"
+        },
+        {
+          "text": "Terminal 21 (Shopping)",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 14,
+            "text": "Terminal 21 (Shopping)"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Terminal 21"
+        },
+        {
+          "text": "Almafi",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 15,
+            "text": "Almafi"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Almafi"
+        },
+        {
+          "text": "Almalfi",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 16,
+            "text": "Almalfi"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Almalfi"
+        },
+        {
+          "text": "Baboli gardens",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 17,
+            "text": "Baboli gardens"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Baboli gardens"
+        },
+        {
+          "text": "Piazza Navone",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 18,
+            "text": "Piazza Navone"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "Piazza Navone"
+        },
+        {
+          "text": "สนามยิงธนู Recurve Archery Club (Archery)",
+          "time": null,
+          "isStarred": false,
+          "sourceLine": {
+            "lineNumber": 19,
+            "text": "สนามยิงธนู Recurve Archery Club (Archery)"
+          },
+          "kind": "place",
+          "area": null,
+          "placeText": "สนามยิงธนู Recurve Archery Club"
+        }
+      ],
+      "confidence": "high",
+      "uncertainty": null,
+      "headerWeekday": null,
+      "headerSourceLine": {
+        "lineNumber": 1,
+        "text": "Day 1:"
+      },
+      "dateCandidate": null
+    }
+  ],
+  "unplacedLines": [],
+  "overallConfidence": "high",
+  "usedHeaderlessFallback": false,
+  "hasAmbiguousNumericDates": false
+}

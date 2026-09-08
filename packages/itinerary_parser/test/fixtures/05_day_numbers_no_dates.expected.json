@@ -67,9 +67,9 @@
             "lineNumber": 7,
             "text": "- Day trip to Nara"
           },
-          "kind": "place",
+          "kind": "placeInstruction",
           "area": null,
-          "placeText": "Day trip to Nara"
+          "placeText": "Nara"
         },
         {
           "text": "14:00 Feed the deer",
@@ -94,9 +94,9 @@
             "lineNumber": 9,
             "text": "- Return to Kyoto"
           },
-          "kind": "place",
+          "kind": "placeInstruction",
           "area": null,
-          "placeText": "Return to Kyoto"
+          "placeText": "Kyoto"
         }
       ],
       "confidence": "high",

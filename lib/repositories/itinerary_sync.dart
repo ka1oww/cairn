@@ -43,8 +43,10 @@
 // the server deletes only days at or below it. A phone six days behind cannot
 // silently delete a day somebody added yesterday.
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cairn_model/cairn_model.dart';
+import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
 import '../storage/drift/app_database.dart';
 import '../storage/remote/shared_facts.dart';
@@ -597,6 +599,17 @@ class TripSync {
           stop.areaSource,
         ),
     };
+    final lineMetadata = {
+      for (final day in merged.days)
+        for (final stop in day.stops)
+          (day.number, stop.position): _rehydrateLineMetadata(
+            stop,
+            retainedAreaHeading:
+                !stop.carriesAreas &&
+                localAreas[(day.number, stop.position)]?.$1 ==
+                    StopKind.areaHeading.name,
+          ),
+    };
     final incomingStops = [
       for (final day in merged.days)
         for (final stop in day.stops)
@@ -606,7 +619,10 @@ class TripSync {
               position: stop.position,
               text: stop.text,
               timeIso: stop.timeIso,
-              kind: stop.kind,
+              kind: lineMetadata[(day.number, stop.position)]!.kind,
+              placeText: lineMetadata[(day.number, stop.position)]!.placeText,
+              placeCandidatesJson: lineMetadata[(day.number, stop.position)]!
+                  .placeCandidatesJson,
               areaText: stop.areaText,
               areaSource: stop.areaSource,
             )
@@ -616,7 +632,10 @@ class TripSync {
               position: stop.position,
               text: stop.text,
               timeIso: stop.timeIso,
-              kind: localAreas[(day.number, stop.position)]?.$1,
+              kind: lineMetadata[(day.number, stop.position)]!.kind,
+              placeText: lineMetadata[(day.number, stop.position)]!.placeText,
+              placeCandidatesJson: lineMetadata[(day.number, stop.position)]!
+                  .placeCandidatesJson,
               areaText: localAreas[(day.number, stop.position)]?.$2,
               areaSource: localAreas[(day.number, stop.position)]?.$3,
             ),
@@ -673,6 +692,26 @@ class TripSync {
     );
   }
 
+  static ({String kind, String? placeText, String? placeCandidatesJson})
+  _rehydrateLineMetadata(RemoteStop stop, {required bool retainedAreaHeading}) {
+    final classified = ip.classifyStop(
+      raw: stop.text,
+      isAreaHeading:
+          retainedAreaHeading || stop.kind == StopKind.areaHeading.name,
+      hasTime: stop.timeIso != null,
+    );
+    final placeText = classified.kind == ip.StopKind.place
+        ? classified.placeText ?? stop.text
+        : classified.placeText;
+    return (
+      kind: StopKind.values.byName(classified.kind.name).name,
+      placeText: placeText,
+      placeCandidatesJson: classified.places.isEmpty
+          ? null
+          : jsonEncode(classified.places),
+    );
+  }
+
   static bool _samePlan(
     List<ItineraryDay> days,
     List<ItineraryStop> stops,
@@ -696,7 +735,8 @@ class TripSync {
           (
             [stop.dayNumber, stop.position],
             '${stop.dayNumber}|${stop.position}|${stop.stopText}'
-                '|${stop.timeIso}|${stop.kind}|${stop.areaText}'
+                '|${stop.timeIso}|${stop.kind}|${stop.placeText}'
+                '|${stop.placeCandidatesJson}|${stop.areaText}'
                 '|${stop.areaSource}',
           ),
       ]),
@@ -725,7 +765,8 @@ class TripSync {
           (
             [stop.dayNumber, stop.position],
             '${stop.dayNumber}|${stop.position}|${stop.text}|${stop.timeIso}'
-                '|${stop.kind}|${stop.areaText}|${stop.areaSource}',
+                '|${stop.kind}|${stop.placeText}|${stop.placeCandidatesJson}'
+                '|${stop.areaText}|${stop.areaSource}',
           ),
       ]),
       '--',

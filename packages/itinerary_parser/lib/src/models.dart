@@ -86,8 +86,7 @@ enum DayUncertainty {
     'weekday-disagrees',
     "The weekday the plan names doesn't fall on the date written beside "
         'it. The date was kept; the disagreement is flagged, not corrected.',
-  ),
-  ;
+  );
 
   /// Stable, machine-readable identifier (also what `toJson` emits).
   final String slug;
@@ -162,7 +161,24 @@ class ParsedTime {
 
 /// What a stop *is* for tap-to-Maps.
 enum StopKind {
+  /// A single place the traveller wrote as a committed stop.
   place,
+
+  /// A line such as `Activities` or `Food` that organizes following lines.
+  /// It remains visible but is never a Maps query.
+  sectionLabel,
+
+  /// A conditional or optional branch the traveller has not committed to.
+  alternative,
+
+  /// An instruction carrying one separable place expression, such as
+  /// `Fly to Prague`. [Stop.placeText] is the expression, not the whole line.
+  placeInstruction,
+
+  /// One source line carrying several possible place expressions. The line
+  /// stays atomic and [placesOnLine] exposes the choices for review.
+  multiPlace,
+
   areaHeading,
   mealLabel,
   note,
@@ -220,7 +236,15 @@ class Stop {
   final SourceLine sourceLine;
   final StopKind kind;
   final AreaHint? area;
+
+  /// The parser-extracted place expression, if this line has one. It is
+  /// separate from [text], which remains the source line verbatim.
   final String? placeText;
+
+  /// Every parser-extracted place expression in source order. A compound or
+  /// alternative line can carry several; a line with no usable expression is
+  /// empty rather than guessed at.
+  final List<String> placeCandidates;
 
   const Stop({
     required this.text,
@@ -229,6 +253,7 @@ class Stop {
     this.kind = StopKind.place,
     this.area,
     this.placeText,
+    this.placeCandidates = const [],
   });
 
   /// True exactly when [time] is present. This is the star rule.
@@ -477,8 +502,7 @@ enum UnplacedReason {
   bookingReference(
     'hotel-booking-reference',
     'This looked like a booking confirmation reference, not a stop.',
-  ),
-  ;
+  );
 
   /// Stable, machine-readable identifier (also what `toJson` emits).
   final String slug;

@@ -11,3 +11,4 @@ export 'src/gazetteer.dart';
 export 'src/line_classifier.dart' show stripBullet;
 export 'src/models.dart';
 export 'src/parser.dart' show parseItinerary, ItineraryParser;
+export 'src/stop_kind.dart' show ClassifiedStop, classifyStop;

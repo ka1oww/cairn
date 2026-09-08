@@ -100,6 +100,9 @@ class ReviewStop {
   /// and a note differently from a place, and never re-decides which it is.
   final model.StopKind kind;
 
+  final String? placeText;
+  final List<String> placeCandidates;
+
   /// The area in force, and whose it is. A person's edit here is
   /// [model.AreaSource.human] and outranks the parser from then on.
   final String? area;
@@ -110,6 +113,8 @@ class ReviewStop {
     required this.text,
     this.timeLabel,
     this.kind = model.StopKind.place,
+    this.placeText,
+    this.placeCandidates = const [],
     this.area,
     this.areaSource,
   });
@@ -418,6 +423,8 @@ class _DraftStop {
     this.time,
     required this.sourceLineNumber,
     this.kind = model.StopKind.place,
+    this.placeText,
+    this.placeCandidates = const [],
     this.area,
     this.areaSource,
   });
@@ -426,6 +433,8 @@ class _DraftStop {
   String text;
   model.ClockTime? time;
   model.StopKind kind;
+  String? placeText;
+  List<String> placeCandidates;
   String? area;
   model.AreaSource? areaSource;
 
@@ -772,6 +781,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
     final trimmed = text.trim();
     if (found == null || trimmed.isEmpty) return;
     found.stop.text = trimmed;
+    found.stop.placeText = null;
+    found.stop.placeCandidates = const [];
     _rebuildReview();
   }
 
@@ -900,6 +911,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   time: _timeOf(stop.timeLabel),
                   sourceLineNumber: 0,
                   kind: stop.kind,
+                  placeText: stop.placeText,
+                  placeCandidates: stop.placeCandidates,
                   area: stop.area,
                   areaSource: stop.areaSource,
                 ),
@@ -1074,6 +1087,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   text: stop.text,
                   time: stop.time,
                   kind: stop.kind,
+                  placeText: stop.placeText,
+                  placeCandidates: stop.placeCandidates,
                   area: stop.area,
                   areaSource: stop.areaSource,
                 ),
@@ -1277,6 +1292,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   // the three fields here would throw that answer away on
                   // the way into the draft.
                   kind: stop.kind,
+                  placeText: stop.placeText,
+                  placeCandidates: stop.placeCandidates,
                   area: stop.area,
                   areaSource: stop.areaSource,
                 ),
@@ -1337,6 +1354,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
               text: stop.text,
               time: stop.time,
               kind: stop.kind,
+              placeText: stop.placeText,
+              placeCandidates: stop.placeCandidates,
               area: stop.area,
               areaSource: stop.areaSource,
             ),
@@ -1381,6 +1400,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   },
                   sourceLineNumber: stop.sourceLine.lineNumber,
                   kind: stopKindOf(stop.kind),
+                  placeText: stop.placeText,
+                  placeCandidates: stop.placeCandidates,
                   area: stop.area?.text,
                   areaSource: stop.area == null
                       ? null
@@ -1455,6 +1476,8 @@ class PasteFlow extends Notifier<PasteFlowState> {
             text: stop.text,
             timeLabel: stop.time?.iso,
             kind: stop.kind,
+            placeText: stop.placeText,
+            placeCandidates: stop.placeCandidates,
             area: stop.area,
             areaSource: stop.areaSource,
           ),

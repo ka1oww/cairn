@@ -56,6 +56,9 @@ class DayStop {
   /// re-decides: a second classifier is the thing to refuse in review.
   final StopKind kind;
 
+  final String? placeText;
+  final List<String> placeCandidates;
+
   /// `Lunch` on `Lunch: Ichiran` — shown, and never sent to a maps app,
   /// because no restaurant is called that.
   final String? mealLabel;
@@ -89,6 +92,8 @@ class DayStop {
     required this.text,
     this.timeLabel,
     this.kind = StopKind.place,
+    this.placeText,
+    this.placeCandidates = const [],
     this.mealLabel,
     this.searchText,
     this.area,
@@ -100,9 +105,12 @@ class DayStop {
 
   bool get isStarred => timeLabel != null;
 
-  /// Whether tapping this row opens a maps search. A note the traveller wrote
-  /// renders and does nothing; so does a meal label with no restaurant on it.
-  bool get opensMaps => searchText != null && kind != StopKind.note;
+  /// Whether tapping this row opens a maps search. Only a committed single
+  /// place, or a meal label with a venue payload, is resolvable. Every other
+  /// line type remains visible and inert.
+  bool get opensMaps =>
+      searchText != null &&
+      (kind == StopKind.place || kind == StopKind.mealLabel);
 
   /// Whether the row is drawn short with an "N places" badge. Length decides,
   /// so a row that fits is drawn as written however many places it names.
@@ -432,23 +440,31 @@ DayStop _dayStop(
       ? mealLabelSplit(stop.text)
       : (label: null, rest: stop.text.trim());
   final rest = meal.rest;
-  // Three ways a row has nothing to search for: the traveller's own note, a
-  // heading that is not itself a stop, and a line standing in for a place
-  // nobody has picked yet. All three render, and all three are inert.
+  // Only a committed single place and a meal with a venue payload are safe
+  // searches. Alternatives, compound lines, section labels, notes and loose
+  // instructions all render as written while remaining inert.
+  final resolvable =
+      stop.kind == StopKind.place || stop.kind == StopKind.mealLabel;
+  final candidatePlaces = stop.placeCandidates.isNotEmpty
+      ? stop.placeCandidates
+      : stop.placeText == null
+      ? const <String>[]
+      : [stop.placeText!];
+  final candidateText = stop.placeText ?? rest;
   final searchText =
-      stop.kind == StopKind.note ||
-          stop.kind == StopKind.areaHeading ||
-          rest == null ||
-          isPlaceholderText(rest)
+      !resolvable ||
+          candidateText == null ||
+          candidatePlaces.length > 1 ||
+          isPlaceholderText(candidateText)
       ? null
-      : rest;
+      : candidateText;
   return DayStop(
     position: position,
-    // The label is drawn on its own, so the row's words are what is left of
-    // the line once it is taken off.
-    text: rest ?? stop.text,
+    text: meal.label == null ? stop.text : rest ?? stop.text,
     timeLabel: stop.timeLabel,
     kind: stop.kind,
+    placeText: stop.placeText,
+    placeCandidates: candidatePlaces,
     mealLabel: meal.label,
     searchText: searchText,
     area: stop.area,

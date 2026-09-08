@@ -1389,6 +1389,42 @@ void main() {
       );
       expect(await db.readItineraryDays(), hasLength(2));
     });
+
+    test('a pulled line rehydrates its local place metadata', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      final server = FakeServer(trip: sharedTrip(id, const []))
+        ..holds = serverHolds([
+          RemoteDay(
+            number: 1,
+            place: 'Rome',
+            revisedAt: DateTime.utc(2027, 6, 1, 9),
+            stops: const [
+              RemoteStop(position: 0, text: 'Terminal 21 (Shopping)'),
+              RemoteStop(position: 1, text: 'Fly to Prague'),
+              RemoteStop(
+                position: 2,
+                text:
+                    'Flight to Milan, train to Como, evening in Como '
+                    '(Varenna)',
+              ),
+            ],
+          ),
+        ]);
+
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
+
+      final stops = (await TripRepository(
+        db,
+      ).watchItinerary().first)!.days.single.stops;
+      expect(stops[0].placeText, 'Terminal 21');
+      expect(stops[0].placeCandidates, ['Terminal 21']);
+      expect(stops[1].kind, StopKind.placeInstruction);
+      expect(stops[1].placeText, 'Prague');
+      expect(stops[2].kind, StopKind.multiPlace);
+      expect(stops[2].placeCandidates, ['Milan', 'Como', 'Varenna']);
+    });
   });
 
   group('the roster propagates, and not only at join', () {
@@ -1562,6 +1598,12 @@ void main() {
       await db.customStatement('ALTER TABLE photos_v5 RENAME TO photos');
       // v9 gave stops their area columns and the phone its app-preferences
       // table; both have to go too, for the same reason as everything above.
+      await db.customStatement(
+        'ALTER TABLE itinerary_stops DROP COLUMN place_candidates_json',
+      );
+      await db.customStatement(
+        'ALTER TABLE itinerary_stops DROP COLUMN place_text',
+      );
       await db.customStatement('ALTER TABLE itinerary_stops DROP COLUMN kind');
       await db.customStatement(
         'ALTER TABLE itinerary_stops DROP COLUMN area_text',
@@ -2026,6 +2068,49 @@ void main() {
         expect(stops.single.areaSource, 'human');
       },
     );
+
+    test('a retained area heading stays inert without area columns', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        ConfirmedItinerary(
+          days: [
+            ConfirmedDay(
+              number: 1,
+              date: CalendarDate(2027, 6, 14),
+              place: 'Tokyo',
+              stops: [
+                Stop(text: 'Shinjuku', kind: StopKind.areaHeading),
+                Stop(text: 'Tokyo Metropolitan Government Building'),
+              ],
+            ),
+          ],
+        ),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: sharedTrip(id, const []))
+        ..holds = serverHolds([
+          RemoteDay(
+            number: 1,
+            dateIso: '2027-06-14',
+            place: 'Tokyo',
+            revisedAt: DateTime.utc(2027, 6, 2),
+            stops: const [
+              RemoteStop(position: 0, text: 'Shinjuku', carriesAreas: false),
+              RemoteStop(
+                position: 1,
+                text: 'Tokyo Metropolitan Government Building',
+                carriesAreas: false,
+              ),
+            ],
+          ),
+        ]);
+
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
+
+      expect((await db.readItineraryStops()).first.kind, 'areaHeading');
+    });
 
     test(
       'a stop the server explicitly says has no area does clear the local one',

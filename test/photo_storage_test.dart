@@ -194,6 +194,8 @@ void main() {
           text: 'Senso-ji',
           timeIso: null,
           kind: null,
+          placeText: null,
+          placeCandidatesJson: null,
           areaText: null,
           areaSource: null,
         ),
@@ -210,6 +212,12 @@ void main() {
     await before.customStatement('DROP TABLE sync_states');
     await before.customStatement(
       'ALTER TABLE itinerary_days DROP COLUMN revised_at_utc_iso',
+    );
+    await before.customStatement(
+      'ALTER TABLE itinerary_stops DROP COLUMN place_candidates_json',
+    );
+    await before.customStatement(
+      'ALTER TABLE itinerary_stops DROP COLUMN place_text',
     );
     await before.customStatement(
       'ALTER TABLE itinerary_stops DROP COLUMN kind',

@@ -203,7 +203,7 @@ class RemoteStop {
   /// never a column, here or in Postgres.
   final String? timeIso;
 
-  /// What the line is (`place` | `areaHeading` | `mealLabel` | `note`), the
+  /// What the line is (the stable `StopKind.name`), the
   /// area in force, and where that area came from. They travel because a
   /// person's correction is a shared fact about the plan — the day it sits on
   /// is the merge atom, exactly as for the words and the time.

@@ -65,8 +65,15 @@ class ItineraryStops extends Table {
   /// `HH:MM` (`cairn_model.ClockTime.iso`), or null for an untimed stop.
   TextColumn get timeIso => text().nullable()();
 
-  /// What the stop is: place / areaHeading / mealLabel / note.
+  /// The stable [StopKind.name] written for this line.
   TextColumn get kind => text().withDefault(const Constant('place'))();
+
+  /// The parser-extracted place expression, distinct from [stopText].
+  TextColumn get placeText => text().nullable()();
+
+  /// JSON-encoded parser place expressions in source order. This is local
+  /// metadata, so an older server's itinerary row is reclassified on pull.
+  TextColumn get placeCandidatesJson => text().nullable()();
 
   /// Area in force for this stop, or null = send nothing (rule 3).
   TextColumn get areaText => text().nullable()();
@@ -477,7 +484,7 @@ class AppDatabase extends _$AppDatabase {
   final TripId Function() mint;
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -667,6 +674,10 @@ class AppDatabase extends _$AppDatabase {
           "last_error like 'the frame file is missing at %'",
         );
       }
+      if (from < 13) {
+        await m.addColumn(itineraryStops, itineraryStops.placeText);
+        await m.addColumn(itineraryStops, itineraryStops.placeCandidatesJson);
+      }
     },
   );
 
@@ -741,6 +752,8 @@ class AppDatabase extends _$AppDatabase {
                     stop.stopText,
                     stop.timeIso,
                     stop.kind,
+                    stop.placeText,
+                    stop.placeCandidatesJson,
                     stop.areaText,
                     stop.areaSource,
                   ),
@@ -761,6 +774,8 @@ class AppDatabase extends _$AppDatabase {
                   stop.text,
                   stop.timeIso,
                   stop.kind ?? 'place',
+                  stop.placeText,
+                  stop.placeCandidatesJson,
                   stop.areaText,
                   stop.areaSource,
                 ),
@@ -942,6 +957,8 @@ class AppDatabase extends _$AppDatabase {
                   text: stop.stopText,
                   timeIso: stop.timeIso,
                   kind: stop.kind,
+                  placeText: stop.placeText,
+                  placeCandidatesJson: stop.placeCandidatesJson,
                   areaText: stop.areaText,
                   areaSource: stop.areaSource,
                 ),
@@ -1063,6 +1080,8 @@ class AppDatabase extends _$AppDatabase {
             stopText: stop.text,
             timeIso: Value(stop.timeIso),
             kind: stop.kind == null ? const Value.absent() : Value(stop.kind!),
+            placeText: Value(stop.placeText),
+            placeCandidatesJson: Value(stop.placeCandidatesJson),
             areaText: Value(stop.areaText),
             areaSource: Value(stop.areaSource),
           ),
@@ -1084,15 +1103,28 @@ class AppDatabase extends _$AppDatabase {
   static String _daySignature({
     required String? dateIso,
     required String? place,
-    required List<(int, String, String?, String?, String?, String?)> stops,
+    required List<
+      (int, String, String?, String?, String?, String?, String?, String?)
+    >
+    stops,
   }) {
     final ordered = [...stops]..sort((a, b) => a.$1.compareTo(b.$1));
     return [
       dateIso ?? '',
       place ?? '',
-      for (final (position, text, timeIso, kind, areaText, areaSource)
+      for (final (
+            position,
+            text,
+            timeIso,
+            kind,
+            placeText,
+            placeCandidatesJson,
+            areaText,
+            areaSource,
+          )
           in ordered)
         '$position\u0000$text\u0000${timeIso ?? ''}\u0000${kind ?? ''}'
+            '\u0000${placeText ?? ''}\u0000${placeCandidatesJson ?? ''}'
             '\u0000${areaText ?? ''}\u0000${areaSource ?? ''}',
     ].join('\u0001');
   }
@@ -1784,6 +1816,8 @@ typedef ItineraryStopRecord = ({
   String text,
   String? timeIso,
   String? kind,
+  String? placeText,
+  String? placeCandidatesJson,
   String? areaText,
   String? areaSource,
 });

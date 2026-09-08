@@ -136,13 +136,13 @@
             "lineNumber": 13,
             "text": "- 10:12 train to Kyoto"
           },
-          "kind": "place",
+          "kind": "placeInstruction",
           "area": {
             "text": "kyoto",
             "source": "runningHeading",
             "setBy": null
           },
-          "placeText": "train to Kyoto"
+          "placeText": "Kyoto"
         }
       ],
       "confidence": "high",

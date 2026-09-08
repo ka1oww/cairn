@@ -82,6 +82,12 @@ Future<void> windBackToV4(AppDatabase db) async {
   await db.customStatement('ALTER TABLE photos_v4 RENAME TO photos');
   // v9 gave stops their area columns and the phone its app-preferences
   // table; both have to go too, for the same reason as everything above.
+  await db.customStatement(
+    'ALTER TABLE itinerary_stops DROP COLUMN place_candidates_json',
+  );
+  await db.customStatement(
+    'ALTER TABLE itinerary_stops DROP COLUMN place_text',
+  );
   await db.customStatement('ALTER TABLE itinerary_stops DROP COLUMN kind');
   await db.customStatement('ALTER TABLE itinerary_stops DROP COLUMN area_text');
   await db.customStatement(
