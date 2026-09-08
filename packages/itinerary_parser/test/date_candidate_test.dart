@@ -9,7 +9,8 @@
 import 'package:itinerary_parser/itinerary_parser.dart';
 import 'package:test/test.dart';
 
-ParsedDay firstDayOf(String header, {bool monthFirst = false}) => parseItinerary(
+ParsedDay firstDayOf(String header, {bool monthFirst = false}) =>
+    parseItinerary(
       '$header\n- Senso-ji\n',
       monthFirstNumericDates: monthFirst,
     ).days.first;
@@ -79,15 +80,15 @@ void main() {
     });
 
     test('without a year the candidate stays unresolved', () {
-      expect(firstDayOf('Day 1 - Tokyo, 14 June').dateCandidate?.resolved,
-          isNull);
+      expect(
+          firstDayOf('Day 1 - Tokyo, 14 June').dateCandidate?.resolved, isNull);
       expect(firstDayOf('Day 1 - Tokyo, 14 June').dateCandidate?.inYear(2027),
           DateTime(2027, 6, 14));
     });
 
     test('an en-dash header reads the same as a hyphen one', () {
-      expect(firstDayOf('Day 1 – Tokyo, 14 June').dateCandidate?.text,
-          '14 June');
+      expect(
+          firstDayOf('Day 1 – Tokyo, 14 June').dateCandidate?.text, '14 June');
     });
   });
 
@@ -114,9 +115,8 @@ void main() {
     });
 
     test('a date header that resolved its own date carries no candidate', () {
-      final day = parseItinerary('Sat 14 June 2027 - Tokyo\n- Senso-ji\n')
-          .days
-          .first;
+      final day =
+          parseItinerary('Sat 14 June 2027 - Tokyo\n- Senso-ji\n').days.first;
 
       expect(day.date, DateTime(2027, 6, 14));
       expect(day.dateCandidate, isNull);

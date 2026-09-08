@@ -66,4 +66,41 @@ void main() {
     expect(result.days.single.stops[2].area?.text, 'KOTAKE-MUKAIHARA');
     expect(result.days.single.stops[2].area?.source, AreaSource.runningHeading);
   });
+
+  test('a heading run that names no place seeds nothing', () {
+    // `Local Gems` is a chat assistant's section title, and `local` reaches
+    // the anchor vocabulary honestly: the plan writes it twice and
+    // capitalises it once, which is the whole corroboration bar. What it
+    // never does is name a place, and the tap rule already says so about a
+    // stop line. The seed asks the same question of a heading, so the four
+    // stops under this day carry no area rather than a search for `local`.
+    const plan = 'Paris trip\n'
+        'Day 3 - Museums\n'
+        '- Musee Rodin (local favourite)\n'
+        'Day 4 - Local Gems\n'
+        '- Marche d\'Aligre\n'
+        '- Musee de l\'Orangerie\n';
+
+    final r = parseItinerary(plan);
+    final day4 = r.days.last;
+    expect(day4.place, 'Local Gems');
+    for (final stop in day4.stops) {
+      expect(stop.area, isNull,
+          reason: '"${stop.text}" must not be sent to a search for `local`');
+    }
+  });
+
+  test('a heading run that does name a place still seeds', () {
+    // The other half of the bar. The refusal above is narrow on purpose: it
+    // asks only whether the run is made of common words, so an ordinary
+    // place still anchors its day exactly as before.
+    const plan = 'Japan trip\n'
+        'Day 1 - Asakusa\n'
+        '- Senso-ji\n'
+        'Day 2 - Asakusa\n'
+        '- Komehyo\n';
+
+    final r = parseItinerary(plan);
+    expect(r.days.last.stops.single.area?.text, 'asakusa');
+  });
 }

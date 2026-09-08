@@ -7,6 +7,7 @@ import 'area_words.dart';
 import 'area_annotations.dart';
 import 'area_vocab.dart';
 import 'gazetteer.dart';
+import 'place_content.dart';
 
 /// One stop as seen by the assignment engine.
 class AreaStopInput {
@@ -373,6 +374,15 @@ String? _seedForDay(
   if (t != null) return t;
   final cands = vocabRuns(place, vocab);
   if (cands.length != 1) return null;
+  // A run through the anchor vocabulary is an inference about the heading,
+  // and an inference has to survive the same question the tap rule asks of a
+  // stop: does this text name a place at all? `## Day 4: Local Gems` runs
+  // `local` -- a word the corroboration pass admits because the plan writes
+  // it twice and capitalises it once -- and then sends four stops to a
+  // search for `local`. The gazetteer already refused it, which is the same
+  // refusal one measurement later; this is the phase-1 half of it, so a plan
+  // read without a gazetteer is not the only one that pays.
+  if (namesNoPlace(cands.first)) return null;
   if (hasGaz() && !contains(areaTokens(cands.first).join(' '))) {
     return null;
   }

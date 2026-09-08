@@ -249,7 +249,12 @@ void main() {
         },
         maxSentWrong: {
           Genre.handwritten: 4,
-          Genre.aiWritten: 4,
+          // Zero, since a heading run that names no place stopped seeding a
+          // day: `## Day 4: Local Gems` sent four Paris stops to a search
+          // for `local`, and they were every wrong area this genre had
+          // without a gazetteer. The gazetteer had already refused it, so
+          // C10 below is unchanged.
+          Genre.aiWritten: 0,
           Genre.wanderlog: 11,
         },
         maxNoneWrong: {
