@@ -320,8 +320,7 @@ String? _gazetteerAreaInStop(
         final candidateWords = words.sublist(start, end + 1);
         final candidate = candidateWords.join(' ');
         if (areaWords(candidate).isEmpty) continue;
-        final precededByDescriptor =
-            start > 0 &&
+        final precededByDescriptor = start > 0 &&
             (venueGenericWords.contains(words[start - 1]) ||
                 mealPrefixWords.contains(words[start - 1]) ||
                 furnitureWords.contains(words[start - 1]));

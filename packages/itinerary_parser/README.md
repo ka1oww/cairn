@@ -170,6 +170,23 @@ and looked up another and simply never matches.
 and `;` into the individual place names a multi-place line named, for a
 caller that wants to offer more than one Maps query per line.
 
+## Numbered day headers
+
+A numbered header may carry the itinerary content itself; it does not need a
+following bullet list. For example, `Day 3 Rome: - Trevi Fountain - Pantheon`
+becomes a day whose `place` is `Rome` and whose two stops retain the header as
+their `sourceLine`. Dashed, plus-separated, and parenthesised dashed lists are
+split the same way. A plain label stays a label: `Day 1: Kyoto` still produces
+an empty, low-confidence day rather than turning `Kyoto` into a stop.
+
+`Day 2-5` is an ascending inclusive range, producing one `ParsedDay` for each
+claimed number. `Day 4-5-6` and `Day 6 + 7` instead preserve the written
+numbers as separate claims. A range or multi-number header does not say which
+claimed day owns its inline or following stops, so those stops remain visible
+on every claimed day rather than being allocated by a guess. Duplicate and
+overlapping claims are likewise kept as distinct days in source order; the
+parser never merges them or lets a later claim overwrite an earlier one.
+
 ## Confidence
 
 Every day, and the result as a whole, carries a [`Confidence`]:

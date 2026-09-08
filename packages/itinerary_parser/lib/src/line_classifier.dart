@@ -89,6 +89,13 @@ class DayNumberMatch {
   const DayNumberMatch(this.dayNumbers, this.trailingText);
 }
 
+/// Recognizes an explicit numbered-day header and preserves every day claim.
+///
+/// An ascending two-endpoint dash is an inclusive range (`Day 2-5` becomes
+/// 2, 3, 4, 5). Three or more dashed numbers (`Day 4-5-6`) and plus-separated
+/// numbers (`Day 6 + 7`) are individual claims in their written order. This
+/// layer never deduplicates a claim; the document builder keeps duplicates and
+/// overlaps as separate source entries so no traveller content is discarded.
 DayNumberMatch? tryParseDayNumberHeader(String line) {
   final trimmed = line.trim();
   final ascendingRange = _ascendingDayRangeHeader.firstMatch(trimmed);
