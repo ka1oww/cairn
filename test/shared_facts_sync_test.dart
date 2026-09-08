@@ -1989,6 +1989,26 @@ void main() {
       );
     });
 
+    test(
+      'a persisted destination zone closes without a device offset',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await aTwoDayTrip(db);
+        await db.setTripTimeZone('Europe/Rome');
+        final server = FakeServer(trip: sharedTrip(id, const []));
+
+        final outcome = await TripSync(
+          database: db,
+          facts: server,
+          now: () => DateTime.utc(2027, 6, 19, 22),
+        ).syncNow();
+
+        expect(outcome.standing, SyncStanding.archived);
+        expect(server.readTrips, 0, reason: 'not one round trip');
+      },
+    );
+
     test('a plan with no dates has not ended, so it still syncs', () async {
       final db = inMemory();
       addTearDown(db.close);

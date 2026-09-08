@@ -133,8 +133,6 @@ class SyncOutcome {
   bool get didReach => standing == SyncStanding.synced;
 }
 
-Duration _deviceOffset() => DateTime.now().timeZoneOffset;
-
 /// What the shared `trips` row needs and this phone does not have.
 ///
 /// Handed to a [TripRowSource] so that whatever eventually knows the trip's
@@ -194,7 +192,7 @@ class TripSync {
     required this.database,
     required this.facts,
     this.now = DateTime.now,
-    this.utcOffset = _deviceOffset,
+    this.utcOffset,
     this.tripRow,
   });
 
@@ -206,15 +204,9 @@ class TripSync {
   /// the day is written ([AppDatabase.replaceItinerary]).
   final DateTime Function() now;
 
-  /// The trip's clock, as an offset from UTC — what turns the plan's last
-  /// bare date into the instant the trip ends.
-  ///
-  /// The same acknowledged approximation the app makes above this seam
-  /// (`lib/app_state/trip_lifecycle.dart`, and `tripUtcOffsetProvider`): one
-  /// offset for the whole trip, read off the device, because no trip clock is
-  /// stored yet. It is deliberately a function rather than a value, so it is
-  /// read at reconcile time and pinned by a test the way [now] is.
-  final Duration Function() utcOffset;
+  /// Legacy fixed-offset seam for older isolated tests. Production derives
+  /// this from the persisted destination IANA zone below.
+  final Duration Function()? utcOffset;
 
   /// Who can say what the trip's clock is, or null while nothing can.
   final TripRowSource? tripRow;
@@ -392,20 +384,11 @@ class TripSync {
             .toList()
           ..sort();
 
-    // The trip's end is `tripEndsAtFrom`'s and nobody else's -- the same call
-    // `_endsAt` and the app's `tripEndsAtFor` make, because a row that
-    // published an end this phone disagreed with would shut the pool and
-    // refuse every reconcile on a trip still being lived. The helper answers
-    // with the *instant* the last day seals, which is midnight ending it on
-    // the trip's clock; the row wants that day's own calendar date, so it is
-    // read back the way it was worked out -- into the trip's clock, then back
-    // one day. Null when the plan's last day carries no date: `trips.end_date`
-    // is `not null` (0003_trips.sql) and inventing one to satisfy it would be
-    // the guess this whole rule exists to refuse, so the source declines and
-    // the sync waits in `awaitingTripRow` until the plan says.
-    final lastDay = (await _endsAt())
-        ?.add(utcOffset())
-        .subtract(const Duration(days: 1));
+    final daysInPlanOrder = (await database.readItineraryDays()).toList()
+      ..sort((a, b) => a.number.compareTo(b.number));
+    final lastDateIso = daysInPlanOrder.isEmpty
+        ? null
+        : daysInPlanOrder.last.dateIso;
 
     final draft = await source(
       PendingTripRow(
@@ -414,7 +397,7 @@ class TripSync {
         nameRevisedAt: DateTime.parse(trip.nameRevisedAtUtcIso).toUtc(),
         startedBy: MemberId(trip.startedByMemberId),
         firstDateIso: resolved.isEmpty ? null : resolved.first,
-        lastDateIso: lastDay?.toIso8601String().substring(0, 10),
+        lastDateIso: lastDateIso,
       ),
     );
     if (draft == null) {
@@ -832,16 +815,24 @@ class TripSync {
   Future<DateTime?> _endsAt() async {
     final days = (await database.readItineraryDays()).toList()
       ..sort((a, b) => a.number.compareTo(b.number));
-    return tripEndsAtFrom(
-      dayDatesInPlanOrder: [
-        for (final day in days)
-          if (day.dateIso case final iso?)
-            DateTime.parse('${iso}T00:00:00Z').toUtc()
-          else
-            null,
-      ],
-      utcOffset: utcOffset(),
-    );
+    final dates = [
+      for (final day in days)
+        if (day.dateIso case final iso?)
+          DateTime.parse('${iso}T00:00:00Z').toUtc()
+        else
+          null,
+    ];
+    final timeZone = (await database.readTripFacts())?.timeZone;
+    if (timeZone != null) {
+      return tripEndsAtInTimeZone(
+        dayDatesInPlanOrder: dates,
+        timeZone: timeZone,
+      );
+    }
+    final offset = utcOffset;
+    return offset == null
+        ? null
+        : tripEndsAtFrom(dayDatesInPlanOrder: dates, utcOffset: offset());
   }
 
   /// Which day of the trip somebody joined on, worked out from the plan.

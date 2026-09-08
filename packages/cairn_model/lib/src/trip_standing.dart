@@ -1,5 +1,13 @@
 import 'trip_close.dart';
 
+import 'package:timezone/data/latest.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
+
+final bool _timeZonesReady = (() {
+  tz_data.initializeTimeZones();
+  return true;
+})();
+
 /// Where a whole trip stands against an instant.
 ///
 /// **This is the only place the ending is decided.** `DayStanding` answers it
@@ -126,4 +134,42 @@ DateTime? tripEndsAtFrom({
   final last = dayDatesInPlanOrder.last;
   if (last == null) return null;
   return last.add(const Duration(days: 1)).subtract(utcOffset);
+}
+
+/// The instant the final day in [dayDatesInPlanOrder] seals in [timeZone].
+///
+/// A null or unrecognised IANA zone is deliberately an unknown ending. A
+/// device offset is not a substitute for the destination's DST rules.
+DateTime? tripEndsAtInTimeZone({
+  required List<DateTime?> dayDatesInPlanOrder,
+  required String? timeZone,
+}) {
+  if (timeZone == null || !_timeZonesReady) return null;
+  final calendarMidnight = tripEndsAtFrom(
+    dayDatesInPlanOrder: dayDatesInPlanOrder,
+    utcOffset: Duration.zero,
+  );
+  if (calendarMidnight == null) return null;
+  try {
+    final location = tz.getLocation(timeZone);
+    return tz.TZDateTime(
+      location,
+      calendarMidnight.year,
+      calendarMidnight.month,
+      calendarMidnight.day,
+    ).toUtc();
+  } on ArgumentError {
+    return null;
+  }
+}
+
+/// The wall-clock time for [instant] in [timeZone], or null when unknown.
+Duration? timeOfDayInTimeZone(DateTime instant, String? timeZone) {
+  if (timeZone == null || !_timeZonesReady) return null;
+  try {
+    final local = tz.TZDateTime.from(instant.toUtc(), tz.getLocation(timeZone));
+    return Duration(hours: local.hour, minutes: local.minute);
+  } on ArgumentError {
+    return null;
+  }
 }

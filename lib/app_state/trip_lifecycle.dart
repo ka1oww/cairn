@@ -24,17 +24,13 @@
 //    travellers are still on it. Nothing here guesses a date, and a trip
 //    takes its ending the moment its plan's last day has one — the same
 //    answer `TripInvite.standingAt` gives a null close.
-//  - **The end is midnight on the trip's own clock, not UTC midnight.** The
-//    same acknowledged approximation as `todayProvider` and
-//    `tripUtcOffsetProvider`: one offset for the whole trip, read off the
-//    device, because no trip clock is stored yet. It is why a trip that
-//    crosses a border still closes on the evening its travellers lived, to
-//    within the one offset this slice has; the server's half
-//    (`trip_closes_at`, `0005_trip_invites.sql`, derived from the itinerary
-//    since `0016`) reads the trip's real zone and asks `tripEndsAtFrom`'s
-//    question of the same plan.
+//  - **The end is midnight on the trip's own clock, not UTC midnight.** A
+//    saved destination IANA zone turns that calendar boundary into an instant
+//    through the same DST rules as pings. Without one, the ending stays
+//    unknown rather than borrowing the phone's clock.
 import 'package:cairn_model/cairn_model.dart' as model;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:trip_moments/trip_moments.dart' as tm;
 
 import 'date_labels.dart';
 import 'ping_schedule.dart';
@@ -51,13 +47,22 @@ import 'trip_providers.dart';
 /// screen and another on the wire. What this supplies is the shape it needs:
 /// the plan's day dates in the plan's own order, nulls kept, since which day
 /// is *last* is the whole of the question.
-DateTime? tripEndsAtFor(TripPlan? plan, Duration utcOffset) {
+DateTime? tripEndsAtFor(
+  TripPlan? plan,
+  Duration? utcOffset, {
+  String? timeZone,
+}) {
   if (plan == null) return null;
   final days = plan.days.toList()..sort((a, b) => a.number.compareTo(b.number));
-  return model.tripEndsAtFrom(
-    dayDatesInPlanOrder: [for (final day in days) day.date],
-    utcOffset: utcOffset,
-  );
+  final dates = [for (final day in days) day.date];
+  if (timeZone != null) {
+    return model.tripEndsAtInTimeZone(
+      dayDatesInPlanOrder: dates,
+      timeZone: timeZone,
+    );
+  }
+  if (utcOffset == null) return null;
+  return model.tripEndsAtFrom(dayDatesInPlanOrder: dates, utcOffset: utcOffset);
 }
 
 /// The instant [plan] closes to new photos — and with it the instant its
@@ -66,17 +71,25 @@ DateTime? tripEndsAtFor(TripPlan? plan, Duration utcOffset) {
 /// The rule is the domain's (`cairn_model`'s `tripClosesAt`: the trip's end
 /// plus the grace) and is deliberately not spelled out again here. The book's
 /// rule is not this one and never will be: it does not expire.
-DateTime? tripCloseFor(TripPlan? plan, Duration utcOffset) {
-  final endsAt = tripEndsAtFor(plan, utcOffset);
+DateTime? tripCloseFor(
+  TripPlan? plan,
+  Duration? utcOffset, {
+  String? timeZone,
+}) {
+  final endsAt = tripEndsAtFor(plan, utcOffset, timeZone: timeZone);
   return endsAt == null ? null : model.tripClosesAt(endsAt);
 }
 
 /// Where the trip stands at [now]. The whole of this file's answer.
 model.TripStanding tripStandingFor(
   TripPlan? plan,
-  Duration utcOffset,
-  DateTime now,
-) => model.tripStandingAt(now: now, endsAt: tripEndsAtFor(plan, utcOffset));
+  Duration? utcOffset,
+  DateTime now, {
+  String? timeZone,
+}) => model.tripStandingAt(
+  now: now,
+  endsAt: tripEndsAtFor(plan, utcOffset, timeZone: timeZone),
+);
 
 /// The one sentence that says where the trip's ending stands, or null while
 /// the trip is still underway and has no ending to report.
@@ -85,26 +98,55 @@ model.TripStanding tripStandingFor(
 /// post-trip announcement and the trip's own sheet — because a trip that is
 /// over on one screen and closing on another is two answers to one question.
 ///
-/// The grace line names the last day the door is open, not the instant it
-/// shuts: [closesAt] is midnight *ending* that day, so the date said out loud
-/// is the day before it, exactly as the code's expiry line does it.
+String? tripClosingLabel({
+  required DateTime closesAt,
+  required Duration? utcOffset,
+  String? timeZone,
+}) {
+  final localTime = timeZone == null
+      ? utcOffset == null
+            ? null
+            : Duration(
+                hours: closesAt.toUtc().add(utcOffset).hour,
+                minutes: closesAt.toUtc().add(utcOffset).minute,
+              )
+      : model.timeOfDayInTimeZone(closesAt, timeZone);
+  if (localTime == null) return null;
+  final localDate = timeZone == null
+      ? closesAt.toUtc().add(utcOffset!)
+      : tm.dateInTimeZone(closesAt, timeZone);
+  final date = localTime == Duration.zero
+      ? localDate.subtract(const Duration(days: 1))
+      : localDate;
+  final day = dayMonthLabel(date);
+  if (localTime == Duration.zero) return 'the end of $day';
+  final hour = localTime.inHours.toString().padLeft(2, '0');
+  final minute = (localTime.inMinutes % Duration.minutesPerHour)
+      .toString()
+      .padLeft(2, '0');
+  return '$hour:$minute on $day';
+}
+
 String? tripEndingLine({
   required model.TripStanding standing,
   required DateTime? closesAt,
-  required Duration utcOffset,
-}) => switch (standing) {
-  model.TripStanding.underway => null,
-  model.TripStanding.grace =>
-    closesAt == null
-        ? 'Still open for anything you are holding.'
-        : 'Still open for anything you are holding, until the end of '
-              '${dayMonthLabel(closesAt.add(utcOffset).subtract(const Duration(days: 1)))}.',
-  // No countdown and no invitation to act: the trip is closed, and the only
-  // honest thing left to say is that what it holds is what it holds. The
-  // book made from it is a later surface (travelapp-photo-handover) and is
-  // deliberately not promised here.
-  model.TripStanding.archived => 'Closed. What is in it is what it is.',
-};
+  required Duration? utcOffset,
+  String? timeZone,
+}) {
+  if (standing == model.TripStanding.underway) return null;
+  if (standing == model.TripStanding.archived) {
+    return 'Closed. What is in it is what it is.';
+  }
+  if (closesAt == null) return 'Still open for anything you are holding.';
+  final label = tripClosingLabel(
+    closesAt: closesAt,
+    utcOffset: utcOffset,
+    timeZone: timeZone,
+  );
+  return label == null
+      ? 'Still open for anything you are holding.'
+      : 'Still open for anything you are holding, until $label.';
+}
 
 // ---------------------------------------------------------------------------
 // Providers.
@@ -115,7 +157,8 @@ String? tripEndingLine({
 final tripEndsAtProvider = Provider<DateTime?>(
   (ref) => tripEndsAtFor(
     ref.watch(savedItineraryProvider).value,
-    ref.watch(tripUtcOffsetProvider),
+    null,
+    timeZone: ref.watch(tripTimeZoneProvider),
   ),
 );
 
@@ -124,7 +167,8 @@ final tripEndsAtProvider = Provider<DateTime?>(
 final tripClosesAtProvider = Provider<DateTime?>(
   (ref) => tripCloseFor(
     ref.watch(savedItineraryProvider).value,
-    ref.watch(tripUtcOffsetProvider),
+    null,
+    timeZone: ref.watch(tripTimeZoneProvider),
   ),
 );
 
@@ -153,6 +197,7 @@ final tripEndingLineProvider = Provider<String?>(
   (ref) => tripEndingLine(
     standing: ref.watch(tripStandingProvider),
     closesAt: ref.watch(tripClosesAtProvider),
-    utcOffset: ref.watch(tripUtcOffsetProvider),
+    utcOffset: null,
+    timeZone: ref.watch(tripTimeZoneProvider),
   ),
 );
