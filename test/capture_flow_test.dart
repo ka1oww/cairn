@@ -911,6 +911,46 @@ void main() {
       expect(await db.readPendingCapture(), isNull);
     });
 
+    testWidgets('a zone-less relaunch holds the breath without an hour', (
+      tester,
+    ) async {
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(
+        tester,
+        today: day(14),
+        now: ping.at,
+        tripTimeZone: 'Etc/UTC',
+        camera: camera,
+      );
+      await accept(tester, tripPaste);
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+
+      await launch(
+        tester,
+        today: day(14),
+        now: ping.at.add(const Duration(minutes: 10)),
+        tripTimeZone: '',
+        camera: camera,
+      );
+
+      expect(await db.readPendingCapture(), isNotNull);
+      expect(File(camera.taken.single).existsSync(), isTrue);
+      expect(File(camera.frontTaken.single).existsSync(), isTrue);
+      expect(textOf(const Key('capture-call')), 'Your moment is waiting.');
+
+      await tester.tap(find.byKey(const Key('capture-call-action')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('capture-time-pending')), findsOneWidget);
+      expect(find.byKey(const Key('capture-hour')), findsNothing);
+      expect(find.byKey(const Key('capture-keep')), findsNothing);
+      expect(find.byKey(const Key('capture-once-more')), findsNothing);
+      expect(await db.readPendingCapture(), isNotNull);
+      expect(camera.discarded, isEmpty);
+    });
+
     testWidgets('a restore that cannot read its row leaves the camera '
         'reachable', (tester) async {
       // `isRestoring` gates `open()` and draws the day page with no button.

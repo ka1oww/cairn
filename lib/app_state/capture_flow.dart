@@ -189,7 +189,7 @@ class TheBreath extends CaptureState {
 
   /// `14:50` — the hour this will print beside, in the trip's clock. The
   /// word is anchored under it because that is where the book sets it.
-  final String hourLabel;
+  final String? hourLabel;
 
   /// What is on the line right now. Empty is the usual.
   final String word;
@@ -207,7 +207,7 @@ class TheBreath extends CaptureState {
     required this.framePath,
     this.frontFramePath,
     required this.takenAtUtc,
-    required this.hourLabel,
+    this.hourLabel,
     this.word = '',
     required this.closesAt,
     this.isKeeping = false,
@@ -424,6 +424,9 @@ class CaptureFlow extends Notifier<CaptureState> {
 
   @override
   CaptureState build() {
+    ref.listen(tripTimeZoneProvider, (_, _) {
+      unawaited(_readPendingBreath(restoring: false));
+    });
     unawaited(_restorePending());
     return const CaptureClosed(isRestoring: true);
   }
@@ -438,7 +441,7 @@ class CaptureFlow extends Notifier<CaptureState> {
   /// the launch: the standing rule is no lockout, ever.
   Future<void> _restorePending() async {
     try {
-      await _readPendingBreath();
+      await _readPendingBreath(restoring: true);
     } catch (_) {
       if (!ref.mounted) return;
       if (state case CaptureClosed(isRestoring: true)) {
@@ -447,13 +450,23 @@ class CaptureFlow extends Notifier<CaptureState> {
     }
   }
 
-  Future<void> _readPendingBreath() async {
+  Future<void> _readPendingBreath({required bool restoring}) async {
     final pending = await ref.read(pendingCaptureStoreProvider).read();
     if (!ref.mounted) return;
     final closed = state;
-    if (closed is! CaptureClosed || !closed.isRestoring) return;
+    if (restoring) {
+      if (closed is! CaptureClosed || !closed.isRestoring) return;
+    } else if (closed is! TheBreath) {
+      return;
+    }
     if (pending == null) {
-      state = const CaptureClosed();
+      if (restoring) state = const CaptureClosed();
+      return;
+    }
+
+    final timeZone = ref.read(tripTimeZoneProvider);
+    if (timeZone == null || !tm.isKnownTimeZone(timeZone)) {
+      state = _breathFor(pending, null);
       return;
     }
 
@@ -465,25 +478,26 @@ class CaptureFlow extends Notifier<CaptureState> {
       return;
     }
 
-    final hourLabel = clockLabel(
-      pending.takenAtUtc,
-      null,
-      timeZone: ref.read(tripTimeZoneProvider),
-    );
+    final hourLabel = clockLabel(pending.takenAtUtc, null, timeZone: timeZone);
     if (hourLabel == null) {
-      await ref.read(pendingCaptureStoreProvider).clear();
-      await _discard([pending.framePath, pending.frontFramePath]);
-      if (ref.mounted) state = const CaptureClosed();
+      state = _breathFor(pending, null);
       return;
     }
-    state = TheBreath(
-      framePath: pending.framePath,
-      frontFramePath: pending.frontFramePath,
-      takenAtUtc: pending.takenAtUtc,
-      hourLabel: hourLabel,
-      word: pending.word,
-      closesAt: pending.closesAt,
-    );
+    state = _breathFor(pending, hourLabel);
+  }
+
+  TheBreath _breathFor(PendingCapture pending, String? hourLabel) => TheBreath(
+    framePath: pending.framePath,
+    frontFramePath: pending.frontFramePath,
+    takenAtUtc: pending.takenAtUtc,
+    hourLabel: hourLabel,
+    word: pending.word,
+    closesAt: pending.closesAt,
+  );
+
+  bool _hasKnownTripTimeZone() {
+    final timeZone = ref.read(tripTimeZoneProvider);
+    return timeZone != null && tm.isKnownTimeZone(timeZone);
   }
 
   /// Opens the camera, if the moment is yours to answer.
@@ -560,12 +574,6 @@ class CaptureFlow extends Notifier<CaptureState> {
         null,
         timeZone: ref.read(tripTimeZoneProvider),
       );
-      if (hourLabel == null) {
-        await ref.read(pendingCaptureStoreProvider).clear();
-        await _discard([frame.path, frame.frontPath]);
-        state = const CaptureClosed();
-        return;
-      }
       state = TheBreath(
         framePath: frame.path,
         frontFramePath: frame.frontPath,
@@ -592,6 +600,7 @@ class CaptureFlow extends Notifier<CaptureState> {
   Future<void> onceMore() async {
     final breath = state;
     if (breath is! TheBreath || breath.isKeeping) return;
+    if (!_hasKnownTripTimeZone()) return;
     // Both halves of the capture event go: an attempt is one moment, and a
     // retake that kept its front frame would leave an orphan on disk.
     await ref.read(pendingCaptureStoreProvider).clear();
@@ -620,6 +629,7 @@ class CaptureFlow extends Notifier<CaptureState> {
   Future<void> turnTheDayOver() async {
     final breath = state;
     if (breath is! TheBreath || breath.isKeeping) return;
+    if (!_hasKnownTripTimeZone()) return;
     // **The last gate before the pool, and the one that matters.** A frame
     // taken while the trip was still open cannot be kept into a trip that
     // has closed since — the archive is fixed, and a photograph landing in
@@ -673,11 +683,12 @@ class CaptureFlow extends Notifier<CaptureState> {
   Future<void> abandon() async {
     final breath = state;
     if (breath is TheBreath && breath.isKeeping) return;
-    state = const CaptureClosed();
     if (breath is TheBreath) {
+      if (!_hasKnownTripTimeZone()) return;
       await ref.read(pendingCaptureStoreProvider).clear();
       await _discard([breath.framePath, breath.frontFramePath]);
     }
+    state = const CaptureClosed();
   }
 
   /// The one spelling of "these files of the capture event go".

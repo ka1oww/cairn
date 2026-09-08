@@ -158,7 +158,7 @@ DateTime? tripEndsAtInTimeZone({
       calendarMidnight.month,
       calendarMidnight.day,
     ).toUtc();
-  } on ArgumentError {
+  } on Object {
     return null;
   }
 }
@@ -169,7 +169,7 @@ Duration? timeOfDayInTimeZone(DateTime instant, String? timeZone) {
   try {
     final local = tz.TZDateTime.from(instant.toUtc(), tz.getLocation(timeZone));
     return Duration(hours: local.hour, minutes: local.minute);
-  } on ArgumentError {
+  } on Object {
     return null;
   }
 }

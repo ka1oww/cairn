@@ -36,7 +36,7 @@ bool isKnownTimeZone(String timeZone) {
     if (!_timeZonesReady) return false;
     tz.getLocation(timeZone);
     return true;
-  } on ArgumentError {
+  } on Object {
     return false;
   }
 }
