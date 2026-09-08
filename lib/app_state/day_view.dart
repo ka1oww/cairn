@@ -56,6 +56,9 @@ class DayStop {
   /// re-decides: a second classifier is the thing to refuse in review.
   final StopKind kind;
 
+  final String? placeText;
+  final List<String> placeCandidates;
+
   /// `Lunch` on `Lunch: Ichiran` — shown, and never sent to a maps app,
   /// because no restaurant is called that.
   final String? mealLabel;
@@ -89,6 +92,8 @@ class DayStop {
     required this.text,
     this.timeLabel,
     this.kind = StopKind.place,
+    this.placeText,
+    this.placeCandidates = const [],
     this.mealLabel,
     this.searchText,
     this.area,
@@ -440,16 +445,26 @@ DayStop _dayStop(
   // instructions all render as written while remaining inert.
   final resolvable =
       stop.kind == StopKind.place || stop.kind == StopKind.mealLabel;
-  final searchText = !resolvable || rest == null || isPlaceholderText(rest)
+  final candidatePlaces = stop.placeCandidates.isNotEmpty
+      ? stop.placeCandidates
+      : stop.placeText == null
+      ? const <String>[]
+      : [stop.placeText!];
+  final candidateText = stop.placeText ?? rest;
+  final searchText =
+      !resolvable ||
+          candidateText == null ||
+          candidatePlaces.length > 1 ||
+          isPlaceholderText(candidateText)
       ? null
-      : rest;
+      : candidateText;
   return DayStop(
     position: position,
-    // The label is drawn on its own, so the row's words are what is left of
-    // the line once it is taken off.
-    text: rest ?? stop.text,
+    text: meal.label == null ? stop.text : rest ?? stop.text,
     timeLabel: stop.timeLabel,
     kind: stop.kind,
+    placeText: stop.placeText,
+    placeCandidates: candidatePlaces,
     mealLabel: meal.label,
     searchText: searchText,
     area: stop.area,

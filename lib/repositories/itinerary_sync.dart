@@ -597,6 +597,14 @@ class TripSync {
           stop.areaSource,
         ),
     };
+    final localPlaceData = {
+      for (final stop in localStops)
+        (stop.dayNumber, stop.position): (
+          text: stop.stopText,
+          placeText: stop.placeText,
+          placeCandidatesJson: stop.placeCandidatesJson,
+        ),
+    };
     final incomingStops = [
       for (final day in merged.days)
         for (final stop in day.stops)
@@ -607,6 +615,15 @@ class TripSync {
               text: stop.text,
               timeIso: stop.timeIso,
               kind: stop.kind,
+              placeText:
+                  localPlaceData[(day.number, stop.position)]?.text == stop.text
+                  ? localPlaceData[(day.number, stop.position)]?.placeText
+                  : null,
+              placeCandidatesJson:
+                  localPlaceData[(day.number, stop.position)]?.text == stop.text
+                  ? localPlaceData[(day.number, stop.position)]
+                        ?.placeCandidatesJson
+                  : null,
               areaText: stop.areaText,
               areaSource: stop.areaSource,
             )
@@ -617,6 +634,15 @@ class TripSync {
               text: stop.text,
               timeIso: stop.timeIso,
               kind: localAreas[(day.number, stop.position)]?.$1,
+              placeText:
+                  localPlaceData[(day.number, stop.position)]?.text == stop.text
+                  ? localPlaceData[(day.number, stop.position)]?.placeText
+                  : null,
+              placeCandidatesJson:
+                  localPlaceData[(day.number, stop.position)]?.text == stop.text
+                  ? localPlaceData[(day.number, stop.position)]
+                        ?.placeCandidatesJson
+                  : null,
               areaText: localAreas[(day.number, stop.position)]?.$2,
               areaSource: localAreas[(day.number, stop.position)]?.$3,
             ),

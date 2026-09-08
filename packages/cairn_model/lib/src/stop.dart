@@ -79,6 +79,10 @@ final class Stop {
   /// in the editor is tappable without anything having to say so.
   final StopKind kind;
 
+  final String? placeText;
+
+  final List<String> placeCandidates;
+
   /// The area in force for this stop — what a Maps search appends.
   /// Null means "send the stop's own words alone" (rule 3: a miss sends
   /// nothing rather than guessing).
@@ -91,6 +95,8 @@ final class Stop {
     required this.text,
     this.time,
     this.kind = StopKind.place,
+    this.placeText,
+    this.placeCandidates = const [],
     this.area,
     this.areaSource,
   }) {
@@ -129,14 +135,33 @@ final class Stop {
       other.text == text &&
       other.time == time &&
       other.kind == kind &&
+      other.placeText == placeText &&
+      _sameStrings(other.placeCandidates, placeCandidates) &&
       other.area == area &&
       other.areaSource == areaSource;
 
   @override
-  int get hashCode => Object.hash(text, time, kind, area, areaSource);
+  int get hashCode => Object.hash(
+    text,
+    time,
+    kind,
+    placeText,
+    Object.hashAll(placeCandidates),
+    area,
+    areaSource,
+  );
 
   @override
-  String toString() => 'Stop(${time == null ? '' : '${time!.iso} '}$text'
+  String toString() =>
+      'Stop(${time == null ? '' : '${time!.iso} '}$text'
       '${kind == StopKind.place ? '' : ' <${kind.name}>'}'
       '${area == null ? '' : ' [$area:${areaSource?.name}]'})';
+}
+
+bool _sameStrings(List<String> left, List<String> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }

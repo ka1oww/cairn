@@ -86,8 +86,7 @@ enum DayUncertainty {
     'weekday-disagrees',
     "The weekday the plan names doesn't fall on the date written beside "
         'it. The date was kept; the disagreement is flagged, not corrected.',
-  ),
-  ;
+  );
 
   /// Stable, machine-readable identifier (also what `toJson` emits).
   final String slug;
@@ -206,10 +205,10 @@ class AreaHint {
   String get normalized => text.toLowerCase().trim();
 
   Map<String, dynamic> toJson() => {
-        'text': text,
-        'source': source.name,
-        'setBy': setBy?.toJson(),
-      };
+    'text': text,
+    'source': source.name,
+    'setBy': setBy?.toJson(),
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -238,6 +237,7 @@ class Stop {
   final StopKind kind;
   final AreaHint? area;
   final String? placeText;
+  final List<String> placeCandidates;
 
   const Stop({
     required this.text,
@@ -246,20 +246,21 @@ class Stop {
     this.kind = StopKind.place,
     this.area,
     this.placeText,
+    this.placeCandidates = const [],
   });
 
   /// True exactly when [time] is present. This is the star rule.
   bool get isStarred => time != null;
 
   Map<String, dynamic> toJson() => {
-        'text': text,
-        'time': time?.toJson(),
-        'isStarred': isStarred,
-        'sourceLine': sourceLine.toJson(),
-        'kind': kind.name,
-        'area': area?.toJson(),
-        'placeText': placeText,
-      };
+    'text': text,
+    'time': time?.toJson(),
+    'isStarred': isStarred,
+    'sourceLine': sourceLine.toJson(),
+    'kind': kind.name,
+    'area': area?.toJson(),
+    'placeText': placeText,
+  };
 
   @override
   String toString() => 'Stop(${time != null ? '${time!.toIso()} ' : ''}$text)';
@@ -353,13 +354,13 @@ class DateCandidate {
   DateTime inYear(int year) => DateTime(year, month, day);
 
   Map<String, dynamic> toJson() => {
-        'day': day,
-        'month': month,
-        'year': year,
-        'text': text,
-        'headerText': headerText,
-        'ambiguousNumericOrder': ambiguousNumericOrder,
-      };
+    'day': day,
+    'month': month,
+    'year': year,
+    'text': text,
+    'headerText': headerText,
+    'ambiguousNumericOrder': ambiguousNumericOrder,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -438,16 +439,16 @@ class ParsedDay {
   });
 
   Map<String, dynamic> toJson() => {
-        'index': index,
-        'date': date == null ? null : _formatDate(date!),
-        'place': place,
-        'stops': stops.map((s) => s.toJson()).toList(),
-        'confidence': confidence.name,
-        'uncertainty': uncertainty?.slug,
-        'headerWeekday': headerWeekday,
-        'headerSourceLine': headerSourceLine?.toJson(),
-        'dateCandidate': dateCandidate?.toJson(),
-      };
+    'index': index,
+    'date': date == null ? null : _formatDate(date!),
+    'place': place,
+    'stops': stops.map((s) => s.toJson()).toList(),
+    'confidence': confidence.name,
+    'uncertainty': uncertainty?.slug,
+    'headerWeekday': headerWeekday,
+    'headerSourceLine': headerSourceLine?.toJson(),
+    'dateCandidate': dateCandidate?.toJson(),
+  };
 
   @override
   String toString() =>
@@ -494,8 +495,7 @@ enum UnplacedReason {
   bookingReference(
     'hotel-booking-reference',
     'This looked like a booking confirmation reference, not a stop.',
-  ),
-  ;
+  );
 
   /// Stable, machine-readable identifier (also what `toJson` emits).
   final String slug;
@@ -521,9 +521,9 @@ class UnplacedLine {
   const UnplacedLine({required this.sourceLine, required this.reason});
 
   Map<String, dynamic> toJson() => {
-        'sourceLine': sourceLine.toJson(),
-        'reason': reason.slug,
-      };
+    'sourceLine': sourceLine.toJson(),
+    'reason': reason.slug,
+  };
 
   @override
   String toString() =>
@@ -652,12 +652,12 @@ class ParseResult {
   });
 
   Map<String, dynamic> toJson() => {
-        'days': days.map((d) => d.toJson()).toList(),
-        'unplacedLines': unplacedLines.map((u) => u.toJson()).toList(),
-        'overallConfidence': overallConfidence.name,
-        'usedHeaderlessFallback': usedHeaderlessFallback,
-        'hasAmbiguousNumericDates': hasAmbiguousNumericDates,
-      };
+    'days': days.map((d) => d.toJson()).toList(),
+    'unplacedLines': unplacedLines.map((u) => u.toJson()).toList(),
+    'overallConfidence': overallConfidence.name,
+    'usedHeaderlessFallback': usedHeaderlessFallback,
+    'hasAmbiguousNumericDates': hasAmbiguousNumericDates,
+  };
 
   @override
   String toString() =>

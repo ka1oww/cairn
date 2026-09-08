@@ -225,6 +225,9 @@ class PlanStop {
   /// What the line is, decided by the parser at the paste and carried since.
   final StopKind kind;
 
+  final String? placeText;
+  final List<String> placeCandidates;
+
   /// The area in force for this stop, and whose it is. Null is an answer: it
   /// means a search goes out as the stop's own words alone.
   final String? area;
@@ -234,6 +237,8 @@ class PlanStop {
     required this.text,
     this.timeLabel,
     this.kind = StopKind.place,
+    this.placeText,
+    this.placeCandidates = const [],
     this.area,
     this.areaSource,
   });
@@ -265,6 +270,8 @@ TripPlan? _toPlan(ConfirmedItinerary? itinerary) {
                 text: stop.text,
                 timeLabel: stop.time?.iso,
                 kind: stop.kind,
+                placeText: stop.placeText,
+                placeCandidates: stop.placeCandidates,
                 area: stop.area,
                 areaSource: stop.areaSource,
               ),

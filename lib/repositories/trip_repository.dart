@@ -7,6 +7,8 @@
 // the itinerary arrives already spoken in `cairn_model` vocabulary — the app
 // state layer converts the parser's `ParsedDay`/`Stop` dialect before it
 // reaches this seam — and leaves here as Drift companions.
+import 'dart:convert';
+
 import 'package:cairn_model/cairn_model.dart';
 
 import '../storage/drift/app_database.dart';
@@ -90,6 +92,10 @@ class TripRepository {
                         text: stop.stopText,
                         time: _parseTime(stop.timeIso),
                         kind: stopKindFromStored(stop.kind),
+                        placeText: stop.placeText,
+                        placeCandidates: placeCandidatesFromStored(
+                          stop.placeCandidatesJson,
+                        ),
                         area: stop.areaText,
                         areaSource: stop.areaText == null
                             ? null
@@ -150,6 +156,10 @@ class TripRepository {
               text: stop.text,
               timeIso: stop.time?.iso,
               kind: stop.kind.name,
+              placeText: stop.placeText,
+              placeCandidatesJson: stop.placeCandidates.isEmpty
+                  ? null
+                  : jsonEncode(stop.placeCandidates),
               areaText: stop.area,
               areaSource: stop.area == null ? null : stop.areaSource?.name,
             ),
@@ -196,6 +206,19 @@ StopKind stopKindFromStored(String? stored) => switch (stored) {
   'note' => StopKind.note,
   _ => StopKind.place,
 };
+
+List<String> placeCandidatesFromStored(String? stored) {
+  if (stored == null) return const [];
+  try {
+    final decoded = jsonDecode(stored);
+    if (decoded is! List || !decoded.every((value) => value is String)) {
+      return const [];
+    }
+    return decoded.cast<String>();
+  } on FormatException {
+    return const [];
+  }
+}
 
 /// Reads back what `area_source` was stored as. An area with an unreadable
 /// source is the parser's: the tier that anything may overwrite.
