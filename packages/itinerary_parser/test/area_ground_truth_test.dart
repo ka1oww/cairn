@@ -377,13 +377,18 @@ void main() {
         s,
         minSentRight: {
           Genre.handwritten: 69,
-          Genre.aiWritten: 34,
-          Genre.wanderlog: 83,
+          // Raised when the areas a plan declares about its own stops became
+          // plan-wide rather than forward-only: `Hakuba Happo Bus Terminal`
+          // and `Hakuba Happo-One Snow Resort` were being sent to Nagano
+          // because the line that taught the engine `hakuba` came four stops
+          // later in the same day.
+          Genre.aiWritten: 35,
+          Genre.wanderlog: 87,
         },
         maxSentWrong: {
           Genre.handwritten: 1,
-          Genre.aiWritten: 3,
-          Genre.wanderlog: 9,
+          Genre.aiWritten: 2,
+          Genre.wanderlog: 6,
         },
         maxNoneWrong: {
           Genre.handwritten: 1,

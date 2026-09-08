@@ -103,4 +103,32 @@ void main() {
     final r = parseItinerary(plan);
     expect(r.days.last.stops.single.area?.text, 'asakusa');
   });
+
+  test('a self-declared area is trusted before the line that declares it', () {
+    // The stop-line self-evidence rule needs a position that reads as a
+    // locality, and `Hakuba Happo Bus Terminal` gives it none: `hakuba`
+    // opens a longer venue name. What rescues it is the plan's own later
+    // line `SKY CAFE HAKUBA`, where `hakuba` follows a venue word and so is
+    // read as the locality it is. That evidence used to arrive too late --
+    // the trusted set was filled in reading order and reset every day -- so
+    // the terminal went to Nagano, sixty miles away, and the cafe did not.
+    const plan = 'Trip to Nagano\n'
+        'Day 1 - Nagano\n'
+        '- Hakuba Happo Bus Terminal\n'
+        '- SKY CAFE HAKUBA\n'
+        '- Zenkoji Temple\n';
+
+    final gaz = SortedListAreaGazetteer(['hakuba', 'nagano']);
+    final stops = parseItinerary(plan, gazetteer: gaz).days.single.stops;
+    expect(stops[0].area?.text, 'hakuba');
+    expect(stops[1].area?.text, 'hakuba');
+    // The day's own heading still answers for a stop that declares nothing.
+    expect(stops[2].area?.text, 'nagano');
+
+    // And it is still evidence, not a guess: with no gazetteer to confirm
+    // that `hakuba` names a place, neither line is touched and the day's own
+    // heading stands.
+    final blind = parseItinerary(plan).days.single.stops;
+    expect(blind[0].area?.text, 'nagano');
+  });
 }

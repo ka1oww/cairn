@@ -72,207 +72,226 @@ Map<int, AreaAssignment> anchorAssign(
   int? runningSetBy;
   int? runningSetByAssignmentId;
 
-  for (final day in days) {
-    var routeContinuation = false;
-    final trustedSelfAreas = <String>{};
-    final kind = headerKind(day.headerText);
-    final seed = _seedForDay(day.place, vocab, gazetteer, gazetteerObj);
-    if (kind == 'daynum' || kind == 'date' || kind == 'none') {
-      running = seed;
-      runningSetBy = seed != null ? -1 : null; // day boundary
-      runningSetByAssignmentId = null;
-    } else if (seed != null) {
-      running = seed;
-      runningSetBy = -1;
-      runningSetByAssignmentId = null;
-    }
-    // unqualified placeHeader: running continues
+  // An area the plan declares about a stop of its own is evidence about the
+  // whole plan, not only about the lines after it. The set was per day and
+  // filled in reading order, so `SKY CAFE HAKUBA` taught the engine `hakuba`
+  // at the sixth stop of the day and the first and second -- `Hakuba Happo
+  // Bus Terminal`, `Hakuba Happo-One Snow Resort` -- had already been sent to
+  // Nagano, sixty miles away. So it is plan-wide, and the whole assignment
+  // runs twice: the second pass starts knowing everything the first one
+  // learned. Trust is still earned the same way, from a gazetteer-listed name
+  // that is the only area its own line can be read as; only when it counts
+  // has changed.
+  final trustedSelfAreas = <String>{};
 
-    for (final s in day.stops) {
-      final raw = s.raw;
-      final cleanResult = cleanStopText(raw);
-      final clean = cleanResult.clean;
-      final parens = cleanResult.parens;
-      final ws = areaTokens(clean);
-      final isMeal = ws.isNotEmpty && mealPrefixWords.contains(ws.first);
-      String? assignedOwn;
-      String? assignedSource;
-      int? assignedSetBy;
-      int? assignedSetByAssignmentId;
+  for (var pass = 0; pass < 2; pass++) {
+    running = null;
+    runningSetBy = null;
+    runningSetByAssignmentId = null;
+    for (final day in days) {
+      var routeContinuation = false;
+      final kind = headerKind(day.headerText);
+      final seed = _seedForDay(day.place, vocab, gazetteer, gazetteerObj);
+      if (kind == 'daynum' || kind == 'date' || kind == 'none') {
+        running = seed;
+        runningSetBy = seed != null ? -1 : null; // day boundary
+        runningSetByAssignmentId = null;
+      } else if (seed != null) {
+        running = seed;
+        runningSetBy = -1;
+        runningSetByAssignmentId = null;
+      }
+      // unqualified placeHeader: running continues
 
-      // marker check
-      final isHotelLine = hotelWordRegExp.hasMatch(raw);
-      final isTransitLeg = ws.isNotEmpty && transitLeadWords.contains(ws.first);
-      if (!isMeal &&
-          !s.hasTime &&
-          clean.isNotEmpty &&
-          !isHotelLine &&
-          !isTransitLeg) {
-        final content = [
-          for (final w in ws)
-            if (!genericStopWords.contains(w)) w,
-        ];
-        if (content.isNotEmpty && content.length <= 5) {
-          final leftover = [
+      for (final s in day.stops) {
+        final raw = s.raw;
+        final cleanResult = cleanStopText(raw);
+        final clean = cleanResult.clean;
+        final parens = cleanResult.parens;
+        final ws = areaTokens(clean);
+        final isMeal = ws.isNotEmpty && mealPrefixWords.contains(ws.first);
+        String? assignedOwn;
+        String? assignedSource;
+        int? assignedSetBy;
+        int? assignedSetByAssignmentId;
+
+        // marker check
+        final isHotelLine = hotelWordRegExp.hasMatch(raw);
+        final isTransitLeg =
+            ws.isNotEmpty && transitLeadWords.contains(ws.first);
+        if (!isMeal &&
+            !s.hasTime &&
+            clean.isNotEmpty &&
+            !isHotelLine &&
+            !isTransitLeg) {
+          final content = [
             for (final w in ws)
-              if (!genericStopWords.contains(w) &&
-                  !venueGenericWords.contains(w) &&
-                  !furnitureWords.contains(w) &&
-                  !vocab.contains(w))
-                w,
+              if (!genericStopWords.contains(w)) w,
           ];
-          final cands = vocabRuns(clean, vocab);
-          if (leftover.isEmpty && cands.length == 1) {
-            running = cands.first;
-            runningSetBy = s.lineNumber;
-            runningSetByAssignmentId = s.assignmentId;
-            assignedOwn = cands.first;
-            assignedSource = 'runningHeading';
-            assignedSetBy = s.lineNumber;
-            assignedSetByAssignmentId = s.assignmentId;
+          if (content.isNotEmpty && content.length <= 5) {
+            final leftover = [
+              for (final w in ws)
+                if (!genericStopWords.contains(w) &&
+                    !venueGenericWords.contains(w) &&
+                    !furnitureWords.contains(w) &&
+                    !vocab.contains(w))
+                  w,
+            ];
+            final cands = vocabRuns(clean, vocab);
+            if (leftover.isEmpty && cands.length == 1) {
+              running = cands.first;
+              runningSetBy = s.lineNumber;
+              runningSetByAssignmentId = s.assignmentId;
+              assignedOwn = cands.first;
+              assignedSource = 'runningHeading';
+              assignedSetBy = s.lineNumber;
+              assignedSetByAssignmentId = s.assignmentId;
+            }
           }
         }
-      }
 
-      // hotel-prefix rule
-      if (assignedOwn == null && !s.hasTime) {
-        final m = hotelPrefixRegExp.firstMatch(raw);
-        if (m != null) {
-          final pw = areaTokens(m.group(1)!);
-          if (pw.isNotEmpty && pw.every((w) => vocab.contains(w))) {
-            running = pw.join(' ');
+        // hotel-prefix rule
+        if (assignedOwn == null && !s.hasTime) {
+          final m = hotelPrefixRegExp.firstMatch(raw);
+          if (m != null) {
+            final pw = areaTokens(m.group(1)!);
+            if (pw.isNotEmpty && pw.every((w) => vocab.contains(w))) {
+              running = pw.join(' ');
+              runningSetBy = s.lineNumber;
+              runningSetByAssignmentId = s.assignmentId;
+              assignedOwn = running;
+              assignedSource = 'hotelPrefix';
+              assignedSetBy = s.lineNumber;
+              assignedSetByAssignmentId = s.assignmentId;
+            }
+          }
+        }
+
+        // train-route destination (C7t)
+        final isTrainRoute = RegExp(
+          r'^\s*(?:train\s+)?route\b',
+          caseSensitive: false,
+        ).hasMatch(clean);
+        final hadRouteContinuation = routeContinuation;
+        if (trainRule &&
+            assignedOwn == null &&
+            (isTrainRoute || hadRouteContinuation)) {
+          final dests = <String>[];
+          for (final m in stationRegExp.allMatches(
+            raw.replaceAll(RegExp(r'https?://\S+'), ' '),
+          )) {
+            final d = m.group(1)!;
+            final dws = areaTokens(d);
+            final isAnchorArea = dws.every((w) => vocab.contains(w));
+            final isGazetteerArea =
+                hasGaz() && _destinationInGazetteer(dws, gazContains);
+            if (dws.isNotEmpty &&
+                ((isTrainRoute && isAnchorArea) || isGazetteerArea)) {
+              dests.add(d);
+            }
+          }
+          if (dests.isNotEmpty) {
+            running = dests.last;
             runningSetBy = s.lineNumber;
             runningSetByAssignmentId = s.assignmentId;
             assignedOwn = running;
-            assignedSource = 'hotelPrefix';
+            assignedSource = 'trainDestination';
             assignedSetBy = s.lineNumber;
             assignedSetByAssignmentId = s.assignmentId;
           }
         }
-      }
+        if (isTrainRoute) {
+          routeContinuation = true;
+        } else if (hadRouteContinuation) {
+          routeContinuation = false;
+        }
 
-      // train-route destination (C7t)
-      final isTrainRoute = RegExp(
-        r'^\s*(?:train\s+)?route\b',
-        caseSensitive: false,
-      ).hasMatch(clean);
-      final hadRouteContinuation = routeContinuation;
-      if (trainRule &&
-          assignedOwn == null &&
-          (isTrainRoute || hadRouteContinuation)) {
-        final dests = <String>[];
-        for (final m in stationRegExp.allMatches(
-          raw.replaceAll(RegExp(r'https?://\S+'), ' '),
-        )) {
-          final d = m.group(1)!;
-          final dws = areaTokens(d);
-          final isAnchorArea = dws.every((w) => vocab.contains(w));
-          final isGazetteerArea =
-              hasGaz() && _destinationInGazetteer(dws, gazContains);
-          if (dws.isNotEmpty &&
-              ((isTrainRoute && isAnchorArea) || isGazetteerArea)) {
-            dests.add(d);
+        // in-tail locality (this stop only)
+        if (assignedOwn == null && !isTransitLeg) {
+          final t = inTail(clean);
+          if (t != null) {
+            assignedOwn = t;
+            assignedSource = 'inlineLocality';
+            // running unchanged
           }
         }
-        if (dests.isNotEmpty) {
-          running = dests.last;
-          runningSetBy = s.lineNumber;
-          runningSetByAssignmentId = s.assignmentId;
-          assignedOwn = running;
-          assignedSource = 'trainDestination';
-          assignedSetBy = s.lineNumber;
-          assignedSetByAssignmentId = s.assignmentId;
+
+        // stop-line self-evidence (gazetteer only): a unique gazetteer-listed
+        // area named by the line itself beats the running heading
+        if (assignedOwn == null && hasGaz()) {
+          final selfArea = _gazetteerAreaInStop(
+            clean,
+            trustedSelfAreas,
+            gazContains,
+          );
+          if (selfArea != null) {
+            assignedOwn = selfArea;
+            assignedSource = 'travellerDeclared';
+            trustedSelfAreas.add(joinedAreaWords(selfArea));
+          }
         }
-      }
-      if (isTrainRoute) {
-        routeContinuation = true;
-      } else if (hadRouteContinuation) {
-        routeContinuation = false;
-      }
 
-      // in-tail locality (this stop only)
-      if (assignedOwn == null && !isTransitLeg) {
-        final t = inTail(clean);
-        if (t != null) {
-          assignedOwn = t;
-          assignedSource = 'inlineLocality';
-          // running unchanged
+        String? assigned = assignedOwn ?? running;
+        String? source =
+            assignedSource ?? (assigned != null ? 'runningHeading' : 'none');
+        int? setBy = assignedSetBy ?? runningSetBy;
+        int? setByAssignmentId =
+            assignedSetByAssignmentId ?? runningSetByAssignmentId;
+        // For inlineLocality, source is inlineLocality even when via assignedOwn
+        // For running fallback, source is runningHeading
+
+        // Determine effective source for running fallback
+        if (assignedOwn == null && assigned != null) {
+          source = 'runningHeading';
+          setBy = runningSetBy;
+          setByAssignmentId = runningSetByAssignmentId;
         }
-      }
 
-      // stop-line self-evidence (gazetteer only): a unique gazetteer-listed
-      // area named by the line itself beats the running heading
-      if (assignedOwn == null && hasGaz()) {
-        final selfArea = _gazetteerAreaInStop(
-          clean,
-          trustedSelfAreas,
-          gazContains,
-        );
-        if (selfArea != null) {
-          assignedOwn = selfArea;
-          assignedSource = 'travellerDeclared';
-          trustedSelfAreas.add(joinedAreaWords(selfArea));
-        }
-      }
-
-      String? assigned = assignedOwn ?? running;
-      String? source =
-          assignedSource ?? (assigned != null ? 'runningHeading' : 'none');
-      int? setBy = assignedSetBy ?? runningSetBy;
-      int? setByAssignmentId =
-          assignedSetByAssignmentId ?? runningSetByAssignmentId;
-      // For inlineLocality, source is inlineLocality even when via assignedOwn
-      // For running fallback, source is runningHeading
-
-      // Determine effective source for running fallback
-      if (assignedOwn == null && assigned != null) {
-        source = 'runningHeading';
-        setBy = runningSetBy;
-        setByAssignmentId = runningSetByAssignmentId;
-      }
-
-      // overrides: traveller annotation beats context
-      var overridden = false;
-      for (final ann in travellerAnnotations(raw)) {
-        if (ann.kind == 'declared' ||
-            areaTokens(ann.capture).any((w) => vocab.contains(w))) {
-          assigned = ann.capture;
-          source = ann.kind == 'declared'
-              ? 'travellerDeclared'
-              : 'travellerProximity';
-          setBy = null; // own-line source
-          setByAssignmentId = null;
-          overridden = true;
-          break;
-        }
-      }
-      if (!overridden && hasGaz()) {
-        for (final p in parens) {
-          final pws = [
-            for (final w in areaTokens(p))
-              if (!genericStopWords.contains(w) &&
-                  !venueGenericWords.contains(w))
-                w,
-          ];
-          if (pws.isNotEmpty && pws.length <= 3 && gazContains(pws.join(' '))) {
-            assigned = pws.join(' ');
-            source = 'travellerProximity';
-            setBy = null;
+        // overrides: traveller annotation beats context
+        var overridden = false;
+        for (final ann in travellerAnnotations(raw)) {
+          if (ann.kind == 'declared' ||
+              areaTokens(ann.capture).any((w) => vocab.contains(w))) {
+            assigned = ann.capture;
+            source = ann.kind == 'declared'
+                ? 'travellerDeclared'
+                : 'travellerProximity';
+            setBy = null; // own-line source
             setByAssignmentId = null;
+            overridden = true;
             break;
           }
         }
+        if (!overridden && hasGaz()) {
+          for (final p in parens) {
+            final pws = [
+              for (final w in areaTokens(p))
+                if (!genericStopWords.contains(w) &&
+                    !venueGenericWords.contains(w))
+                  w,
+            ];
+            if (pws.isNotEmpty &&
+                pws.length <= 3 &&
+                gazContains(pws.join(' '))) {
+              assigned = pws.join(' ');
+              source = 'travellerProximity';
+              setBy = null;
+              setByAssignmentId = null;
+              break;
+            }
+          }
+        }
+
+        // Normalize: if assigned is empty/furniture-like with no content, keep null run semantics
+        // But scorer assigns the raw capture — we keep it.
+
+        out[s.assignmentId] = AreaAssignment(
+          text: assigned,
+          source: source!,
+          setByLine: setBy,
+          setByAssignmentId: setByAssignmentId,
+        );
       }
-
-      // Normalize: if assigned is empty/furniture-like with no content, keep null run semantics
-      // But scorer assigns the raw capture — we keep it.
-
-      out[s.assignmentId] = AreaAssignment(
-        text: assigned,
-        source: source!,
-        setByLine: setBy,
-        setByAssignmentId: setByAssignmentId,
-      );
     }
   }
   return out;
