@@ -8,7 +8,11 @@ import 'area_words.dart';
 import 'area_annotations.dart';
 
 final RegExp _urlRe = RegExp(r'https?://\S+');
-final RegExp _wordRe = RegExp(r"[A-Za-z][A-Za-z'’‘’\-]*");
+
+/// One word as the corroboration pass sees it, in any script that writes
+/// names. See `area_words.dart`'s tokenizer comment for why this is not
+/// `[A-Za-z]` any more.
+final RegExp _wordRe = RegExp(r"[\p{L}][\p{L}\p{M}'’‘\-]*", unicode: true);
 
 /// Result of [buildAnchorVocab]: the vocabulary + debug info.
 class AnchorVocab {
@@ -57,18 +61,20 @@ AnchorVocab buildAnchorVocab(
   final capitalized = <String>{};
 
   void add(List<String> words, int ln, String kind, String srcText) {
-    // Capitalized tokens in srcText
+    // Words offering name-evidence in srcText: a capital, or a script with
+    // no capital to offer. The second half is why a `京都` heading can reach
+    // the vocabulary at all — a capitalization test alone refuses every name
+    // CJK, hangul, Thai and the Indic scripts can write, and that refusal is
+    // silent: the plan parses, every day finds its place header, and every
+    // stop comes back with no area.
     final capTokens = <String>{};
     for (final m in _wordRe.allMatches(stripDiacritics(srcText))) {
-      final w = m.group(0)!;
-      if (w.isNotEmpty &&
-          w[0].toUpperCase() == w[0] &&
-          w[0].toLowerCase() != w[0]) {
-        capTokens.addAll(areaTokens(w));
+      if (looksLikeANameWord(m.group(0)!)) {
+        capTokens.addAll(areaTokens(m.group(0)!));
       }
     }
     for (final w in words) {
-      if (w.length >= 3 &&
+      if (isLongEnoughToAnchor(w) &&
           !genericStopWords.contains(w) &&
           !venueGenericWords.contains(w) &&
           !furnitureWords.contains(w) &&
@@ -119,10 +125,7 @@ AnchorVocab buildAnchorVocab(
       if (origWords.length <= 9) {
         final caps = [
           for (final w in origWords)
-            if (w.isNotEmpty &&
-                w[0].toUpperCase() == w[0] &&
-                w[0].toLowerCase() != w[0])
-              w
+            if (looksLikeANameWord(w)) w,
         ];
         final toks = [for (final w in caps) ...areaTokens(w)];
         add(toks, ln, 'hotel', stripped);

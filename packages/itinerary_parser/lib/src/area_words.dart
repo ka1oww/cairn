@@ -296,15 +296,23 @@ final RegExp suggRegExp = RegExp(
   r'\bsuggested\s+area:?\s*([^);.\n]+)',
   caseSensitive: false,
 );
+// The name half is any script (`新宿 Station` is how a bilingual plan writes
+// it); the keyword half stays English, because that is the only word this
+// rule knows how to recognize.
 final RegExp stationRegExp = RegExp(
-  r"([A-Za-z][A-Za-z'’‘’\-]*)[ \t]+(?:STATION|STN|Station|Sta\.?)\b",
+  r"([\p{L}][\p{L}\p{M}'’‘\-]*)[ \t]+(?:STATION|STN|Station|Sta\.?)\b",
+  unicode: true,
 );
 final RegExp hotelWordRegExp = RegExp(
   r'\b(?:hotel|hostel|ryokan|guesthouse|inn)\b',
   caseSensitive: false,
 );
+// `GINZA HOTEL`, `京都 HOTEL`. The name must still read as a name — a
+// capital, or a script with no capitals — which is what keeps a lower-case
+// word in front of `HOTEL` from being taken for an area.
 final RegExp hotelPrefixRegExp = RegExp(
-  r"^\s*([A-Z][A-Za-z'’\-]*)[ \t]+HOTEL\b",
+  r"^\s*([\p{Lu}\p{Lt}\p{Lo}][\p{L}\p{M}'’\-]*)[ \t]+HOTEL\b",
+  unicode: true,
 );
 
 // ---------------------------------------------------------------- tokenizer
@@ -432,7 +440,66 @@ const Map<String, String> _decomposeMap = {
   'Č': 'C\u030c',
 };
 
-final RegExp _wordRegExp = RegExp(r"[A-Za-z][A-Za-z'’‘’-]*");
+/// One word, in any script that writes names.
+///
+/// This was `[A-Za-z][A-Za-z'’‘-]*` until 2026-09-08, and that single
+/// character class was why a Kyoto plan written `京都` derived no areas at
+/// all: [areaTokens] returned an empty list for every line of it, so no word
+/// could reach the anchor vocabulary, no day could seed a running area, and
+/// every stop came back with `area == null`. The same held for Greek,
+/// Cyrillic, Hangul and Thai. Nothing reported it, because "no area" is also
+/// what a correctly cautious parse looks like.
+///
+/// Widening the alphabet changes nothing for the scripts that already worked:
+/// [stripDiacritics] still runs first, so `München` is still tokenized from
+/// `Munchen` and still yields `munchen`, and the committed gazetteer asset —
+/// frozen against Python's NFD in the measurement lab — still matches letter
+/// for letter. `\p{M}` keeps a decomposed character attached to its base for
+/// the marks `stripDiacritics` does not know.
+final RegExp _wordRegExp = RegExp(
+  r"[\p{L}][\p{L}\p{M}'’‘-]*",
+  unicode: true,
+);
+
+/// True when [word] is written in a script that has no letter case at all —
+/// CJK, kana, hangul, Thai, Arabic, Hebrew, the Indic scripts. `\p{Lo}` is
+/// exactly "letter, other": a letter with no uppercase form to demand.
+///
+/// The same argument `line_classifier.dart` makes for a bare place-name
+/// heading, made once more where the anchor vocabulary needs it. In these
+/// scripts an uncapitalized word *is* what a name looks like, so a
+/// capitalization test refuses every name the script can write.
+bool isCaselessScriptWord(String word) =>
+    word.isNotEmpty && _caselessWordRegExp.hasMatch(word);
+
+final RegExp _caselessWordRegExp = RegExp(r'^[\p{Lo}\p{M}]+$', unicode: true);
+
+/// The shortest a word may be and still anchor an area.
+///
+/// Three characters, as it always was, for a script that writes with an
+/// alphabet — two-letter words are prepositions far more often than places.
+/// Two code points for a caseless script, because that is a whole place name
+/// there and not an abbreviation of one: `京都` is Kyoto, `大阪` is Osaka,
+/// `東京` is Tokyo, `서울` is Seoul. The old flat `length >= 3` refused every
+/// one of them, and it counted UTF-16 units rather than characters while it
+/// did so.
+bool isLongEnoughToAnchor(String word) {
+  final length = word.runes.length;
+  return isCaselessScriptWord(word) ? length >= 2 : length >= 3;
+}
+
+/// True when [word] offers the evidence a name offers: a capital, or a script
+/// with no capitals to offer.
+///
+/// The one place both halves of that test are written. Callers used to spell
+/// the cased half inline (`w[0].toUpperCase() == w[0] &&
+/// w[0].toLowerCase() != w[0]`) and had no caseless half at all.
+bool looksLikeANameWord(String word) {
+  if (word.isEmpty) return false;
+  final first = word[0];
+  if (first.toUpperCase() == first && first.toLowerCase() != first) return true;
+  return isCaselessScriptWord(word);
+}
 
 /// Ordered word tokens, lowercased, diacritics stripped, hyphens split
 /// (hyphenated pairs also contribute their joined form).
