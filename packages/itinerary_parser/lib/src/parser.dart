@@ -1,3 +1,4 @@
+import 'area_words.dart';
 import 'area_assign.dart';
 import 'area_vocab.dart';
 import 'date_header.dart';
@@ -295,13 +296,150 @@ ParseResult _annotateWithAreas(
   }
 
   return ParseResult(
-    days: newDays,
+    days: _lendAreasToRepeatedNames(newDays, vocab, gazetteer),
     unplacedLines: base.unplacedLines,
     overallConfidence: base.overallConfidence,
     usedHeaderlessFallback: base.usedHeaderlessFallback,
     firstAmbiguousNumericDate: base.firstAmbiguousNumericDate,
     firstYearlessDate: base.firstYearlessDate,
   );
+}
+
+/// The name a stop would be searched for, or null when it names no one place.
+///
+/// This is the parser's own half of the app's tap rule, and the two agree on
+/// purpose: an area is worth lending exactly where a tap would send it. A row
+/// carrying several candidate places names no single thing to look up, so it
+/// is not a key here either.
+String? _searchableName(Stop stop) {
+  if (stop.placeCandidates.length > 1) return null;
+  final text = stop.placeText;
+  if (text == null || text.trim().isEmpty) return null;
+  return text;
+}
+
+/// Lends an area to a name the plan writes more than once.
+///
+/// The engine assigns an area by reading a line in the context of its day. A
+/// stop it leaves bare is one whose day never established an area *before*
+/// that line — on the Wanderlog corpus every such stop sits above the first
+/// area its day resolves, so nothing earlier in the day can help it, and the
+/// day's most common area is wrong for it about twice as often as it is
+/// right. Both of those were measured before this rule was written; neither
+/// is a rule here.
+///
+/// What is left is the plan itself. A name written more than once is the
+/// traveller's own repetition, and where every resolved occurrence of that
+/// name agrees on one area, that area is the plan's own answer for the name
+/// rather than an inference about the line. So it is lent to the occurrences
+/// that have none.
+///
+/// Three refusals hold it in:
+///
+///   * **Disagreement is silence.** Two resolved occurrences under different
+///     areas is the ambiguity the rule exists to respect, not to resolve --
+///     one Japan plan carries two genuinely different Shiraito Waterfalls --
+///     so a name whose twins disagree is left bare.
+///   * **The area must be a real place**, known to the anchor vocabulary or
+///     to the gazetteer. An in-tail annotation reaches the engine unvalidated
+///     because the traveller's own wording is a statement rather than a
+///     guess, and that is fine on the line that wrote it; lending it onward
+///     to a line that did not is how `Ichiran Ramen, Arrival day` happens.
+///   * **One occurrence is not corroboration.** Two distinct lines have to
+///     have resolved the name to the same area before it may be lent, which
+///     is the anchor vocabulary's own bar for admitting a word, applied to
+///     the same kind of inference. Both places this was measured to matter
+///     are airports: the plan flies Singapore to Narita to Fukuoka, each
+///     airport is written twice, and the one resolved occurrence of each sat
+///     under a running heading naming the *destination* city. Lending off it
+///     put `Singapore Changi Airport, Fukuoka` and `Narita International
+///     Airport, Fukuoka` into the search box, which is the whole failure this
+///     is guarded against. A distinctive name written twice in a plan is
+///     usually a leg of a journey, and a journey is not an address.
+///   * **It never overwrites.** Only a stop with no area at all is touched,
+///     so every stronger provenance -- and the traveller's own correction
+///     above this package -- is untouched by construction.
+/// Distinct lines that must already have resolved a name to one area before
+/// that area may be lent to the name's bare occurrences.
+const int _minLendingOccurrences = 2;
+
+List<ParsedDay> _lendAreasToRepeatedNames(
+  List<ParsedDay> days,
+  Set<String> vocab,
+  AreaGazetteer? gazetteer,
+) {
+  final areasByName = <String, Set<String>>{};
+  final resolvedLines = <String, Set<int>>{};
+  var anyBare = false;
+  for (final day in days) {
+    for (final stop in day.stops) {
+      final name = _searchableName(stop);
+      if (name == null) continue;
+      final key = normalizedArea(name);
+      if (key.isEmpty) continue;
+      final entry = areasByName.putIfAbsent(key, () => <String>{});
+      final area = stop.area?.text;
+      if (area == null) {
+        anyBare = true;
+      } else {
+        entry.add(area);
+        resolvedLines
+            .putIfAbsent(key, () => <int>{})
+            .add(stop.sourceLine.lineNumber);
+      }
+    }
+  }
+  if (!anyBare) return days;
+
+  bool namesARealPlace(String area) {
+    final words = areaTokens(area);
+    if (words.isEmpty) return false;
+    if (words.every(vocab.contains)) return true;
+    return gazetteer != null && gazetteer.contains(joinedAreaWords(area));
+  }
+
+  final lendable = <String, String>{};
+  for (final entry in areasByName.entries) {
+    if (entry.value.length != 1) continue;
+    if ((resolvedLines[entry.key]?.length ?? 0) < _minLendingOccurrences) {
+      continue;
+    }
+    final area = entry.value.first;
+    if (namesARealPlace(area)) lendable[entry.key] = area;
+  }
+  if (lendable.isEmpty) return days;
+
+  return [
+    for (final day in days)
+      ParsedDay(
+        index: day.index,
+        date: day.date,
+        place: day.place,
+        stops: [
+          for (final stop in day.stops)
+            () {
+              if (stop.area != null) return stop;
+              final name = _searchableName(stop);
+              final lent = name == null ? null : lendable[normalizedArea(name)];
+              if (lent == null) return stop;
+              return Stop(
+                text: stop.text,
+                time: stop.time,
+                sourceLine: stop.sourceLine,
+                kind: stop.kind,
+                area: AreaHint(text: lent, source: AreaSource.repeatedName),
+                placeText: stop.placeText,
+                placeCandidates: stop.placeCandidates,
+              );
+            }(),
+        ],
+        confidence: day.confidence,
+        uncertainty: day.uncertainty,
+        headerWeekday: day.headerWeekday,
+        headerSourceLine: day.headerSourceLine,
+        dateCandidate: day.dateCandidate,
+      ),
+  ];
 }
 
 String _stopAnalysisText(ParsedDay day, Stop stop) {

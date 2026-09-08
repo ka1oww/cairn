@@ -245,7 +245,7 @@ void main() {
         minSentRight: {
           Genre.handwritten: 65,
           Genre.aiWritten: 31,
-          Genre.wanderlog: 74,
+          Genre.wanderlog: 78,
         },
         maxSentWrong: {
           Genre.handwritten: 4,
@@ -255,7 +255,7 @@ void main() {
         maxNoneWrong: {
           Genre.handwritten: 1,
           Genre.aiWritten: 2,
-          Genre.wanderlog: 7,
+          Genre.wanderlog: 4,
         },
       );
     });
@@ -373,7 +373,7 @@ void main() {
         minSentRight: {
           Genre.handwritten: 69,
           Genre.aiWritten: 34,
-          Genre.wanderlog: 79,
+          Genre.wanderlog: 83,
         },
         maxSentWrong: {
           Genre.handwritten: 1,
@@ -383,7 +383,7 @@ void main() {
         maxNoneWrong: {
           Genre.handwritten: 1,
           Genre.aiWritten: 1,
-          Genre.wanderlog: 7,
+          Genre.wanderlog: 4,
         },
       );
     });

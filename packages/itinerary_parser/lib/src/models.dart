@@ -192,6 +192,16 @@ enum AreaSource {
   runningHeading,
   hotelPrefix,
   trainDestination,
+
+  /// Lent by another stop in the same plan that carries the very same name.
+  ///
+  /// The weakest provenance the parser has, and the only one that is not a
+  /// reading of the line it lands on. It exists for the ambiguous name — a
+  /// chain, or any name the plan writes more than once — where having no area
+  /// is already a coin flip across every branch, so an area agreed by the
+  /// name's own resolved twins cannot make the search worse. It never fires
+  /// where the twins disagree.
+  repeatedName,
   person,
 }
 
