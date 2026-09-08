@@ -223,7 +223,7 @@ void main() {
     // works through the 20th and is dead when the 21st begins.
     expect(
       textOf(const Key('trip-code-expiry')),
-      'Dies with the trip, after 20 June.',
+      'Dies with the trip, after the end of 20 June.',
     );
   });
 
