@@ -69,6 +69,16 @@ bool isTriviallyEmpty(String text) =>
     text.trim().replaceAll(RegExp(r'[\s\-–—:,.]'), '').isEmpty;
 
 final RegExp _dayNumberHeader = RegExp(
+  r'^day\s*[:\-]?\s*(\d{1,3})\b\s*(?:[-:–—]\s*)?(.*)$',
+  caseSensitive: false,
+);
+
+final RegExp _ascendingDayRangeHeader = RegExp(
+  r'^day\s*[:\-]?\s*(\d{1,3})\s*[-–—]\s*(\d{1,3})(?=$|\s*:\s*)(?:\s*:\s*(.*))?$',
+  caseSensitive: false,
+);
+
+final RegExp _numericDayClaimsHeader = RegExp(
   r'^day\s*[:\-]?\s*(\d{1,3})((?:(?:[-–—]\s*|\s*\+\s*)\d{1,3})*)\b\s*(?:[-:–—]\s*)?(.*)$',
   caseSensitive: false,
 );
@@ -80,42 +90,45 @@ class DayNumberMatch {
 }
 
 DayNumberMatch? tryParseDayNumberHeader(String line) {
-  final m = _dayNumberHeader.firstMatch(line.trim());
-  if (m == null) return null;
-  final first = int.parse(m.group(1)!);
-  final continuation = m.group(2)!;
-  final writtenNumbers = <int>[
-    first,
-    for (final match in RegExp(r'\d{1,3}').allMatches(continuation))
-      int.parse(match.group(0)!),
-  ];
-
-  // A two-endpoint dash is an inclusive range in the direction written:
-  // `Day 2-5` becomes 2,3,4,5 and `Day 5-2` becomes 5,4,3,2. Three or more
-  // dashed numbers (`Day 4-5-6`) and plus-separated numbers (`Day 6 + 7`)
-  // are explicit claims and stay exactly as written. Repeated numbers are
-  // deliberately retained; the document builder also retains duplicate and
-  // overlapping claims from separate headers rather than silently merging or
-  // overwriting a traveller's text.
-  final List<int> dayNumbers;
-  if (writtenNumbers.length == 2 &&
-      !continuation.contains('+') &&
-      RegExp(r'[-–—]').hasMatch(continuation)) {
-    final start = writtenNumbers.first;
-    final end = writtenNumbers.last;
-    final step = start <= end ? 1 : -1;
-    dayNumbers = [];
-    for (var day = start;; day += step) {
-      dayNumbers.add(day);
-      if (day == end) break;
+  final trimmed = line.trim();
+  final ascendingRange = _ascendingDayRangeHeader.firstMatch(trimmed);
+  if (ascendingRange != null) {
+    final start = int.parse(ascendingRange.group(1)!);
+    final end = int.parse(ascendingRange.group(2)!);
+    if (start < end) {
+      final trailing = ascendingRange.group(3)?.trim();
+      return DayNumberMatch(
+        List.unmodifiable([for (var day = start; day <= end; day++) day]),
+        (trailing == null || trailing.isEmpty) ? null : trailing,
+      );
     }
-  } else {
-    dayNumbers = writtenNumbers;
   }
 
-  final trailing = m.group(3)?.trim();
+  final numericClaims = _numericDayClaimsHeader.firstMatch(trimmed);
+  if (numericClaims != null) {
+    final continuation = numericClaims.group(2)!;
+    final writtenNumbers = [
+      int.parse(numericClaims.group(1)!),
+      for (final match in RegExp(r'\d{1,3}').allMatches(continuation))
+        int.parse(match.group(0)!),
+    ];
+    final isPlusList = continuation.contains('+');
+    final isDashedList = RegExp(r'[-–—]').hasMatch(continuation);
+
+    if (isPlusList || (isDashedList && writtenNumbers.length >= 3)) {
+      final trailing = numericClaims.group(3)?.trim();
+      return DayNumberMatch(
+        List.unmodifiable(writtenNumbers),
+        (trailing == null || trailing.isEmpty) ? null : trailing,
+      );
+    }
+  }
+
+  final m = _dayNumberHeader.firstMatch(trimmed);
+  if (m == null) return null;
+  final trailing = m.group(2)?.trim();
   return DayNumberMatch(
-    List.unmodifiable(dayNumbers),
+    List.unmodifiable([int.parse(m.group(1)!)]),
     (trailing == null || trailing.isEmpty) ? null : trailing,
   );
 }
@@ -151,9 +164,10 @@ bool startsWithBullet(String line) {
     }
     if (RegExp(r'^[a-z]').hasMatch(after)) return false;
     if (RegExp(r'^\d').hasMatch(after)) return false;
-    if (RegExp(r'^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)',
-            caseSensitive: false)
-        .hasMatch(after)) {
+    if (RegExp(
+      r'^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)',
+      caseSensitive: false,
+    ).hasMatch(after)) {
       return false;
     }
   }
@@ -188,10 +202,7 @@ final RegExp _casedWord = RegExp(
 // a letter that has no uppercase form to demand. In these scripts an
 // uncapitalized word *is* what a place name looks like, so refusing one for
 // want of a capital refuses every heading the script can write.
-final RegExp _caselessWord = RegExp(
-  r'^[\p{Lo}\p{M}]+$',
-  unicode: true,
-);
+final RegExp _caselessWord = RegExp(r'^[\p{Lo}\p{M}]+$', unicode: true);
 
 // True when the line carries a capital anywhere, i.e. some word offered
 // capitalization as evidence that it is a name rather than prose.

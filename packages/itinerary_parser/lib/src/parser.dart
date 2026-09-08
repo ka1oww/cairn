@@ -38,14 +38,20 @@ ParseResult parseItinerary(
   bool monthFirstNumericDates = false,
   AreaGazetteer? gazetteer,
 }) {
-  var rawLines =
-      text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+  var rawLines = text
+      .replaceAll('\r\n', '\n')
+      .replaceAll('\r', '\n')
+      .split('\n');
   // Paste-path furniture strip: blank provably repeated print furniture
   rawLines = _stripPasteFurniture(rawLines);
   final lines = <_Line>[
     for (var i = 0; i < rawLines.length; i++)
-      _Line(i + 1, rawLines[i], stripWhatsAppPrefix(rawLines[i]) ?? rawLines[i],
-          stripWhatsAppPrefix(rawLines[i]) != null),
+      _Line(
+        i + 1,
+        rawLines[i],
+        stripWhatsAppPrefix(rawLines[i]) ?? rawLines[i],
+        stripWhatsAppPrefix(rawLines[i]) != null,
+      ),
   ];
 
   var classified = <_Classified>[
@@ -94,8 +100,10 @@ ParseResult parseItinerary(
 
 List<String> _stripPasteFurniture(List<String> lines) {
   final phRe = RegExp(r'^\s*\d{1,2}/\d{1,2}/\d{2},\s*\d{1,2}:\d{2}\s*[AP]M\b');
-  final ufRe = RegExp(r'^\s*https?://\S+\s*(\d{1,3}/\d{1,3})?\s*$',
-      caseSensitive: false);
+  final ufRe = RegExp(
+    r'^\s*https?://\S+\s*(\d{1,3}/\d{1,3})?\s*$',
+    caseSensitive: false,
+  );
   var result = List<String>.from(lines);
   if (lines.where((l) => phRe.hasMatch(l)).length >= 3) {
     result = [for (final l in result) phRe.hasMatch(l) ? '' : l];
@@ -107,7 +115,10 @@ List<String> _stripPasteFurniture(List<String> lines) {
 }
 
 ParseResult _annotateWithAreas(
-    ParseResult base, List<String> plines, AreaGazetteer? gazetteer) {
+  ParseResult base,
+  List<String> plines,
+  AreaGazetteer? gazetteer,
+) {
   if (base.days.isEmpty) return base;
   // Build anchor vocab inputs
   final dayInfos = [
@@ -121,6 +132,16 @@ ParseResult _annotateWithAreas(
   final vocabResult = buildAnchorVocab(plines, dayInfos);
   final vocab = vocabResult.vocab;
 
+  final assignmentIds = <Stop, int>{};
+  final assignmentLines = <int, int>{};
+  var nextAssignmentId = 0;
+  int assignmentIdFor(Stop stop) {
+    final assignmentId = nextAssignmentId++;
+    assignmentIds[stop] = assignmentId;
+    assignmentLines[assignmentId] = stop.sourceLine.lineNumber;
+    return assignmentId;
+  }
+
   // Build assignment inputs
   final areaDays = [
     for (final d in base.days)
@@ -130,18 +151,25 @@ ParseResult _annotateWithAreas(
         stops: [
           for (final s in d.stops)
             AreaStopInput(
-                raw: _stopAnalysisText(d, s),
-                hasTime: s.time != null,
-                lineNumber: s.sourceLine.lineNumber),
+              assignmentId: assignmentIdFor(s),
+              raw: _stopAnalysisText(d, s),
+              hasTime: s.time != null,
+              lineNumber: s.sourceLine.lineNumber,
+            ),
         ],
       ),
   ];
 
-  final assignments = anchorAssign(plines, areaDays, vocab,
-      trainRule: true, gazetteerObj: gazetteer);
+  final assignments = anchorAssign(
+    plines,
+    areaDays,
+    vocab,
+    trainRule: true,
+    gazetteerObj: gazetteer,
+  );
 
-  // Map line numbers that were markers (areaHeading)
-  final markerLines = <int>{};
+  // Map assignment identities that were markers (areaHeading).
+  final markerAssignments = <int>{};
   for (final entry in assignments.entries) {
     if (entry.value.source == 'runningHeading' ||
         entry.value.source == 'hotelPrefix' ||
@@ -155,8 +183,9 @@ ParseResult _annotateWithAreas(
       // We use the engine's own signal: assignedOwn was set on that line.
       // The engine sets running + assignedOwn on marker lines; we detect
       // by checking if setBy == lineNumber.
-      if (entry.value.setByLine == entry.key) {
-        markerLines.add(entry.key);
+      if (entry.value.setByLine != null &&
+          entry.value.setByLine == assignmentLines[entry.key]) {
+        markerAssignments.add(entry.key);
       }
     }
   }
@@ -166,8 +195,9 @@ ParseResult _annotateWithAreas(
   for (final d in base.days) {
     final newStops = <Stop>[];
     for (final s in d.stops) {
-      final assignment = assignments[s.sourceLine.lineNumber];
-      final isHeading = markerLines.contains(s.sourceLine.lineNumber);
+      final assignmentId = assignmentIds[s]!;
+      final assignment = assignments[assignmentId];
+      final isHeading = markerAssignments.contains(assignmentId);
       final classified = classifyStop(
         raw: _stopAnalysisText(d, s),
         isAreaHeading: isHeading,
@@ -179,10 +209,14 @@ ParseResult _annotateWithAreas(
         final src = _areaSourceFromString(assignment.source);
         if (isHeading) {
           hint = AreaHint(
-              text: assignment.text!, source: src, setBy: s.sourceLine);
+            text: assignment.text!,
+            source: src,
+            setBy: s.sourceLine,
+          );
         } else {
           final setByLine = assignment.setByLine;
-          final setBy = setByLine != null &&
+          final setBy =
+              setByLine != null &&
                   setByLine != s.sourceLine.lineNumber &&
                   setByLine > 0 &&
                   setByLine <= plines.length
@@ -199,26 +233,30 @@ ParseResult _annotateWithAreas(
         placeText = s.text;
       }
 
-      newStops.add(Stop(
-        text: s.text,
-        time: s.time,
-        sourceLine: s.sourceLine,
-        kind: classified.kind,
-        area: hint,
-        placeText: placeText,
-      ));
+      newStops.add(
+        Stop(
+          text: s.text,
+          time: s.time,
+          sourceLine: s.sourceLine,
+          kind: classified.kind,
+          area: hint,
+          placeText: placeText,
+        ),
+      );
     }
-    newDays.add(ParsedDay(
-      index: d.index,
-      date: d.date,
-      place: d.place,
-      stops: newStops,
-      confidence: d.confidence,
-      uncertainty: d.uncertainty,
-      headerWeekday: d.headerWeekday,
-      headerSourceLine: d.headerSourceLine,
-      dateCandidate: d.dateCandidate,
-    ));
+    newDays.add(
+      ParsedDay(
+        index: d.index,
+        date: d.date,
+        place: d.place,
+        stops: newStops,
+        confidence: d.confidence,
+        uncertainty: d.uncertainty,
+        headerWeekday: d.headerWeekday,
+        headerSourceLine: d.headerSourceLine,
+        dateCandidate: d.dateCandidate,
+      ),
+    );
   }
 
   return ParseResult(
@@ -262,12 +300,11 @@ abstract final class ItineraryParser {
     String text, {
     DateTime? tripStartDate,
     bool monthFirstNumericDates = false,
-  }) =>
-      parseItinerary(
-        text,
-        tripStartDate: tripStartDate,
-        monthFirstNumericDates: monthFirstNumericDates,
-      );
+  }) => parseItinerary(
+    text,
+    tripStartDate: tripStartDate,
+    monthFirstNumericDates: monthFirstNumericDates,
+  );
 }
 
 class _Line {
@@ -276,7 +313,11 @@ class _Line {
   final String effective;
   final bool hadWhatsAppPrefix;
   const _Line(
-      this.lineNumber, this.raw, this.effective, this.hadWhatsAppPrefix);
+    this.lineNumber,
+    this.raw,
+    this.effective,
+    this.hadWhatsAppPrefix,
+  );
 
   SourceLine get sourceLine => SourceLine(lineNumber, raw);
 }
@@ -340,16 +381,25 @@ _Classified _classifyLine(
     return _Classified(_Kind.decorative, line);
   }
   if (line.hadWhatsAppPrefix && isWhatsAppPlaceholder(line.effective)) {
-    return _Classified(_Kind.whatsappPlaceholder, line,
-        reason: UnplacedReason.whatsAppMediaPlaceholder);
+    return _Classified(
+      _Kind.whatsappPlaceholder,
+      line,
+      reason: UnplacedReason.whatsAppMediaPlaceholder,
+    );
   }
   if (isSignatureLine(line.effective)) {
-    return _Classified(_Kind.signature, line,
-        reason: UnplacedReason.emailSignature);
+    return _Classified(
+      _Kind.signature,
+      line,
+      reason: UnplacedReason.emailSignature,
+    );
   }
   if (isHotelBookingReference(line.effective)) {
-    return _Classified(_Kind.hotelBooking, line,
-        reason: UnplacedReason.bookingReference);
+    return _Classified(
+      _Kind.hotelBooking,
+      line,
+      reason: UnplacedReason.bookingReference,
+    );
   }
 
   final urlResult = stripUrls(line.effective);
@@ -370,8 +420,10 @@ _Classified _classifyLine(
       final trailing = dayMatch.trailingText;
       final fragment = trailing == null
           ? null
-          : findDateFragment(trailing,
-              monthFirstNumericDates: monthFirstNumericDates);
+          : findDateFragment(
+              trailing,
+              monthFirstNumericDates: monthFirstNumericDates,
+            );
       return _Classified(
         _Kind.dayHeader,
         line,
@@ -384,13 +436,16 @@ _Classified _classifyLine(
       );
     }
 
-    final dateMatch = tryParseDateHeader(cleaned.trim(),
-        monthFirstNumericDates: monthFirstNumericDates);
+    final dateMatch = tryParseDateHeader(
+      cleaned.trim(),
+      monthFirstNumericDates: monthFirstNumericDates,
+    );
     if (dateMatch != null) {
       // A numeric range names no single day. Keep it as an ordinary line
       // rather than binding its first half and inventing a day from search
       // controls or opening hours such as `9/9 - 9/10`.
-      final isNumericRange = dateMatch.trailingText != null &&
+      final isNumericRange =
+          dateMatch.trailingText != null &&
           RegExp(r'^\d{1,2}/\d{1,2}(?:/\d{2,4})?$')
               .hasMatch(dateMatch.trailingText!.trim());
       if (!isNumericRange) {
@@ -409,8 +464,12 @@ _Classified _classifyLine(
   if (isTriviallyEmpty(stopText)) {
     return _Classified(_Kind.empty, line);
   }
-  return _Classified(_Kind.stop, line,
-      stopText: stopText, stopTime: extractTime(stopText));
+  return _Classified(
+    _Kind.stop,
+    line,
+    stopText: stopText,
+    stopTime: extractTime(stopText),
+  );
 }
 
 class _DayHeaderParts {
@@ -438,8 +497,8 @@ _DayHeaderParts _splitDayHeaderParts(
 
   // A parenthesised dashed list is present in the field corpus as
   // `Venice (- Rialto bridge - ...)`.
-  final parenthesised =
-      RegExp(r'^(.*?)\s*\(\s*-\s*(.+)\)\s*$').firstMatch(text);
+  final parenthesised = RegExp(r'^(.*?)\s*\(\s*-\s*(.+)\)\s*$')
+      .firstMatch(text);
   if (parenthesised != null) {
     final prefix = parenthesised.group(1)!.trim();
     final items = _splitInlineDayStops(parenthesised.group(2)!);
@@ -460,10 +519,7 @@ _DayHeaderParts _splitDayHeaderParts(
       return _DayHeaderParts(place: prefix, stops: items);
     }
     return _DayHeaderParts(
-      stops: [
-        if (prefix.isNotEmpty) _cleanDayStop(prefix),
-        ...items,
-      ],
+      stops: [if (prefix.isNotEmpty) _cleanDayStop(prefix), ...items],
     );
   }
 
@@ -507,8 +563,10 @@ bool _isPlainDayLabel(String text) {
 
   // Preserve two established title shapes whose numbers are descriptions,
   // not list content or dates (`5 temples`, `Kyoto 3 nights`).
-  if (RegExp(r'^\d{1,3}\s+[\p{L}\p{M}]+$', unicode: true)
-      .hasMatch(labelShape)) {
+  if (RegExp(
+    r'^\d{1,3}\s+[\p{L}\p{M}]+$',
+    unicode: true,
+  ).hasMatch(labelShape)) {
     return true;
   }
   return RegExp(
@@ -524,9 +582,10 @@ bool _nextNonBlankLooksLikeListItem(List<_Line> lines, int fromIndex) {
     if (isBlank(eff) || isDecorativeSeparator(eff)) continue;
     if (startsWithBullet(eff) || extractTime(eff) != null) return true;
     // Wanderlog widening: travel-leg shape "< 1 hr, 10 min"
-    if (RegExp(r'^<?\s*\d[\d\s,.·]*\s*(days?|hrs?|hr|mins?|min)\b',
-            caseSensitive: false)
-        .hasMatch(eff.trim())) {
+    if (RegExp(
+      r'^<?\s*\d[\d\s,.·]*\s*(days?|hrs?|hr|mins?|min)\b',
+      caseSensitive: false,
+    ).hasMatch(eff.trim())) {
       return true;
     }
     return false;
@@ -552,8 +611,11 @@ DateTime? _resolveDateHeaderDate(DateHeaderMatch m, DateTime? tripStartDate) {
   var date = _realDateOrNull(year, m.month!, m.day!);
   if (date == null) return null;
   if (rolledForward) {
-    final start =
-        DateTime(tripStartDate!.year, tripStartDate.month, tripStartDate.day);
+    final start = DateTime(
+      tripStartDate!.year,
+      tripStartDate.month,
+      tripStartDate.day,
+    );
     if (date.difference(start).inDays < -30) {
       date = _realDateOrNull(year + 1, m.month!, m.day!);
     }
@@ -632,7 +694,9 @@ bool _hasFollowingStops(List<_Classified> lines, int headerIndex) {
 }
 
 ParseResult _buildHeaderModeResult(
-    List<_Classified> classified, DateTime? tripStartDate) {
+  List<_Classified> classified,
+  DateTime? tripStartDate,
+) {
   final days = <ParsedDay>[];
   final unplaced = <UnplacedLine>[];
   var current = <_OpenDay>[];
@@ -645,9 +709,11 @@ ParseResult _buildHeaderModeResult(
     current = [];
   }
 
-  for (var classifiedIndex = 0;
-      classifiedIndex < classified.length;
-      classifiedIndex++) {
+  for (
+    var classifiedIndex = 0;
+    classifiedIndex < classified.length;
+    classifiedIndex++
+  ) {
     final c = classified[classifiedIndex];
     switch (c.kind) {
       case _Kind.blank:
@@ -660,7 +726,8 @@ ParseResult _buildHeaderModeResult(
       case _Kind.urlOnly:
         contentLineCount++;
         unplaced.add(
-            UnplacedLine(sourceLine: c.line.sourceLine, reason: c.reason!));
+          UnplacedLine(sourceLine: c.line.sourceLine, reason: c.reason!),
+        );
       case _Kind.dayHeader:
         contentLineCount++;
         closeCurrent();
@@ -685,8 +752,11 @@ ParseResult _buildHeaderModeResult(
             // dates the day a day early.
             date: tripStartDate == null
                 ? null
-                : DateTime(tripStartDate.year, tripStartDate.month,
-                    tripStartDate.day + dayNumber - 1),
+                : DateTime(
+                    tripStartDate.year,
+                    tripStartDate.month,
+                    tripStartDate.day + dayNumber - 1,
+                  ),
             place: parts.place,
             headerConfidence: Confidence.high,
             headerSourceLine: c.line.sourceLine,
@@ -725,13 +795,15 @@ ParseResult _buildHeaderModeResult(
         if (m.hasFullDate && m.year == null && !impossible) {
           firstYearlessDate ??= YearlessDate(day: m.day!, month: m.month!);
         }
-        final resolvedDate =
-            impossible ? null : _resolveDateHeaderDate(m, tripStartDate);
+        final resolvedDate = impossible
+            ? null
+            : _resolveDateHeaderDate(m, tripStartDate);
         // A named weekday beside a resolved date is checked, not trusted
         // blind: on a disagreement the date is kept (numbers are harder to
         // mistype than a weekday word) and the doubt is surfaced so the
         // confirmation screen asks instead of the parser correcting anyone.
-        final weekdayDisagrees = resolvedDate != null &&
+        final weekdayDisagrees =
+            resolvedDate != null &&
             m.weekday != null &&
             resolvedDate.weekday != m.weekday;
         final DayUncertainty? uncertainty;
@@ -751,8 +823,9 @@ ParseResult _buildHeaderModeResult(
             index: days.length + 1,
             date: resolvedDate,
             place: m.trailingText,
-            headerConfidence:
-                uncertainty == null ? Confidence.high : Confidence.medium,
+            headerConfidence: uncertainty == null
+                ? Confidence.high
+                : Confidence.medium,
             headerUncertainty: uncertainty,
             headerWeekday: m.weekday,
             headerSourceLine: c.line.sourceLine,
@@ -773,16 +846,20 @@ ParseResult _buildHeaderModeResult(
       case _Kind.stop:
         contentLineCount++;
         if (current.isEmpty) {
-          unplaced.add(UnplacedLine(
+          unplaced.add(
+            UnplacedLine(
               sourceLine: c.line.sourceLine,
-              reason: UnplacedReason.precedesFirstHeader));
+              reason: UnplacedReason.precedesFirstHeader,
+            ),
+          );
         } else {
           for (final day in current) {
             day.stops.add(
               Stop(
-                  text: c.stopText!,
-                  time: c.stopTime,
-                  sourceLine: c.line.sourceLine),
+                text: c.stopText!,
+                time: c.stopTime,
+                sourceLine: c.line.sourceLine,
+              ),
             );
           }
         }
@@ -790,8 +867,12 @@ ParseResult _buildHeaderModeResult(
   }
   closeCurrent();
 
-  final overall =
-      _combineOverall(days, unplaced, contentLineCount, fallback: false);
+  final overall = _combineOverall(
+    days,
+    unplaced,
+    contentLineCount,
+    fallback: false,
+  );
   return ParseResult(
     days: days,
     unplacedLines: unplaced,
@@ -833,7 +914,8 @@ ParseResult _buildFallbackResult(List<_Classified> classified) {
       case _Kind.hotelBooking:
       case _Kind.urlOnly:
         unplaced.add(
-            UnplacedLine(sourceLine: c.line.sourceLine, reason: c.reason!));
+          UnplacedLine(sourceLine: c.line.sourceLine, reason: c.reason!),
+        );
       case _Kind.dayHeader:
       case _Kind.dateHeader:
       case _Kind.placeHeader:
@@ -841,10 +923,13 @@ ParseResult _buildFallbackResult(List<_Classified> classified) {
         // unreachable; kept only for exhaustiveness.
         break;
       case _Kind.stop:
-        blockStops.add(Stop(
+        blockStops.add(
+          Stop(
             text: c.stopText!,
             time: c.stopTime,
-            sourceLine: c.line.sourceLine));
+            sourceLine: c.line.sourceLine,
+          ),
+        );
     }
   }
   flushBlock();

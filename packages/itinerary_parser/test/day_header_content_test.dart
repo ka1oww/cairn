@@ -16,16 +16,13 @@ void main() {
 
       expect(result.days, hasLength(1));
       expect(result.days.single.place, 'Rome');
-      expect(
-        result.days.single.stops.map((stop) => stop.text),
-        [
-          'Trevi Fountain',
-          'Galleria Doria Pamphilj',
-          'San Luigi dei Francesi',
-          'pantheon',
-          'Spanish Steps',
-        ],
-      );
+      expect(result.days.single.stops.map((stop) => stop.text), [
+        'Trevi Fountain',
+        'Galleria Doria Pamphilj',
+        'San Luigi dei Francesi',
+        'pantheon',
+        'Spanish Steps',
+      ]);
       expect(
         result.days.single.stops.map((stop) => stop.sourceLine.text).toSet(),
         {
@@ -41,10 +38,11 @@ void main() {
         'Day 3: Chinatown + Temple tour + Madame Tussads',
       ).days.single;
 
-      expect(
-        day.stops.map((stop) => stop.text),
-        ['Chinatown', 'Temple tour', 'Madame Tussads'],
-      );
+      expect(day.stops.map((stop) => stop.text), [
+        'Chinatown',
+        'Temple tour',
+        'Madame Tussads',
+      ]);
     });
 
     test('a genuine label followed by stops behaves as before', () {
@@ -55,10 +53,10 @@ void main() {
       ).days.single;
 
       expect(day.place, 'Kyoto');
-      expect(
-        day.stops.map((stop) => stop.text),
-        ['Fushimi Inari', 'Nishiki Market'],
-      );
+      expect(day.stops.map((stop) => stop.text), [
+        'Fushimi Inari',
+        'Nishiki Market',
+      ]);
       expect(day.confidence, Confidence.high);
       expect(day.uncertainty, isNull);
     });
@@ -78,6 +76,16 @@ void main() {
       expect(day.place, 'Rome:');
       expect(day.stops.single.text, 'Trevi Fountain');
     });
+
+    test('inline stops retain their individual area assignments', () {
+      final day = parseItinerary(
+        'Trip to Rome\n'
+        'Day 1 - Rome: - Colosseum - Coffee in Trastevere',
+      ).days.single;
+
+      expect(day.stops[0].area?.text, 'rome');
+      expect(day.stops[1].area?.text, 'Trastevere');
+    });
   });
 
   group('day ranges and repeated claims', () {
@@ -88,15 +96,12 @@ void main() {
       );
 
       expect(result.days, hasLength(4));
-      expect(
-        result.days.map((day) => day.date),
-        [
-          DateTime(2026, 1, 2),
-          DateTime(2026, 1, 3),
-          DateTime(2026, 1, 4),
-          DateTime(2026, 1, 5),
-        ],
-      );
+      expect(result.days.map((day) => day.date), [
+        DateTime(2026, 1, 2),
+        DateTime(2026, 1, 3),
+        DateTime(2026, 1, 4),
+        DateTime(2026, 1, 5),
+      ]);
       for (final day in result.days) {
         expect(day.stops.single.text, 'Edinburgh (5 nights)');
       }
@@ -112,14 +117,8 @@ void main() {
         tripStartDate: DateTime(2026, 1, 1),
       );
 
-      expect(
-        dashed.days.map((day) => day.date?.day),
-        [4, 5, 6],
-      );
-      expect(
-        plus.days.map((day) => day.date?.day),
-        [6, 7],
-      );
+      expect(dashed.days.map((day) => day.date?.day), [4, 5, 6]);
+      expect(plus.days.map((day) => day.date?.day), [6, 7]);
     });
 
     test('a range shares its following-line stop with every claimed day', () {
@@ -145,32 +144,23 @@ void main() {
       );
 
       expect(result.days, hasLength(6));
-      expect(
-        result.days.map((day) => day.date?.day),
-        [16, 16, 30, 31, 31, 1],
-      );
-      expect(
-        result.days.map((day) => day.headerSourceLine?.text),
-        [
-          'Day 16: Day trip to Ghent from Bruges',
-          'Day 16: Antwerp (1 night)',
-          'Day 30-31: Füssen (2 nights)',
-          'Day 30-31: Füssen (2 nights)',
-          'Day 31-32: Munich (2 nights)',
-          'Day 31-32: Munich (2 nights)',
-        ],
-      );
-      expect(
-        result.days.map((day) => day.stops.single.text),
-        [
-          'Day trip to Ghent from Bruges',
-          'Antwerp (1 night)',
-          'Füssen (2 nights)',
-          'Füssen (2 nights)',
-          'Munich (2 nights)',
-          'Munich (2 nights)',
-        ],
-      );
+      expect(result.days.map((day) => day.date?.day), [16, 16, 30, 31, 31, 1]);
+      expect(result.days.map((day) => day.headerSourceLine?.text), [
+        'Day 16: Day trip to Ghent from Bruges',
+        'Day 16: Antwerp (1 night)',
+        'Day 30-31: Füssen (2 nights)',
+        'Day 30-31: Füssen (2 nights)',
+        'Day 31-32: Munich (2 nights)',
+        'Day 31-32: Munich (2 nights)',
+      ]);
+      expect(result.days.map((day) => day.stops.single.text), [
+        'Day trip to Ghent from Bruges',
+        'Antwerp (1 night)',
+        'Füssen (2 nights)',
+        'Füssen (2 nights)',
+        'Munich (2 nights)',
+        'Munich (2 nights)',
+      ]);
     });
   });
 
@@ -181,17 +171,17 @@ void main() {
       'Paris to Italy': (
         input: _fixture('paris_to_italy'),
         days: 14,
-        stops: 14
+        stops: 14,
       ),
       'Italy 12-day': (
         input: _fixture('italy_twelve_day'),
         days: 12,
-        stops: 12
+        stops: 12,
       ),
       'Italy compressed': (
         input: _fixture('italy_compressed'),
         days: 10,
-        stops: 31
+        stops: 31,
       ),
       'Spain': (input: _fixture('spain'), days: 10, stops: 10),
     };
