@@ -387,7 +387,7 @@ const _startupSignInBudget = Duration(seconds: 3);
 /// identity above still holds everywhere a roster or a photograph does.
 ///
 /// The vault is asked first and it usually answers: a phone that has signed in
-/// before knows its own id from a local file, with no network in it at all, so
+/// before knows its own id from the local Keychain, with no network in it, so
 /// the boot path does not wait on a server to find out who it is. Refreshing
 /// the token is then the sync's business, behind the first frame.
 ///
@@ -410,7 +410,11 @@ Future<String?> resolveMemberId(
 }
 
 /// Where this phone's account is kept between launches.
-SessionVault deviceVault() => FileSessionVault();
+///
+/// The old support-directory file is supplied only as a one-time migration
+/// source. [KeychainSessionVault] deletes it after the Keychain accepts the
+/// credential and never writes a new credential there.
+SessionVault deviceVault() => KeychainSessionVault(legacy: FileSessionVault());
 
 /// The app's own [SessionSource]: an anonymous GoTrue account, kept across
 /// launches. See `storage/remote/gotrue_sessions.dart` for why it is

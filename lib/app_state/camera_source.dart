@@ -255,27 +255,38 @@ Future<void> _delete(String path) async {
 /// capture flow is walkable there without anything being switched on. On a
 /// real phone the same code takes a real photograph.
 class DeviceCameraSource implements CameraSource {
-  const DeviceCameraSource();
+  const DeviceCameraSource({
+    this.camera = const _PluginCameraCaptureEdge(),
+    this.standIn = const StandInCameraSource(),
+  });
+
+  final CameraCaptureEdge camera;
+  final CameraSource standIn;
 
   @override
   Future<CapturedFrame> takeOne() async {
-    if (await _hasBackCamera()) return const BackCameraSource().takeOne();
-    return const StandInCameraSource().takeOne();
+    if (await _hasBackCameraOrRefuse()) {
+      return BackCameraSource(camera: camera).takeOne();
+    }
+    return standIn.takeOne();
   }
 
   @override
   Future<void> discard(String path) => _delete(path);
 
-  static Future<bool> _hasBackCamera() async {
+  Future<bool> _hasBackCameraOrRefuse() async {
     try {
-      final cameras = await availableCameras();
+      final cameras = await camera.listCameras();
       return cameras.any((c) => c.lensDirection == CameraLensDirection.back);
-    } catch (_) {
-      // Catching broadly on purpose: the answers to "is there a back camera"
-      // are yes, no, and every way the platform channel can decline to say —
-      // a simulator, a denied permission, a host with no camera plugin at
-      // all. All three mean the same thing here, which is take the stand-in.
-      return false;
+    } catch (error, stackTrace) {
+      // An empty successful answer is the simulator's honest "no camera".
+      // A thrown answer means the camera path failed. Turning that failure
+      // into a generated frame would file a synthetic image as a person's
+      // photograph on a real phone, so it must travel as a refusal instead.
+      final reason = error is CameraException
+          ? error.description ?? 'The camera could not be checked.'
+          : 'The camera could not be checked.';
+      Error.throwWithStackTrace(CameraRefused(reason), stackTrace);
     }
   }
 }

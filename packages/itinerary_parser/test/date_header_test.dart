@@ -1,4 +1,5 @@
 import 'package:itinerary_parser/src/date_header.dart';
+import 'package:itinerary_parser/itinerary_parser.dart' show parseItinerary;
 import 'package:test/test.dart';
 
 void main() {
@@ -118,6 +119,15 @@ void main() {
       expect(tryParseDateHeader('Sat, Jun 14th - Sun, Jun 15th'), isNull);
     });
 
+    test('a numeric date range stays a stop instead of becoming a day', () {
+      final parsed = parseItinerary('Day 1 - Tokyo\n9/9 – 9/10\n- Senso-ji');
+      expect(parsed.days, hasLength(1));
+      expect(parsed.days.single.stops.map((stop) => stop.text), [
+        '9/9 – 9/10',
+        'Senso-ji',
+      ]);
+    });
+
     test('a day-first date range after a comma is refused too', () {
       expect(tryParseDateHeader('Sat, 14 June — Wed, 18 June'), isNull);
       expect(tryParseDateHeader('Sat, 14th Jun — Wed, 18th Jun'), isNull);
@@ -176,8 +186,7 @@ void main() {
       expect(m.year, 2027);
     });
 
-    test('a leading word that is neither weekday nor month does not match',
-        () {
+    test('a leading word that is neither weekday nor month does not match', () {
       expect(tryParseDateHeader('Foo Jun 14'), isNull);
       expect(tryParseDateHeader('Foo, 14 June'), isNull);
     });

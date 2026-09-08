@@ -278,16 +278,13 @@ either door, and a scanned PDF with no text layer gets a one-tap offer to read
 it the same way. Recognition quality is judged on a device and never by the
 suite.
 
-**The one import path that is genuinely bad is the flagship one.** The
-repository's own real Wanderlog print — a three-day Asahikawa guide — extracts
-correctly (622 lines, the three real `Day N` headers among them) and then
-**parses into 32 days and 555 stops**, because the page cleanup does not strip
-Wanderlog's `Save` button label (30 lines end in it, merged onto the end of a
-place name) or its `9/9 – 9/10` opening-hours ranges (12 lines, which read as
-dates). The confirm screen is honest about it — "3 read clean. 29 need your
-eye." — so nothing lies, but the only sane action a person has is to give up
-and paste the text by hand. This file used to describe that path as working;
-it does not work.
+**The flagship import path reads its real fixture.** The repository's own
+printed Wanderlog Asahikawa guide extracts and parses as its three numbered
+days. Cleanup removes a repeated trailing `Save` control and repeated exact
+numeric-range controls only when each shape is proved across the print. Once
+the parser sees an explicit `Day N`, bare proper-noun lines inside that
+structure remain stops instead of inventing more days. The fixture itself is
+the end-to-end regression.
 
 Beneath it: five pure-Dart libraries, a backend schema, a
 dual-camera spike, the decision record, and the design handoffs, all
@@ -296,11 +293,11 @@ tested.
 | Piece | State |
 | --- | --- |
 | Every product decision | **Settled.** See `docs/decisions/`. |
-| `packages/itinerary_parser` | Landed. Parses pasted trip plans into days and stops. Fed real Wanderlog chrome it invents days — see the queued fix. |
+| `packages/itinerary_parser` | Landed. Parses pasted trip plans into days and stops. Explicit numbered-day structure outranks inferred bare-place headers, and numeric ranges do not become dates. |
 | `packages/photo_day_assignment` | Landed. Decides which day a photo belongs to. |
 | `packages/trip_moments` | Landed. Deals one ping per person across the party. Nothing delivers what it deals. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
-| `packages/plan_extraction` | Landed. Bytes in, plan text out — the file-import contract and its `.txt`/`.docx`/`.xlsx`/`.csv`/`.pdf` extractors. Extraction is correct on the Wanderlog print; the cleanup does not strip two of its chrome shapes. |
+| `packages/plan_extraction` | Landed. Bytes in, plan text out, with `.txt`/`.docx`/`.xlsx`/`.csv`/`.pdf` extractors. Provably repeated print controls are removed, and the Wanderlog fixture parses end to end as three days. |
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with migrations `0001`-`0010`, `0012` and `0014` applied (`0011` and `0013` are written and locally probed, not hosted). **No photo transport, and no phone-side call that redeems an invite.** |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
@@ -472,27 +469,17 @@ are the ones that stand between Cairn and being a group at all.
   trip, and the door that reads them back — and honestly says so when it cannot
   reach a trip. What is missing is the call: nothing ever asks the server to
   redeem a code.
-- **Stop the undated re-paste from misfiling photographs.** Reproduced: on a
-  plan whose days carry **no dates**, re-pasting an edited plan pairs repasted
-  days to current days *by position*, and because `mergeRepaste` never
-  renumbers (deliberately — `photos.dayNumber` is the only link a photograph
-  has to a day), a photograph stays on a number whose content has moved
-  underneath it. Delete the first of three undated days and day 1 keeps its
-  Tokyo photographs while becoming Kyoto; day 3 duplicates day 2. Nobody is
-  told and nothing errors. **The dated case is correct and was checked** —
-  date-matching pins every day. The same position pass is also how a genuinely
-  new undated day rides in without being asked about. The fix is a decision
-  about what position-pairing may claim, not a patch.
-- **Fix the Wanderlog print's parse.** Extraction is right and the parser is
-  fed chrome the cleanup does not strip: Wanderlog's `Save` button label, which
-  the PDF merges onto the end of a place name, and its `9/9 – 9/10`
-  opening-hours ranges, which read as dates. Three real days become 32 days and
-  555 stops. This is the flagship import path and the fixture is in the
-  repository.
-- **The Maps hand-off.** Named in the brief as half the planner's job and
-  **never built and never decided**: no `url_launcher` in `pubspec.yaml`, no
-  maps URL anywhere in `lib/`, and no decision file about it. It needs a
-  decision before it needs code.
+- **Undated re-paste keeps photographs with their content.** Built and pinned
+  by a regression using real `PhotoRef` day numbers. `mergeRepaste` first
+  claims unique unchanged content, then uses position only where no stable
+  content identity exists. Removing day 1 no longer puts its photographs under
+  day 2's content. Date matching remains the first pass.
+- **The Wanderlog print parses as three days.** Built and pinned against the
+  real PDF fixture. Repeated page controls are removed conservatively, and an
+  explicit `Day N` structure outranks inferred bare-place headings.
+- **The Maps hand-off.** Built. `maps_handoff.dart` owns the display and URL
+  rules for Google Maps, Apple Maps, and Waze, and `LinkOpenerEdge` opens the
+  selected keyless universal link from day and Trail surfaces.
 - Finish reconciling the schema with the settled decisions. The three-word
   grammar is on the server now — `supabase/migrations/0005_trip_invites.sql`
   mints two words and a number, forgives order and spelling by the same rule
@@ -515,11 +502,10 @@ are the ones that stand between Cairn and being a group at all.
   is healed to the account on the next launch that knows one
   (`MembershipStore.adoptAccountIdentity`), so only a phone that never signs
   in keeps a local trip.
-- **Put the refresh token in the Keychain.** `gotrue_sessions.dart` writes
-  `cairn_session.json` — `user_id` and `refresh_token` as plain JSON — into
-  Application Support, which is in iCloud and iTunes backups and is not the
-  Keychain. The account is anonymous with only that phone's own membership
-  behind it, so the blast radius is small; it is still the wrong place.
+- **Keep the refresh token in the Keychain.** Built. The account id and refresh
+  token are one `ThisDeviceOnly` Keychain value. A pre-existing plaintext
+  Application Support file is migrated once and deleted only after the secure
+  write succeeds.
 - The trip's close at trip end + 72 hours as a *stored* rule. Both halves
   derive it correctly now — `cairn_model`'s `tripStandingAt` on the phone, and
   `trip_closes_at()` on the server, which is what kills an invite code and
@@ -561,8 +547,8 @@ are the ones that stand between Cairn and being a group at all.
 - The countdown's drawn treatment (the burning thread). The reading itself
   came forward with the two-minute window and is built.
 - Android delivery through the Play testing track.
-- Autofill the itinerary from a Wanderlog *export* — distinct from reading a
-  Wanderlog *print*, which is built and, today, produces an unusable plan.
+- Autofill the itinerary from a Wanderlog *export*, distinct from reading a
+  Wanderlog *print*, which is built and parses its real fixture correctly.
 - Google sign-in with accounts keyed to their own id rather than Apple's.
 - Standing ops so Cairn survives the quiet months between trips.
 
@@ -627,20 +613,14 @@ Each of these has already cost time, or is certain to.
 - **Dart's `int` bitwise operators are 32-bit when compiled to JavaScript.** The
   ping derivation uses arithmetic rather than shifts for exactly this reason, and
   a golden test pins it. See `packages/trip_moments/`.
-- **The Simulator has no camera, so the app draws its own frame there — and the
-  fallback is silent.** That is what makes the capture flow walkable without a
-  cable, and it is two traps, not one. A green simulator run says the flow is
-  right and says *nothing* about whether the camera path works; the real back
-  camera has to be judged on a device. And `DeviceCameraSource._hasBackCamera()`
-  wraps `availableCameras()` in a bare `catch (_) { return false; }`, so on a
-  *real* phone any unexpected throw substitutes a generated 360×480 two-tone
-  PNG for somebody's photograph, into the real pool, with nothing shown. This
-  has not been reproduced on a device — on iOS `availableCameras()` does not
-  require authorization and a denial surfaces honestly later — so it is a
-  latent hazard on an unknown path, named rather than claimed.
+- **The Simulator has no camera, so the app draws its own frame there.** A
+  successful empty camera list is the only route to that stand-in. Any thrown
+  discovery error is a visible `CameraRefused`, so a real phone can no longer
+  file a generated frame as somebody's photograph. A green simulator run still
+  says nothing about whether the real camera path works.
 - **The person holding the phone has a real id and a placeholder name.** The
   anonymous GoTrue account's id *is* this phone's member id, resolved on the
-  boot path from a local file rather than over the network, so the roster and
+  boot path from the local Keychain rather than over the network, so the roster and
   the gate ask about the right person. The display name is still the constant
   `'You'`, and a trip started before any account exists is credited to `'me'` —
   visibly not an `auth.users` id, so a push carrying it is refused loudly

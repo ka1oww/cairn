@@ -59,6 +59,16 @@ class BlockingVault extends MemoryVault {
   }
 }
 
+class MemorySecureValueStore implements SecureSessionValueStore {
+  String? value;
+
+  @override
+  Future<String?> read() async => value;
+
+  @override
+  Future<void> write(String? next) async => value = next;
+}
+
 /// A GoTrue answer, spelled the way GoTrue spells one.
 String sessionBody(String userId, {String refresh = 'refresh-1'}) =>
     jsonEncode({
@@ -71,6 +81,50 @@ String sessionBody(String userId, {String refresh = 'refresh-1'}) =>
 
 void main() {
   group('the build is pointed at the hosted project', () {
+    test('the device vault is not the plaintext file vault', () {
+      expect(deviceVault(), isA<KeychainSessionVault>());
+    });
+
+    test(
+      'an existing plaintext session migrates once into one secure value',
+      () async {
+        final legacy = MemoryVault(
+          stored: const StoredSession(
+            userId: 'user-a',
+            refreshToken: 'refresh-a',
+          ),
+        );
+        final secure = MemorySecureValueStore();
+        final vault = KeychainSessionVault(secure: secure, legacy: legacy);
+
+        final session = await vault.read();
+
+        expect(session?.userId, 'user-a');
+        expect(session?.refreshToken, 'refresh-a');
+        expect(jsonDecode(secure.value!), {
+          'user_id': 'user-a',
+          'refresh_token': 'refresh-a',
+        });
+        expect(legacy.stored, isNull);
+      },
+    );
+
+    test('a new session is written only to secure storage', () async {
+      final legacy = MemoryVault();
+      final secure = MemorySecureValueStore();
+      final vault = KeychainSessionVault(secure: secure, legacy: legacy);
+
+      await vault.write(
+        const StoredSession(userId: 'user-b', refreshToken: 'refresh-b'),
+      );
+
+      expect(jsonDecode(secure.value!), {
+        'user_id': 'user-b',
+        'refresh_token': 'refresh-b',
+      });
+      expect(legacy.stored, isNull);
+    });
+
     test('by default, with nothing passed', () {
       const config = SharedFactsConfig.fromEnvironment;
       expect(config.isConfigured, isTrue);

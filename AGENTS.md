@@ -208,12 +208,11 @@ import what is written there, not here.
   this removed. A day the merge leaves in place keeps its **number**,
   and that alone is what keeps its photographs: `photos.dayNumber` is the only
   link, and nothing re-files photos when a plan is saved. The merge never
-  renumbers, so a day's photographs never move — but *keeping* them is not the
-  same as keeping them with the right day. The position pass can pair a
-  repasted day with a **different** current day: drop the first of three
-  undated days from the re-paste text and `repasted[0]` pairs with
-  `current[0]`, so day 1 keeps its number and so its photographs while its
-  content becomes what was day 2's. **A day the re-paste *adds* keeps the
+  renumbers, so a day's photographs never move. Undated days are anchored by
+  unique unchanged content before the position pass, which means removing the
+  first of three days cannot put day 1's photographs under day 2's content.
+  Only days with no unique unchanged-content match fall back to position.
+  **A day the re-paste *adds* keeps the
   parser's doubt, and a day the plan already held keeps none** — `MergedDay`
   carries `confidence`, `uncertainty` and `headerWeekday` off the parse for
   `MergedDayOrigin.appendedNew` alone, so `Sat - Nara` is asked about exactly
@@ -221,11 +220,9 @@ import what is written there, not here.
   its date silently open, while a day the person already answered for is not
   nagged again. That asymmetry is the rule, not an oversight; making it
   uniform in either direction is the thing to refuse in review. It is keyed on
-  origin, though, and not on whether the content is new, so the position-pairing
-  gap just named is also the path where genuinely new content still arrives
-  without doubt: insert an undated `Sat - Nara` block above an existing undated
-  day and it pairs by position, rides in clean, and saves with its date open
-  unasked. Two known
+  origin, though, and not on whether the content is new, so a wholly rewritten
+  undated day that has no stable content identity can still pair by position,
+  ride in clean, and save with its date open unasked. Two known
   gaps remain, both deferred. A displaced line's time — `itinerary_set_asides` has no time column, so a
   set-aside stop's star survives only until Save, and dragging it back after a
   reopen restores it unstarred; closing that needs a schema change. And a
@@ -290,9 +287,11 @@ import what is written there, not here.
   two, because the roster is replaced wholesale with the server's and a phone
   still calling itself `me` would ask the gate and the ping schedule about a
   stranger. That id is resolved on the boot path but **not over the network**:
-  the vault keeps the account's id beside its refresh token, so `main()` reads
-  it off a local file and only a first-ever launch waits (three seconds, then
-  the stand-in). The identity is fixed for the launch — a session that lands
+  the vault keeps the account's id beside its refresh token as one iOS
+  Keychain item, so `main()` reads it locally and only a first-ever launch waits
+  (three seconds, then the stand-in). `KeychainSessionVault` migrates the old
+  plaintext Application Support file once, deleting it only after the secure
+  write succeeds. The identity is fixed for the launch. A session that lands
   late is stored for the next one, with one narrow exception and one repair,
   both `bootstrap.dart`'s (its docs are the authority): accepting a plan may
   adopt a late-landing account, bounded, only while no trip exists yet
@@ -423,12 +422,14 @@ import what is written there, not here.
   scheme; run it with
   `xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner
   -configuration Debug -destination 'platform=iOS Simulator,id=<UDID>'
-  -only-testing:RunnerTests CODE_SIGNING_ALLOWED=NO` after a
+  -only-testing:RunnerTests` after a
   `flutter build ios --simulator --debug --no-codesign` (Debug, because the
-  tests need `ENABLE_TESTABILITY`). Only the platform code that is *decidable*
-  belongs there — the OCR render-scale arithmetic and the reading-order
-  geometry above are the whole of it today, and recognition quality still is
-  not testable anywhere.
+  tests need `ENABLE_TESTABILITY`). Do not disable signing for this test run:
+  the simulator's Keychain returns `errSecMissingEntitlement` to an unsigned
+  test host. Only the platform code that is *decidable* belongs there. The OCR
+  render-scale arithmetic, the reading-order geometry, and Keychain
+  read-write-delete behaviour are the whole of it today, and recognition
+  quality still is not testable anywhere.
 - **The house skin's tokens are written once, in
   `lib/screens/house_style.dart`** — a transcription of
   `docs/design/README.md`'s House system block; a second spelling of any
@@ -448,9 +449,12 @@ import what is written there, not here.
   relaunch restored, whatever the window says by then, because that one call
   is the only route back to frames already on disk. The camera is
   behind `CameraSource` (`lib/app_state/camera_source.dart`): a real camera on
-  a device, a *generated* PNG anywhere without one — which is what
-  makes the flow walkable on the Simulator, and also means a green simulator
-  run is no evidence the camera path works. Judge that on a device only.
+  a device, a *generated* PNG only after a **successful empty** camera list,
+  the Simulator's honest "no camera", which is what makes the flow walkable
+  there. A thrown discovery error is a visible `CameraRefused`, never the
+  stand-in, so a real phone's failure cannot file a synthetic frame as
+  somebody's photograph. A green simulator run is still no evidence the
+  camera path works. Judge that on a device only.
   `NSCameraUsageDescription` is in `ios/Runner/Info.plist`; audio is off, so
   no microphone string is needed. The ping's schedule is real
   (`trip_moments`) but dealt for a stub party of one, and `NotificationEdge`
@@ -486,9 +490,10 @@ import what is written there, not here.
   the grace has closed, clears both rather than raising a breath nobody can
   keep. All persisted frame paths are relative to Documents and
   resolve through `FramePaths` at read/upload time, because iOS changes the
-  absolute app-container prefix on update. Three refusals are load-bearing and
-  all three are `CameraRefused`: no
-  back camera, no *front* camera, and a failure of the second shot — and the
+  absolute app-container prefix on update. Four refusals are load-bearing and
+  all four are `CameraRefused`: a thrown camera *discovery* (the stand-in
+  bullet above), no back camera, no *front* camera, and a failure of the
+  second shot. That
   last one **discards the back file it already copied**, because a half-taken
   event must leave no orphan on disk. `CameraCaptureEdge` and the injectable
   directory exist for exactly that: `test/camera_source_test.dart` proves the
@@ -1066,7 +1071,11 @@ Sharp edges worth knowing before touching this directory again:
   - **The page cleanup strips only provably repeated furniture**
     (`lib/src/text_cleanup.dart`): a phrase at a page edge on ≥3 pages and on
     ≥half of them, bare numbers no larger than the page count, and the
-    Wanderlog print shapes the plan names. It **preserves line order and never
+    Wanderlog print shapes the plan names. A repeated trailing `Save` control
+    is removed from its place line only when the shape appears on at least
+    three pages and at least half the print, and an exact numeric range control
+    is removed at the same threshold. One real occurrence of either stays. It
+    **preserves line order and never
     joins lines** — a wrongly joined line corrupts a stop silently, an
     unjoined one is two stops the person can fix in the box. Two guards are
     load-bearing and both were bugs first: the furniture key is blind to

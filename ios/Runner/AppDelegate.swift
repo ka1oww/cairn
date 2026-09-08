@@ -18,5 +18,8 @@ import UIKit
     // The trip clock's edge: the one fact the shared `trips` row needs that
     // Dart cannot ask the phone for itself.
     DeviceTimeZone.register(with: engineBridge.applicationRegistrar.messenger())
+    // The anonymous account's refresh token belongs in the Keychain, not in
+    // an Application Support file that can enter a device backup.
+    SessionVaultChannel.register(with: engineBridge.applicationRegistrar.messenger())
   }
 }

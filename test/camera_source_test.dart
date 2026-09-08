@@ -77,6 +77,29 @@ class UndeletableFrameSource extends BackCameraSource {
       throw const FileSystemException('cannot delete');
 }
 
+class RefusingCameraEdge implements CameraCaptureEdge {
+  @override
+  Future<List<CameraDescription>> listCameras() =>
+      throw CameraException('available', 'camera service unavailable');
+
+  @override
+  Future<String> capture(CameraDescription camera) =>
+      throw StateError('capture must not be reached');
+}
+
+class RecordingStandIn implements CameraSource {
+  int captures = 0;
+
+  @override
+  Future<CapturedFrame> takeOne() async {
+    captures += 1;
+    return CapturedFrame(path: 'synthetic.png', takenAtUtc: DateTime.utc(2027));
+  }
+
+  @override
+  Future<void> discard(String path) async {}
+}
+
 void main() {
   late Directory temporary;
   late Directory frames;
@@ -93,6 +116,29 @@ void main() {
 
   BackCameraSource source(FakeCameraEdge edge) =>
       BackCameraSource(camera: edge, directoryProvider: () async => frames);
+
+  test(
+    'a camera discovery failure never substitutes a synthetic photograph',
+    () async {
+      final standIn = RecordingStandIn();
+      final source = DeviceCameraSource(
+        camera: RefusingCameraEdge(),
+        standIn: standIn,
+      );
+
+      await expectLater(
+        source.takeOne(),
+        throwsA(
+          isA<CameraRefused>().having(
+            (error) => error.reason,
+            'reason',
+            'camera service unavailable',
+          ),
+        ),
+      );
+      expect(standIn.captures, 0);
+    },
+  );
 
   test('takes and identifies back then front sequentially', () async {
     final edge = FakeCameraEdge(temporary);

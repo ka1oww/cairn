@@ -358,7 +358,7 @@
 <div class="node partial" style="left:1080px;top:250px;width:240px;height:115px">
   <span class="chip">partial</span><h4>Platform glue</h4>
   <p>Dual capture, the GPS tag at capture, the document picker behind the import pill, the sign-in flow, the tap-to-Maps handoff. Keeps screens platform-blind.</p>
-  <span class="sub">the camera is behind <code>CameraSource</code>, real on a device and a drawn stand-in without one; the picker behind <code>FilePickerEdge</code>; the Maps handoff behind <code>LinkOpenerEdge</code> (a keyless https universal link, no scheme check needed); location and Apple sign-in not started</span>
+  <span class="sub">the camera is behind <code>CameraSource</code>, with a stand-in only after a successful empty camera list and a visible refusal on discovery errors. The picker is behind <code>FilePickerEdge</code>, the anonymous session is behind the iOS Keychain channel, and the Maps handoff is behind <code>LinkOpenerEdge</code> (a keyless https universal link, no scheme check needed). Location and Apple sign-in are not started</span>
 </div>
 
 <!-- ======================= platform edges ======================= -->
@@ -426,7 +426,7 @@
 </div>
 <div class="node partial" style="left:800px;top:805px;width:410px;height:120px">
   <span class="chip">partial</span><h4>Supabase / R2 client adapter</h4>
-  <p>Session JWT, RLS-filtered queries, edge-function calls, presigned byte transfers — behind one interface. Nothing else in the app may import a network symbol. Built: the shared facts' half (<code>lib/storage/remote/</code>), plain HTTP over PostgREST, auth beside it &mdash; <code>GotrueSessions</code> keeps a GoTrue <b>anonymous</b> account, which is the <code>auth.uid()</code> every policy reads &mdash; and the photo push half: the upload-ticket mint, the raw presigned PUT (the one request that must carry <b>no</b> Supabase header), and the idempotent <code>photos</code> insert; proven against a fake, never a live bucket. Not built: Sign in with Apple (the real identity route), the download path. Where the project lives is still a <code>--dart-define</code>, but as an <i>override</i>: it defaults to the hosted project's URL and its <b>publishable</b> anon key, both checked in. The invariant that survived is narrower &mdash; no <i>secret</i> is ever checked in, never a <code>service_role</code> key or the database password. Overridden to empty, it refuses before sending anything.</p>
+  <p>Session JWT, RLS-filtered queries, edge-function calls and presigned byte transfers sit behind one interface. Nothing else in the app may import a network symbol. Built: the shared facts half (<code>lib/storage/remote/</code>), plain HTTP over PostgREST, and auth beside it. <code>GotrueSessions</code> keeps a GoTrue <b>anonymous</b> account whose id and refresh token live as one device-only Keychain item, with one-time migration from the old plaintext file. The photo push half is also built: the upload-ticket mint, the raw presigned PUT (the one request that must carry <b>no</b> Supabase header), and the idempotent <code>photos</code> insert. It is proven against a fake and never a live bucket. Not built: Sign in with Apple (the real identity route) and the download path. The project location is a <code>--dart-define</code> override that defaults to the hosted project's URL and its <b>publishable</b> anon key, both checked in. No <i>secret</i> is ever checked in. Overridden to empty, it refuses before sending anything.</p>
 </div>
 
 <!-- ======================= backend ======================= -->

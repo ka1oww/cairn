@@ -273,7 +273,11 @@ building UI on top of this package.
   a stop, not promoted to a header. When nothing in the whole paste ever
   looks like a header, the parser falls back to one day per blank-line
   block and marks everything low confidence rather than guess which
-  lines were meant as headers.
+  lines were meant as headers. And a plan that carries even one explicit
+  `Day N` header never promotes a bare place line at all: numbered
+  structure outranks the inference, so a printed guide's place cards read
+  as stops inside their numbered day instead of splitting it into
+  invented ones.
 
 - **A bare place header is judged by shape, in any script.** The word test
   is Unicode-aware (`unicode: true` and property escapes, not widened
@@ -313,7 +317,11 @@ building UI on top of this package.
   `Sat, Jun 14th — Wed, Jun 18th` names no single day, so the weekday-comma
   and weekday-then-month-day shapes refuse it rather than bind its first
   date and keep the second as a place name; the line falls through as a
-  stop or an unplaced line the person still sees. The test is the shape of
+  stop or an unplaced line the person still sees. A numeric range is
+  refused the same way: a date-shaped line trailed by a second numeric
+  date (`9/9 - 9/10`, `Itinerary 11/30 - 12/17`) stays an ordinary line
+  rather than binding its first half, because a printed guide's
+  opening-hours and search controls wear exactly that shape. The test is the shape of
   the trailing text, so a real place whose name opens with a month-day run
   (`… — May 1 Museum`) is refused the same way — mis-binding a spurious
   day is the worse failure of the two.

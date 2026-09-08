@@ -280,7 +280,55 @@ void main() {
     });
   });
 
-  group('matching by position (undated)', () {
+  group('matching undated days', () {
+    test(
+      'removing the first undated day keeps each photo with its content',
+      () {
+        final current = [
+          day(1, place: 'Tokyo', stops: [mStop('Senso-ji')]),
+          day(2, place: 'Kyoto', stops: [mStop('Fushimi Inari')]),
+          day(3, place: 'Nara', stops: [mStop('Deer park')]),
+        ];
+        final photos = [
+          PhotoRef(
+            id: PhotoId('00000000-0000-4000-8000-000000000001'),
+            dayNumber: 1,
+            contributor: MemberId('traveller'),
+            takenAt: DateTime.utc(2027, 6, 14),
+            origin: PhotoOrigin.pinged,
+          ),
+          PhotoRef(
+            id: PhotoId('00000000-0000-4000-8000-000000000002'),
+            dayNumber: 2,
+            contributor: MemberId('traveller'),
+            takenAt: DateTime.utc(2027, 6, 15),
+            origin: PhotoOrigin.pinged,
+          ),
+          PhotoRef(
+            id: PhotoId('00000000-0000-4000-8000-000000000003'),
+            dayNumber: 3,
+            contributor: MemberId('traveller'),
+            takenAt: DateTime.utc(2027, 6, 16),
+            origin: PhotoOrigin.pinged,
+          ),
+        ];
+        final repasted = [
+          pDay(1, place: 'Kyoto', stops: [pStop('Fushimi Inari')]),
+          pDay(2, place: 'Nara', stops: [pStop('Deer park')]),
+        ];
+
+        final result = mergeRepaste(current: current, repasted: repasted);
+
+        String? placeFor(PhotoRef photo) => result.days
+            .where((merged) => merged.number == photo.dayNumber)
+            .singleOrNull
+            ?.place;
+        expect(placeFor(photos[0]), 'Tokyo');
+        expect(placeFor(photos[1]), 'Kyoto');
+        expect(placeFor(photos[2]), 'Nara');
+      },
+    );
+
     test('undated repasted days pair with unclaimed current days in order', () {
       final current = [
         day(1, place: 'Tokyo', stops: [mStop('Fish market')]),
@@ -860,7 +908,7 @@ void main() {
             place: 'Tokyo',
             stops: [pStop('Senso-ji'), pStop('Ueno park')],
           ),
-          // Position-matched onto day 2, which is undated and stays undated.
+          // Content-matched onto day 2, which is undated and stays undated.
           pWeekdayDay(2, place: 'Kyoto', stops: [pStop('Fushimi Inari')]),
         ];
 
@@ -869,7 +917,7 @@ void main() {
         expect(result.days[0].origin, MergedDayOrigin.mergedByDate);
         expect(result.days[0].uncertainty, isNull);
         expect(result.days[0].confidence, ip.Confidence.high);
-        expect(result.days[1].origin, MergedDayOrigin.mergedByPosition);
+        expect(result.days[1].origin, MergedDayOrigin.mergedByContent);
         expect(result.days[1].headerWeekday, isNull);
         expect(result.days[1].uncertainty, isNull);
         expect(result.days[1].confidence, ip.Confidence.high);

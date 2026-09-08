@@ -64,6 +64,15 @@ String cleanPaginatedText(List<List<String>> pages) {
   ];
   final furniture = _repeatedFurniture(normalized);
   final pageCount = normalized.length;
+  final saveControlPages = <int>{
+    for (var p = 0; p < normalized.length; p++)
+      if (normalized[p].any(_hasTrailingSaveControl)) p,
+  };
+  final stripsSaveControls = _appearsAcrossThePrint(
+    saveControlPages.length,
+    pageCount,
+  );
+  final repeatedRangeControls = _repeatedRangeControls(normalized);
   // A one-page document is the one place repetition can never be proved.
   final lonePage = pageCount == 1;
 
@@ -82,13 +91,14 @@ String cleanPaginatedText(List<List<String>> pages) {
       final atEdge = edges.contains(i);
       if (atEdge && furniture.contains(_furnitureKey(line))) continue;
       if (atEdge && _isPageNumber(line, pageCount)) continue;
+      if (repeatedRangeControls.contains(line)) continue;
       if (atEdge &&
           lonePage &&
           _isLonePagePrintFurniture(line, corroboratedByFooter: hasWebFooter)) {
         continue;
       }
       if (_isPrintFurniture(line)) continue;
-      kept.add(line);
+      kept.add(stripsSaveControls ? _withoutTrailingSaveControl(line) : line);
     }
     if (kept.any((l) => l.isNotEmpty)) {
       if (out.isNotEmpty) out.add('');
@@ -96,6 +106,39 @@ String cleanPaginatedText(List<List<String>> pages) {
     }
   }
   return _collapseBlanks(out).join('\n');
+}
+
+bool _appearsAcrossThePrint(int pages, int pageCount) =>
+    pages >= _minRepeats && pages >= (pageCount + 1) ~/ 2;
+
+final RegExp _trailingSaveControl = RegExp(r'\s+Save$', caseSensitive: false);
+
+bool _hasTrailingSaveControl(String line) =>
+    _trailingSaveControl.hasMatch(line);
+
+String _withoutTrailingSaveControl(String line) =>
+    line.replaceFirst(_trailingSaveControl, '').trimRight();
+
+final RegExp _numericRangeControl = RegExp(
+  r'^\d{1,2}/\d{1,2}(?:/\d{2,4})?\s*[-–—]\s*'
+  r'\d{1,2}/\d{1,2}(?:/\d{2,4})?$',
+);
+
+/// Repeated date-range controls from a printed site's search chrome. A real
+/// range written once remains untouched. Only an exact line appearing on at
+/// least three pages and at least half the print is provable furniture.
+Set<String> _repeatedRangeControls(List<List<String>> pages) {
+  final pagesPerRange = <String, Set<int>>{};
+  for (var p = 0; p < pages.length; p++) {
+    for (final line in pages[p]) {
+      if (!_numericRangeControl.hasMatch(line)) continue;
+      pagesPerRange.putIfAbsent(line, () => <int>{}).add(p);
+    }
+  }
+  return {
+    for (final entry in pagesPerRange.entries)
+      if (_appearsAcrossThePrint(entry.value.length, pages.length)) entry.key,
+  };
 }
 
 /// Whitespace and invisible-character repair, applied to every line of every

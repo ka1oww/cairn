@@ -8,7 +8,7 @@
 // The settled rules (firstmate brief, 2026-08-26), written once:
 //
 //  1. Match repasted days to current days by DATE first (when both sides have
-//     dates), then by POSITION for undated days.
+//     dates), then by unchanged CONTENT for undated days, then by POSITION.
 //  2. A matched day takes the repasted content; anything the revised plan no
 //     longer contains *anywhere* goes to the set-aside, never silently
 //     dropped. Survival is plan-wide: a stop the re-paste moved to another day
@@ -56,7 +56,13 @@ enum MergedDayOrigin {
   /// A repasted day with the same date took it over (rule 1, date pass).
   mergedByDate,
 
-  /// An undated repasted day filled it by position (rule 1, position pass).
+  /// An undated repasted day carried the same place and stops as exactly one
+  /// current day. This pass runs before position so inserting or removing an
+  /// undated day cannot silently move photographs onto another day's content.
+  mergedByContent,
+
+  /// An undated repasted day filled it by position after no stable content
+  /// match was available (rule 1, position pass).
   mergedByPosition,
 
   /// A repasted day no current day claimed; appended after the existing ones
@@ -113,10 +119,9 @@ class MergedDay {
   /// repasted day with an undated current day by *position*, a genuinely new
   /// undated block inserted above an existing undated day arrives as
   /// [MergedDayOrigin.mergedByPosition] and so carries no doubt: it saves with
-  /// its date open and is never asked about. That is the same position-pairing
-  /// gap this module already documents — the one that lets a day keep its
-  /// number and its photographs while its content becomes another day's — and
-  /// not a second one. It is deferred with it rather than closed here.
+  /// its date open and is never asked about. A unique unchanged content match
+  /// protects existing days before that pass, but a wholly rewritten undated
+  /// day still has no stable identity beyond position.
   ///
   /// The merge itself never invents any of the three and never resolves them:
   /// working out which Saturday, like working out a year, is the screen's ask.
@@ -198,9 +203,13 @@ class RepasteMergeResult {
 /// earliest not-yet-claimed current day wearing that date. A candidate the
 /// parser flagged [ip.DateCandidate.ambiguousNumericOrder] (5/6/2027: is that
 /// May or June?) is undated for matching and falls through to the position
-/// pass; it still rides on the [MergedDay] for the screen to ask about. The **position pass** then pairs remaining
-/// *undated* repasted days, in order, with remaining unclaimed current days,
-/// in order. A dated repasted day whose date no current day wears is never
+/// pass. It still rides on the [MergedDay] for the screen to ask about. The
+/// **content pass** then claims a current day when exactly one undated day on
+/// each side has the same normalized place and stop texts. This is the stable
+/// evidence that prevents a removed first day from shifting every later
+/// photograph. The **position pass** finally pairs remaining *undated*
+/// repasted days, in order, with remaining unclaimed current days, in order. A
+/// dated repasted day whose date no current day wears is never
 /// position-matched: it names a day the current plan does not have, and is
 /// appended (rule 4).
 ///
@@ -227,6 +236,7 @@ RepasteMergeResult mergeRepaste({
   // iteration order and the walk below reads straight off these.
   final currentClaimed = List.filled(current.length, false);
   final pairedCurrentOf = List<int?>.filled(repasted.length, null);
+  final pairedByContent = List.filled(repasted.length, false);
 
   // -- pass 1: date ---------------------------------------------------------
   for (var r = 0; r < repasted.length; r++) {
@@ -242,7 +252,37 @@ RepasteMergeResult mergeRepaste({
     }
   }
 
-  // -- pass 2: position, undated repasted days only -------------------------
+  // -- pass 2: stable content, undated repasted days only -------------------
+  // A signature must be unique on both sides. Two identical museum-only days
+  // carry no evidence about which photograph belongs to which, so they fall
+  // through to the positional rule instead of being paired arbitrarily.
+  final currentSignatures = <String, List<int>>{};
+  for (var c = 0; c < current.length; c++) {
+    if (currentClaimed[c]) continue;
+    final signature = _currentContentSignature(current[c]);
+    if (signature == null) continue;
+    currentSignatures.putIfAbsent(signature, () => []).add(c);
+  }
+  final repastedSignatures = <String, List<int>>{};
+  for (var r = 0; r < repasted.length; r++) {
+    if (pairedCurrentOf[r] != null || _effectiveDate(repasted[r]) != null) {
+      continue;
+    }
+    final signature = _repastedContentSignature(repasted[r]);
+    if (signature == null) continue;
+    repastedSignatures.putIfAbsent(signature, () => []).add(r);
+  }
+  for (final entry in repastedSignatures.entries) {
+    final matchingCurrent = currentSignatures[entry.key];
+    if (entry.value.length != 1 || matchingCurrent?.length != 1) continue;
+    final r = entry.value.single;
+    final c = matchingCurrent!.single;
+    currentClaimed[c] = true;
+    pairedCurrentOf[r] = c;
+    pairedByContent[r] = true;
+  }
+
+  // -- pass 3: position, undated repasted days only -------------------------
   final freeCurrents = <int>[
     for (var c = 0; c < current.length; c++)
       if (!currentClaimed[c]) c,
@@ -288,7 +328,15 @@ RepasteMergeResult mergeRepaste({
       );
       continue;
     }
-    days.add(_mergeMatched(current[c], repasted[r], repastedTexts, setAside));
+    days.add(
+      _mergeMatched(
+        current[c],
+        repasted[r],
+        repastedTexts,
+        setAside,
+        origin: pairedByContent[r] ? MergedDayOrigin.mergedByContent : null,
+      ),
+    );
   }
 
   // Then whatever the revised plan brings that the current plan has no day
@@ -392,8 +440,9 @@ MergedDay _mergeMatched(
   ConfirmedDay currentDay,
   ip.ParsedDay parsed,
   Set<String> repastedTexts,
-  List<SetAsideItem> setAside,
-) {
+  List<SetAsideItem> setAside, {
+  MergedDayOrigin? origin,
+}) {
   final newStops = _convertStops(parsed.stops);
 
   // Which current stops survive? Anything the revised plan still says, on any
@@ -405,7 +454,7 @@ MergedDay _mergeMatched(
 
   final placeChanged = currentDay.place != parsed.place;
   final stopsChanged = !_stopListsEqual(currentDay.stops, newStops);
-  final origin = parsed.date != null || _candidateDate(parsed) != null
+  origin ??= parsed.date != null || _candidateDate(parsed) != null
       ? MergedDayOrigin.mergedByDate
       : MergedDayOrigin.mergedByPosition;
 
@@ -433,6 +482,23 @@ MergedDay _mergeMatched(
     unchanged: false,
     dateCandidate: parsed.dateCandidate,
   );
+}
+
+String? _currentContentSignature(ConfirmedDay day) =>
+    _contentSignature(day.place, [for (final stop in day.stops) stop.text]);
+
+String? _repastedContentSignature(ip.ParsedDay day) =>
+    _contentSignature(day.place, [for (final stop in day.stops) stop.text]);
+
+/// A day identity made only from words that survive a re-paste. Stop order and
+/// clock times are edits within a day, not evidence that it became another
+/// day. Length prefixes keep different field boundaries from colliding.
+String? _contentSignature(String? place, List<String> stops) {
+  final normalizedPlace = _normalize(place ?? '');
+  final normalizedStops = [for (final stop in stops) _normalize(stop)]..sort();
+  if (normalizedPlace.isEmpty && normalizedStops.isEmpty) return null;
+  String field(String value) => '${value.length}:$value';
+  return '${field(normalizedPlace)}|${normalizedStops.map(field).join('|')}';
 }
 
 List<Stop> _convertStops(List<ip.Stop> stops) => List.unmodifiable([
