@@ -33,7 +33,11 @@ void main() {
         number: 1,
         place: 'Tokyo',
         stops: [
-          Stop(text: 'Ueno Park'),
+          Stop(
+            text: 'Ueno Park',
+            placeText: 'Ueno Park',
+            placeCandidates: ['Ueno Park'],
+          ),
           // The kinds a real paste would have stored: the round trip is over
           // those too now, and a day only comes back as the same instance
           // when the re-read agrees with what was saved.
@@ -41,6 +45,8 @@ void main() {
             text: '10:00 Coffee',
             time: ClockTime(10, 0),
             kind: StopKind.mealLabel,
+            placeText: 'Coffee',
+            placeCandidates: ['Coffee'],
           ),
         ],
       ),

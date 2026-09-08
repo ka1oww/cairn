@@ -1155,6 +1155,12 @@ void main() {
         await db.customStatement(
           'ALTER TABLE itinerary_stops DROP COLUMN area_source',
         );
+        await db.customStatement(
+          'ALTER TABLE itinerary_stops DROP COLUMN place_candidates_json',
+        );
+        await db.customStatement(
+          'ALTER TABLE itinerary_stops DROP COLUMN place_text',
+        );
         await db.customStatement('DROP TABLE app_preferences');
         await db.customStatement(
           'ALTER TABLE trip_facts DROP COLUMN name_revised_at_utc_iso',
@@ -1266,6 +1272,12 @@ void main() {
           lastError: '404: {"code":"NOT_FOUND"}',
         );
         await db.customStatement('DROP TABLE pending_captures');
+        await db.customStatement(
+          'ALTER TABLE itinerary_stops DROP COLUMN place_candidates_json',
+        );
+        await db.customStatement(
+          'ALTER TABLE itinerary_stops DROP COLUMN place_text',
+        );
         await db.customStatement('PRAGMA user_version = 10');
         await db.close();
 
@@ -1321,6 +1333,12 @@ void main() {
               'the frame file is missing at /old/Documents/frames/kept.jpg',
         );
         await db.customStatement('DROP TABLE pending_captures');
+        await db.customStatement(
+          'ALTER TABLE itinerary_stops DROP COLUMN place_candidates_json',
+        );
+        await db.customStatement(
+          'ALTER TABLE itinerary_stops DROP COLUMN place_text',
+        );
         await db.customStatement('PRAGMA user_version = 11');
         await db.close();
 
