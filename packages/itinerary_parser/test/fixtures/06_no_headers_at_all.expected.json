@@ -89,9 +89,9 @@
             "lineNumber": 7,
             "text": "Maybe catch the Glico sign at night"
           },
-          "kind": "place",
+          "kind": "alternative",
           "area": null,
-          "placeText": "Maybe catch the Glico sign at night"
+          "placeText": "the Glico sign"
         }
       ],
       "confidence": "low",

@@ -100,9 +100,12 @@ class DayStop {
 
   bool get isStarred => timeLabel != null;
 
-  /// Whether tapping this row opens a maps search. A note the traveller wrote
-  /// renders and does nothing; so does a meal label with no restaurant on it.
-  bool get opensMaps => searchText != null && kind != StopKind.note;
+  /// Whether tapping this row opens a maps search. Only a committed single
+  /// place, or a meal label with a venue payload, is resolvable. Every other
+  /// line type remains visible and inert.
+  bool get opensMaps =>
+      searchText != null &&
+      (kind == StopKind.place || kind == StopKind.mealLabel);
 
   /// Whether the row is drawn short with an "N places" badge. Length decides,
   /// so a row that fits is drawn as written however many places it names.
@@ -432,14 +435,12 @@ DayStop _dayStop(
       ? mealLabelSplit(stop.text)
       : (label: null, rest: stop.text.trim());
   final rest = meal.rest;
-  // Three ways a row has nothing to search for: the traveller's own note, a
-  // heading that is not itself a stop, and a line standing in for a place
-  // nobody has picked yet. All three render, and all three are inert.
-  final searchText =
-      stop.kind == StopKind.note ||
-          stop.kind == StopKind.areaHeading ||
-          rest == null ||
-          isPlaceholderText(rest)
+  // Only a committed single place and a meal with a venue payload are safe
+  // searches. Alternatives, compound lines, section labels, notes and loose
+  // instructions all render as written while remaining inert.
+  final resolvable =
+      stop.kind == StopKind.place || stop.kind == StopKind.mealLabel;
+  final searchText = !resolvable || rest == null || isPlaceholderText(rest)
       ? null
       : rest;
   return DayStop(

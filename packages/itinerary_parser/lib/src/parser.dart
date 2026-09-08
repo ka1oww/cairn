@@ -220,7 +220,7 @@ ParseResult _annotateWithAreas(
         }
       }
 
-      // For place/mealLabel, placeText from classifier; for heading/note, null
+      // The classifier alone decides whether there is a safe place expression.
       String? placeText = classified.placeText;
       // But for place stops, ensure placeText is at least s.text stripped of bullet if classifier gave null
       if (classified.kind == StopKind.place && placeText == null) {

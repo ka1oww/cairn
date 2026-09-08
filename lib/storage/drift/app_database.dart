@@ -65,7 +65,7 @@ class ItineraryStops extends Table {
   /// `HH:MM` (`cairn_model.ClockTime.iso`), or null for an untimed stop.
   TextColumn get timeIso => text().nullable()();
 
-  /// What the stop is: place / areaHeading / mealLabel / note.
+  /// The stable [StopKind.name] written for this line.
   TextColumn get kind => text().withDefault(const Constant('place'))();
 
   /// Area in force for this stop, or null = send nothing (rule 3).

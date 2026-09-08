@@ -108,8 +108,13 @@ same line still stars the stop.
 
 ## Stop kind and area (tap-to-Maps)
 
-Every stop carries a `StopKind` (`place`, `areaHeading`, `mealLabel`, or
-`note`) and, where the deterministic extractor could work one out, an
+Every stop carries a `StopKind`: `place`, `sectionLabel`, `alternative`,
+`placeInstruction`, `multiPlace`, `areaHeading`, `mealLabel`, or `note`.
+Section labels, uncommitted alternatives and compound lines stay visible but
+are not resolvable as ordinary places. A `placeInstruction` such as
+`Fly to Prague` keeps the full instruction in `Stop.text` while exposing only
+`Prague` in `Stop.placeText`. Where the deterministic extractor could work one
+out, a stop also carries an
 `AreaHint` — the neighbourhood/area text in force for that stop, plus an
 `AreaSource` naming why (`travellerDeclared`, `travellerProximity`,
 `inlineLocality`, `runningHeading`, `hotelPrefix`, `trainDestination`, or

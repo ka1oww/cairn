@@ -187,6 +187,10 @@ class TripRepository {
 /// at all, and a plain place is the only honest reading of a line nobody
 /// classified — it is what a stop typed in the editor gets too.
 StopKind stopKindFromStored(String? stored) => switch (stored) {
+  'sectionLabel' => StopKind.sectionLabel,
+  'alternative' => StopKind.alternative,
+  'placeInstruction' => StopKind.placeInstruction,
+  'multiPlace' => StopKind.multiPlace,
   'areaHeading' => StopKind.areaHeading,
   'mealLabel' => StopKind.mealLabel,
   'note' => StopKind.note,

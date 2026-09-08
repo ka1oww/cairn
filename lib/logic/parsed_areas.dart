@@ -13,6 +13,10 @@ import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 /// What the parser decided a line is.
 StopKind stopKindOf(ip.StopKind kind) => switch (kind) {
   ip.StopKind.place => StopKind.place,
+  ip.StopKind.sectionLabel => StopKind.sectionLabel,
+  ip.StopKind.alternative => StopKind.alternative,
+  ip.StopKind.placeInstruction => StopKind.placeInstruction,
+  ip.StopKind.multiPlace => StopKind.multiPlace,
   ip.StopKind.areaHeading => StopKind.areaHeading,
   ip.StopKind.mealLabel => StopKind.mealLabel,
   ip.StopKind.note => StopKind.note,

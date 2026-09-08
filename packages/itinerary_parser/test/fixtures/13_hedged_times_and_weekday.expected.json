@@ -70,9 +70,9 @@
             "lineNumber": 7,
             "text": "- Train to Kyoto 10:12"
           },
-          "kind": "place",
+          "kind": "placeInstruction",
           "area": null,
-          "placeText": "Train to Kyoto 10:12"
+          "placeText": "Kyoto"
         },
         {
           "text": "Fushimi Inari ~4pm",

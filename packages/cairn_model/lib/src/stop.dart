@@ -10,6 +10,20 @@ enum StopKind {
   /// Somewhere a person could be sent: the line opens a Maps search.
   place,
 
+  /// `Activities` or `Food`: visible plan structure, never a Maps search.
+  sectionLabel,
+
+  /// A conditional or optional place branch that has not been committed to.
+  alternative,
+
+  /// An instruction that carries a place fact, such as `Fly to Prague`.
+  /// It remains inert until the separately parsed place expression is carried
+  /// through the app's persisted model.
+  placeInstruction,
+
+  /// One source line that carries several candidate places or purposes.
+  multiPlace,
+
   /// A line that sets the running area for the stops under it.
   areaHeading,
 

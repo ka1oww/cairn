@@ -68,6 +68,11 @@ UrlStripResult stripUrls(String line) {
 bool isTriviallyEmpty(String text) =>
     text.trim().replaceAll(RegExp(r'[\s\-–—:,.]'), '').isEmpty;
 
+/// True for a bare line that organizes following itinerary content without
+/// naming a place of its own.
+bool isSectionLabelText(String text) =>
+    {'activities', 'food'}.contains(text.trim().toLowerCase());
+
 final RegExp _dayNumberHeader = RegExp(
   r'^day\s*[:\-]?\s*(\d{1,3})\b\s*(?:[-:–—]\s*)?(.*)$',
   caseSensitive: false,
@@ -256,6 +261,7 @@ bool looksLikeProperNounHeader(String line) {
   final trimmed = line.trim();
   if (trimmed.isEmpty) return false;
   if (startsWithBullet(trimmed)) return false;
+  if (isSectionLabelText(trimmed)) return false;
   if (_anyDigit.hasMatch(trimmed)) return false;
   if (extractTime(trimmed) != null) return false;
   final words = trimmed.split(RegExp(r'\s+'));

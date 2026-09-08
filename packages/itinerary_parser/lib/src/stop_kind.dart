@@ -5,6 +5,7 @@ library;
 
 import 'area_words.dart';
 import 'area_annotations.dart';
+import 'line_classifier.dart';
 import 'models.dart';
 
 class ClassifiedStop {
@@ -25,17 +26,26 @@ ClassifiedStop classifyStop({
   required bool isAreaHeading,
   required bool hasTime,
 }) {
-  // 1. areaHeading — decided by engine
+  final cleanResult = cleanStopText(raw);
+  final clean = cleanResult.clean;
+  final ws = areaTokens(clean);
+
+  // A bare section label is structure even if the area engine happened to
+  // read its title-like shape as a running heading. Keep it in the stop list,
+  // but never offer it as a place query.
+  if (isSectionLabelText(clean)) {
+    return const ClassifiedStop(
+        kind: StopKind.sectionLabel, placeText: null, places: []);
+  }
+
+  // areaHeading is decided by the assignment engine.
   if (isAreaHeading) {
     return const ClassifiedStop(
         kind: StopKind.areaHeading, placeText: null, places: []);
   }
 
-  final cleanResult = cleanStopText(raw);
-  final clean = cleanResult.clean;
-  final ws = areaTokens(clean);
-
-  // 2. mealLabel
+  // A meal word with a payload is a labelled place. Bare `Food` was handled
+  // as a section label above.
   if (ws.isNotEmpty && mealPrefixWords.contains(ws.first)) {
     // Extract payload after label separator : or -
     final payload = _mealPayload(raw, clean);
@@ -56,14 +66,53 @@ ClassifiedStop classifyStop({
         kind: StopKind.mealLabel, placeText: payload.trim(), places: places);
   }
 
-  // 3. note — furniture-only, Wi-Fi blob, bare time/duration
-  if (_isNote(raw, clean, ws)) {
+  // Commentary, fare deliberation and other non-place planning prose stays
+  // visible as a note rather than falling through to the place default.
+  if (_isPlanningNote(raw, clean) ||
+      (!_hasCategoryAnnotation(cleanResult) && _isNote(raw, clean, ws))) {
     return const ClassifiedStop(
         kind: StopKind.note, placeText: null, places: []);
   }
 
-  // 4. place
-  // placeText: strip bullet/time/annotation but keep the venue words
+  // Conditional branches are real plan content, but not committed stops.
+  if (_isAlternative(clean)) {
+    final places = _alternativePlaces(raw, clean);
+    return ClassifiedStop(
+      kind: StopKind.alternative,
+      placeText: places.isEmpty ? null : places.join('; '),
+      places: places,
+    );
+  }
+
+  // `Return to X from Y` describes one intended destination even though it
+  // mentions its origin too. Decide this before the general multi-place pass.
+  final instructionPlace = _instructionPlace(clean);
+  if (_startsWithReturnInstruction(clean) && instructionPlace != null) {
+    return ClassifiedStop(
+      kind: StopKind.placeInstruction,
+      placeText: instructionPlace,
+      places: [instructionPlace],
+    );
+  }
+
+  final multiPlaces = _travelPlaceExpressions(cleanResult);
+  if (multiPlaces.length > 1) {
+    return ClassifiedStop(
+      kind: StopKind.multiPlace,
+      placeText: multiPlaces.join('; '),
+      places: multiPlaces,
+    );
+  }
+
+  if (instructionPlace != null) {
+    return ClassifiedStop(
+      kind: StopKind.placeInstruction,
+      placeText: instructionPlace,
+      places: [instructionPlace],
+    );
+  }
+
+  // Ordinary place: strip bullet/time/annotation but keep the venue words.
   final placeText = _extractPlaceText(raw, clean);
   if (placeText == null || placeText.trim().isEmpty) {
     return const ClassifiedStop(
@@ -72,6 +121,180 @@ ClassifiedStop classifyStop({
   final places = placesOnLinePayload(placeText);
   return ClassifiedStop(
       kind: StopKind.place, placeText: placeText, places: places);
+}
+
+bool _isPlanningNote(String raw, String clean) {
+  final lower = clean.toLowerCase();
+  if (RegExp(r'^short day due to\b').hasMatch(lower) ||
+      RegExp(r'^most likely going to cut\b').hasMatch(lower) ||
+      RegExp(r'^on the way back for snacks\??$').hasMatch(lower)) {
+    return true;
+  }
+
+  // The Rome corpus has a whole sentence comparing flexible return fares.
+  // Brand names in that sentence do not turn the pricing deliberation into a
+  // place. Requiring both fare vocabulary and deliberation keeps this narrow.
+  final hasFare =
+      RegExp(r'\b(?:fare|price|priced|expensive)\b', caseSensitive: false)
+          .hasMatch(raw);
+  final deliberates = RegExp(
+          r'\b(?:allow|flexib|time changes?|trip options?|book a return)\b',
+          caseSensitive: false)
+      .hasMatch(raw);
+  return hasFare && deliberates;
+}
+
+bool _isAlternative(String clean) {
+  final lower = clean.toLowerCase();
+  return RegExp(r'^(?:if\b|perhaps\b|maybe\b|consider\b|alternatively\b)')
+          .hasMatch(lower) ||
+      RegExp(r'\bperhaps\b').hasMatch(lower) ||
+      RegExp(r'\bon the way back for snacks\?\s*$').hasMatch(lower);
+}
+
+List<String> _alternativePlaces(String raw, String clean) {
+  final out = <String>[];
+
+  void addMatch(RegExp pattern, String text) {
+    for (final match in pattern.allMatches(text)) {
+      final candidate = _cleanExpression(match.group(1));
+      if (candidate != null) out.add(candidate);
+    }
+  }
+
+  addMatch(
+    RegExp(r'\blove\s+(.+?)(?=\s+and\s+(?:weather|time)\b|[?.]|$)',
+        caseSensitive: false),
+    clean,
+  );
+  addMatch(
+    RegExp(r'\bperhaps\s+(.+?)(?=\s+or\b|[?.]|$)', caseSensitive: false),
+    clean,
+  );
+  addMatch(
+    RegExp(r'\bor\s+(?:the\s+)?(.+?)(?=[?.]|$)', caseSensitive: false),
+    clean,
+  );
+  addMatch(
+    RegExp(r'^consider\s+(.+?)(?=\s+for\b|[?.]|$)', caseSensitive: false),
+    clean,
+  );
+  addMatch(
+    RegExp(
+      r'^(?:maybe|perhaps)\s+(?:(?:catch|visit|see|go\s+to|stop\s+at)\s+)?(.+?)(?=\s+at\s+(?:night|morning|midday|noon|evening)\b|[?.]|$)',
+      caseSensitive: false,
+    ),
+    clean,
+  );
+  addMatch(
+    RegExp(r'^(.+?)\s+on the way back for snacks\?\s*$', caseSensitive: false),
+    raw.trim(),
+  );
+  return _uniqueExpressions(out);
+}
+
+bool _startsWithReturnInstruction(String clean) =>
+    RegExp(r'^return\s+(?:back\s+)?to\b', caseSensitive: false).hasMatch(clean);
+
+String? _instructionPlace(String clean) {
+  final patterns = [
+    RegExp(
+      r'^check\s+in\s+at\s+(.+?)(?=\s+at\s+\d{1,2}(?::|\.)\d{2}|[.]?$)',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'^return\s+(?:back\s+)?to\s+(.+?)(?=\s+from\b|\s+at\s+\d|\s+arriv\w*\b|[.]?$)',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'^(?:fly|flight|travel|train|take\s+(?:a\s+)?train|day\s+trip)\s+(?:back\s+)?to\s+(.+?)(?=\s+(?:arriv\w*|depart\w*)\b|[,.;]|$)',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'\bto\s+(.+?)(?=\s+(?:arriv\w*|depart\w*)\b|[,.;]|$)',
+      caseSensitive: false,
+    ),
+  ];
+  for (final pattern in patterns) {
+    final match = pattern.firstMatch(clean);
+    final candidate = _cleanExpression(match?.group(1));
+    if (candidate != null) return candidate;
+  }
+  return null;
+}
+
+List<String> _travelPlaceExpressions(CleanStopResult cleanResult) {
+  final out = <String>[];
+  for (final clause in cleanResult.clean.split(RegExp(r'[,.;]'))) {
+    final match = RegExp(
+      r'\b(?:to|in|from)\s+(.+?)(?=\s+(?:arriv\w*|depart\w*|and\s+back|then\b)|$)',
+      caseSensitive: false,
+    ).firstMatch(clause);
+    final candidate = _cleanExpression(match?.group(1));
+    if (candidate != null) out.add(candidate);
+  }
+
+  for (final parenthetical in cleanResult.parens) {
+    if (_looksLikePlaceParenthetical(parenthetical)) {
+      final candidate = _cleanExpression(parenthetical);
+      if (candidate != null) out.add(candidate);
+    }
+  }
+  return _uniqueExpressions(out);
+}
+
+bool _looksLikePlaceParenthetical(String text) {
+  final words = areaTokens(text);
+  if (words.isEmpty || words.length > 4) return false;
+  if (words.every(_categoryWords.contains)) return false;
+  return RegExp(r'^\p{Lu}', unicode: true).hasMatch(text.trim());
+}
+
+const _categoryWords = {
+  'archery',
+  'bar',
+  'brunch',
+  'burger',
+  'cabaret',
+  'cafe',
+  'climbing',
+  'coffee',
+  'cookie',
+  'market',
+  'massage',
+  'museum',
+  'park',
+  'shopping',
+  'snacks',
+  'thai',
+  'viet',
+};
+
+bool _hasCategoryAnnotation(CleanStopResult result) => result.parens.any(
+      (text) {
+        final words = areaTokens(text);
+        return words.isNotEmpty && words.every(_categoryWords.contains);
+      },
+    );
+
+String? _cleanExpression(String? value) {
+  if (value == null) return null;
+  var clean = value.trim();
+  clean = clean.replaceAll(
+      RegExp(
+          r'\s+(?:at\s+\d{1,2}(?::|\.)\d{2}.*|arriv\w*\s+.*|\d{1,2}(?::|\.)\d{2}\s*(?:am|pm)?)$',
+          caseSensitive: false),
+      '');
+  clean = clean.replaceAll(RegExp(r'^[\s,:;.!?\-–—]+|[\s,:;.!?\-–—]+$'), '');
+  return clean.isEmpty ? null : clean;
+}
+
+List<String> _uniqueExpressions(Iterable<String> values) {
+  final seen = <String>{};
+  return [
+    for (final value in values)
+      if (seen.add(value.toLowerCase())) value,
+  ];
 }
 
 String? _mealPayload(String raw, String clean) {

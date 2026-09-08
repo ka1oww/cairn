@@ -162,7 +162,24 @@ class ParsedTime {
 
 /// What a stop *is* for tap-to-Maps.
 enum StopKind {
+  /// A single place the traveller wrote as a committed stop.
   place,
+
+  /// A line such as `Activities` or `Food` that organizes following lines.
+  /// It remains visible but is never a Maps query.
+  sectionLabel,
+
+  /// A conditional or optional branch the traveller has not committed to.
+  alternative,
+
+  /// An instruction carrying one separable place expression, such as
+  /// `Fly to Prague`. [Stop.placeText] is the expression, not the whole line.
+  placeInstruction,
+
+  /// One source line carrying several possible place expressions. The line
+  /// stays atomic and [placesOnLine] exposes the choices for review.
+  multiPlace,
+
   areaHeading,
   mealLabel,
   note,

@@ -157,9 +157,9 @@
             "lineNumber": 15,
             "text": "Day trip to Kamakura"
           },
-          "kind": "place",
+          "kind": "placeInstruction",
           "area": null,
-          "placeText": "Day trip to Kamakura"
+          "placeText": "Kamakura"
         },
         {
           "text": "Tsurugaoka Hachimangu and Komachi-dori",
