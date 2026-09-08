@@ -513,9 +513,11 @@ a "change one, change all" edge:
     first sync froze — so a plan postponed or extended after it reached the
     server no longer reads as live on every phone and closed on the server.
     Deriving it from a table clients write is why `0016` also guards that
-    table: `trip_itinerary_days_guard_closed_trip` refuses every write to a
-    closed trip's days, so the close cannot be lifted back off an archived
-    record, while deleting the trip outright still cascades.
+    table, and `0017` widens the same one-body guard
+    (`guard_closed_trip_itinerary_write`) to all four itinerary tables:
+    every write to a closed trip's plan is refused, so the close cannot be
+    lifted back off an archived record and its plan cannot be rewritten,
+    while deleting the trip outright still cascades.
     What the close does not take, on either side, is a
     person's hold on their own photograph. See
     `docs/decisions/2026-08-26-the-ending.md`.

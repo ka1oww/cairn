@@ -537,7 +537,8 @@
       in <code>CaptureFlow.turnTheDayOver</code> and in <code>photos_insert_trip_member</code>.
       Since <code>0016</code> all four server-side gates read one function that derives the last
       day from <code>trip_itinerary_days</code> rather than from the <code>trips.end_date</code>
-      the first sync froze, and a guard on that table keeps a closed trip's days unwritable.
+      the first sync froze, and since <code>0017</code> one guard body keeps a closed trip's
+      plan unwritable on all four itinerary tables.
       Eight phones means one wrong clock. What it never takes is a person's hold on their own
       photograph.</li>
     </ol>
