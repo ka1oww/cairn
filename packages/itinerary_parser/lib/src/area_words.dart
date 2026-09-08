@@ -469,10 +469,22 @@ final RegExp _wordRegExp = RegExp(
 /// heading, made once more where the anchor vocabulary needs it. In these
 /// scripts an uncapitalized word *is* what a name looks like, so a
 /// capitalization test refuses every name the script can write.
+///
+/// `\p{Lm}` rides alongside because Japanese spells everyday names with
+/// modifier letters: the katakana prolonged-sound mark `ー` (U+30FC) in
+/// `東京タワー` and `ラーメン`, the iteration mark `々` (U+3005) in `代々木`.
+/// A class of `\p{Lo}` alone refused all three, silently. `\p{Lm}` is a
+/// companion and never sufficient on its own: at least one `\p{Lo}` letter
+/// is required, because a word made only of marks names nothing. Lowercase
+/// Latin, Greek and Cyrillic are `\p{Ll}`, never `\p{Lo}` or `\p{Lm}`, so
+/// the caseless branch still cannot leak into them.
 bool isCaselessScriptWord(String word) =>
     word.isNotEmpty && _caselessWordRegExp.hasMatch(word);
 
-final RegExp _caselessWordRegExp = RegExp(r'^[\p{Lo}\p{M}]+$', unicode: true);
+final RegExp _caselessWordRegExp = RegExp(
+  r'^[\p{Lm}\p{M}]*\p{Lo}[\p{Lo}\p{Lm}\p{M}]*$',
+  unicode: true,
+);
 
 /// The shortest a word may be and still anchor an area.
 ///
@@ -482,7 +494,9 @@ final RegExp _caselessWordRegExp = RegExp(r'^[\p{Lo}\p{M}]+$', unicode: true);
 /// there and not an abbreviation of one: `京都` is Kyoto, `大阪` is Osaka,
 /// `東京` is Tokyo, `서울` is Seoul. The old flat `length >= 3` refused every
 /// one of them, and it counted UTF-16 units rather than characters while it
-/// did so.
+/// did so. The caseless test admits the modifier letters those scripts
+/// write names with (`ー`, `々`), so `代々木` takes the two-point floor
+/// rather than being counted as an alphabetic word.
 bool isLongEnoughToAnchor(String word) {
   final length = word.runes.length;
   return isCaselessScriptWord(word) ? length >= 2 : length >= 3;

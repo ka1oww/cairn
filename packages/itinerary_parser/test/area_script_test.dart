@@ -56,6 +56,19 @@ void main() {
         expect(looksLikeANameWord(word), isTrue);
       });
     }
+    for (final word in ['ラーメン', '東京タワー', '代々木']) {
+      test('$word reads as a name word despite its modifier letter', () {
+        // The prolonged-sound mark U+30FC and the iteration mark U+3005 are
+        // \p{Lm}, not \p{Lo}; a class of \p{Lo} alone refused all three.
+        expect(isCaselessScriptWord(word), isTrue);
+        expect(looksLikeANameWord(word), isTrue);
+      });
+    }
+    test('modifier letters alone name nothing', () {
+      expect(isCaselessScriptWord('ー'), isFalse);
+      expect(isCaselessScriptWord('々ー'), isFalse);
+      expect(looksLikeANameWord('ー'), isFalse);
+    });
     test('a lowercase Latin word still does not', () {
       // Greek and Cyrillic lowercase are \p{Ll}, never \p{Lo}, so the
       // caseless branch cannot leak into them either.
