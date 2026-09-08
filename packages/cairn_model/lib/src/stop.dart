@@ -79,8 +79,13 @@ final class Stop {
   /// in the editor is tappable without anything having to say so.
   final StopKind kind;
 
+  /// The parser-extracted place expression, kept apart from the verbatim
+  /// [text]. Null means the parser did not find one.
   final String? placeText;
 
+  /// Parser-extracted place expressions in source order. This keeps a
+  /// compound or alternative line's choices without turning it into several
+  /// committed stops.
   final List<String> placeCandidates;
 
   /// The area in force for this stop — what a Maps search appends.
@@ -142,18 +147,17 @@ final class Stop {
 
   @override
   int get hashCode => Object.hash(
-    text,
-    time,
-    kind,
-    placeText,
-    Object.hashAll(placeCandidates),
-    area,
-    areaSource,
-  );
+        text,
+        time,
+        kind,
+        placeText,
+        Object.hashAll(placeCandidates),
+        area,
+        areaSource,
+      );
 
   @override
-  String toString() =>
-      'Stop(${time == null ? '' : '${time!.iso} '}$text'
+  String toString() => 'Stop(${time == null ? '' : '${time!.iso} '}$text'
       '${kind == StopKind.place ? '' : ' <${kind.name}>'}'
       '${area == null ? '' : ' [$area:${areaSource?.name}]'})';
 }

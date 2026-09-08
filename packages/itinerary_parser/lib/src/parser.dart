@@ -38,10 +38,8 @@ ParseResult parseItinerary(
   bool monthFirstNumericDates = false,
   AreaGazetteer? gazetteer,
 }) {
-  var rawLines = text
-      .replaceAll('\r\n', '\n')
-      .replaceAll('\r', '\n')
-      .split('\n');
+  var rawLines =
+      text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
   // Paste-path furniture strip: blank provably repeated print furniture
   rawLines = _stripPasteFurniture(rawLines);
   final lines = <_Line>[
@@ -212,8 +210,7 @@ ParseResult _annotateWithAreas(
           );
         } else {
           final setByLine = assignment.setByLine;
-          final setBy =
-              setByLine != null &&
+          final setBy = setByLine != null &&
                   setByLine != s.sourceLine.lineNumber &&
                   setByLine > 0 &&
                   setByLine <= plines.length
@@ -298,11 +295,12 @@ abstract final class ItineraryParser {
     String text, {
     DateTime? tripStartDate,
     bool monthFirstNumericDates = false,
-  }) => parseItinerary(
-    text,
-    tripStartDate: tripStartDate,
-    monthFirstNumericDates: monthFirstNumericDates,
-  );
+  }) =>
+      parseItinerary(
+        text,
+        tripStartDate: tripStartDate,
+        monthFirstNumericDates: monthFirstNumericDates,
+      );
 }
 
 class _Line {
@@ -442,8 +440,7 @@ _Classified _classifyLine(
       // A numeric range names no single day. Keep it as an ordinary line
       // rather than binding its first half and inventing a day from search
       // controls or opening hours such as `9/9 - 9/10`.
-      final isNumericRange =
-          dateMatch.trailingText != null &&
+      final isNumericRange = dateMatch.trailingText != null &&
           RegExp(r'^\d{1,2}/\d{1,2}(?:/\d{2,4})?$')
               .hasMatch(dateMatch.trailingText!.trim());
       if (!isNumericRange) {
@@ -791,15 +788,13 @@ ParseResult _buildHeaderModeResult(
         if (m.hasFullDate && m.year == null && !impossible) {
           firstYearlessDate ??= YearlessDate(day: m.day!, month: m.month!);
         }
-        final resolvedDate = impossible
-            ? null
-            : _resolveDateHeaderDate(m, tripStartDate);
+        final resolvedDate =
+            impossible ? null : _resolveDateHeaderDate(m, tripStartDate);
         // A named weekday beside a resolved date is checked, not trusted
         // blind: on a disagreement the date is kept (numbers are harder to
         // mistype than a weekday word) and the doubt is surfaced so the
         // confirmation screen asks instead of the parser correcting anyone.
-        final weekdayDisagrees =
-            resolvedDate != null &&
+        final weekdayDisagrees = resolvedDate != null &&
             m.weekday != null &&
             resolvedDate.weekday != m.weekday;
         final DayUncertainty? uncertainty;

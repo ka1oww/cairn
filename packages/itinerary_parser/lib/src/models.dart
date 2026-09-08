@@ -205,10 +205,10 @@ class AreaHint {
   String get normalized => text.toLowerCase().trim();
 
   Map<String, dynamic> toJson() => {
-    'text': text,
-    'source': source.name,
-    'setBy': setBy?.toJson(),
-  };
+        'text': text,
+        'source': source.name,
+        'setBy': setBy?.toJson(),
+      };
 
   @override
   bool operator ==(Object other) =>
@@ -236,7 +236,14 @@ class Stop {
   final SourceLine sourceLine;
   final StopKind kind;
   final AreaHint? area;
+
+  /// The parser-extracted place expression, if this line has one. It is
+  /// separate from [text], which remains the source line verbatim.
   final String? placeText;
+
+  /// Every parser-extracted place expression in source order. A compound or
+  /// alternative line can carry several; a line with no usable expression is
+  /// empty rather than guessed at.
   final List<String> placeCandidates;
 
   const Stop({
@@ -253,14 +260,14 @@ class Stop {
   bool get isStarred => time != null;
 
   Map<String, dynamic> toJson() => {
-    'text': text,
-    'time': time?.toJson(),
-    'isStarred': isStarred,
-    'sourceLine': sourceLine.toJson(),
-    'kind': kind.name,
-    'area': area?.toJson(),
-    'placeText': placeText,
-  };
+        'text': text,
+        'time': time?.toJson(),
+        'isStarred': isStarred,
+        'sourceLine': sourceLine.toJson(),
+        'kind': kind.name,
+        'area': area?.toJson(),
+        'placeText': placeText,
+      };
 
   @override
   String toString() => 'Stop(${time != null ? '${time!.toIso()} ' : ''}$text)';
@@ -354,13 +361,13 @@ class DateCandidate {
   DateTime inYear(int year) => DateTime(year, month, day);
 
   Map<String, dynamic> toJson() => {
-    'day': day,
-    'month': month,
-    'year': year,
-    'text': text,
-    'headerText': headerText,
-    'ambiguousNumericOrder': ambiguousNumericOrder,
-  };
+        'day': day,
+        'month': month,
+        'year': year,
+        'text': text,
+        'headerText': headerText,
+        'ambiguousNumericOrder': ambiguousNumericOrder,
+      };
 
   @override
   bool operator ==(Object other) =>
@@ -439,16 +446,16 @@ class ParsedDay {
   });
 
   Map<String, dynamic> toJson() => {
-    'index': index,
-    'date': date == null ? null : _formatDate(date!),
-    'place': place,
-    'stops': stops.map((s) => s.toJson()).toList(),
-    'confidence': confidence.name,
-    'uncertainty': uncertainty?.slug,
-    'headerWeekday': headerWeekday,
-    'headerSourceLine': headerSourceLine?.toJson(),
-    'dateCandidate': dateCandidate?.toJson(),
-  };
+        'index': index,
+        'date': date == null ? null : _formatDate(date!),
+        'place': place,
+        'stops': stops.map((s) => s.toJson()).toList(),
+        'confidence': confidence.name,
+        'uncertainty': uncertainty?.slug,
+        'headerWeekday': headerWeekday,
+        'headerSourceLine': headerSourceLine?.toJson(),
+        'dateCandidate': dateCandidate?.toJson(),
+      };
 
   @override
   String toString() =>
@@ -521,9 +528,9 @@ class UnplacedLine {
   const UnplacedLine({required this.sourceLine, required this.reason});
 
   Map<String, dynamic> toJson() => {
-    'sourceLine': sourceLine.toJson(),
-    'reason': reason.slug,
-  };
+        'sourceLine': sourceLine.toJson(),
+        'reason': reason.slug,
+      };
 
   @override
   String toString() =>
@@ -652,12 +659,12 @@ class ParseResult {
   });
 
   Map<String, dynamic> toJson() => {
-    'days': days.map((d) => d.toJson()).toList(),
-    'unplacedLines': unplacedLines.map((u) => u.toJson()).toList(),
-    'overallConfidence': overallConfidence.name,
-    'usedHeaderlessFallback': usedHeaderlessFallback,
-    'hasAmbiguousNumericDates': hasAmbiguousNumericDates,
-  };
+        'days': days.map((d) => d.toJson()).toList(),
+        'unplacedLines': unplacedLines.map((u) => u.toJson()).toList(),
+        'overallConfidence': overallConfidence.name,
+        'usedHeaderlessFallback': usedHeaderlessFallback,
+        'hasAmbiguousNumericDates': hasAmbiguousNumericDates,
+      };
 
   @override
   String toString() =>

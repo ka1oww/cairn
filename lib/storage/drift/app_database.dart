@@ -68,8 +68,11 @@ class ItineraryStops extends Table {
   /// The stable [StopKind.name] written for this line.
   TextColumn get kind => text().withDefault(const Constant('place'))();
 
+  /// The parser-extracted place expression, distinct from [stopText].
   TextColumn get placeText => text().nullable()();
 
+  /// JSON-encoded parser place expressions in source order. This is local
+  /// metadata, so an older server's itinerary row is reclassified on pull.
   TextColumn get placeCandidatesJson => text().nullable()();
 
   /// Area in force for this stop, or null = send nothing (rule 3).
