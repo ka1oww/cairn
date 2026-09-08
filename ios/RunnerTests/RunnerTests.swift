@@ -208,3 +208,30 @@ class TextRecognitionRenderScaleTests: XCTestCase {
     return try XCTUnwrap(CGPDFDocument(provider))
   }
 }
+
+final class SessionKeychainTests: XCTestCase {
+  func testWritesUpdatesReadsAndDeletesOneCredential() throws {
+    let service = "com.ka1o.cairn.tests.\(UUID().uuidString)"
+    let account = "anonymous-account"
+    defer {
+      try? SessionKeychain.write(nil, service: service, account: account)
+    }
+
+    XCTAssertNil(try SessionKeychain.read(service: service, account: account))
+
+    try SessionKeychain.write("first", service: service, account: account)
+    XCTAssertEqual(
+      try SessionKeychain.read(service: service, account: account),
+      "first"
+    )
+
+    try SessionKeychain.write("rotated", service: service, account: account)
+    XCTAssertEqual(
+      try SessionKeychain.read(service: service, account: account),
+      "rotated"
+    )
+
+    try SessionKeychain.write(nil, service: service, account: account)
+    XCTAssertNil(try SessionKeychain.read(service: service, account: account))
+  }
+}

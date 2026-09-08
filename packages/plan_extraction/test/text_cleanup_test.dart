@@ -122,6 +122,50 @@ void main() {
   });
 
   group('the print furniture Wanderlog draws between stops', () {
+    test('repeated Save controls are removed from place names', () {
+      final out = clean([
+        ['Day 1', 'Asahiyama Zoo Save'],
+        ['Day 2', 'Kanno Farm Save'],
+        ['Day 3', 'Tokiwa Park Save'],
+      ]);
+
+      expect(out.where((line) => line.isNotEmpty), [
+        'Day 1',
+        'Asahiyama Zoo',
+        'Day 2',
+        'Kanno Farm',
+        'Day 3',
+        'Tokiwa Park',
+      ]);
+    });
+
+    test('one real line ending in Save is left alone', () {
+      expect(
+        clean([
+          ['Day 1', 'Remember to Save'],
+        ]),
+        ['Day 1', 'Remember to Save'],
+      );
+    });
+
+    test('a repeated search date range goes, but one real range stays', () {
+      const range = '9/9 – 9/10';
+      expect(
+        clean([
+          ['Day 1', range],
+          ['Day 2', range],
+          ['Day 3', range],
+        ]).where((line) => line.isNotEmpty),
+        ['Day 1', 'Day 2', 'Day 3'],
+      );
+      expect(
+        clean([
+          ['Day 1', range],
+        ]),
+        ['Day 1', range],
+      );
+    });
+
     test('travel-time dividers go', () {
       final out = clean([
         [

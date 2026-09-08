@@ -48,10 +48,33 @@ ParseResult parseItinerary(
           stripWhatsAppPrefix(rawLines[i]) != null),
   ];
 
-  final classified = <_Classified>[
+  var classified = <_Classified>[
     for (var i = 0; i < lines.length; i++)
-      _classifyLine(lines[i], lines, i, monthFirstNumericDates),
+      _classifyLine(
+        lines[i],
+        lines,
+        i,
+        monthFirstNumericDates,
+        allowBarePlaceHeaders: true,
+      ),
   ];
+
+  // A numbered day heading is explicit structure. Once a plan contains one,
+  // bare proper-noun lines inside its days are stops, not competing inferred
+  // headings. This matters for printed guides, whose place cards and wrapped
+  // prose otherwise split one numbered day into dozens of invented ones.
+  if (classified.any((line) => line.kind == _Kind.dayHeader)) {
+    classified = <_Classified>[
+      for (var i = 0; i < lines.length; i++)
+        _classifyLine(
+          lines[i],
+          lines,
+          i,
+          monthFirstNumericDates,
+          allowBarePlaceHeaders: false,
+        ),
+    ];
+  }
 
   final headerFound = classified.any(
     (c) =>
@@ -299,7 +322,12 @@ class _Classified {
 }
 
 _Classified _classifyLine(
-    _Line line, List<_Line> all, int index, bool monthFirstNumericDates) {
+  _Line line,
+  List<_Line> all,
+  int index,
+  bool monthFirstNumericDates, {
+  required bool allowBarePlaceHeaders,
+}) {
   if (isBlank(line.raw)) {
     return _Classified(_Kind.blank, line);
   }
@@ -354,27 +382,19 @@ _Classified _classifyLine(
     final dateMatch = tryParseDateHeader(cleaned.trim(),
         monthFirstNumericDates: monthFirstNumericDates);
     if (dateMatch != null) {
-      // Date-range header demotion: "Itinerary 11/30 - 12/17" trailing "12/17" is not a place
-      if (dateMatch.trailingText != null &&
+      // A numeric range names no single day. Keep it as an ordinary line
+      // rather than binding its first half and inventing a day from search
+      // controls or opening hours such as `9/9 - 9/10`.
+      final isNumericRange = dateMatch.trailingText != null &&
           RegExp(r'^\d{1,2}/\d{1,2}(?:/\d{2,4})?$')
-              .hasMatch(dateMatch.trailingText!.trim())) {
-        return _Classified(
-          _Kind.dateHeader,
-          line,
-          dateMatch: DateHeaderMatch(
-            day: dateMatch.day,
-            month: dateMatch.month,
-            year: dateMatch.year,
-            weekday: dateMatch.weekday,
-            trailingText: null,
-            numericAsWritten: dateMatch.numericAsWritten,
-          ),
-        );
+              .hasMatch(dateMatch.trailingText!.trim());
+      if (!isNumericRange) {
+        return _Classified(_Kind.dateHeader, line, dateMatch: dateMatch);
       }
-      return _Classified(_Kind.dateHeader, line, dateMatch: dateMatch);
     }
 
-    if (looksLikeProperNounHeader(cleaned) &&
+    if (allowBarePlaceHeaders &&
+        looksLikeProperNounHeader(cleaned) &&
         _nextNonBlankLooksLikeListItem(all, index)) {
       return _Classified(_Kind.placeHeader, line, placeText: cleaned.trim());
     }

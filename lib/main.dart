@@ -12,8 +12,8 @@ import 'bootstrap.dart';
 /// to somebody the trip does not hold.
 ///
 /// What it does *not* do is wait on a network to find that out. A phone that
-/// has signed in before reads its id out of the vault, which is a local file;
-/// only a first-ever launch has an account to mint, and even that one has a
+/// has signed in before reads its id out of the local Keychain vault. Only a
+/// first-ever launch has an account to mint, and even that one has a
 /// short budget (`resolveMemberId`) rather than the full request timeout.
 ///
 /// A phone that cannot reach the server, on a launch that has nothing stored,

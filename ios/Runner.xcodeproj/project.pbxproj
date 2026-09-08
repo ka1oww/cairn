@@ -13,6 +13,7 @@
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		CA11EC5E00000000000000D1 /* TextRecognition.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11EC5F00000000000000D1 /* TextRecognition.swift */; };
 		CA11EC6500000000000000D1 /* DeviceTimeZone.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11EC6600000000000000D1 /* DeviceTimeZone.swift */; };
+		CA11EC6800000000000000D1 /* SessionVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11EC6700000000000000D1 /* SessionVault.swift */; };
 		CA11EC6100000000000000D1 /* TextLineOrder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11EC6000000000000000D1 /* TextLineOrder.swift */; };
 		CA11EC6200000000000000D1 /* TextLineOrder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11EC6000000000000000D1 /* TextLineOrder.swift */; };
 		CA11EC6400000000000000D1 /* TextLineOrderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11EC6300000000000000D1 /* TextLineOrderTests.swift */; };
@@ -56,6 +57,7 @@
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		CA11EC5F00000000000000D1 /* TextRecognition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextRecognition.swift; sourceTree = "<group>"; };
 		CA11EC6600000000000000D1 /* DeviceTimeZone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTimeZone.swift; sourceTree = "<group>"; };
+		CA11EC6700000000000000D1 /* SessionVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionVault.swift; sourceTree = "<group>"; };
 		CA11EC6000000000000000D1 /* TextLineOrder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextLineOrder.swift; sourceTree = "<group>"; };
 		CA11EC6300000000000000D1 /* TextLineOrderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextLineOrderTests.swift; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -135,6 +137,7 @@
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				CA11EC5F00000000000000D1 /* TextRecognition.swift */,
 				CA11EC6600000000000000D1 /* DeviceTimeZone.swift */,
+				CA11EC6700000000000000D1 /* SessionVault.swift */,
 				CA11EC6000000000000000D1 /* TextLineOrder.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
@@ -301,6 +304,7 @@
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				CA11EC5E00000000000000D1 /* TextRecognition.swift in Sources */,
 				CA11EC6500000000000000D1 /* DeviceTimeZone.swift in Sources */,
+				CA11EC6800000000000000D1 /* SessionVault.swift in Sources */,
 				CA11EC6100000000000000D1 /* TextLineOrder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -26,9 +26,9 @@ or `.pdf`, and the app says which formats this build actually reads) or a photo
 or screenshot put through on-device text recognition. Either way the text lands
 in the paste box for the person to see and fix before the parser reads it, and
 recognition quality is still to be judged on a real device rather than by the
-test suite. A printed Wanderlog plan is read, but not yet read *well* — the
-text comes out right and the parser then turns a three-day guide into
-thirty-two days, so that path currently needs fixing rather than showing off.
+test suite. The repository's printed Wanderlog fixture now reads as its three
+real days. Repeated print controls are removed conservatively before the
+explicit numbered day structure reaches the parser.
 The Trail, the Pool and the capture that fills it are built, and five pure-Dart
 packages sit under them.
 

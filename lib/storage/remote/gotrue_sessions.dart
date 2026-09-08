@@ -38,6 +38,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cairn_model/cairn_model.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -81,7 +82,9 @@ class NoVault implements SessionVault {
   Future<void> write(StoredSession? session) async {}
 }
 
-/// One small file in the app's support directory.
+/// The plaintext vault used by releases before credentials moved to the
+/// Keychain. It remains only so [KeychainSessionVault] can migrate an existing
+/// anonymous account once and remove the file.
 ///
 /// Not the documents directory, where the photographs are: this is not the
 /// person's data, it is a credential, and the support directory is the one iOS
@@ -151,6 +154,94 @@ class FileSessionVault implements SessionVault {
         // allowed to turn that recoverable outcome into a launch failure.
       }
       return;
+    }
+  }
+}
+
+/// The narrow storage operation the Keychain-backed vault needs.
+///
+/// Kept separate from [SessionVault] so tests can prove migration and the
+/// single-value write without invoking a platform channel.
+abstract interface class SecureSessionValueStore {
+  Future<String?> read();
+  Future<void> write(String? value);
+}
+
+/// The iOS Keychain channel implemented by `ios/Runner/SessionVault.swift`.
+class MethodChannelSessionValueStore implements SecureSessionValueStore {
+  const MethodChannelSessionValueStore();
+
+  static const _channel = MethodChannel('cairn/session_vault');
+
+  @override
+  Future<String?> read() => _channel.invokeMethod<String>('read');
+
+  @override
+  Future<void> write(String? value) =>
+      _channel.invokeMethod<void>('write', value);
+}
+
+/// Keeps the anonymous account's id and refresh token as one Keychain value.
+///
+/// One JSON value preserves the pairing that matters when GoTrue rotates a
+/// refresh token. A legacy plaintext file is read only when the Keychain is
+/// empty, copied into the Keychain, then deleted after the secure write
+/// succeeds. New credentials are never written to the legacy vault.
+class KeychainSessionVault implements SessionVault {
+  KeychainSessionVault({
+    this.secure = const MethodChannelSessionValueStore(),
+    this.legacy,
+  });
+
+  final SecureSessionValueStore secure;
+  final SessionVault? legacy;
+
+  @override
+  Future<StoredSession?> read() async {
+    final secured = await _readSecure();
+    if (secured != null) return secured;
+
+    final old = await legacy?.read();
+    if (old == null) return null;
+    if (await _writeSecure(old)) await legacy?.write(null);
+    return old;
+  }
+
+  @override
+  Future<void> write(StoredSession? session) async {
+    if (!await _writeSecure(session)) return;
+    await legacy?.write(null);
+  }
+
+  Future<StoredSession?> _readSecure() async {
+    try {
+      final encoded = await secure.read();
+      if (encoded == null || encoded.isEmpty) return null;
+      final body = jsonDecode(encoded);
+      if (body is! Map) return null;
+      final token = body['refresh_token'];
+      final id = body['user_id'];
+      if (token is! String || token.isEmpty) return null;
+      if (id is! String || id.isEmpty) return null;
+      return StoredSession(userId: id, refreshToken: token);
+    } on Exception {
+      return null;
+    }
+  }
+
+  Future<bool> _writeSecure(StoredSession? session) async {
+    try {
+      await secure.write(
+        session == null
+            ? null
+            : jsonEncode({
+                'user_id': session.userId,
+                'refresh_token': session.refreshToken,
+              }),
+      );
+      return true;
+    } on Exception {
+      return false;
     }
   }
 }
