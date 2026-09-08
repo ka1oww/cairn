@@ -1,8 +1,9 @@
 import 'package:cairn_model/cairn_model.dart';
 import 'package:test/test.dart';
 
-/// The subtle one: a day's clock is fixed where the day starts, and does not
-/// move when the trip crosses a border in the afternoon.
+/// The legacy domain model's subtle rule: a day's stored clock does not move
+/// when the trip crosses a border in the afternoon. The live ping scheduler
+/// uses the persisted destination IANA zone instead.
 void main() {
   // Tokyo in June is UTC+9; London in June is UTC+1 (BST).
   final tokyo =

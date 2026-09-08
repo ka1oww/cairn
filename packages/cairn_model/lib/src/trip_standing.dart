@@ -117,10 +117,10 @@ TripStanding tripStandingAt({
 /// day and so no end either.
 ///
 /// Each date is a bare calendar date carried at UTC midnight; the day itself
-/// ends at the *next* midnight on the trip's clock, which is what [utcOffset]
-/// subtracts. It is the caller's one offset for the whole trip, not the
-/// device's zone at the instant of asking — the same approximation the trip's
-/// clock makes everywhere else until a stored one lands.
+/// ends at the *next* midnight on the supplied fixed-offset clock, which is
+/// what [utcOffset] subtracts. This is retained for legacy callers; production
+/// trip-clock code uses [tripEndsAtInTimeZone] and its persisted destination
+/// IANA name instead.
 ///
 /// **Written here and not on either side of the seam**: the app's
 /// `tripEndsAtFor` and the sync's `TripSync._endsAt` both call this, so the

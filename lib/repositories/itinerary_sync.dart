@@ -68,14 +68,11 @@ enum SyncStanding {
   /// The trip has never reached a server and the phone cannot yet say
   /// everything the shared row needs, so it has not been created.
   ///
-  /// A real gap, named rather than papered over. Since 2026-08-27 it is one
-  /// gap and not three: the clock is the phone's own IANA zone and the name
-  /// is no longer a gate at all
-  /// (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`), so what
-  /// is left is **a plan that has not said when it happens**. `start_date`
-  /// and `end_date` are `not null` on the server and inventing either would
-  /// be the guess this whole file refuses; a plan with no dates, or one whose
-  /// last day is still open, therefore waits here until somebody dates it.
+  /// A real gap, named rather than papered over. A new shared row requires an
+  /// explicit destination IANA zone and a plan that has said when it happens.
+  /// `start_date` and `end_date` are `not null` on the server and inventing
+  /// either would be the guess this whole file refuses; a plan with no dates,
+  /// an open final day, or no destination zone therefore waits here.
   ///
   /// **This is the standing a person has to be shown.** It is the one state
   /// in which the plan is quietly staying on this phone for a reason the
@@ -145,9 +142,8 @@ class PendingTripRow {
 
   /// The plan's first *resolved* date, or null when every day's date is still
   /// open, and the date of the plan's last day, or null when that day's date
-  /// is still open — `cairn_model`'s `tripEndsAtFrom` decides the second, so
-  /// the row cannot claim an ending the phone would not. A source is free to
-  /// answer anyway, or to decline.
+  /// is still open. The server needs these date-only values to create its
+  /// immutable trip row; a source is free to answer anyway, or to decline.
   final String? firstDateIso;
   final String? lastDateIso;
 
@@ -807,11 +803,11 @@ class TripSync {
   /// Read off the stored itinerary rather than taken from above, because
   /// nothing above this seam knows this class exists — that is the whole
   /// arrangement, and a trip's ending handed in from a provider would break
-  /// it. The *rule* is not this side's either: `tripEndsAtFrom` decides it,
-  /// the same call `tripEndsAtFor` makes on the app's side, so a plan whose
-  /// last day is undated is as unended here as it is on screen. All this owes
-  /// it is the days in plan order, nulls kept, since which day is last is the
-  /// whole of the question.
+  /// it. The *rule* is not this side's either: a persisted destination zone
+  /// uses `tripEndsAtInTimeZone`, the same primary call `tripEndsAtFor` makes
+  /// on the app's side. A plan whose last day is undated is as unended here as
+  /// it is on screen. All this owes it is the days in plan order, nulls kept,
+  /// since which day is last is the whole of the question.
   Future<DateTime?> _endsAt() async {
     final days = (await database.readItineraryDays()).toList()
       ..sort((a, b) => a.number.compareTo(b.number));

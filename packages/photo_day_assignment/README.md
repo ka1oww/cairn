@@ -12,6 +12,9 @@ book) is wrong and nobody notices until it's too late to fix. So it never
 guesses quietly — every result says exactly how sure it is, and a low-
 confidence guess is always marked low.
 
+Its per-day zones are for photo placement only. They never supply Cairn's live
+ping clock, which is one persisted destination IANA zone.
+
 ## Why not just use the EXIF timestamp?
 
 `DateTimeOriginal` in EXIF is a bare string like `2026:03:14 20:00:00` —
@@ -91,7 +94,7 @@ another instant, which is precisely the bug this package exists to prevent.
 `LocalDateTime` only holds wall-clock digits; it can't become a real instant
 until a zone is chosen for it, which is exactly what the ladder above does.
 
-A trip whose own itinerary crosses timezones (not just a photo taken
+A photo-placement itinerary that crosses timezones (not just a photo taken
 somewhere unexpected) can give individual days their own zone:
 
 ```dart

@@ -1,5 +1,5 @@
-/// A trip's shape: when it starts, how many days it runs, and which IANA
-/// timezone(s) its day boundaries are drawn in.
+/// A photo-placement trip shape: when it starts, how many days it runs, and
+/// which IANA timezone(s) its photo-day boundaries are drawn in.
 ///
 /// Most trips have one timezone for their whole duration — set
 /// [defaultTimeZoneName] and leave [timeZoneOverridesByDay] empty. A trip
@@ -7,7 +7,8 @@
 /// advance, not just "a photo happened to be taken abroad") can give
 /// individual days their own zone via [timeZoneOverridesByDay]; each day's
 /// midnight-to-midnight window is then computed in *that* day's own zone.
-/// See the README for how that interacts with GPS-based placement.
+/// This is not Cairn's live ping clock, which is one persisted destination
+/// zone. See the README for how that interacts with GPS-based placement.
 class TripDefinition {
   /// The calendar date of day 1. Only the year/month/day fields matter —
   /// any time-of-day component is ignored, since a day always starts at

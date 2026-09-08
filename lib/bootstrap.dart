@@ -276,8 +276,9 @@ Future<String?> _lateAccountIdFrom(SessionSource sessions) async {
 /// agree with seven other phones, and every screen already reads that store.
 /// What *is* handed up is one read-only stream — where each reconcile got to
 /// ([TripSync.standings]) — because a plan that never left the phone looked
-/// identical to one that had, on every screen, and that silence was the
-/// defect (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`).
+/// identical to one that had, on every screen, and that silence must remain
+/// visible when a destination zone or plan date is still missing
+/// (`docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md`).
 ///
 /// Returns null when nothing syncs, which is every test.
 TripSync? _startSharedFactsSync(

@@ -319,8 +319,8 @@ class PhotoSync {
 
   /// The instant this phone's plan ends, on the trip's clock, or null while
   /// its last day's date is still open. The same read `TripSync._endsAt`
-  /// makes, feeding the same `tripEndsAtFrom` — the rule lives in
-  /// `cairn_model` and is not restated by either caller.
+  /// makes, feeding the same destination-zone-aware ending rule — the rule
+  /// lives in `cairn_model` and is not restated by either caller.
   Future<DateTime?> _endsAt() async {
     final days = (await database.readItineraryDays()).toList()
       ..sort((a, b) => a.number.compareTo(b.number));

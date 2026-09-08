@@ -255,9 +255,9 @@ final class Trip {
   /// "over" is the whole of that question.
   ///
   /// [now] is required rather than read from a clock here, because this
-  /// package has none: a trip has one clock and it follows the itinerary's leg
-  /// (`docs/decisions/2026-08-22-last-calls.md` §4), so the instant is the
-  /// caller's to supply and each day is then read on its own clock.
+  /// package has none. This legacy domain object reads each day on its stored
+  /// clock; the live scheduler instead uses the persisted destination IANA
+  /// zone, and the instant is always the caller's to supply.
   ///
   /// [Member.joinedOnDay] deliberately plays no part. It used to open the days
   /// before someone arrived, back when every other past day stayed shut; now

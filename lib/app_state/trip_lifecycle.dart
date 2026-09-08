@@ -10,9 +10,10 @@
 // What this file supplies is the one input the domain cannot work out for
 // itself: *when the trip ends*, read off a saved plan whose days carry bare
 // calendar dates and no clock. The arithmetic over those dates is the
-// domain's too (`cairn_model`'s `tripEndsAtFrom`) and is deliberately not
-// restated here — the sync's `_endsAt` calls the same function from the other
-// side of the seam, and a rule written on both sides is a rule that drifts.
+// domain's too (`cairn_model`'s `tripEndsAtInTimeZone`) and is deliberately
+// not restated here — the sync's `_endsAt` calls the same function from the
+// other side of the seam, and a rule written on both sides is a rule that
+// drifts.
 // What is left here is reading the plan and handing it over in plan order.
 //
 // Two things worth knowing before changing anything in it:
@@ -42,10 +43,11 @@ import 'trip_providers.dart';
 
 /// The instant [plan]'s last day seals, or null while that end is not known.
 ///
-/// The rule is the domain's — `cairn_model`'s [model.tripEndsAtFrom], which
-/// the sync's own `_endsAt` calls too, so the ending cannot be one thing on
-/// screen and another on the wire. What this supplies is the shape it needs:
-/// the plan's day dates in the plan's own order, nulls kept, since which day
+/// The rule is the domain's — [model.tripEndsAtInTimeZone] for a persisted
+/// destination zone, with [model.tripEndsAtFrom] retained only for legacy
+/// fixed-offset callers. The sync's own `_endsAt` makes the same choice, so
+/// the ending cannot be one thing on screen and another on the wire. What this
+/// supplies is the plan's day dates in plan order, nulls kept, since which day
 /// is *last* is the whole of the question.
 DateTime? tripEndsAtFor(
   TripPlan? plan,

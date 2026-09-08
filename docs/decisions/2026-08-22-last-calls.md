@@ -32,7 +32,7 @@ Already drawn in the design — *"two days already walked, their photos are your
 to scroll"*. The gate exists to make you contribute to the day you are living,
 not to punish you for having arrived late.
 
-## 4. The trip has one clock, and it follows the itinerary's leg
+## 4. The trip has one clock
 
 Every ping slot uses that one clock, so a day stays a single shared day for
 everyone on the trip. A photo's day still comes from where it was taken when
@@ -75,6 +75,6 @@ Land at 16:00 on day one and that day's slots run 16:00–22:30, for however man
 people fit. These are the only two days where the fixed window is reliably
 wrong, and fewer slots on a short day is correct rather than a shortfall to pad.
 
-**On a day that changes country, the clock is fixed where the day starts** and
-only moves at the next day boundary. A day is an artefact, not a measurement:
-one clock from start to finish keeps the time thread honest and the slots stable.
+The destination's IANA zone is the trip's one clock, including when a day
+crosses a border. The current rule and its unknown-zone behaviour live in
+[the destination clock decision](2026-09-08-the-trip-clock-is-the-destination.md).

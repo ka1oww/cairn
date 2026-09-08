@@ -19,8 +19,8 @@ dart test
 | Word | In code | In one sentence |
 | --- | --- | --- |
 | Trip | `Trip` | The whole journey: who is on it, how long it runs, what the plan says, and what time it is. |
-| Trip clock | `TripClock` | The wall clock everyone on the trip shares. Not any phone's. |
-| Day | `TripDay` | One day of the trip, read on the clock it started on. |
+| Trip clock | `TripClock` | Legacy fixed-offset clock value; not the runtime ping clock. |
+| Day | `TripDay` | A legacy domain day that preserves the clock it was built with. |
 | Stop | `Stop` | A place on a day, as the pasted itinerary described it. |
 | Member | `Member` | A person on the trip. |
 | A trip's id | `TripId` | The uuid the phone mints for a trip, before the trip has ever synced. |
@@ -43,25 +43,16 @@ midnight (`docs/decisions/2026-08-22-the-moment.md`, and
 than a grid). Like any artefact it is made somewhere, and it keeps that
 provenance afterwards.
 
-So **a day's clock is fixed where the day starts.** If the group wakes in Tokyo
-and lands in London that afternoon, the whole of that day is still read on
-Tokyo's clock. Its midnight-to-midnight window is Tokyo's, and a photo taken at
-15:00 London time appears on the page at 23:00 — which is what the clock in
-their pockets said all day, and what makes "08:40 breakfast · 23:00 the walk
-back" a day rather than a folder of pictures
-(`docs/decisions/2026-08-22-design-calls.md` §2, "Times show, prominently").
-London's clock governs the *next* day: the first one that *starts* there.
-
-`packages/photo_day_assignment` already draws day boundaries this way — its
-`TripDefinition.timeZoneOverridesByDay` computes "each day's
-midnight-to-midnight window in *that* day's own zone" — and `TripDay.sequence`
-is deliberately the same shape, so an override there and an override here mean
-the same thing.
+The legacy model preserves the clock supplied when each day was built; that
+supports historic photo and gate-domain objects, but it is not the runtime
+schedule's source of truth. Cairn's live trip clock is one persisted destination
+IANA zone, which `trip_moments` resolves on every date. See
+[the destination clock decision](../../docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md).
 
 The model makes the property hard to get wrong rather than merely possible:
 
-- `TripDay.clock` is final and there is no `copyWith`. A day's clock is chosen
-  when the day is built and cannot be moved afterwards.
+- `TripDay.clock` is final and there is no `copyWith`. A legacy day's clock is
+  chosen when the day is built and cannot be moved afterwards.
 - `TripDay.startsAt`, `endsAt` and `clockTimeOf` read that clock and nothing
   else. A day cannot reach the trip, so it cannot accidentally be rendered on
   where the trip ended up.
@@ -78,20 +69,15 @@ A trip has one clock its members share. Nobody's phone decides what time it is
 on the trip: someone still on home time must not be pinged at 3am
 local-to-the-trip, and a day must not seal at eight different midnights.
 
-The decision files do not use the phrase "trip clock", but both existing
-packages already implement one and neither would work without it —
-`trip_moments` places every ping in the trip's own timezone (`tripUtcOffset`,
-and its `quiet_window.dart` refers to a `[TripClock]` that did not exist until
-this package), and `photo_day_assignment` falls back to the trip's zone for any
-photo without GPS (`TripDefinition.defaultTimeZoneName`). `TripClock` is the
-name for the thing they were both already assuming.
+The runtime's authoritative trip clock is the persisted destination IANA name:
+`trip_moments` resolves every ping through that zone's date-specific DST rule.
+`photo_day_assignment` still falls back to a trip zone for photos without GPS
+(`TripDefinition.defaultTimeZoneName`).
 
-It carries **two spellings and resolves neither**: a fixed `utcOffset`, which
-is all `trip_moments` can use, and an optional IANA `zoneId`, which is what
-`photo_day_assignment` and `photos.capture_timezone` need. Converting between
-them takes a timezone database; this package has none and will never have one,
-so a caller that has one passes the answer in
-(`TripClock.zone('Asia/Tokyo', utcOffset: Duration(hours: 9))`).
+`TripClock` is a legacy value type for the older domain and photo-assignment
+surfaces. It carries a fixed `utcOffset` plus an optional IANA `zoneId`, but
+does not resolve one into the other. Do not use it to schedule a new trip; see
+[the destination clock decision](../../docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md).
 
 ## Why the gate is shaped like this
 

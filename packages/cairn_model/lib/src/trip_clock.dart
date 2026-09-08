@@ -1,29 +1,24 @@
 import 'calendar_date.dart';
 import 'clock_time.dart';
 
-/// The clock a trip is read on: the wall clock everyone on the trip looks at,
-/// expressed as an offset from UTC and, where it is known, the IANA zone that
-/// offset came from.
+/// Legacy value model for a trip clock: a fixed UTC offset and, where known,
+/// the IANA zone name it came from.
 ///
 /// A trip has one clock its members share. Nobody's phone gets to decide what
 /// time it is on the trip: someone still on home time must not be pinged at
 /// 3am local-to-the-trip, and a day must not seal at eight different
-/// midnights. `packages/trip_moments` already works this way (`tripUtcOffset`,
-/// and the dangling `[TripClock]` reference in its `quiet_window.dart` that
-/// this type answers), and so does `packages/photo_day_assignment`
-/// (`TripDefinition.defaultTimeZoneName`).
+/// midnights. The production schedule now passes the persisted IANA zone
+/// directly to `trip_moments`; this value remains for the older domain and
+/// photo-assignment types that still carry an offset with their zone name.
 ///
-/// **Two spellings, both carried, neither resolved.** `trip_moments` needs a
-/// fixed [utcOffset] and cannot do DST at all; `photo_day_assignment` needs a
-/// real IANA [zoneId] and has a timezone database to read it with. This
-/// package has no timezone database and never will — it is pure Dart with no
-/// I/O — so it holds whichever spellings a caller knows and converts between
-/// them never. Build a clock with [TripClock.zone] whenever the zone is
-/// known, so the layer below has the name it needs.
+/// **Two spellings, both carried, neither resolved.** This package has no
+/// timezone database, so it cannot derive a date-specific offset from
+/// [zoneId]. New scheduling code must use the IANA-aware `trip_moments`
+/// surface rather than this fixed-offset arithmetic.
 final class TripClock {
   /// How far ahead of UTC this clock reads. Positive is east of Greenwich.
   ///
-  /// This is the value `trip_moments` takes as `tripUtcOffset`.
+  /// This is retained for legacy fixed-offset consumers only.
   final Duration utcOffset;
 
   /// The IANA zone name this clock came from, e.g. `'Asia/Tokyo'`, or null

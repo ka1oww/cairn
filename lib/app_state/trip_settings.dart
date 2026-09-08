@@ -31,10 +31,10 @@
 // Deliberately absent: removing someone (there is nobody else on this phone's
 // roster to remove, and a control that can never fire is chrome), leaving
 // (the same, and a party of one leaving would leave the trip with nobody),
-// changing the trip's clock (the shared row now carries the zone the phone
-// that created it keeps, and nothing on the phone can change it afterwards —
-// `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`), and the link
-// half of sharing (no deep link is registered, and a button that copies
+// changing the trip's clock (the shared row carries an immutable configured
+// destination zone, and nothing on the phone can change it afterwards —
+// `docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md`), and the
+// link half of sharing (no deep link is registered, and a button that copies
 // nothing is a lie).
 //
 // **Present, and new: where the plan stands.** [PlanSharing] is the sentence
@@ -490,8 +490,8 @@ PlanSharing? planSharingFor(SyncStanding? standing, TripPlan? plan) {
 }
 
 /// Whether the plan's last day carries a date. The trip's end is that day's
-/// and nobody else's (`cairn_model`'s `tripEndsAtFrom`), so a plan dated up
-/// to a last day left open still cannot be published.
+/// and nobody else's, through the destination-zone-aware domain rule, so a
+/// plan dated up to a last day left open still cannot be published.
 bool _lastDayUndated(TripPlan? plan) =>
     plan == null || plan.days.isEmpty || plan.days.last.date == null;
 

@@ -61,9 +61,10 @@ Two things that are *not* arrows:
   returns a schedule. Return values and parameters move data up and in without
   the lower layer knowing who asked. Knowledge points down; data flows any
   direction.
-- **A shared rule is not an import.** Three packages encode "a day's clock is
-  fixed where the day starts" without referencing each other. Those couplings
-  are listed under [Invariants that cross the map](#invariants-that-cross-the-map),
+- **A shared rule is not an import.** The runtime scheduler receives one
+  persisted destination IANA zone without referencing storage directly.
+  Photo placement may use a different, GPS-derived local zone for its own
+  purpose. Those couplings are listed under [Invariants that cross the map](#invariants-that-cross-the-map),
   because they break exactly like dependencies do — just without a compiler
   noticing.
 
@@ -423,11 +424,11 @@ vocabulary for the layers *above* the packages, not a dependency of its peers.
 Couplings that behave like dependencies but appear in no import graph. Each is
 a "change one, change all" edge:
 
-1. **The day's clock is fixed where the day starts** — encoded three times, by
-   design, in three sibling packages that cannot see each other:
-   `cairn_model.TripDay` (immutable clock, no `copyWith`),
-   `trip_moments`' day handling (#8), and `photo_day_assignment`'s
-   `timeZoneOverridesByDay`. Nothing but tests and this map keeps them agreeing.
+1. **The runtime trip clock is one persisted destination IANA zone.**
+   `trip_moments` converts each day's slots through that zone's date-specific
+   rule. `cairn_model.TripDay` and `photo_day_assignment` retain separate
+   legacy or photo-placement clocks; neither may substitute a per-day offset
+   for scheduling. Nothing but tests and this map keeps these boundaries clear.
 2. **The gate rule exists twice on purpose, and only twice.** On the phone the
    rule is `cairn_model.GateState.decide` — `Trip.gateFor` answers with it for
    a whole trip, and the app's `lib/app_state/day_gate.dart` answers with it
@@ -441,10 +442,11 @@ a "change one, change all" edge:
    the thing to refuse in review. The rule, since round one: the gate applies
    to the day being lived; every day that has sealed is open to the whole
    party.
-3. **The trip clock has exactly one source**: the `trips` row. Both packages
-   take the zone as a parameter precisely so no phone ever infers it
-   independently — two phones inferring different zones is silent schedule
-   drift with no error anywhere.
+3. **The trip clock has exactly one authoritative source**: `trips.timezone`.
+   The local `trip_facts.time_zone` is its durable offline copy; a new row is
+   created only from explicit destination configuration. Neither package nor
+   phone infers a zone independently — two phones inferring different zones is
+   silent schedule drift with no error anywhere.
 4. **The `trip_moments` derivation is frozen.** Hash, seed namespace, window,
    inset, arithmetic. Changing any of it mid-trip splits the schedule between
    app versions; the only safe change is a loud one (`v2` → `v3`).
@@ -567,13 +569,12 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   the `day_pages` insert→update fallback and the deletion refetch remain
   notes, and no reconciliation of rows against R2 objects exists in any
   direction.
-- **The shared facts' sync is live on an ordinary build — since 27 August 2026
-  and not before — and one test is the only thing that says so.** It was
-  written, tested and correct for weeks while a `String.fromEnvironment` with
-  no default meant no binary anybody would run could create the shared `trips`
-  row; the clock is now the phone's own IANA zone and an unnamed trip
-  publishes under a placeholder the phone maps back to local null
-  (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`).
+- **The shared facts' sync is live when a new trip has an explicit destination
+  zone, and one test is the only thing that says so.** An unset destination
+  zone deliberately leaves the trip local and quiet; an unnamed trip still
+  publishes under a placeholder the phone maps back to local null. The
+  destination-clock decision owns the configuration rule
+  (`docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md`).
   A green `flutter test` still proves nothing about the hosted project:
   every widget test binds `NoSession` and an in-memory database, deliberately,
   because a sync started under `testWidgets` hangs the test. The live check is

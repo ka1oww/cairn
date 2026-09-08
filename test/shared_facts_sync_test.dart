@@ -1682,6 +1682,11 @@ void main() {
       addTearDown(db.close);
 
       final epoch = DateTime.parse(beforeAnySync);
+      expect(
+        (await db.readTripFacts())!.timeZone,
+        isNull,
+        reason: 'an upgraded local row must not borrow this phone\'s zone',
+      );
       expect(await db.readItineraryDays(), hasLength(1));
       expect(
         DateTime.parse((await db.readItineraryDays()).single.revisedAtUtcIso)

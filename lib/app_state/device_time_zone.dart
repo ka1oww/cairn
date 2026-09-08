@@ -1,7 +1,6 @@
 // APP STATE band (docs/architecture.md), platform-edge side: the phone's own
 // IANA time zone, behind a seam — the same shape as camera_source.dart and
-// text_recognition_edge.dart. Everything above this file asks what clock this
-// phone keeps and is handed a name; nothing above it names a method channel.
+// text_recognition_edge.dart. Nothing above this file names a method channel.
 //
 // **Why this is a platform call at all.** Dart cannot answer it. `DateTime`
 // hands out a UTC *offset* and an *abbreviation* (`JST`, `GMT+8`), and
@@ -12,9 +11,9 @@
 // Newfoundland and Nepal live in. So the name is read from the phone, or it
 // is not claimed at all.
 //
-// The one caller is the composition root, which assembles the shared `trips`
-// row (`bootstrap.dart`). See
-// `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`.
+// This seam cannot establish a trip's destination: the composition root now
+// accepts explicit destination configuration instead. See
+// `docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md`.
 import 'package:flutter/services.dart';
 
 /// Whatever can say which IANA zone this phone keeps.

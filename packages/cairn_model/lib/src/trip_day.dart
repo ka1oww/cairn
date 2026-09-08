@@ -5,7 +5,7 @@ import 'equality.dart';
 import 'stop.dart';
 import 'trip_clock.dart';
 
-/// One day of the trip.
+/// Legacy domain representation of one day of the trip.
 ///
 /// **A day is an artefact, not a measurement.** It is the thing the trip
 /// produces once per day — a page of photos in the order they happened, sealed
@@ -13,14 +13,9 @@ import 'trip_clock.dart';
 /// artefact it is made at a particular place and keeps that provenance
 /// afterwards.
 ///
-/// So a day's [clock] is fixed where the day *starts*. If the group wakes in
-/// Tokyo and lands in London that afternoon, the whole of that day is still
-/// read on Tokyo's clock: its midnight-to-midnight window is Tokyo's, and a
-/// photo taken at 15:00 London time appears on the page at 23:00, which is
-/// what the clock in their pockets said all day. London's clock governs the
-/// *next* day. `packages/photo_day_assignment` already draws day boundaries
-/// this way (`TripDefinition.timeZoneOverridesByDay`, "each day's
-/// midnight-to-midnight window is computed in *that* day's own zone").
+/// Its [clock] is fixed when the day is built. This is retained for older
+/// domain and photo-related values; the live schedule does not derive a trip
+/// clock from it. It receives the persisted destination IANA zone directly.
 ///
 /// Nothing here can move a day's clock after the fact. [clock] is final, there
 /// is no `copyWith`, and [startsAt], [endsAt] and [clockTimeOf] all read it
@@ -36,8 +31,7 @@ final class TripDay {
   /// Days are ordered by [number] and by [startsAt], never by [date].
   final CalendarDate date;
 
-  /// The clock this day is read on, fixed where the day starts. See the class
-  /// doc — this is the subtle one.
+  /// The legacy clock this day preserves. See the class doc.
   final TripClock clock;
 
   /// The city or place this day belongs to, if the itinerary named one. Maps
@@ -66,15 +60,13 @@ final class TripDay {
     }
   }
 
-  /// Builds the consecutive days of a trip, each on the trip's [clock] unless
+  /// Builds legacy consecutive days, each on the trip's [clock] unless
   /// [clockOverridesByDay] gives that day its own.
   ///
   /// This is the same shape as `TripDefinition` in
   /// `packages/photo_day_assignment` (`defaultTimeZoneName` plus
-  /// `timeZoneOverridesByDay`), deliberately: a trip that changes clock does so
-  /// on a day boundary, and an override names the day the new clock takes over
-  /// — the day that *starts* somewhere new, not the day the border was
-  /// crossed on.
+  /// `timeZoneOverridesByDay`). Neither is the live ping scheduler's clock;
+  /// it always receives the persisted destination IANA zone instead.
   ///
   /// All maps are keyed by 1-based day number.
   static List<TripDay> sequence({
