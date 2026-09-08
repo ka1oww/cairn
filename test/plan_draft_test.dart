@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:cairn/app_state/area_gazetteer_loader.dart';
 import 'package:cairn/app_state/file_picker_edge.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/screens/paste_screen.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 import 'package:plan_extraction/plan_extraction.dart';
 
@@ -247,6 +248,58 @@ void main() {
 
     await relaunch(tester);
     expect(boxText(tester), _importedPlan);
+  });
+
+  testWidgets("'Try an example' retires a standing import draft after its "
+      'guard is confirmed', (tester) async {
+    await launch(
+      tester,
+      picks: [
+        PickedBytes(
+          fileName: 'japan-trip.txt',
+          extension: 'txt',
+          bytes: _bytes(_importedPlan),
+        ),
+      ],
+    );
+    await importAFile(tester);
+
+    await tester.tap(find.byKey(const Key('try-example')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('paste-example-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(boxText(tester), sampleItinerary);
+    expect(await db.readPlanDraft(), isNull);
+    await relaunch(tester);
+    expect(boxText(tester), '');
+  });
+
+  testWidgets("'Build it by hand' retires a standing import draft after its "
+      'guard is confirmed', (tester) async {
+    await launch(
+      tester,
+      picks: [
+        PickedBytes(
+          fileName: 'japan-trip.txt',
+          extension: 'txt',
+          bytes: _bytes(_importedPlan),
+        ),
+      ],
+    );
+    await importAFile(tester);
+
+    await tester.tap(find.byKey(const Key('build-by-hand')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('paste-build-by-hand-confirm')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('day-card-1')), findsOneWidget);
+    expect(await db.readPlanDraft(), isNull);
+    await relaunch(tester);
+    expect(boxText(tester), '');
   });
 
   testWidgets('a box typed from scratch is not a draft', (tester) async {
