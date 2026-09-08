@@ -449,9 +449,12 @@ import what is written there, not here.
   relaunch restored, whatever the window says by then, because that one call
   is the only route back to frames already on disk. The camera is
   behind `CameraSource` (`lib/app_state/camera_source.dart`): a real camera on
-  a device, a *generated* PNG anywhere without one — which is what
-  makes the flow walkable on the Simulator, and also means a green simulator
-  run is no evidence the camera path works. Judge that on a device only.
+  a device, a *generated* PNG only after a **successful empty** camera list,
+  the Simulator's honest "no camera", which is what makes the flow walkable
+  there. A thrown discovery error is a visible `CameraRefused`, never the
+  stand-in, so a real phone's failure cannot file a synthetic frame as
+  somebody's photograph. A green simulator run is still no evidence the
+  camera path works. Judge that on a device only.
   `NSCameraUsageDescription` is in `ios/Runner/Info.plist`; audio is off, so
   no microphone string is needed. The ping's schedule is real
   (`trip_moments`) but dealt for a stub party of one, and `NotificationEdge`
@@ -487,9 +490,10 @@ import what is written there, not here.
   the grace has closed, clears both rather than raising a breath nobody can
   keep. All persisted frame paths are relative to Documents and
   resolve through `FramePaths` at read/upload time, because iOS changes the
-  absolute app-container prefix on update. Three refusals are load-bearing and
-  all three are `CameraRefused`: no
-  back camera, no *front* camera, and a failure of the second shot — and the
+  absolute app-container prefix on update. Four refusals are load-bearing and
+  all four are `CameraRefused`: a thrown camera *discovery* (the stand-in
+  bullet above), no back camera, no *front* camera, and a failure of the
+  second shot. That
   last one **discards the back file it already copied**, because a half-taken
   event must leave no orphan on disk. `CameraCaptureEdge` and the injectable
   directory exist for exactly that: `test/camera_source_test.dart` proves the

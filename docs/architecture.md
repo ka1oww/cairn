@@ -623,9 +623,11 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   answers, and this slice is deliberately bare.
 - **Where there is no camera, the app draws its own frame.** The iOS
   Simulator has no camera and never will, so `DeviceCameraSource` falls back
-  to a generated image whenever no back camera answers. That makes the flow
-  walkable on the simulator — and it means a green run there is not evidence
-  the real capture path works. Only a device is.
+  to a generated image when camera discovery *succeeds* and lists no back
+  camera. A discovery that throws is a visible `CameraRefused` instead, so a
+  real phone's failure never files a generated frame as a photograph. The
+  stand-in makes the flow walkable on the simulator, and it means a green
+  run there is not evidence the real capture path works. Only a device is.
 - **The pool holds one phone's photos.** Capture writes into it and the Pool
   draws it, which is the whole loop on one device — but nothing fetches
   anybody else's bytes, so `PooledPhoto.localPath` is non-null for exactly the
