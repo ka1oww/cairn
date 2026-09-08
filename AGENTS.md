@@ -78,13 +78,11 @@ import what is written there, not here.
   once: the query (`searchText, area`, or bare `searchText` when there is no
   area), the three keyless app URLs (Google/Apple/Waze), the meal-label
   split, the placeholder test, the places on a line and the badge threshold.
-  `sendableSearchText` is the whole tap-offer rule and the one place a row
-  is refused a tap at all; it asks `itinerary_parser`'s `namesNoPlace`
-  rather than keeping a second word list, because the vocabularies that
-  predicate reads are the area engine's own and two copies drift.
+  `sendableSearchText` is the whole tap-offer rule and delegates the placeless
+  predicate to `itinerary_parser`; the package README owns that contract.
   A second copy of any of them is the thing to refuse in review — the
   screens compose nothing. `parsed_areas.dart` is the only mapping from the
-  parser's seven provenances to the domain's three
+  parser's detailed provenances to the domain's three
   (`travellerOwn` > `human` > `parser`, which is also the priority order),
   and both `paste_flow.dart` and `repaste_merge.dart` go through it.
   `calendar_days.dart` is the one spelling of "n days later" over a
@@ -984,55 +982,12 @@ Sharp edges worth knowing before touching this directory again:
     null, which is a plan read the phase-1 way, never a failed import.
     `test/area_gazetteer_test.dart` pins all of that, because every wrong
     answer to "when" is silent.
-  - **The whole area engine is script-agnostic too, and it was ASCII-only in
-    three places that all failed silently** (fixed 2026-09-08). `areaTokens`'s
-    word shape was `[A-Za-z]+`, so a `京都` or `서울` plan produced no tokens,
-    entered nothing in the anchor vocabulary and came back with no area on any
-    stop; the corroboration pass proved a word was a name by testing it for a
-    capital, which every caseless script refuses to offer (`looksLikeANameWord`
-    accepts a caseless-script word instead); and the vocabulary's length floor
-    was a flat three characters, right for an alphabet and wrong for a script
-    that writes a whole place name in two code points (`isLongEnoughToAnchor`
-    splits the bound and counts characters, not UTF-16 units). Accented Latin
-    was the lossy half rather than the silent one. The corroboration bar itself
-    is unchanged — two distinct lines plus name-evidence — which is why every
-    figure in the per-genre measurement was byte-identical across the fix.
-  - **An explicit day heading suppresses invented ones, and a date is as
-    explicit as a number.** The rule existed and fired only for `Day N`; that
-    asymmetry was the whole Wanderlog day-count defect, whose print heads each
-    day with a date and puts the day's region on the line below, so an
-    eighteen-day trip parsed as thirty-one days. The boundary is what is
-    suppressed and only the boundary: a demoted line still reaches the anchor
-    vocabulary as place-name evidence, because "does a day start here" and "is
-    this word a place name" are different questions. Dropping that was
-    measurable, not theoretical — the corpus lost exactly one vocabulary word.
-    `area_ground_truth_test.dart` pins day and stop counts against numbers
-    counted off each document by hand.
-  - **An area may be lent to a name the plan writes more than once**
-    (`AreaSource.repeatedName`, the weakest provenance there is, mapped to the
-    app's `parser` tier). Where every resolved occurrence of a name agrees on
-    one area, that area is lent to the occurrences that have none. Three
-    refusals are load-bearing and each was measured: twins that disagree stay
-    silent (this corpus carries two different Shiraito Waterfalls); **one
-    resolved occurrence is not corroboration**, or an airport written twice in
-    a plan that flies through three gets the destination city appended to it;
-    and the lent area must be known to the vocabulary or the gazetteer, or an
-    unvalidated in-tail annotation travels to a line that never wrote it. Two
-    cheaper repairs are deliberately absent because they were scored first —
-    the nearest preceding area in the day answers none of the unanswered rows
-    (they all sit above it), and the day's most common area gets twice as many
-    wrong as right.
-  - **The measurement is per genre and there is no blended figure.**
-    `tool/measure_plan_corpus.dart` (the full run, including day counts and
-    maps-tap outcomes, which need the app's own tap rule) and
-    `area_ground_truth_test.dart` (the half that can be a floor in CI) both
-    report handwritten / ai-written / wanderlog separately, in four buckets
-    that never sum a wrong area with a missing one. A single number over the
-    corpus measured nothing a traveller experiences: the easiest genre is 42%
-    of the labelled rows. Re-adding one is the thing to refuse in review. The
-    fixtures under `test/fixtures/areas/gt/` are hand-labelled and are the only
-    honest signal in the package; a floor may be ratcheted up, never a label
-    edited.
+  - **Area parsing, explicit-heading suppression and repeated-name lending are
+    measured contracts.** The package README owns their current rules and
+    `tool/measure_plan_corpus.dart` owns the per-genre measurement definitions.
+    The hand-labelled fixtures under `test/fixtures/areas/gt/` are ground truth:
+    ratchet a floor upward when evidence improves, but never edit a label to
+    agree with the parser.
   - **The bare place-name day header is script-agnostic, and its narrowness is
     bought twice.** `looksLikeProperNounHeader` (`src/line_classifier.dart`)
     tested `^[A-Z][A-Za-z'.]*$` until 2026-08-30, so `München`, `Αθήνα`,

@@ -38,7 +38,7 @@ enum StopKind {
 ///
 /// The order is the priority the trip's areas are decided by:
 /// [travellerOwn] > [human] > [parser] > nothing. `itinerary_parser` names
-/// seven provenances; they fold into these three at the paste boundary
+/// detailed provenances; they fold into these three at the paste boundary
 /// (`lib/app_state/paste_flow.dart`), because what the app has to know is who
 /// may overwrite whom, not which heuristic fired.
 enum AreaSource {

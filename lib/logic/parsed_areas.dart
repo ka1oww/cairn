@@ -24,7 +24,7 @@ StopKind stopKindOf(ip.StopKind kind) => switch (kind) {
 
 /// The tier an area's provenance belongs to.
 ///
-/// The parser names seven provenances; the app keeps three, because what it
+/// The parser names detailed provenances; the app keeps three, because what it
 /// has to know is who may overwrite whom. The person's own words on the
 /// pasted line — `(near Akihabara)`, `@ Shibuya`, a locality written into the
 /// stop itself — are the traveller's, and outrank a correction made earlier.

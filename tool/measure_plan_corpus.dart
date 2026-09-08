@@ -115,6 +115,7 @@ class DocReport {
   int sentRight = 0, sentWrong = 0, noneRight = 0, noneWrong = 0;
   int tapDistinct = 0, tapAmbiguousWithArea = 0, tapAmbiguousNoArea = 0;
   int tapPlaceless = 0, noTap = 0;
+
   /// Tappable stops carrying no area at all — Fix 3's whole catchment.
   int tapNoArea = 0;
   final List<String> wrongRows = [];
@@ -131,8 +132,10 @@ class DocReport {
 /// One document's whole measurement.
 DocReport measureDoc(CorpusDoc doc, {AreaGazetteer? gazetteer}) {
   final text = File('$_corpusDir/${doc.name}.txt').readAsStringSync();
-  final result = parseItinerary(preprocessForDoc(doc.key, text),
-      gazetteer: gazetteer);
+  final result = parseItinerary(
+    preprocessForDoc(doc.key, text),
+    gazetteer: gazetteer,
+  );
 
   final stops = result.days.fold<int>(0, (n, d) => n + d.stops.length);
   final report = DocReport(doc, result.days.length, stops);
@@ -153,14 +156,15 @@ DocReport measureDoc(CorpusDoc doc, {AreaGazetteer? gazetteer}) {
         report.sentRight++;
       case 'wrong':
         report.sentWrong++;
-        report.wrongRows.add('${doc.name}:${row.line} sent "$assigned" '
-            'want ${row.accepts.join("|")}');
+        report.wrongRows.add(
+          '${doc.name}:${row.line} sent "$assigned" '
+          'want ${row.accepts.join("|")}',
+        );
       case 'none-ok':
         report.noneRight++;
       default:
         report.noneWrong++;
     }
-
   }
 
   for (final day in result.days) {
@@ -171,16 +175,19 @@ DocReport measureDoc(CorpusDoc doc, {AreaGazetteer? gazetteer}) {
         report.noTap++;
       } else if (namesNoPlace(search)) {
         report.tapPlaceless++;
-        report.placelessRows
-            .add('${doc.name}:${stop.sourceLine.lineNumber} "$search"');
+        report.placelessRows.add(
+          '${doc.name}:${stop.sourceLine.lineNumber} "$search"',
+        );
       } else if (ambiguous.contains(normalizedArea(search))) {
         if (stop.area?.text != null) {
           report.tapAmbiguousWithArea++;
         } else {
           report.tapAmbiguousNoArea++;
         }
-        report.ambiguousRows.add('${doc.name}:${stop.sourceLine.lineNumber} '
-            '"$search" area=${stop.area?.text ?? "-"}');
+        report.ambiguousRows.add(
+          '${doc.name}:${stop.sourceLine.lineNumber} '
+          '"$search" area=${stop.area?.text ?? "-"}',
+        );
       } else {
         report.tapDistinct++;
       }
@@ -246,8 +253,11 @@ List<GtRow> loadGroundTruth(String path) => [
     if (line.isNotEmpty && !line.startsWith('#'))
       () {
         final parts = line.split('\t');
-        return GtRow(int.parse(parts[0]), parts[1].split('|'),
-            parts.length > 2 ? parts[2] : '');
+        return GtRow(
+          int.parse(parts[0]),
+          parts[1].split('|'),
+          parts.length > 2 ? parts[2] : '',
+        );
       }(),
 ];
 
@@ -261,8 +271,10 @@ List<GtRow> loadGroundTruth(String path) => [
 String preprocessForDoc(String docKey, String text) {
   var lines = text.split('\n');
   if (docKey == '02') {
-    final trailer = RegExp(r'^<?\s*\d[\d\s,.·]*\s*(days?|hrs?|hr|mins?|min)\b',
-        caseSensitive: false);
+    final trailer = RegExp(
+      r'^<?\s*\d[\d\s,.·]*\s*(days?|hrs?|hr|mins?|min)\b',
+      caseSensitive: false,
+    );
     lines = [
       for (final l in lines)
         () {
@@ -305,9 +317,11 @@ AreaGazetteer? loadCommittedGazetteer({String dir = _gazetteerDir}) {
 void main(List<String> args) {
   final verbose = args.contains('--rows');
   final gazetteer = loadCommittedGazetteer();
-  stdout.writeln(gazetteer == null
-      ? 'gazetteer: NOT LOADED (phase-1 behaviour)'
-      : 'gazetteer: committed assets loaded');
+  stdout.writeln(
+    gazetteer == null
+        ? 'gazetteer: NOT LOADED (phase-1 behaviour)'
+        : 'gazetteer: committed assets loaded',
+  );
   stdout.writeln('');
   _table('WITHOUT the gazetteer', null, verbose);
   stdout.writeln('');
@@ -316,9 +330,11 @@ void main(List<String> args) {
 
 void _table(String title, AreaGazetteer? gazetteer, bool verbose) {
   stdout.writeln('== $title ==');
-  stdout.writeln('genre        document              days(want)  stops  '
-      'sent-right sent-wrong none-right none-wrong  '
-      'distinct amb+area amb-none placeless no-tap  tap-no-area');
+  stdout.writeln(
+    'genre        document              days(want)  stops  '
+    'sent-right sent-wrong none-right none-wrong  '
+    'distinct amb+area amb-none placeless no-tap  tap-no-area',
+  );
   final reports = [
     for (final doc in corpus) measureDoc(doc, gazetteer: gazetteer),
   ];
@@ -326,38 +342,43 @@ void _table(String title, AreaGazetteer? gazetteer, bool verbose) {
   for (final r in reports) {
     final genre = r.doc.genre == last ? '' : r.doc.genre.label;
     last = r.doc.genre;
-    final dayCell = '${r.days}(${r.expectedDays})'
+    final dayCell =
+        '${r.days}(${r.expectedDays})'
         '${r.days == r.expectedDays ? ' ' : '!'}';
-    stdout.writeln('${genre.padRight(13)}${r.doc.name.padRight(22)}'
-        '${dayCell.padRight(12)}${r.stops.toString().padRight(7)}'
-        '${r.sentRight.toString().padRight(11)}'
-        '${r.sentWrong.toString().padRight(11)}'
-        '${r.noneRight.toString().padRight(11)}'
-        '${r.noneWrong.toString().padRight(12)}'
-        '${r.tapDistinct.toString().padRight(9)}'
-        '${r.tapAmbiguousWithArea.toString().padRight(9)}'
-        '${r.tapAmbiguousNoArea.toString().padRight(9)}'
-        '${r.tapPlaceless.toString().padRight(10)}'
-        '${r.noTap.toString().padRight(7)}'
-        '${r.tapNoArea}');
+    stdout.writeln(
+      '${genre.padRight(13)}${r.doc.name.padRight(22)}'
+      '${dayCell.padRight(12)}${r.stops.toString().padRight(7)}'
+      '${r.sentRight.toString().padRight(11)}'
+      '${r.sentWrong.toString().padRight(11)}'
+      '${r.noneRight.toString().padRight(11)}'
+      '${r.noneWrong.toString().padRight(12)}'
+      '${r.tapDistinct.toString().padRight(9)}'
+      '${r.tapAmbiguousWithArea.toString().padRight(9)}'
+      '${r.tapAmbiguousNoArea.toString().padRight(9)}'
+      '${r.tapPlaceless.toString().padRight(10)}'
+      '${r.noTap.toString().padRight(7)}'
+      '${r.tapNoArea}',
+    );
   }
   for (final genre in Genre.values) {
     final inGenre = reports.where((r) => r.doc.genre == genre);
     if (inGenre.length < 2) continue;
     int sum(int Function(DocReport) f) =>
         inGenre.fold<int>(0, (n, r) => n + f(r));
-    stdout.writeln('${'  ${genre.label} total'.padRight(35)}'
-        '${' '.padRight(12)}${sum((r) => r.stops).toString().padRight(7)}'
-        '${sum((r) => r.sentRight).toString().padRight(11)}'
-        '${sum((r) => r.sentWrong).toString().padRight(11)}'
-        '${sum((r) => r.noneRight).toString().padRight(11)}'
-        '${sum((r) => r.noneWrong).toString().padRight(12)}'
-        '${sum((r) => r.tapDistinct).toString().padRight(9)}'
-        '${sum((r) => r.tapAmbiguousWithArea).toString().padRight(9)}'
-        '${sum((r) => r.tapAmbiguousNoArea).toString().padRight(9)}'
-        '${sum((r) => r.tapPlaceless).toString().padRight(10)}'
-        '${sum((r) => r.noTap).toString().padRight(7)}'
-        '${sum((r) => r.tapNoArea)}');
+    stdout.writeln(
+      '${'  ${genre.label} total'.padRight(35)}'
+      '${' '.padRight(12)}${sum((r) => r.stops).toString().padRight(7)}'
+      '${sum((r) => r.sentRight).toString().padRight(11)}'
+      '${sum((r) => r.sentWrong).toString().padRight(11)}'
+      '${sum((r) => r.noneRight).toString().padRight(11)}'
+      '${sum((r) => r.noneWrong).toString().padRight(12)}'
+      '${sum((r) => r.tapDistinct).toString().padRight(9)}'
+      '${sum((r) => r.tapAmbiguousWithArea).toString().padRight(9)}'
+      '${sum((r) => r.tapAmbiguousNoArea).toString().padRight(9)}'
+      '${sum((r) => r.tapPlaceless).toString().padRight(10)}'
+      '${sum((r) => r.noTap).toString().padRight(7)}'
+      '${sum((r) => r.tapNoArea)}',
+    );
   }
   if (!verbose) return;
   for (final r in reports) {

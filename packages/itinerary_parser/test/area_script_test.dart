@@ -45,7 +45,8 @@ void main() {
     reads.forEach((word, why) {
       test('$word ($why) produces at least one token', () {
         expect(areaTokens(word), isNotEmpty,
-            reason: 'a word the tokenizer cannot read can never anchor an area');
+            reason:
+                'a word the tokenizer cannot read can never anchor an area');
       });
     });
   });

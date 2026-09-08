@@ -70,25 +70,19 @@ ParseResult parseItinerary(
   // cards and wrapped prose otherwise split one day into dozens of invented
   // ones.
   //
-  // A *date* is explicit in exactly the way a number is, and until 2026-09-08
-  // only the number counted. That asymmetry was the whole of the Wanderlog
-  // day-count defect: its print heads each day `Monday, November 30th` and
-  // then prints the day's region on the line below (`Fukuoka`), which read as
-  // a competing header and opened a day of its own. The parser found all
-  // eighteen real headings and invented thirteen more, so an eighteen-day
-  // trip came back as thirty-one days. The suppression is the fix, not a new
-  // rule, and it costs the bare-place dialect nothing: a plan whose days are
-  // headed by bare place names has no dated heading to trigger it.
+  // A date is explicit in exactly the way a number is. This matters for
+  // printed guides that put the day's region on the line after a dated
+  // heading: that region belongs to the dated day instead of opening another
+  // inferred one. A plan whose days are headed only by bare place names has
+  // no explicit heading to trigger the suppression.
   //
   // What is suppressed is the *boundary*, and only the boundary. The two
   // passes below ask different questions of the same line: "does a new day
   // start here" and "is this word the name of a place". Answering no to the
   // first is no answer at all to the second, so a suppressed line still
   // reaches the anchor vocabulary as place-name evidence, through
-  // [suppressedPlaceNames]. Dropping the evidence with the boundary was
-  // measurable rather than theoretical: it took `shogawa` out of the
-  // Wanderlog corpus's vocabulary — the only word it lost — and with it the
-  // area on three stops that name the river in their own text.
+  // [suppressedPlaceNames]. Dropping the evidence with the boundary would
+  // silently weaken area assignment for later stops that repeat that name.
   var suppressedPlaceNames = const <_Classified>[];
   if (classified.any((line) =>
       line.kind == _Kind.dayHeader || line.kind == _Kind.dateHeader)) {

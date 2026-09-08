@@ -279,7 +279,7 @@ one. The mapping is mechanical:
 | `Stop.isStarred` | `Stop.isStarred`, and it is still a getter over `time` |
 | `Stop.kind` (`StopKind`) | `Stop.kind` (`StopKind`) — the same eight values, carried as-is |
 | `Stop.placeText`, `Stop.placeCandidates` | `Stop.placeText`, `Stop.placeCandidates` — the extracted expression and its source-ordered candidates, carried as-is |
-| `Stop.area` (`AreaHint`, seven-provenance `AreaSource`) | `Stop.area` / `Stop.areaSource` (three-tier `AreaSource`) — not mechanical: the fold from seven provenances to three is `lib/logic/parsed_areas.dart` in the app, not this package |
+| `Stop.area` (`AreaHint`, detailed `AreaSource`) | `Stop.area` / `Stop.areaSource` (three-tier `AreaSource`) — not mechanical: the provenance fold is `lib/logic/parsed_areas.dart` in the app, not this package |
 | `Stop.sourceLine`, `ParsedDay.confidence` | stay in the parser |
 | `ParsedDay.place` | `TripDay.place` |
 | `ParsedDay.date` | `TripDay.date` (as a `CalendarDate`) |
