@@ -221,9 +221,8 @@ void main() {
     expect(boxText(tester), edited);
   });
 
-  testWidgets("'Try an example' cannot reach a standing import draft", (
-    tester,
-  ) async {
+  testWidgets("'Try an example' keeps a standing import draft when its "
+      'guard is cancelled', (tester) async {
     await launch(
       tester,
       picks: [
@@ -237,12 +236,13 @@ void main() {
     await importAFile(tester);
     expect(await db.readPlanDraft(), _importedPlan);
 
-    // The example is a programmatic fill, not an import: it must not touch
-    // the standing draft. A draft tracks the box, so a standing draft means
-    // a non-empty box — and over a non-empty box the pill is absent, not
-    // disabled, so the overwrite cannot even be asked for.
+    // The example is a programmatic fill, not an import: declining it must
+    // leave the standing draft alone.
     await settleTheDraft(tester);
-    expect(find.byKey(const Key('try-example')), findsNothing);
+    await tester.tap(find.byKey(const Key('try-example')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('paste-discard-keep')));
+    await tester.pumpAndSettle();
     expect(await db.readPlanDraft(), _importedPlan);
 
     await relaunch(tester);

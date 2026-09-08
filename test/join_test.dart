@@ -222,6 +222,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('trip-code-new')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('trip-code-new-confirm')));
+    await tester.pumpAndSettle();
     expect(spokenCode(), isNot(retired));
 
     await goToTheDoor(tester);

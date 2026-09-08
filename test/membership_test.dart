@@ -266,11 +266,30 @@ void main() {
     );
   });
 
-  testWidgets('new words retire the old ones', (tester) async {
+  testWidgets('new words keep the old ones when the guard is cancelled', (
+    tester,
+  ) async {
     await openSheet(tester, today: day(15));
     final first = spokenCode();
 
     await tester.tap(find.byKey(const Key('trip-code-new')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('trip-code-new-ask')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('trip-code-new-keep')));
+    await tester.pumpAndSettle();
+
+    expect(spokenCode(), first);
+  });
+
+  testWidgets('new words retire the old ones after the guard is confirmed', (
+    tester,
+  ) async {
+    await openSheet(tester, today: day(15));
+    final first = spokenCode();
+
+    await tester.tap(find.byKey(const Key('trip-code-new')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('trip-code-new-confirm')));
     await tester.pumpAndSettle();
 
     final second = spokenCode();
