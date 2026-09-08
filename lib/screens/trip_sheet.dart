@@ -390,6 +390,32 @@ class _Code extends ConsumerWidget {
 
   final TripSettingsView view;
 
+  Future<void> _makeNewWords(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('trip-code-new-ask'),
+        content: const Text(
+          'The words you have now will stop working. Anyone holding them '
+          'will need the new words to join.',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('trip-code-new-keep'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep these words'),
+          ),
+          TextButton(
+            key: const Key('trip-code-new-confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Make new words'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await ref.read(tripActionsProvider).newCode();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -438,7 +464,7 @@ class _Code extends ConsumerWidget {
             alignment: Alignment.centerLeft,
             child: TextButton(
               key: const Key('trip-code-new'),
-              onPressed: () => ref.read(tripActionsProvider).newCode(),
+              onPressed: () => _makeNewWords(context, ref),
               child: Text(code == null ? 'Make new words' : 'New words'),
             ),
           ),

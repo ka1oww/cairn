@@ -323,7 +323,45 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
     }
   }
 
-  void _fillExample() {
+  Future<bool> _askBeforeDiscardingTheBox({
+    required String content,
+    required Key confirmKey,
+    required String confirmLabel,
+  }) async {
+    if (_controller.text.trim().isEmpty) return true;
+    final discard =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            key: const Key('paste-discard-ask'),
+            content: Text(content),
+            actions: [
+              TextButton(
+                key: const Key('paste-discard-keep'),
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Keep my plan'),
+              ),
+              TextButton(
+                key: confirmKey,
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(confirmLabel),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!discard || !mounted) return false;
+    await ref.read(planDraftProvider).forget();
+    return true;
+  }
+
+  Future<void> _fillExample() async {
+    final replace = await _askBeforeDiscardingTheBox(
+      content: 'The plan in this box will be replaced by an example.',
+      confirmKey: const Key('paste-example-confirm'),
+      confirmLabel: 'Use the example',
+    );
+    if (!replace || !mounted) return;
     _setControllerTextWithoutTracking(sampleItinerary);
   }
 
@@ -332,7 +370,13 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
   // thin — a one-header parse drops the person on the existing confirm
   // screen holding a single empty day, and the editor slice replaces only
   // what this line hands over.
-  void _buildByHand() {
+  Future<void> _buildByHand() async {
+    final replace = await _askBeforeDiscardingTheBox(
+      content: 'The plan in this box will be replaced by a blank day.',
+      confirmKey: const Key('paste-build-by-hand-confirm'),
+      confirmLabel: 'Build by hand',
+    );
+    if (!replace || !mounted) return;
     ref.read(pasteFlowProvider.notifier).parse('Day 1');
   }
 
@@ -556,36 +600,24 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
                   child: const Text('Back to the editor'),
                 )
               else
-                // The two starter pills exist to fill an empty box; once
-                // the box holds anything they would clobber it, so they are
-                // absent, not disabled — the same treatment the re-paste
-                // branch already gives them.
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _controller,
-                  builder: (context, value, _) {
-                    if (value.text.trim().isNotEmpty) {
-                      return const SizedBox.shrink();
-                    }
-                    return Row(
-                      children: [
-                        Expanded(
-                          child: _SoftPill(
-                            key: const Key('try-example'),
-                            label: 'Try an example',
-                            onPressed: _fillExample,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _SoftPill(
-                            key: const Key('build-by-hand'),
-                            label: 'Build it by hand',
-                            onPressed: _buildByHand,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SoftPill(
+                        key: const Key('try-example'),
+                        label: 'Try an example',
+                        onPressed: _fillExample,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _SoftPill(
+                        key: const Key('build-by-hand'),
+                        label: 'Build it by hand',
+                        onPressed: _buildByHand,
+                      ),
+                    ),
+                  ],
                 ),
               // The second of design surface 6a's two doors. Most people
               // arrive here holding a code somebody told them rather than a

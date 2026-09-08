@@ -116,18 +116,10 @@ import what is written there, not here.
 - **The paste box survives the process, but only for an import.**
   `lib/app_state/plan_draft.dart` holds the whole rule and
   `plan_drafts` (one row, id 1, schema v7) holds the text. An import that
-  lands starts the draft, and only an import or the person's own editing may
-  write to it — not the example, not a plan typed from scratch, and a
-  programmatic fill that isn't an import leaves a standing draft alone rather
-  than overwrite it — because what it defends is an expensive read (a
-  three-page scan through recognition), not typing. While it stands it
-  *tracks the box*, which is what makes "never resurrect over something the
-  person has since typed by hand" true by construction instead of by a
-  timestamp; there is deliberately **no expiry**. Emptying the box discards
-  it, `PasteFlow.accept` forgets it, a fresh import replaces it — though
-  over a box already holding different text the paste screen asks one
-  question first, and declining keeps the text and writes no draft
-  (`test/import_replace_ask_test.dart`). The restore
+  lands starts the draft. Its write, discard and restore rules are owned by
+  `plan_draft.dart`'s module documentation. In particular, a confirmed
+  example or hand-built start deliberately discards a standing import after
+  warning what will be replaced; declining leaves it alone. The restore
   rule is the paste screen's, because only it knows what is in the box: a
   draft is put back **only into a box that would otherwise open empty**, so
   it never lands over a re-paste's pre-filled live plan, and the read

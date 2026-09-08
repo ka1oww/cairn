@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:cairn/app_state/area_gazetteer_loader.dart';
 import 'package:cairn/app_state/file_picker_edge.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/screens/paste_screen.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 import 'package:plan_extraction/plan_extraction.dart';
 
@@ -221,9 +222,8 @@ void main() {
     expect(boxText(tester), edited);
   });
 
-  testWidgets("'Try an example' cannot reach a standing import draft", (
-    tester,
-  ) async {
+  testWidgets("'Try an example' keeps a standing import draft when its "
+      'guard is cancelled', (tester) async {
     await launch(
       tester,
       picks: [
@@ -237,16 +237,67 @@ void main() {
     await importAFile(tester);
     expect(await db.readPlanDraft(), _importedPlan);
 
-    // The example is a programmatic fill, not an import: it must not touch
-    // the standing draft. A draft tracks the box, so a standing draft means
-    // a non-empty box — and over a non-empty box the pill is absent, not
-    // disabled, so the overwrite cannot even be asked for.
+    // The example is a programmatic fill, not an import: declining it must
+    // leave the standing draft alone.
     await settleTheDraft(tester);
-    expect(find.byKey(const Key('try-example')), findsNothing);
+    await tester.tap(find.byKey(const Key('try-example')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('paste-discard-keep')));
+    await tester.pumpAndSettle();
     expect(await db.readPlanDraft(), _importedPlan);
 
     await relaunch(tester);
     expect(boxText(tester), _importedPlan);
+  });
+
+  testWidgets("'Try an example' retires a standing import draft after its "
+      'guard is confirmed', (tester) async {
+    await launch(
+      tester,
+      picks: [
+        PickedBytes(
+          fileName: 'japan-trip.txt',
+          extension: 'txt',
+          bytes: _bytes(_importedPlan),
+        ),
+      ],
+    );
+    await importAFile(tester);
+
+    await tester.tap(find.byKey(const Key('try-example')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('paste-example-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(boxText(tester), sampleItinerary);
+    expect(await db.readPlanDraft(), isNull);
+    await relaunch(tester);
+    expect(boxText(tester), '');
+  });
+
+  testWidgets("'Build it by hand' retires a standing import draft after its "
+      'guard is confirmed', (tester) async {
+    await launch(
+      tester,
+      picks: [
+        PickedBytes(
+          fileName: 'japan-trip.txt',
+          extension: 'txt',
+          bytes: _bytes(_importedPlan),
+        ),
+      ],
+    );
+    await importAFile(tester);
+
+    await tester.tap(find.byKey(const Key('build-by-hand')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('paste-build-by-hand-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('day-card-1')), findsOneWidget);
+    expect(await db.readPlanDraft(), isNull);
+    await relaunch(tester);
+    expect(boxText(tester), '');
   });
 
   testWidgets('a box typed from scratch is not a draft', (tester) async {

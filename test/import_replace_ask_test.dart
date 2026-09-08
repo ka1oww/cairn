@@ -2,10 +2,8 @@
 //
 // A file import used to replace a non-empty box silently — a typed half-plan,
 // an earlier import, anything — with no way back, because pre-accept text is
-// kept nowhere else. Now the one destructive landing asks first, in the box's
-// own voice, and declining costs nothing. And the two starter pills, whose
-// only job is to fill an empty box, are absent (not disabled) once the box
-// holds anything — the same treatment the re-paste branch already gives them.
+// kept nowhere else. Now every destructive replacement asks first, in the
+// box's own voice, and declining costs nothing.
 //
 // Harness is import_flow_test.dart's: the picker and extraction seams bound
 // to fakes, closeStreamsSynchronously load-bearing as ever.
@@ -20,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:cairn/app_state/area_gazetteer_loader.dart';
 import 'package:cairn/app_state/file_picker_edge.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/screens/paste_screen.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 import 'package:plan_extraction/plan_extraction.dart';
 
@@ -145,21 +144,56 @@ void main() {
     expect(boxText(tester), typedPlan);
   });
 
-  testWidgets('the starter pills are absent once the box has content, and '
-      'back once it is emptied', (tester) async {
+  testWidgets('an example keeps a typed plan when the guard is cancelled', (
+    tester,
+  ) async {
     await launch(tester);
-
-    expect(find.byKey(const Key('try-example')), findsOneWidget);
-    expect(find.byKey(const Key('build-by-hand')), findsOneWidget);
-
     await tester.enterText(find.byKey(const Key('paste-input')), typedPlan);
-    await tester.pump();
-    expect(find.byKey(const Key('try-example')), findsNothing);
-    expect(find.byKey(const Key('build-by-hand')), findsNothing);
+    await tester.tap(find.byKey(const Key('try-example')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('paste-discard-ask')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('paste-discard-keep')));
+    await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const Key('paste-input')), '');
-    await tester.pump();
-    expect(find.byKey(const Key('try-example')), findsOneWidget);
-    expect(find.byKey(const Key('build-by-hand')), findsOneWidget);
+    expect(boxText(tester), typedPlan);
+  });
+
+  testWidgets('an example replaces a typed plan when the guard is confirmed', (
+    tester,
+  ) async {
+    await launch(tester);
+    await tester.enterText(find.byKey(const Key('paste-input')), typedPlan);
+    await tester.tap(find.byKey(const Key('try-example')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('paste-example-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(boxText(tester), sampleItinerary);
+  });
+
+  testWidgets('building by hand keeps a typed plan when the guard is '
+      'cancelled', (tester) async {
+    await launch(tester);
+    await tester.enterText(find.byKey(const Key('paste-input')), typedPlan);
+    await tester.tap(find.byKey(const Key('build-by-hand')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('paste-discard-ask')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('paste-discard-keep')));
+    await tester.pumpAndSettle();
+
+    expect(boxText(tester), typedPlan);
+  });
+
+  testWidgets('building by hand discards a typed plan when the guard is '
+      'confirmed', (tester) async {
+    await launch(tester);
+    await tester.enterText(find.byKey(const Key('paste-input')), typedPlan);
+    await tester.tap(find.byKey(const Key('build-by-hand')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('paste-build-by-hand-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('paste-input')), findsNothing);
+    expect(find.byKey(const Key('day-card-1')), findsOneWidget);
   });
 }
