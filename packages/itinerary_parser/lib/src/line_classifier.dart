@@ -73,18 +73,69 @@ final RegExp _dayNumberHeader = RegExp(
   caseSensitive: false,
 );
 
+final RegExp _ascendingDayRangeHeader = RegExp(
+  r'^day\s*[:\-]?\s*(\d{1,3})\s*[-–—]\s*(\d{1,3})(?=$|\s*:\s*)(?:\s*:\s*(.*))?$',
+  caseSensitive: false,
+);
+
+final RegExp _numericDayClaimsHeader = RegExp(
+  r'^day\s*[:\-]?\s*(\d{1,3})((?:(?:[-–—]\s*|\s*\+\s*)\d{1,3})*)\b\s*(?:[-:–—]\s*)?(.*)$',
+  caseSensitive: false,
+);
+
 class DayNumberMatch {
-  final int dayNumber;
+  final List<int> dayNumbers;
   final String? trailingText;
-  const DayNumberMatch(this.dayNumber, this.trailingText);
+  const DayNumberMatch(this.dayNumbers, this.trailingText);
 }
 
+/// Recognizes an explicit numbered-day header and preserves every day claim.
+///
+/// An ascending two-endpoint dash is an inclusive range (`Day 2-5` becomes
+/// 2, 3, 4, 5). Three or more dashed numbers (`Day 4-5-6`) and plus-separated
+/// numbers (`Day 6 + 7`) are individual claims in their written order. This
+/// layer never deduplicates a claim; the document builder keeps duplicates and
+/// overlaps as separate source entries so no traveller content is discarded.
 DayNumberMatch? tryParseDayNumberHeader(String line) {
-  final m = _dayNumberHeader.firstMatch(line.trim());
+  final trimmed = line.trim();
+  final ascendingRange = _ascendingDayRangeHeader.firstMatch(trimmed);
+  if (ascendingRange != null) {
+    final start = int.parse(ascendingRange.group(1)!);
+    final end = int.parse(ascendingRange.group(2)!);
+    if (start < end) {
+      final trailing = ascendingRange.group(3)?.trim();
+      return DayNumberMatch(
+        List.unmodifiable([for (var day = start; day <= end; day++) day]),
+        (trailing == null || trailing.isEmpty) ? null : trailing,
+      );
+    }
+  }
+
+  final numericClaims = _numericDayClaimsHeader.firstMatch(trimmed);
+  if (numericClaims != null) {
+    final continuation = numericClaims.group(2)!;
+    final writtenNumbers = [
+      int.parse(numericClaims.group(1)!),
+      for (final match in RegExp(r'\d{1,3}').allMatches(continuation))
+        int.parse(match.group(0)!),
+    ];
+    final isPlusList = continuation.contains('+');
+    final isDashedList = RegExp(r'[-–—]').hasMatch(continuation);
+
+    if (isPlusList || (isDashedList && writtenNumbers.length >= 3)) {
+      final trailing = numericClaims.group(3)?.trim();
+      return DayNumberMatch(
+        List.unmodifiable(writtenNumbers),
+        (trailing == null || trailing.isEmpty) ? null : trailing,
+      );
+    }
+  }
+
+  final m = _dayNumberHeader.firstMatch(trimmed);
   if (m == null) return null;
   final trailing = m.group(2)?.trim();
   return DayNumberMatch(
-    int.parse(m.group(1)!),
+    List.unmodifiable([int.parse(m.group(1)!)]),
     (trailing == null || trailing.isEmpty) ? null : trailing,
   );
 }
@@ -120,9 +171,10 @@ bool startsWithBullet(String line) {
     }
     if (RegExp(r'^[a-z]').hasMatch(after)) return false;
     if (RegExp(r'^\d').hasMatch(after)) return false;
-    if (RegExp(r'^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)',
-            caseSensitive: false)
-        .hasMatch(after)) {
+    if (RegExp(
+      r'^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)',
+      caseSensitive: false,
+    ).hasMatch(after)) {
       return false;
     }
   }
@@ -157,10 +209,7 @@ final RegExp _casedWord = RegExp(
 // a letter that has no uppercase form to demand. In these scripts an
 // uncapitalized word *is* what a place name looks like, so refusing one for
 // want of a capital refuses every heading the script can write.
-final RegExp _caselessWord = RegExp(
-  r'^[\p{Lo}\p{M}]+$',
-  unicode: true,
-);
+final RegExp _caselessWord = RegExp(r'^[\p{Lo}\p{M}]+$', unicode: true);
 
 // True when the line carries a capital anywhere, i.e. some word offered
 // capitalization as evidence that it is a name rather than prose.

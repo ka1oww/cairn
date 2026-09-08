@@ -10,11 +10,16 @@ import 'gazetteer.dart';
 
 /// One stop as seen by the assignment engine.
 class AreaStopInput {
+  final int assignmentId;
   final String raw;
   final bool hasTime;
   final int lineNumber;
-  const AreaStopInput(
-      {required this.raw, required this.hasTime, required this.lineNumber});
+  const AreaStopInput({
+    required this.assignmentId,
+    required this.raw,
+    required this.hasTime,
+    required this.lineNumber,
+  });
 }
 
 /// One day as seen by the assignment engine.
@@ -30,14 +35,22 @@ class AreaAssignment {
   final String? text;
   final String source; // AreaSource name
   final int? setByLine;
-  const AreaAssignment({this.text, required this.source, this.setByLine});
+  final int? setByAssignmentId;
+  const AreaAssignment({
+    this.text,
+    required this.source,
+    this.setByLine,
+    this.setByAssignmentId,
+  });
 }
 
 /// Assigns areas to all stops. Mirrors scorer's `anchor_assign` with
 /// `train_rule=True` (C7t). When [gazetteer] is non-null, enables C10
 /// validator behaviour (seed must be gazetteer-listed, bare parenthetical)
 /// plus the two gazetteer-evidence rules (stop-line self-evidence and the
-/// train-route continuation; the package README states both).
+/// train-route continuation; the package README states both). Results are
+/// keyed by [AreaStopInput.assignmentId], which stays distinct when several
+/// stops were derived from one source line.
 Map<int, AreaAssignment> anchorAssign(
   List<String> plines,
   List<AreaDayInput> days,
@@ -56,6 +69,7 @@ Map<int, AreaAssignment> anchorAssign(
   final out = <int, AreaAssignment>{};
   String? running;
   int? runningSetBy;
+  int? runningSetByAssignmentId;
 
   for (final day in days) {
     var routeContinuation = false;
@@ -65,9 +79,11 @@ Map<int, AreaAssignment> anchorAssign(
     if (kind == 'daynum' || kind == 'date' || kind == 'none') {
       running = seed;
       runningSetBy = seed != null ? -1 : null; // day boundary
+      runningSetByAssignmentId = null;
     } else if (seed != null) {
       running = seed;
       runningSetBy = -1;
+      runningSetByAssignmentId = null;
     }
     // unqualified placeHeader: running continues
 
@@ -81,6 +97,7 @@ Map<int, AreaAssignment> anchorAssign(
       String? assignedOwn;
       String? assignedSource;
       int? assignedSetBy;
+      int? assignedSetByAssignmentId;
 
       // marker check
       final isHotelLine = hotelWordRegExp.hasMatch(raw);
@@ -92,7 +109,7 @@ Map<int, AreaAssignment> anchorAssign(
           !isTransitLeg) {
         final content = [
           for (final w in ws)
-            if (!genericStopWords.contains(w)) w
+            if (!genericStopWords.contains(w)) w,
         ];
         if (content.isNotEmpty && content.length <= 5) {
           final leftover = [
@@ -101,15 +118,17 @@ Map<int, AreaAssignment> anchorAssign(
                   !venueGenericWords.contains(w) &&
                   !furnitureWords.contains(w) &&
                   !vocab.contains(w))
-                w
+                w,
           ];
           final cands = vocabRuns(clean, vocab);
           if (leftover.isEmpty && cands.length == 1) {
             running = cands.first;
             runningSetBy = s.lineNumber;
+            runningSetByAssignmentId = s.assignmentId;
             assignedOwn = cands.first;
             assignedSource = 'runningHeading';
             assignedSetBy = s.lineNumber;
+            assignedSetByAssignmentId = s.assignmentId;
           }
         }
       }
@@ -122,24 +141,28 @@ Map<int, AreaAssignment> anchorAssign(
           if (pw.isNotEmpty && pw.every((w) => vocab.contains(w))) {
             running = pw.join(' ');
             runningSetBy = s.lineNumber;
+            runningSetByAssignmentId = s.assignmentId;
             assignedOwn = running;
             assignedSource = 'hotelPrefix';
             assignedSetBy = s.lineNumber;
+            assignedSetByAssignmentId = s.assignmentId;
           }
         }
       }
 
       // train-route destination (C7t)
-      final isTrainRoute =
-          RegExp(r'^\s*(?:train\s+)?route\b', caseSensitive: false)
-              .hasMatch(clean);
+      final isTrainRoute = RegExp(
+        r'^\s*(?:train\s+)?route\b',
+        caseSensitive: false,
+      ).hasMatch(clean);
       final hadRouteContinuation = routeContinuation;
       if (trainRule &&
           assignedOwn == null &&
           (isTrainRoute || hadRouteContinuation)) {
         final dests = <String>[];
-        for (final m in stationRegExp
-            .allMatches(raw.replaceAll(RegExp(r'https?://\S+'), ' '))) {
+        for (final m in stationRegExp.allMatches(
+          raw.replaceAll(RegExp(r'https?://\S+'), ' '),
+        )) {
           final d = m.group(1)!;
           final dws = areaTokens(d);
           final isAnchorArea = dws.every((w) => vocab.contains(w));
@@ -153,9 +176,11 @@ Map<int, AreaAssignment> anchorAssign(
         if (dests.isNotEmpty) {
           running = dests.last;
           runningSetBy = s.lineNumber;
+          runningSetByAssignmentId = s.assignmentId;
           assignedOwn = running;
           assignedSource = 'trainDestination';
           assignedSetBy = s.lineNumber;
+          assignedSetByAssignmentId = s.assignmentId;
         }
       }
       if (isTrainRoute) {
@@ -177,8 +202,11 @@ Map<int, AreaAssignment> anchorAssign(
       // stop-line self-evidence (gazetteer only): a unique gazetteer-listed
       // area named by the line itself beats the running heading
       if (assignedOwn == null && hasGaz()) {
-        final selfArea =
-            _gazetteerAreaInStop(clean, trustedSelfAreas, gazContains);
+        final selfArea = _gazetteerAreaInStop(
+          clean,
+          trustedSelfAreas,
+          gazContains,
+        );
         if (selfArea != null) {
           assignedOwn = selfArea;
           assignedSource = 'travellerDeclared';
@@ -190,6 +218,8 @@ Map<int, AreaAssignment> anchorAssign(
       String? source =
           assignedSource ?? (assigned != null ? 'runningHeading' : 'none');
       int? setBy = assignedSetBy ?? runningSetBy;
+      int? setByAssignmentId =
+          assignedSetByAssignmentId ?? runningSetByAssignmentId;
       // For inlineLocality, source is inlineLocality even when via assignedOwn
       // For running fallback, source is runningHeading
 
@@ -197,6 +227,7 @@ Map<int, AreaAssignment> anchorAssign(
       if (assignedOwn == null && assigned != null) {
         source = 'runningHeading';
         setBy = runningSetBy;
+        setByAssignmentId = runningSetByAssignmentId;
       }
 
       // overrides: traveller annotation beats context
@@ -209,6 +240,7 @@ Map<int, AreaAssignment> anchorAssign(
               ? 'travellerDeclared'
               : 'travellerProximity';
           setBy = null; // own-line source
+          setByAssignmentId = null;
           overridden = true;
           break;
         }
@@ -219,12 +251,13 @@ Map<int, AreaAssignment> anchorAssign(
             for (final w in areaTokens(p))
               if (!genericStopWords.contains(w) &&
                   !venueGenericWords.contains(w))
-                w
+                w,
           ];
           if (pws.isNotEmpty && pws.length <= 3 && gazContains(pws.join(' '))) {
             assigned = pws.join(' ');
             source = 'travellerProximity';
             setBy = null;
+            setByAssignmentId = null;
             break;
           }
         }
@@ -233,8 +266,12 @@ Map<int, AreaAssignment> anchorAssign(
       // Normalize: if assigned is empty/furniture-like with no content, keep null run semantics
       // But scorer assigns the raw capture — we keep it.
 
-      out[s.lineNumber] =
-          AreaAssignment(text: assigned, source: source!, setByLine: setBy);
+      out[s.assignmentId] = AreaAssignment(
+        text: assigned,
+        source: source!,
+        setByLine: setBy,
+        setByAssignmentId: setByAssignmentId,
+      );
     }
   }
   return out;
@@ -250,7 +287,7 @@ bool _destinationInGazetteer(
 ) {
   final filtered = [
     for (final w in dws)
-      if (!genericStopWords.contains(w)) w
+      if (!genericStopWords.contains(w)) w,
   ];
   if (filtered.isEmpty) return false;
   final candidates = <String>{filtered.join(' ')};
@@ -289,11 +326,12 @@ String? _gazetteerAreaInStop(
                 furnitureWords.contains(words[start - 1]));
         final isStandalone = start == 0 && end == words.length - 1;
         final isHyphenatedSuffix = RegExp(
-                r'(^|\s)' + RegExp.escape(candidate) + r'\s*[-–—](?:\s|$)',
-                caseSensitive: false)
-            .hasMatch(segment);
-        final isPreviouslyTrusted =
-            trustedSelfAreas.contains(joinedAreaWords(candidate));
+          r'(^|\s)' + RegExp.escape(candidate) + r'\s*[-–—](?:\s|$)',
+          caseSensitive: false,
+        ).hasMatch(segment);
+        final isPreviouslyTrusted = trustedSelfAreas.contains(
+          joinedAreaWords(candidate),
+        );
         if (!precededByDescriptor &&
             !isStandalone &&
             !isHyphenatedSuffix &&
@@ -314,8 +352,12 @@ String? _gazetteerAreaInStop(
   return matches.values.single;
 }
 
-String? _seedForDay(String? place, Set<String> vocab, Set<String>? gazetteer,
-    AreaGazetteer? gazObj) {
+String? _seedForDay(
+  String? place,
+  Set<String> vocab,
+  Set<String>? gazetteer,
+  AreaGazetteer? gazObj,
+) {
   bool contains(String s) {
     if (gazObj != null) return gazObj.contains(s);
     if (gazetteer != null) return gazetteer.contains(s);
