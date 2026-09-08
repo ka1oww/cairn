@@ -16,6 +16,8 @@
 //      `Ichiran`, because "Lunch" is not part of any restaurant's name.
 library;
 
+import 'package:itinerary_parser/itinerary_parser.dart' show namesNoPlace;
+
 /// The maps app a search opens in. All three are keyless https links, so
 /// nothing here needs an API key, a project or a billing account.
 enum MapsApp { google, apple, waze }
@@ -150,7 +152,18 @@ bool showsPlaceCountBadge(String text, List<String> places) =>
 ///     (an alternative, a compound instruction, a section label, a note);
 ///   * the line names several places, which the row offers individually
 ///     instead of as one search;
-///   * the words left are a placeholder (`TBD`) or nothing at all.
+///   * the words left are a placeholder (`TBD`) or nothing at all;
+///   * the words left name no place — `Free morning`, `LUNCH: OUTLET`,
+///     `Shopping / CHILLING / EVERYTHING`, a table rule a spreadsheet import
+///     brought along. A missing button is honest. A button that opens rubbish
+///     is what makes the app feel broken, and there is nothing a search of
+///     `Free morning, Shibuya` can return that the traveller wanted.
+///
+/// That last test is `itinerary_parser`'s [namesNoPlace] and is deliberately
+/// not a second word list living here: the vocabularies it reads are the same
+/// ones the area engine reads, and two copies of a word list drift apart
+/// silently. It is a predicate over words, not a re-classification — nothing
+/// here re-decides what the parser said a line *is*.
 ///
 /// [mealRest] is what [mealLabelSplit] left of a meal line after its label.
 String? sendableSearchText({
@@ -168,5 +181,6 @@ String? sendableSearchText({
   final text = placeText ?? mealRest;
   if (text == null || text.trim().isEmpty) return null;
   if (isPlaceholderText(text)) return null;
+  if (namesNoPlace(text)) return null;
   return text;
 }

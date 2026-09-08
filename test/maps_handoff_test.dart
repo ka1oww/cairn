@@ -158,4 +158,62 @@ void main() {
       expect(showsPlaceCountBadge(over, placesOn(over)), isTrue);
     });
   });
+
+  group('the offer: a row that names no place gets no tap', () {
+    String? offer(String text, {bool meal = false}) => sendableSearchText(
+      isPlace: !meal,
+      isMealLabel: meal,
+      placeText: meal ? null : text,
+      placeCandidates: const [],
+      mealRest: meal ? text : null,
+    );
+
+    // A missing button is honest. A button that opens rubbish is what makes
+    // the app feel broken: there is nothing a search of `Free morning,
+    // Shibuya` can return that the traveller wanted, and on the captain's
+    // corpus 56 rows across three documents offered exactly that.
+    for (final placeless in [
+      'Free morning',
+      'OUTLET',
+      'street food',
+      'Lunch nearby',
+      'Shopping / CHILLING / EVERYTHING',
+      'Chill',
+      '```',
+      '|------|--------------|',
+    ]) {
+      test('"$placeless" offers no tap', () {
+        expect(offer(placeless), isNull);
+      });
+    }
+
+    test('LUNCH: OUTLET offers no tap once its label is split off', () {
+      expect(offer('OUTLET', meal: true), isNull);
+    });
+
+    // The other half of the bar, and the one that matters more: nothing that
+    // does name a place may lose its tap. A chain, a shop written in capitals,
+    // a number for a name, and a name in a script the tokenizer would once
+    // have read as no words at all are all still tappable.
+    for (final place in [
+      'Sensoji Temple',
+      'Osaka Castle',
+      'Ichiran',
+      'Book Off',
+      'STUSSY',
+      'Komehyo',
+      '711',
+      '京都',
+      'Shibuya Sky',
+      'Narita International Airport',
+    ]) {
+      test('"$place" keeps its tap', () {
+        expect(offer(place), place);
+      });
+    }
+
+    test('a meal line keeps the venue after its label', () {
+      expect(offer('Ichiran', meal: true), 'Ichiran');
+    });
+  });
 }
