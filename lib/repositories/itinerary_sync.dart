@@ -602,7 +602,13 @@ class TripSync {
     final lineMetadata = {
       for (final day in merged.days)
         for (final stop in day.stops)
-          (day.number, stop.position): _rehydrateLineMetadata(stop),
+          (day.number, stop.position): _rehydrateLineMetadata(
+            stop,
+            retainedAreaHeading:
+                !stop.carriesAreas &&
+                localAreas[(day.number, stop.position)]?.$1 ==
+                    StopKind.areaHeading.name,
+          ),
     };
     final incomingStops = [
       for (final day in merged.days)
@@ -687,10 +693,11 @@ class TripSync {
   }
 
   static ({String kind, String? placeText, String? placeCandidatesJson})
-  _rehydrateLineMetadata(RemoteStop stop) {
+  _rehydrateLineMetadata(RemoteStop stop, {required bool retainedAreaHeading}) {
     final classified = ip.classifyStop(
       raw: stop.text,
-      isAreaHeading: stop.kind == StopKind.areaHeading.name,
+      isAreaHeading:
+          retainedAreaHeading || stop.kind == StopKind.areaHeading.name,
       hasTime: stop.timeIso != null,
     );
     final placeText = classified.kind == ip.StopKind.place

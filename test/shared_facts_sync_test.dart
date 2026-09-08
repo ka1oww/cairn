@@ -2069,6 +2069,49 @@ void main() {
       },
     );
 
+    test('a retained area heading stays inert without area columns', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        ConfirmedItinerary(
+          days: [
+            ConfirmedDay(
+              number: 1,
+              date: CalendarDate(2027, 6, 14),
+              place: 'Tokyo',
+              stops: [
+                Stop(text: 'Shinjuku', kind: StopKind.areaHeading),
+                Stop(text: 'Tokyo Metropolitan Government Building'),
+              ],
+            ),
+          ],
+        ),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      final server = FakeServer(trip: sharedTrip(id, const []))
+        ..holds = serverHolds([
+          RemoteDay(
+            number: 1,
+            dateIso: '2027-06-14',
+            place: 'Tokyo',
+            revisedAt: DateTime.utc(2027, 6, 2),
+            stops: const [
+              RemoteStop(position: 0, text: 'Shinjuku', carriesAreas: false),
+              RemoteStop(
+                position: 1,
+                text: 'Tokyo Metropolitan Government Building',
+                carriesAreas: false,
+              ),
+            ],
+          ),
+        ]);
+
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
+
+      expect((await db.readItineraryStops()).first.kind, 'areaHeading');
+    });
+
     test(
       'a stop the server explicitly says has no area does clear the local one',
       () async {
