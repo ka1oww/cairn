@@ -207,6 +207,25 @@ void main() {
         expect(line, isNot(contains('\n')));
       }
     });
+
+    test('remains a three-day plan through the real parser', () {
+      // The D5 regression: the print's repeated `Save` controls and its
+      // `9/9 – 9/10` search-range chip used to survive the cleanup and split
+      // the plan into phantom days. This lives in this file deliberately —
+      // PDFium is one process-wide library and `dart test` runs suites as
+      // concurrent isolate groups, so a second suite driving PDFium races
+      // this one's init/destroy and segfaults the VM.
+      expect(text, isNot(contains(' Save\n')));
+      expect(text, isNot(contains('9/9 – 9/10')));
+
+      final parsed = parseItinerary(text);
+      expect(parsed.days.map((day) => day.headerSourceLine?.text), [
+        'Day 1',
+        'Day 2',
+        'Day 3',
+      ]);
+      expect(parsed.days, hasLength(3));
+    });
   });
 
   group('the refusals', () {
