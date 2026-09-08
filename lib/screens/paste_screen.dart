@@ -329,7 +329,8 @@ class _PasteScreenState extends ConsumerState<PasteScreen> {
     required String confirmLabel,
   }) async {
     if (_controller.text.trim().isEmpty) return true;
-    final discard = await showDialog<bool>(
+    final discard =
+        await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             key: const Key('paste-discard-ask'),

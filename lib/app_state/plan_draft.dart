@@ -5,7 +5,7 @@
 // three-page scan through text recognition lost the whole result to an
 // incoming call, because the box was memory and nothing else.
 //
-// The rules, all four of them, live here and nowhere else:
+// The rules, all five of them, live here and nowhere else:
 //
 //  - **An import starts a draft, and only an import or the person's own
 //    editing may write to it.** Nothing else does — not the example plan,
@@ -13,8 +13,7 @@
 //    because recognition and extraction are expensive to redo; typing is
 //    not, and a box that quietly remembered every keystroke would be a
 //    different feature with a different question to answer. A programmatic
-//    fill that is not an import (the example plan, the draft being put back)
-//    must leave a standing draft alone rather than overwrite it — the paste
+//    fill that is not an import never writes to a standing draft — the paste
 //    screen routes every such fill through one seam that skips the box
 //    tracker on purpose.
 //  - **While it stands, it tracks the box.** Every edit the person makes to
@@ -22,9 +21,12 @@
 //    be older than what they last had in front of them. This is what makes
 //    "it must never silently resurrect over something the person has since
 //    typed by hand" true by construction rather than by a timestamp.
-//  - **Emptying the box forgets it.** Clearing what was imported is how a
-//    person discards an import; there is no other discard gesture on that
-//    screen, and inventing one would be a button nobody asked for.
+//  - **Emptying the box forgets it.** Clearing what was imported is one way
+//    to discard an import; it needs no separate gesture.
+//  - **A confirmed starter action forgets it.** Before the example or blank
+//    hand-built plan replaces non-empty box text, the paste screen says what
+//    will be lost. Confirming deliberately gives up any pending import,
+//    rather than leaving it to return on the next launch.
 //  - **Accepting the plan forgets it.** The text has become the trip
 //    (`PasteFlow.accept`), so the draft has nothing left to protect.
 //

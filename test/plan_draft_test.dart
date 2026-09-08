@@ -291,9 +291,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('build-by-hand')));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('paste-build-by-hand-confirm')),
-    );
+    await tester.tap(find.byKey(const Key('paste-build-by-hand-confirm')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('day-card-1')), findsOneWidget);
