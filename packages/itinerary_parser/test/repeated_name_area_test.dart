@@ -104,6 +104,31 @@ Sat 10 March 2027
     expect(_day(r, 3).stops.last.area?.text, 'karuizawa');
   });
 
+  test('twins agree when they name one place in different words', () {
+    final r = parseItinerary('''
+Day 1 - Shibuya
+- Shibuya Sky
+- Komehyo
+
+Day 2 - Ueno
+- Ueno Park
+- Komehyo (near Shibuya Station)
+
+Sat 6 March 2027
+- Komehyo
+''');
+    // The two resolved twins read `shibuya` off a heading and `Shibuya
+    // Station` off the traveller's own aside. That is one place written two
+    // ways, not two places, and comparing the areas as raw text called it
+    // disagreement and refused the lend outright. The comparison is on the
+    // canonical form, so it agrees. What travels is the plainer of the
+    // spellings the plan itself wrote, never a spelling invented here: the
+    // station adds nothing a search of `shibuya` does not already have.
+    final lent = _stopAt(r, 10).area;
+    expect(lent?.source, AreaSource.repeatedName);
+    expect(lent?.text, 'shibuya');
+  });
+
   test('a lent area must name a real place', () {
     // `Arrival day` is the traveller's own in-tail wording, which the engine
     // trusts on the line that wrote it because a statement is not a guess.
