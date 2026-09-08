@@ -112,6 +112,7 @@ void main() {
         today: today,
         now: today,
         utcOffset: Duration.zero,
+        tripTimeZone: 'Etc/UTC',
         photos: InMemoryPhotoPool(pool),
       ),
     );
@@ -371,6 +372,7 @@ void main() {
             ),
           ),
           tripUtcOffsetProvider.overrideWithValue(Duration.zero),
+          tripTimeZoneProvider.overrideWithValue('Etc/UTC'),
           nowProvider.overrideWithValue(pinnedClock(from: day(14))),
         ],
       );

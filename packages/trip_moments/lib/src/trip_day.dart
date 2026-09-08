@@ -1,4 +1,13 @@
 import 'ping_window.dart';
+import 'package:timezone/data/latest.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
+
+// The database is bundled with this pure-Dart package. Initialise it here so
+// every caller gets the same IANA rules, including historical DST changes.
+final bool _timeZonesReady = (() {
+  tz_data.initializeTimeZones();
+  return true;
+})();
 
 /// Formats a calendar date as `YYYY-MM-DD`.
 ///
@@ -13,22 +22,34 @@ String dateKey(DateTime date) {
   return '$y-$m-$d';
 }
 
+/// The calendar date containing [instant] in [timeZone]. Returned at UTC
+/// midnight because it is a date-only value, never an instant to add to.
+DateTime dateInTimeZone(DateTime instant, String timeZone) {
+  if (!_timeZonesReady) throw StateError('IANA timezone data is unavailable');
+  final local = tz.TZDateTime.from(instant.toUtc(), tz.getLocation(timeZone));
+  return DateTime.utc(local.year, local.month, local.day);
+}
+
+/// Whether [timeZone] names a zone in the bundled IANA database.
+bool isKnownTimeZone(String timeZone) {
+  try {
+    if (!_timeZonesReady) return false;
+    tz.getLocation(timeZone);
+    return true;
+  } on ArgumentError {
+    return false;
+  }
+}
+
 /// One calendar day of a trip, with the clock it is read in and any
 /// itinerary bound that shortens it.
 ///
-/// ## The clock is fixed where the day starts
+/// ## The clock is a real IANA zone
 ///
-/// [utcOffset] is the offset in force *where the day begins*, and it holds
-/// for the whole day even if the party crosses a border at noon. A day is
-/// an artefact, not a measurement: the day's page is one page, and slots
-/// that shifted an hour sideways halfway through it would leave two people
-/// pinged at the same wall-clock minute, or a gap where the clock jumped.
-/// The clock moves at the next day boundary, which is exactly where the
-/// artefact changes anyway.
-///
-/// The app layer supplies the offset. This package models a day's clock as
-/// a fixed [Duration] rather than a full IANA zone, so the app is also
-/// where DST is resolved -- see the package README, "What this cannot do".
+/// [timeZone] is an IANA name such as `Europe/Rome`. Each slot is converted
+/// from its wall-clock minute through that zone, so a DST transition takes
+/// effect on the actual date it occurs. [utcOffset] remains only for legacy
+/// callers and fixed-offset test cases; new app code must pass [timeZone].
 ///
 /// ## Arrival and departure
 ///
@@ -45,9 +66,10 @@ class TripDay {
   /// The calendar date, in the trip's clock. Only year/month/day are read.
   final DateTime date;
 
-  /// The UTC offset in force where this day *starts*. Held for the whole
-  /// day; see the class doc.
-  final Duration utcOffset;
+  /// The IANA zone this day is read in, if it is known.
+  final String? timeZone;
+
+  final Duration? _fixedUtcOffset;
 
   /// Earliest a ping may land, as an offset from local midnight. Null on
   /// an ordinary day. Set this to the arrival time on the day the trip
@@ -61,17 +83,54 @@ class TripDay {
 
   const TripDay({
     required this.date,
-    required this.utcOffset,
+    this.timeZone,
+    Duration? utcOffset,
     this.opensAt,
     this.closesAt,
-  });
+  })  : _fixedUtcOffset = utcOffset,
+        assert(timeZone != null || utcOffset != null),
+        assert(timeZone == null || utcOffset == null);
+
+  /// The offset at local midnight, retained for the assignment's diagnostic
+  /// surface and fixed-offset compatibility. Do not use it to convert a slot:
+  /// a DST day can have a different offset by the waking window.
+  Duration get utcOffset {
+    final fixed = _fixedUtcOffset;
+    if (fixed != null) return fixed;
+    return _localDateTime(0).timeZoneOffset;
+  }
+
+  tz.Location? get _location {
+    if (!_timeZonesReady || timeZone == null) return null;
+    return tz.getLocation(timeZone!);
+  }
+
+  tz.TZDateTime _localDateTime(int minute) {
+    final location = _location;
+    if (location == null) {
+      return tz.TZDateTime.utc(date.year, date.month, date.day).add(
+        Duration(minutes: minute - utcOffset.inMinutes),
+      );
+    }
+    return tz.TZDateTime(
+      location,
+      date.year,
+      date.month,
+      date.day,
+      minute ~/ Duration.minutesPerHour,
+      minute % Duration.minutesPerHour,
+    );
+  }
 
   /// The instant of local midnight for this day, as a UTC [DateTime].
   ///
   /// If the day's clock is UTC+8, local midnight is 16:00 UTC the previous
   /// day, i.e. `UTC = local - offset`.
-  DateTime get localMidnightUtc =>
-      DateTime.utc(date.year, date.month, date.day).subtract(utcOffset);
+  DateTime get localMidnightUtc => _localDateTime(0).toUtc();
+
+  /// The real UTC instant for a wall-clock minute of this calendar day.
+  DateTime instantAt(Duration localTimeOfDay) =>
+      _localDateTime(localTimeOfDay.inMinutes).toUtc();
 
   /// This day's effective bounds: the waking day narrowed by any arrival
   /// or departure time.
@@ -91,7 +150,8 @@ class TripDay {
   }
 
   @override
-  String toString() => 'TripDay(${dateKey(date)}, utc$utcOffset'
+  String toString() =>
+      'TripDay(${dateKey(date)}, ${timeZone ?? 'utc$utcOffset'}'
       '${opensAt != null ? ', opens $opensAt' : ''}'
       '${closesAt != null ? ', closes $closesAt' : ''})';
 }

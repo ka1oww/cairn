@@ -101,20 +101,22 @@ Itinerary bounds only ever *narrow* the day. A 05:40 red-eye landing does
 not buy anyone an 05:40 ping, and a 23:50 departure does not extend the day
 past 22:30. Land at 23:00 and nobody is pinged that day at all.
 
-## A day that changes country keeps the clock it started in
+## A day is read in its destination clock
 
-`TripDay.utcOffset` is the offset in force **where the day begins**, and it
-holds for the whole day even if the party crosses a border at noon. The
-clock moves at the next day boundary.
+`TripDay.timeZone` takes an IANA name such as `Europe/Rome`. Every slot is
+converted from its wall-clock minute through the rule in force on that date,
+so a DST transition changes the UTC instant without changing the waking
+window people see. The zone is a trip-level fact supplied by the app; this
+package deliberately does not infer it from a place name.
 
 A day is an artefact, not a measurement. The day's page is one page, and
 slots that shifted an hour sideways halfway through it would leave two
 people pinged at the same wall-clock minute, or a gap where the clock
 jumped. One clock start to finish keeps the slots stable.
 
-Build the itinerary with `tripDays(...)` for a trip that stays in one
-clock; construct `TripDay`s directly when it does not, so each day can
-carry its own offset.
+Build the itinerary with `tripDays(...)` only for legacy fixed-offset
+schedules. Construct `TripDay`s directly for a real trip clock so every day
+carries the same IANA zone.
 
 ## How the deal works, in plain English
 
@@ -247,10 +249,10 @@ diff (or a Node step in CI) to be caught.
 
 ## What this cannot do
 
-- **No true IANA timezones, no DST.** A day's clock is a fixed UTC offset,
-  supplied per day by the app layer. That is enough to fix the clock where
-  a day starts, but the app is where a DST transition or a real zone
-  lookup has to be resolved.
+- **No destination lookup.** The package contains IANA rules and converts
+  through a supplied zone, including DST, but it cannot decide that a place
+  name means a particular zone. The app must persist that fact, and an
+  unknown zone must stay unknown rather than become the phone's clock.
 - **A party larger than the day can hold is not fully pinged.** At the
   30-minute floor a full waking day holds 29 slots, so a trip of more than
   29 people leaves some unpinged each day — rotating, like a short day.
@@ -267,9 +269,9 @@ diff (or a Node step in CI) to be caught.
   own `captureWindow`, not this package's) and the day's page belong to the
   app layer.
 - **No trip metadata.** This package does not know what a trip "is" beyond
-  a string id, a party of member ids, dates and offsets. It does not
-  validate that a trip exists, load timezones, or know when a trip starts —
-  the app supplies all of that.
+  a string id, a party of member ids, dates and a supplied clock. It does not
+  validate that a trip exists or know when a trip starts — the app supplies
+  all of that.
 
 ## API
 
@@ -305,14 +307,14 @@ for (final ping in schedule.first.pings) {
 }
 print(schedule.last.unpingedMemberIds);            // [dan, gita]
 
-// A trip that crosses a border: give each day the offset in force where
-// that day begins.
+// A trip clock is a real IANA zone. Every day keeps the same wall clock
+// through a DST transition.
 final asia = tripSchedule(
   tripId: 'trip-asia',
   party: party,
   days: [
-    TripDay(date: DateTime(2026, 5, 3), utcOffset: const Duration(hours: 7)),
-    TripDay(date: DateTime(2026, 5, 4), utcOffset: const Duration(hours: 9)),
+    TripDay(date: DateTime(2026, 10, 24), timeZone: 'Europe/Rome'),
+    TripDay(date: DateTime(2026, 10, 25), timeZone: 'Europe/Rome'),
   ],
 );
 ```

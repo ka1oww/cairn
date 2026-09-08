@@ -47,6 +47,10 @@ class TripMembership {
   /// flat, so this is nobody's in particular.
   final String? name;
 
+  /// The destination's IANA clock, or null when this phone cannot honestly
+  /// schedule the trip yet.
+  final String? timeZone;
+
   /// Who started the trip. They may have left; see
   /// `cairn_model`'s `removalPowerHolder`, which is the only thing that
   /// answers "who holds the removal power".
@@ -65,6 +69,7 @@ class TripMembership {
   TripMembership({
     required this.tripId,
     this.name,
+    this.timeZone,
     required this.startedBy,
     required List<Member> members,
     List<TripInvite> invites = const [],
@@ -136,6 +141,7 @@ class MembershipStore implements MembershipRepository {
         return TripMembership(
           tripId: TripId(trip.tripId),
           name: trip.name,
+          timeZone: trip.timeZone,
           startedBy: MemberId(trip.startedByMemberId),
           members: [
             for (final row in members)

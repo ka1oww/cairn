@@ -1165,6 +1165,9 @@ void main() {
         await db.customStatement(
           'ALTER TABLE trip_facts DROP COLUMN name_revised_at_utc_iso',
         );
+        await db.customStatement(
+          'ALTER TABLE trip_facts DROP COLUMN time_zone',
+        );
         await db.customStatement('PRAGMA user_version = 7');
       }
 
@@ -1278,6 +1281,9 @@ void main() {
         await db.customStatement(
           'ALTER TABLE itinerary_stops DROP COLUMN place_text',
         );
+        await db.customStatement(
+          'ALTER TABLE trip_facts DROP COLUMN time_zone',
+        );
         await db.customStatement('PRAGMA user_version = 10');
         await db.close();
 
@@ -1338,6 +1344,9 @@ void main() {
         );
         await db.customStatement(
           'ALTER TABLE itinerary_stops DROP COLUMN place_text',
+        );
+        await db.customStatement(
+          'ALTER TABLE trip_facts DROP COLUMN time_zone',
         );
         await db.customStatement('PRAGMA user_version = 11');
         await db.close();

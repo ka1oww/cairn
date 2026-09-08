@@ -169,7 +169,6 @@ DayAssignment dayAssignment({
     availableMinutes: closeMinute - openMinute,
   );
 
-  final midnightUtc = day.localMidnightUtc;
   final pings = <Ping>[];
   for (var slot = 0; slot < slots; slot++) {
     final minute = pingMinuteForSlot(
@@ -182,7 +181,7 @@ DayAssignment dayAssignment({
     pings.add(Ping(
       memberId: party.memberIds[order[slot]],
       slotIndex: slot,
-      at: midnightUtc.add(Duration(minutes: minute)),
+      at: day.instantAt(Duration(minutes: minute)),
       localTimeOfDay: Duration(minutes: minute),
     ));
   }

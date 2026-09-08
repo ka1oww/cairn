@@ -406,6 +406,7 @@ void main() {
           todayProvider.overrideWithValue(june(16)),
           nowProvider.overrideWith((ref) => pinnedClock(from: clock)),
           tripUtcOffsetProvider.overrideWithValue(Duration.zero),
+          tripTimeZoneProvider.overrideWithValue('Etc/UTC'),
           cameraSourceProvider.overrideWithValue(camera),
         ],
       );

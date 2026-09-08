@@ -577,6 +577,7 @@ void main() {
       DateTime? today,
       required DateTime now,
       Duration utcOffset = Duration.zero,
+      String? tripTimeZone,
       CameraSource? camera,
       PendingCaptureStore? pendingCapture,
       MembershipRepository? membership,
@@ -597,6 +598,7 @@ void main() {
           today: today,
           now: now,
           utcOffset: utcOffset,
+          tripTimeZone: tripTimeZone,
           camera: camera ?? FakeCamera(frames, takenAtUtc: now),
           framePaths: FramePaths(() async => frames.path),
           pendingCapture: pendingCapture,
@@ -1365,6 +1367,7 @@ void main() {
         tester,
         now: evening.toUtc(),
         utcOffset: zone,
+        tripTimeZone: 'Asia/Singapore',
         camera: camera,
       );
       await accept(tester, tripPaste);

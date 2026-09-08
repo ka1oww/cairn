@@ -17,5 +17,6 @@ export 'src/slots.dart'
         slotStartMinute;
 export 'src/stable_hash.dart'
     show stableDigestMax, stableDigestValue, stableFingerprint, stableIndex;
-export 'src/trip_day.dart' show TripDay, dateKey;
+export 'src/trip_day.dart'
+    show TripDay, dateInTimeZone, dateKey, isKnownTimeZone;
 export 'src/trip_schedule.dart' show pingsForMember, tripDays, tripSchedule;

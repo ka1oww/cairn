@@ -297,21 +297,20 @@ import what is written there, not here.
   `flutter test test/hosted_smoke_test.dart --dart-define=CAIRN_HOSTED_SMOKE=true`.
   **A green suite is still no evidence the hosted project behaves** — that is
   what that one test is for, and `supabase/README.md` is the authority on the
-  defines, on why `CAIRN_TRIP_TIMEZONE` is an override rather than a gate, and
+  defines, on the destination-clock configuration, and
   on what the hosted project has and has not actually done.
-- **The plan really leaves the phone on an ordinary build, and the app says
-  when it has not.** Both halves are
-  `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`, and both were
-  one defect: `CAIRN_TRIP_TIMEZONE` used to be a gate with no default, so no
-  ordinary build could ever create the shared `trips` row — silently, forever.
-  The clock is now the phone's own IANA name
-  (`lib/app_state/device_time_zone.dart` over the hand-written
-  `cairn/time_zone` channel, `ios/Runner/DeviceTimeZone.swift`), assembled in
-  `bootstrap.dart`'s `tripRowFor`; the define survives only to pin a
-  destination's zone. A *name*, never the device's UTC offset — `Etc/GMT±N`
-  has no daylight saving and cannot spell a half-hour zone, and
-  `trips.timezone` is checked against `pg_timezone_names` at write time.
-  Reintroducing an offset-derived zone is the thing to refuse in review.
+- **The trip clock is the destination's IANA zone, and a missing zone stays
+  unknown.** `docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md`
+  is the authority. The server already stores and validates `trips.timezone`;
+  local schema v14 persists it as nullable `trip_facts.time_zone`, and a
+  reconcile copies it down before the ping scheduler reads it. `trip_moments`
+  converts each day's wall-clock slot through IANA data, not one launch-time
+  offset, so DST transitions use the offset for that date. A new shared trip
+  currently needs an explicit `CAIRN_TRIP_TIMEZONE` destination value; the
+  phone's own zone is not evidence of a destination. Old local rows and new
+  trips without that value schedule no pings until their server row supplies
+  a zone. Never fall back to the phone's offset or zone as though it were the
+  destination.
   Three rules hold this together. **An unnamed trip still publishes**, as
   `unnamedTripPlaceholder`; a clearing rename uses the same non-null wire word
   and maps it back to null locally. Names now carry their own

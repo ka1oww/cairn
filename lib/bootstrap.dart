@@ -131,6 +131,7 @@ Widget bootstrapApp({
   DateTime? today,
   DateTime? now,
   Duration? utcOffset,
+  String? tripTimeZone,
   CameraSource? camera,
   FramePaths? framePaths,
   PhotoRepository? photos,
@@ -212,6 +213,13 @@ Widget bootstrapApp({
           (ref) => pinnedClock(from: now, moving: since),
         ),
       if (utcOffset != null) tripUtcOffsetProvider.overrideWithValue(utcOffset),
+      if (tripTimeZone != null)
+        tripTimeZoneProvider.overrideWithValue(tripTimeZone)
+      // `today:` is a test-only clock seam. Its callers predate the
+      // destination-clock migration and need a deterministic IANA zone, not
+      // the production fallback this change deliberately refuses.
+      else if (today != null)
+        tripTimeZoneProvider.overrideWithValue('Etc/UTC'),
       if (camera != null) cameraSourceProvider.overrideWithValue(camera),
       if (picker != null) filePickerEdgeProvider.overrideWithValue(picker),
       if (extraction != null)
@@ -292,7 +300,11 @@ TripSync? _startSharedFactsSync(
   return TripSync(
     database: db,
     facts: facts,
-    tripRow: tripRowFor(_tripTimeZoneOfThisPhone),
+    tripRow: tripRowFor(
+      FixedTimeZone(
+        _tripTimeZoneOverride.isEmpty ? null : _tripTimeZoneOverride,
+      ),
+    ),
   )..start(pollEvery: const Duration(minutes: 2));
 }
 
@@ -302,26 +314,11 @@ TripSync? _startSharedFactsSync(
 /// flutter run --dart-define=CAIRN_TRIP_TIMEZONE=Asia/Tokyo
 /// ```
 ///
-/// **No longer a gate**, and that is the whole of defect D3's first half. It
-/// used to be a compile-time constant with no default, so an ordinary
-/// `flutter build ios` produced a binary that could never create the shared
-/// `trips` row and never said so. It survives as an *override* rather than a
-/// requirement, because it is the one way to pin the destination's zone on a
-/// plan made at home, and pinning it is strictly better than the phone's own
-/// answer. Left unset — which is every ordinary build — the phone answers
-/// (`_tripTimeZoneOfThisPhone`).
+/// The configured destination IANA zone. It is intentionally a gate for a
+/// new shared row: the phone's own zone is not evidence of Milan, Tokyo, or
+/// any other destination. Until destination selection gains a person-facing
+/// source, an unset build stays local and quiet rather than publishing a lie.
 const _tripTimeZoneOverride = String.fromEnvironment('CAIRN_TRIP_TIMEZONE');
-
-/// Which zone the app takes as the trip's, when nothing was passed.
-///
-/// The phone's own, read through the platform
-/// (`app_state/device_time_zone.dart`). Not the device's UTC *offset*: a
-/// fixed offset carries no daylight saving and `Etc/GMT±N` cannot spell the
-/// half-hour zones a billion people live in, and `trips.timezone` is checked
-/// against `pg_timezone_names` at write time anyway. See
-/// `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md` for what this
-/// is right about and what it is not.
-const _tripTimeZoneOfThisPhone = DeviceTimeZone();
 
 /// Answers with the shared `trips` row to create, or null to say "not yet".
 ///

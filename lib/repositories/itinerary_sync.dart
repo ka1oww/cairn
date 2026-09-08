@@ -350,6 +350,11 @@ class TripSync {
         final made = await _createSharedTrip(trip, tripId);
         if (made != null) return made;
       } else {
+        // The server has held the destination clock since the trip began.
+        // Copy it before any local derivation needs it, so an upgraded phone
+        // with a formerly zone-less local row becomes DST-safe after one
+        // reconcile and remains so while offline thereafter.
+        await database.setTripTimeZone(shared.timeZone);
         await _reconcileName(shared, trip);
         await _applyRoster(shared, trip);
       }
@@ -419,6 +424,10 @@ class TripSync {
       );
     }
     await facts.createTrip(draft);
+    // The server validates this IANA name. Once it accepts the row, preserve
+    // the destination clock locally so later offline launches schedule the
+    // same DST-aware instants without consulting the network.
+    await database.setTripTimeZone(draft.timeZone);
     await database.markSynced(tripRowSyncedAtUtcIso: _stamp());
     return null;
   }
