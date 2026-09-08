@@ -1396,17 +1396,14 @@ void main() {
       // for exactly that reason: pinning it would answer the question the
       // test is asking.
       //
-      // Written in the device's own zone on both sides, because the date is
-      // the device's: the trip's offset is the one in force that evening, so
-      // the ping lands in that evening's waking hours whatever zone the
-      // suite runs in.
-      final evening = DateTime(2027, 6, 14, 23, 50);
-      final zone = evening.timeZoneOffset;
-      final camera = FakeCamera(frames, takenAtUtc: evening.toUtc());
+      // 23:50 in the destination clock, expressed as an absolute instant.
+      // A DateTime built in the runner's local zone would mean a different
+      // time in Singapore on CI, where the device zone is UTC.
+      final eveningInSingapore = DateTime.utc(2027, 6, 14, 15, 50);
+      final camera = FakeCamera(frames, takenAtUtc: eveningInSingapore);
       await launch(
         tester,
-        now: evening.toUtc(),
-        utcOffset: zone,
+        now: eveningInSingapore,
         tripTimeZone: 'Asia/Singapore',
         camera: camera,
       );
