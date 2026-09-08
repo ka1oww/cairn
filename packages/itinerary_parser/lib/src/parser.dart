@@ -63,11 +63,35 @@ ParseResult parseItinerary(
       ),
   ];
 
-  // A numbered day heading is explicit structure. Once a plan contains one,
-  // bare proper-noun lines inside its days are stops, not competing inferred
-  // headings. This matters for printed guides, whose place cards and wrapped
-  // prose otherwise split one numbered day into dozens of invented ones.
-  if (classified.any((line) => line.kind == _Kind.dayHeader)) {
+  // An explicit day heading is structure the traveller wrote. Once a plan
+  // contains one, bare proper-noun lines inside its days are stops, not
+  // competing inferred headings. This matters for printed guides, whose place
+  // cards and wrapped prose otherwise split one day into dozens of invented
+  // ones.
+  //
+  // A *date* is explicit in exactly the way a number is, and until 2026-09-08
+  // only the number counted. That asymmetry was the whole of the Wanderlog
+  // day-count defect: its print heads each day `Monday, November 30th` and
+  // then prints the day's region on the line below (`Fukuoka`), which read as
+  // a competing header and opened a day of its own. The parser found all
+  // eighteen real headings and invented thirteen more, so an eighteen-day
+  // trip came back as thirty-one days. The suppression is the fix, not a new
+  // rule, and it costs the bare-place dialect nothing: a plan whose days are
+  // headed by bare place names has no dated heading to trigger it.
+  //
+  // What is suppressed is the *boundary*, and only the boundary. The two
+  // passes below ask different questions of the same line: "does a new day
+  // start here" and "is this word the name of a place". Answering no to the
+  // first is no answer at all to the second, so a suppressed line still
+  // reaches the anchor vocabulary as place-name evidence, through
+  // [suppressedPlaceNames]. Dropping the evidence with the boundary was
+  // measurable rather than theoretical: it took `shogawa` out of the
+  // Wanderlog corpus's vocabulary — the only word it lost — and with it the
+  // area on three stops that name the river in their own text.
+  var suppressedPlaceNames = const <_Classified>[];
+  if (classified.any((line) =>
+      line.kind == _Kind.dayHeader || line.kind == _Kind.dateHeader)) {
+    final withBarePlaces = classified;
     classified = <_Classified>[
       for (var i = 0; i < lines.length; i++)
         _classifyLine(
@@ -77,6 +101,12 @@ ParseResult parseItinerary(
           monthFirstNumericDates,
           allowBarePlaceHeaders: false,
         ),
+    ];
+    suppressedPlaceNames = [
+      for (var i = 0; i < classified.length; i++)
+        if (withBarePlaces[i].kind == _Kind.placeHeader &&
+            classified[i].kind != _Kind.placeHeader)
+          withBarePlaces[i],
     ];
   }
 
@@ -93,7 +123,7 @@ ParseResult parseItinerary(
   } else {
     base = _buildHeaderModeResult(classified, tripStartDate);
   }
-  return _annotateWithAreas(base, rawLines, gazetteer);
+  return _annotateWithAreas(base, rawLines, gazetteer, suppressedPlaceNames);
 }
 
 List<String> _stripPasteFurniture(List<String> lines) {
@@ -116,15 +146,25 @@ ParseResult _annotateWithAreas(
   ParseResult base,
   List<String> plines,
   AreaGazetteer? gazetteer,
+  List<_Classified> suppressedPlaceNames,
 ) {
   if (base.days.isEmpty) return base;
-  // Build anchor vocab inputs
+  // Build anchor vocab inputs. `suppressedPlaceNames` are the bare
+  // proper-noun lines an explicit day heading demoted from boundary to stop:
+  // they are not days, and they still name places, so they corroborate the
+  // vocabulary exactly as a place header does. Nothing else in this function
+  // sees them — the assignment inputs below are built from the days alone.
   final dayInfos = [
     for (final d in base.days)
       ParsedDayInfo(
         headerText: d.headerSourceLine?.text,
         headerLine: d.headerSourceLine?.lineNumber ?? 0,
         place: d.place,
+      ),
+    for (final line in suppressedPlaceNames)
+      ParsedDayInfo(
+        headerText: line.placeText,
+        headerLine: line.line.lineNumber,
       ),
   ];
   final vocabResult = buildAnchorVocab(plines, dayInfos);

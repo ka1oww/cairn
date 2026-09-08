@@ -41,10 +41,10 @@ enum Genre { handwritten, aiWritten, wanderlog }
 
 extension on Genre {
   String get label => switch (this) {
-    Genre.handwritten => 'handwritten',
-    Genre.aiWritten => 'ai-written',
-    Genre.wanderlog => 'wanderlog',
-  };
+        Genre.handwritten => 'handwritten',
+        Genre.aiWritten => 'ai-written',
+        Genre.wanderlog => 'wanderlog',
+      };
 }
 
 class _Doc {
@@ -169,8 +169,7 @@ class _Scores {
 _Scores _aggregate({AreaGazetteer? gazetteer}) {
   final byDoc = <String, _DocScore>{};
   for (final doc in _corpus) {
-    final corpusFile =
-        File('test/fixtures/areas/corpus/${doc.name}.txt');
+    final corpusFile = File('test/fixtures/areas/corpus/${doc.name}.txt');
     final lines = corpusFile.readAsStringSync().split('\n');
     final text = _preprocessForDoc(doc.key, List.from(lines));
     final result = parseItinerary(text, gazetteer: gazetteer);
@@ -235,8 +234,7 @@ void _expectFloors(
 }
 
 void main() {
-  group('area ground truth C7t (no gazetteer — phase-1 behaviour exactly)',
-      () {
+  group('area ground truth C7t (no gazetteer — phase-1 behaviour exactly)', () {
     test('per-genre floors', () {
       final s = _aggregate();
       s.report('C7t');
@@ -260,6 +258,37 @@ void main() {
           Genre.wanderlog: 7,
         },
       );
+    });
+
+    // The day-count golden. This is the bar Wanderlog day segmentation was
+    // fixed against, and it is here rather than in a fixture file because the
+    // number it pins is not a parse: `_writtenDays` is counted off each
+    // document by hand and never off the engine.
+    //
+    // `02` was the defect. Its print heads each day with a date and then puts
+    // the day's region on the next line, so an eighteen-day trip parsed as
+    // thirty-one days: every real heading found, and thirteen invented from
+    // bare place-name lines. The stop counts are pinned beside the days
+    // because the two move together — the thirteen invented headings became
+    // thirteen stops, which is why `02` reads 855 here and read 842 while it
+    // was wrong. A change to either number is a real change in what the
+    // reader sees, so update these deliberately and say why.
+    const goldenStops = {'01': 115, '02': 855, '03': 31, '04': 79, '05': 22};
+
+    test('every document parses the days it writes down', () {
+      for (final doc in _corpus) {
+        final lines = File('test/fixtures/areas/corpus/${doc.name}.txt')
+            .readAsStringSync()
+            .split('\n');
+        final result =
+            parseItinerary(_preprocessForDoc(doc.key, List.from(lines)));
+        expect(result.days.length, _writtenDays[doc.key],
+            reason: '${doc.name}: parsed ${result.days.length} days for a '
+                '${_writtenDays[doc.key]}-day plan');
+        expect(result.days.fold<int>(0, (n, d) => n + d.stops.length),
+            goldenStops[doc.key],
+            reason: '${doc.name}: stop count moved');
+      }
     });
 
     test('known failures are documented', () {
