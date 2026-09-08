@@ -93,10 +93,13 @@ void main() {
             '$label held-out: correct=$correct wrong=$wrong miss=$miss noneOk=$noneOk '
             'rowsOK=${rowsOk.toStringAsFixed(1)}% (n=${gt.length})');
 
-        // The corpus's own GT-pinned floor is 87.5% rowsOK (170/19 correct/wrong
-        // over 237 rows). Held-out data was never tuned against, so the generic
-        // bar is "generalises reasonably", not "matches the pinned corpus
-        // exactly": at least half the rows must land correct or none-ok.
+        // This figure is per *document*, which is the only level at which a
+        // combined percentage still means something: the tuned corpus's own
+        // floors are per genre (area_ground_truth_test.dart) precisely
+        // because averaging five documents of three different kinds measured
+        // nothing. Held-out data was never tuned against, so the generic bar
+        // is "generalises reasonably", not "matches the tuned corpus": at
+        // least half of this document's rows must land correct or none-ok.
         expect(rowsOk, greaterThanOrEqualTo(floors.minRowsOk),
             reason:
                 '$label held-out rowsOK should show the extractor generalises past the tuned corpus');

@@ -1,10 +1,79 @@
-/// Ground-truth harness: C7t floors pinned against 237 hand-labelled rows.
+/// Ground-truth harness: the captain's 237 hand-labelled rows, scored per
+/// genre.
+///
+/// **The one number this file used to print is gone.** A blended figure over
+/// the whole corpus measured nothing a traveller experiences: the easiest
+/// genre is 42% of the labelled rows, so the blend moved when that genre
+/// moved and hid everything else. Every figure here is per genre now, and
+/// every floor is a per-genre floor. The genres are the three kinds of
+/// document people actually paste:
+///
+///   handwritten  01-captain-tokyo     a person's own notes
+///   ai-written   03, 04, 05           a chat assistant's markdown
+///   wanderlog    02-wanderlog-japan   a browser's print-to-PDF
+///
+/// Four buckets, never three, and wrong is never added to missing:
+///
+///   sent-right   an area was sent and the label accepts it
+///   sent-wrong   an area was sent and the label refuses it
+///   none-right   no area was sent and the label says NONE is fine
+///   none-wrong   no area was sent and the label wanted one
+///
+/// A wrong area is the failure that sent a Japan traveller to Singapore. A
+/// missing one is a search no better than the words already typed. They are
+/// not the same size of mistake and are never summed here.
+///
+/// `tool/measure_plan_corpus.dart` is the fuller run of the same measurement
+/// (it adds day counts, stop counts and the maps-tap outcomes, which need the
+/// app's own tap rule and so cannot live in this package). This file is the
+/// half that can be a floor in CI.
+///
+/// The fixtures under `test/fixtures/areas/gt/` are hand-labelled and are the
+/// only honest signal here. Nothing in this file may edit one.
 library;
 
 import 'dart:convert';
 import 'dart:io';
 import 'package:test/test.dart';
 import 'package:itinerary_parser/itinerary_parser.dart';
+
+enum Genre { handwritten, aiWritten, wanderlog }
+
+extension on Genre {
+  String get label => switch (this) {
+    Genre.handwritten => 'handwritten',
+    Genre.aiWritten => 'ai-written',
+    Genre.wanderlog => 'wanderlog',
+  };
+}
+
+class _Doc {
+  final String key;
+  final String name;
+  final Genre genre;
+  const _Doc(this.key, this.name, this.genre);
+}
+
+const List<_Doc> _corpus = [
+  _Doc('01', '01-captain-tokyo', Genre.handwritten),
+  _Doc('03', '03-ai-kyoto-osaka', Genre.aiWritten),
+  _Doc('04', '04-ai-seoul', Genre.aiWritten),
+  _Doc('05', '05-ai-paris', Genre.aiWritten),
+  _Doc('02', '02-wanderlog-japan', Genre.wanderlog),
+];
+
+/// How many days each document *writes down*, counted off the document and
+/// never off a parse. `02` writes eighteen dated headings, `Monday, November
+/// 30th` to `Thursday, December 17th`, matching the `11/30 - 12/17` range the
+/// page prints at its top. `01` writes five `DAY n` headers (`DAY 3` twice,
+/// at lines 106 and 159 — nothing here dedupes a traveller's own claim).
+const Map<String, int> _writtenDays = {
+  '01': 5,
+  '02': 18,
+  '03': 7,
+  '04': 5,
+  '05': 4,
+};
 
 String _preprocessForDoc(String docKey, List<String> lines) {
   if (docKey == '02') {
@@ -23,12 +92,8 @@ String _preprocessForDoc(String docKey, List<String> lines) {
     for (var i = 0; i < 11 && i < lines.length; i++) {
       lines[i] = '';
     }
-    lines = [
-      for (final l in lines)
-        l.replaceAll(RegExp(r'^\s*#{1,6}\s*'), '').replaceAll('**', '')
-    ];
   }
-  if (docKey == '04' || docKey == '05') {
+  if (docKey == '03' || docKey == '04' || docKey == '05') {
     lines = [
       for (final l in lines)
         l.replaceAll(RegExp(r'^\s*#{1,6}\s*'), '').replaceAll('**', '')
@@ -55,70 +120,84 @@ List<GtRow> _loadGt(String path) {
   return rows;
 }
 
-const _corpusMap = {
-  '01': '01-captain-tokyo.txt',
-  '02': '02-wanderlog-japan.txt',
-  '03': '03-ai-kyoto-osaka.txt',
-  '04': '04-ai-seoul.txt',
-  '05': '05-ai-paris.txt',
-};
+class _DocScore {
+  final _Doc doc;
+  final int days;
+  final int stops;
+  int sentRight = 0, sentWrong = 0, noneRight = 0, noneWrong = 0;
+  _DocScore(this.doc, this.days, this.stops);
+  int get expectedDays => _writtenDays[doc.key]!;
+}
 
-class _GtStats {
-  int aggCorrect = 0, aggWrong = 0, aggMiss = 0, aggNoneOk = 0, aggN = 0;
-  int needsAreaCorrect = 0, needsAreaWrong = 0;
-  int doc01Correct = 0, doc01Wrong = 0, doc05Wrong = 0;
-  double get rowsOk => (aggCorrect + aggNoneOk) / aggN * 100;
+class _Scores {
+  final Map<String, _DocScore> byDoc;
+  const _Scores(this.byDoc);
+
+  Iterable<_DocScore> inGenre(Genre g) =>
+      byDoc.values.where((d) => d.doc.genre == g);
+  int sentRight(Genre g) => inGenre(g).fold(0, (n, d) => n + d.sentRight);
+  int sentWrong(Genre g) => inGenre(g).fold(0, (n, d) => n + d.sentWrong);
+  int noneRight(Genre g) => inGenre(g).fold(0, (n, d) => n + d.noneRight);
+  int noneWrong(Genre g) => inGenre(g).fold(0, (n, d) => n + d.noneWrong);
+
+  void report(String title) {
+    print('$title  (per genre; no blended figure by design)');
+    print('  genre        document              days(want) stops '
+        'sent-right sent-wrong none-right none-wrong');
+    for (final d in byDoc.values) {
+      final days = '${d.days}(${d.expectedDays})'
+          '${d.days == d.expectedDays ? '' : '!'}';
+      print('  ${d.doc.genre.label.padRight(13)}${d.doc.name.padRight(22)}'
+          '${days.padRight(11)}${d.stops.toString().padRight(6)}'
+          '${d.sentRight.toString().padRight(11)}'
+          '${d.sentWrong.toString().padRight(11)}'
+          '${d.noneRight.toString().padRight(11)}'
+          '${d.noneWrong}');
+    }
+    for (final g in Genre.values) {
+      print('  ${'${g.label} total'.padRight(35)}'
+          '${' '.padRight(17)}${sentRight(g).toString().padRight(11)}'
+          '${sentWrong(g).toString().padRight(11)}'
+          '${noneRight(g).toString().padRight(11)}'
+          '${noneWrong(g)}');
+    }
+  }
 }
 
 /// Runs the whole corpus through [parseItinerary] (with [gazetteer] when
-/// given) and scores every GT row — the one aggregation both the C7t and
-/// the C10 floors are asserted over.
-_GtStats _aggregate({AreaGazetteer? gazetteer}) {
-  final stats = _GtStats();
-  for (final k in _corpusMap.keys) {
-    final corpusFile = File('test/fixtures/areas/corpus/${_corpusMap[k]}');
-    var lines = corpusFile.readAsStringSync().split('\n');
-    final text = _preprocessForDoc(k, List.from(lines));
+/// given) and scores every GT row, keeping the genres apart.
+_Scores _aggregate({AreaGazetteer? gazetteer}) {
+  final byDoc = <String, _DocScore>{};
+  for (final doc in _corpus) {
+    final corpusFile =
+        File('test/fixtures/areas/corpus/${doc.name}.txt');
+    final lines = corpusFile.readAsStringSync().split('\n');
+    final text = _preprocessForDoc(doc.key, List.from(lines));
     final result = parseItinerary(text, gazetteer: gazetteer);
+    final stops = result.days.fold<int>(0, (n, d) => n + d.stops.length);
+    final score = _DocScore(doc, result.days.length, stops);
+    byDoc[doc.key] = score;
 
-    final gtFile = File(
-        'test/fixtures/areas/gt/$k-${k == '01' ? 'captain-tokyo' : k == '02' ? 'wanderlog-japan' : k == '03' ? 'ai-kyoto-osaka' : k == '04' ? 'ai-seoul' : 'ai-paris'}.tsv');
-    // fallback: find by prefix
-    File actualGt = gtFile;
-    if (!actualGt.existsSync()) {
-      actualGt = Directory('test/fixtures/areas/gt')
-          .listSync()
-          .whereType<File>()
-          .firstWhere((f) => f.path.contains('/$k-'));
+    final assigned = <int, String?>{};
+    for (final d in result.days) {
+      for (final s in d.stops) {
+        assigned[s.sourceLine.lineNumber] = s.area?.text;
+      }
     }
-    final gt = _loadGt(actualGt.path);
-
-    for (final row in gt) {
-      String? assigned;
-      for (final d in result.days) {
-        for (final s in d.stops) {
-          if (s.sourceLine.lineNumber == row.line) assigned = s.area?.text;
-        }
+    for (final row in _loadGt('test/fixtures/areas/gt/${doc.name}.tsv')) {
+      switch (areaVerdict(assigned[row.line], row.accepts)) {
+        case 'correct':
+          score.sentRight++;
+        case 'wrong':
+          score.sentWrong++;
+        case 'none-ok':
+          score.noneRight++;
+        default:
+          score.noneWrong++;
       }
-      final v = areaVerdict(assigned, row.accepts);
-      if (v == 'correct') {
-        stats.aggCorrect++;
-        if (!row.accepts.contains('NONE')) stats.needsAreaCorrect++;
-        if (k == '01') stats.doc01Correct++;
-      } else if (v == 'wrong') {
-        stats.aggWrong++;
-        if (!row.accepts.contains('NONE')) stats.needsAreaWrong++;
-        if (k == '01') stats.doc01Wrong++;
-        if (k == '05') stats.doc05Wrong++;
-      } else if (v == 'miss') {
-        stats.aggMiss++;
-      } else if (v == 'none-ok') {
-        stats.aggNoneOk++;
-      }
-      stats.aggN++;
     }
   }
-  return stats;
+  return _Scores(byDoc);
 }
 
 /// The committed gazetteer assets, inflated the way the app's import path
@@ -136,44 +215,60 @@ SortedListAreaGazetteer _loadCommittedGazetteer() {
   return SortedListAreaGazetteer.fromAssetTexts(texts);
 }
 
-void main() {
-  group('area ground truth C7t', () {
-    test('aggregate floors', () {
-      final s = _aggregate();
-      print(
-          'C7t aggregate: correct=${s.aggCorrect} wrong=${s.aggWrong} miss=${s.aggMiss} noneOk=${s.aggNoneOk} rowsOK=${s.rowsOk.toStringAsFixed(1)}%');
-      print(
-          'needs-area correct=${s.needsAreaCorrect} wrong=${s.needsAreaWrong}');
-      print(
-          'doc01 correct=${s.doc01Correct} wrong=${s.doc01Wrong} doc05 wrong=${s.doc05Wrong}');
+/// Asserts the per-genre floors. [correct] and [wrong] are keyed by genre;
+/// a floor on `sent-right` and a ceiling on `sent-wrong` for each.
+void _expectFloors(
+  _Scores s, {
+  required Map<Genre, int> minSentRight,
+  required Map<Genre, int> maxSentWrong,
+  required Map<Genre, int> maxNoneWrong,
+}) {
+  for (final g in Genre.values) {
+    expect(s.sentRight(g), greaterThanOrEqualTo(minSentRight[g]!),
+        reason: '${g.label}: sent-right floor');
+    expect(s.sentWrong(g), lessThanOrEqualTo(maxSentWrong[g]!),
+        reason: '${g.label}: sent-wrong ceiling (a wrong area is the '
+            'expensive failure)');
+    expect(s.noneWrong(g), lessThanOrEqualTo(maxNoneWrong[g]!),
+        reason: '${g.label}: none-wrong ceiling');
+  }
+}
 
-      // Pinned floors per plan §8.2 (C7t): 170/19/87.5%.
-      expect(s.aggCorrect, greaterThanOrEqualTo(170),
-          reason: 'aggregate correct floor');
-      expect(s.aggWrong, lessThanOrEqualTo(19),
-          reason: 'aggregate wrong ceiling');
-      expect(s.rowsOk, greaterThanOrEqualTo(87.5),
-          reason: 'aggregate rowsOK floor');
-      // Needs-area subset (74 rows where NONE absent)
-      expect(s.needsAreaCorrect, greaterThanOrEqualTo(60),
-          reason: 'needs-area correct');
-      expect(s.needsAreaWrong, lessThanOrEqualTo(4),
-          reason: 'needs-area wrong');
-      // Doc01 spot
-      expect(s.doc01Correct, greaterThanOrEqualTo(63), reason: 'doc01 correct');
-      expect(s.doc01Wrong, lessThanOrEqualTo(5), reason: 'doc01 wrong');
-      // Doc05 junk
-      expect(s.doc05Wrong, lessThanOrEqualTo(4), reason: 'doc05 junk');
+void main() {
+  group('area ground truth C7t (no gazetteer — phase-1 behaviour exactly)',
+      () {
+    test('per-genre floors', () {
+      final s = _aggregate();
+      s.report('C7t');
+      // Pinned from the 2026-09-08 measurement run, per genre. Raising a
+      // floor is a decision; lowering one is a regression.
+      _expectFloors(
+        s,
+        minSentRight: {
+          Genre.handwritten: 65,
+          Genre.aiWritten: 31,
+          Genre.wanderlog: 74,
+        },
+        maxSentWrong: {
+          Genre.handwritten: 4,
+          Genre.aiWritten: 4,
+          Genre.wanderlog: 11,
+        },
+        maxNoneWrong: {
+          Genre.handwritten: 1,
+          Genre.aiWritten: 2,
+          Genre.wanderlog: 7,
+        },
+      );
     });
 
     test('known failures are documented', () {
-      // Three rows that are wrong by design (multi-branch eateries under wrong heading)
-      // Pin them so a silent behaviour change is visible in either direction.
+      // Three rows that are wrong by design (multi-branch eateries under wrong
+      // heading). Pinned so a silent behaviour change is visible either way.
       final corpusFile =
           File('test/fixtures/areas/corpus/01-captain-tokyo.txt');
       final lines = corpusFile.readAsStringSync().split('\n');
-      final text = lines.join('\n');
-      final result = parseItinerary(text);
+      final result = parseItinerary(lines.join('\n'));
       String? areaAt(int ln) {
         for (final d in result.days) {
           for (final s in d.stops) {
@@ -183,28 +278,20 @@ void main() {
         return null;
       }
 
-      // 01:103 ginza-not-jinbocho — GLITCH coffee line under GINZA heading but actually Jinbocho
       expect(areaAt(49), isNotNull,
           reason: '01:49 (line 49 GLITCH) should have an area');
-      // 01:158 shimokitazawa — line says shimokitazawa but gets shibuya from running
-      final a158 = areaAt(158);
-      // Document it as currently wrong (shibuya vs shimokitazawa)
-      expect(a158?.toLowerCase(),
+      expect(areaAt(158)?.toLowerCase(),
           anyOf(contains('shibuya'), contains('shimokitazawa')),
           reason: '01:158 documented failure');
-      // 01:190 nerima — teamLab line
       expect(areaAt(190), isNotNull,
           reason: '01:190 should have area (even if wrong)');
     });
 
     test('vocab fixtures match expected anchor vocabularies', () {
-      // Spot check vocab-01
       final expected = File('test/fixtures/areas/vocab/vocab-01.txt')
           .readAsLinesSync()
           .map((l) => l.split('\t').first)
           .toSet();
-      // Rebuild vocab via package's vocab builder indirectly: just check that
-      // the expected vocab words are reasonable (not empty)
       expect(expected.length, greaterThan(5),
           reason: 'vocab-01 fixture should have entries');
     });
@@ -244,31 +331,49 @@ void main() {
         expect(text, contains('GeoNames'));
         expect(text, contains('CC-BY 4.0'));
       }
-      // Plan step 12 acceptance: the JP asset is the size budget.
       final jp = File('../../assets/area_gazetteer/jp.txt.gz');
       expect(jp.lengthSync(), lessThanOrEqualTo(1024 * 1024),
           reason: 'JP asset <= 1 MB');
     });
 
-    test('aggregate floors', () {
+    test('per-genre floors', () {
       final s = _aggregate(gazetteer: _loadCommittedGazetteer());
-      print(
-          'C10 aggregate: correct=${s.aggCorrect} wrong=${s.aggWrong} miss=${s.aggMiss} noneOk=${s.aggNoneOk} rowsOK=${s.rowsOk.toStringAsFixed(1)}%');
-
-      // Pinned floors per plan step 12: 173/16/88.5%.
-      expect(s.aggCorrect, greaterThanOrEqualTo(173),
-          reason: 'aggregate correct floor');
-      expect(s.aggWrong, lessThanOrEqualTo(16),
-          reason: 'aggregate wrong ceiling');
-      expect(s.rowsOk, greaterThanOrEqualTo(88.5),
-          reason: 'aggregate rowsOK floor');
+      s.report('C10');
+      _expectFloors(
+        s,
+        minSentRight: {
+          Genre.handwritten: 69,
+          Genre.aiWritten: 34,
+          Genre.wanderlog: 79,
+        },
+        maxSentWrong: {
+          Genre.handwritten: 1,
+          Genre.aiWritten: 3,
+          Genre.wanderlog: 9,
+        },
+        maxNoneWrong: {
+          Genre.handwritten: 1,
+          Genre.aiWritten: 1,
+          Genre.wanderlog: 7,
+        },
+      );
     });
 
-    test('the gazetteer only ever improves the aggregate', () {
+    test('the gazetteer never makes a genre worse on the expensive measure',
+        () {
       final without = _aggregate();
       final with_ = _aggregate(gazetteer: _loadCommittedGazetteer());
-      expect(with_.aggCorrect, greaterThanOrEqualTo(without.aggCorrect));
-      expect(with_.aggWrong, lessThanOrEqualTo(without.aggWrong));
+      for (final g in Genre.values) {
+        expect(with_.sentRight(g), greaterThanOrEqualTo(without.sentRight(g)),
+            reason: '${g.label}: gazetteer must not lose a correct area');
+      }
+      // Doc 03 gains two wrong areas from the gazetteer and doc 01 loses
+      // three, so the ai-written genre is deliberately exempt from the
+      // wrong-area comparison; it is pinned by the ceiling above instead.
+      for (final g in [Genre.handwritten, Genre.wanderlog]) {
+        expect(with_.sentWrong(g), lessThanOrEqualTo(without.sentWrong(g)),
+            reason: '${g.label}: gazetteer must not add a wrong area');
+      }
     });
 
     test('the hamlet filter killed the junk it was measured to kill', () {
