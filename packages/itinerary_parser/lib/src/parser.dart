@@ -133,12 +133,10 @@ ParseResult _annotateWithAreas(
   final vocab = vocabResult.vocab;
 
   final assignmentIds = <Stop, int>{};
-  final assignmentLines = <int, int>{};
   var nextAssignmentId = 0;
   int assignmentIdFor(Stop stop) {
     final assignmentId = nextAssignmentId++;
     assignmentIds[stop] = assignmentId;
-    assignmentLines[assignmentId] = stop.sourceLine.lineNumber;
     return assignmentId;
   }
 
@@ -183,8 +181,7 @@ ParseResult _annotateWithAreas(
       // We use the engine's own signal: assignedOwn was set on that line.
       // The engine sets running + assignedOwn on marker lines; we detect
       // by checking if setBy == lineNumber.
-      if (entry.value.setByLine != null &&
-          entry.value.setByLine == assignmentLines[entry.key]) {
+      if (entry.value.setByAssignmentId == entry.key) {
         markerAssignments.add(entry.key);
       }
     }

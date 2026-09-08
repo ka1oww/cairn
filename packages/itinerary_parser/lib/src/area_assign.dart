@@ -35,7 +35,13 @@ class AreaAssignment {
   final String? text;
   final String source; // AreaSource name
   final int? setByLine;
-  const AreaAssignment({this.text, required this.source, this.setByLine});
+  final int? setByAssignmentId;
+  const AreaAssignment({
+    this.text,
+    required this.source,
+    this.setByLine,
+    this.setByAssignmentId,
+  });
 }
 
 /// Assigns areas to all stops. Mirrors scorer's `anchor_assign` with
@@ -63,6 +69,7 @@ Map<int, AreaAssignment> anchorAssign(
   final out = <int, AreaAssignment>{};
   String? running;
   int? runningSetBy;
+  int? runningSetByAssignmentId;
 
   for (final day in days) {
     var routeContinuation = false;
@@ -72,9 +79,11 @@ Map<int, AreaAssignment> anchorAssign(
     if (kind == 'daynum' || kind == 'date' || kind == 'none') {
       running = seed;
       runningSetBy = seed != null ? -1 : null; // day boundary
+      runningSetByAssignmentId = null;
     } else if (seed != null) {
       running = seed;
       runningSetBy = -1;
+      runningSetByAssignmentId = null;
     }
     // unqualified placeHeader: running continues
 
@@ -88,6 +97,7 @@ Map<int, AreaAssignment> anchorAssign(
       String? assignedOwn;
       String? assignedSource;
       int? assignedSetBy;
+      int? assignedSetByAssignmentId;
 
       // marker check
       final isHotelLine = hotelWordRegExp.hasMatch(raw);
@@ -114,9 +124,11 @@ Map<int, AreaAssignment> anchorAssign(
           if (leftover.isEmpty && cands.length == 1) {
             running = cands.first;
             runningSetBy = s.lineNumber;
+            runningSetByAssignmentId = s.assignmentId;
             assignedOwn = cands.first;
             assignedSource = 'runningHeading';
             assignedSetBy = s.lineNumber;
+            assignedSetByAssignmentId = s.assignmentId;
           }
         }
       }
@@ -129,9 +141,11 @@ Map<int, AreaAssignment> anchorAssign(
           if (pw.isNotEmpty && pw.every((w) => vocab.contains(w))) {
             running = pw.join(' ');
             runningSetBy = s.lineNumber;
+            runningSetByAssignmentId = s.assignmentId;
             assignedOwn = running;
             assignedSource = 'hotelPrefix';
             assignedSetBy = s.lineNumber;
+            assignedSetByAssignmentId = s.assignmentId;
           }
         }
       }
@@ -162,9 +176,11 @@ Map<int, AreaAssignment> anchorAssign(
         if (dests.isNotEmpty) {
           running = dests.last;
           runningSetBy = s.lineNumber;
+          runningSetByAssignmentId = s.assignmentId;
           assignedOwn = running;
           assignedSource = 'trainDestination';
           assignedSetBy = s.lineNumber;
+          assignedSetByAssignmentId = s.assignmentId;
         }
       }
       if (isTrainRoute) {
@@ -202,6 +218,8 @@ Map<int, AreaAssignment> anchorAssign(
       String? source =
           assignedSource ?? (assigned != null ? 'runningHeading' : 'none');
       int? setBy = assignedSetBy ?? runningSetBy;
+      int? setByAssignmentId =
+          assignedSetByAssignmentId ?? runningSetByAssignmentId;
       // For inlineLocality, source is inlineLocality even when via assignedOwn
       // For running fallback, source is runningHeading
 
@@ -209,6 +227,7 @@ Map<int, AreaAssignment> anchorAssign(
       if (assignedOwn == null && assigned != null) {
         source = 'runningHeading';
         setBy = runningSetBy;
+        setByAssignmentId = runningSetByAssignmentId;
       }
 
       // overrides: traveller annotation beats context
@@ -221,6 +240,7 @@ Map<int, AreaAssignment> anchorAssign(
               ? 'travellerDeclared'
               : 'travellerProximity';
           setBy = null; // own-line source
+          setByAssignmentId = null;
           overridden = true;
           break;
         }
@@ -237,6 +257,7 @@ Map<int, AreaAssignment> anchorAssign(
             assigned = pws.join(' ');
             source = 'travellerProximity';
             setBy = null;
+            setByAssignmentId = null;
             break;
           }
         }
@@ -249,6 +270,7 @@ Map<int, AreaAssignment> anchorAssign(
         text: assigned,
         source: source!,
         setByLine: setBy,
+        setByAssignmentId: setByAssignmentId,
       );
     }
   }

@@ -86,6 +86,16 @@ void main() {
       expect(day.stops[0].area?.text, 'rome');
       expect(day.stops[1].area?.text, 'Trastevere');
     });
+
+    test('only the inline area setter becomes an area heading', () {
+      final day = parseItinerary(
+        'Tokyo\n'
+        'Day 1 - Rome: - Tokyo - Coffee',
+      ).days.single;
+
+      expect(day.stops[0].kind, StopKind.areaHeading);
+      expect(day.stops[1].kind, StopKind.mealLabel);
+    });
   });
 
   group('day ranges and repeated claims', () {
