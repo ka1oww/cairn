@@ -181,6 +181,15 @@ void main() {
       'Chill',
       '```',
       '|------|--------------|',
+      // A Wanderlog print writes the travel leg between every pair of
+      // stops. A hundred and five of them offered a maps tap in one plan,
+      // because `hr` and the distance units were missing from the lists
+      // while `min` and `hours` were already in them.
+      'min · 44.8 mi',
+      '< 1 min · 100 ft',
+      'hr 39 min · 67.4 mi',
+      '~1 hr 45 min',
+      '30 km',
     ]) {
       test('"$placeless" offers no tap', () {
         expect(offer(placeless), isNull);
@@ -205,6 +214,9 @@ void main() {
       '711',
       '京都',
       'Shibuya Sky',
+      // A unit beside a real name is still a real name: only a line made of
+      // nothing but units loses its tap.
+      'Hakuba Happo-One 5 min walk',
       'Narita International Airport',
     ]) {
       test('"$place" keeps its tap', () {

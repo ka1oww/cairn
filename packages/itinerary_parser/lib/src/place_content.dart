@@ -79,6 +79,20 @@ const Set<String> placelessWords = {
   'tbd',
   'tba',
   'none',
+  // Units. A Wanderlog print writes a travel leg between every pair of
+  // stops -- `5 min · 2.6 mi`, `< 1 min · 0 ft`, `~1 hr 45 min` -- and a
+  // line whose only content words are units of time and distance names no
+  // place, so it is offered no tap. `min`, `mins`, `hour`, `hours` and
+  // `hrs` are already furniture in `area_words.dart`; `hr` and the
+  // distances were the gap, and one missing abbreviation was enough to put
+  // a maps button on a hundred and fifty rows of a single plan.
+  'hr',
+  'mi',
+  'ft',
+  'km',
+  'yd',
+  'mile',
+  'miles',
 };
 
 /// True when [text] carries no word that could name a specific place.
