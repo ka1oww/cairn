@@ -170,4 +170,41 @@ void main() {
       expect(day.stops.first.area?.text, 'nagano');
     }
   });
+
+  test('a one-word parenthetical the plan knows names the area', () {
+    // The traveller writing the district after the venue, which is what a
+    // parenthetical on a stop line usually is. It needed a gazetteer until
+    // now, so a plan read phase-1 kept the running heading over the words
+    // the line itself put there.
+    const plan = 'Tokyo trip\n'
+        'Day 1 - Shibuya\n'
+        '- Start at Shibuya Station\n'
+        '- Walk to Shimokitazawa Station\n'
+        '- Ogawa coffee laboratory (Shimokitazawa)\n'
+        '- Nintendo Tokyo\n';
+
+    final stops = parseItinerary(plan).days.single.stops;
+    expect(stops[2].area?.text, 'shimokitazawa');
+    // And it speaks for its own line only: the running heading answers the
+    // next stop again.
+    expect(stops.last.area?.text, 'shibuya');
+  });
+
+  test('a longer parenthetical is a description, not an address', () {
+    // `MOUMOU TEI (BEEF BOWL)` is written twice in one real plan and
+    // capitalised both times, so `beef` and `bowl` reach the anchor
+    // vocabulary exactly as a district does. A gazetteer can say that
+    // `beef bowl` is not a place; the vocabulary cannot, so without one the
+    // rule reaches a single corroborated word and no further.
+    const plan = 'Nagoya trip\n'
+        'Day 1 - Nagoya\n'
+        '- Walk to Nagoya Station\n'
+        '- DINNER : MOUMOU TEI (BEEF BOWL)\n'
+        'Day 2 - Nagoya\n'
+        '- DINNER : MOUMOU TEI (BEEF BOWL)\n';
+
+    for (final day in parseItinerary(plan).days) {
+      expect(day.stops.last.area?.text, 'nagoya');
+    }
+  });
 }

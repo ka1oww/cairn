@@ -243,17 +243,20 @@ void main() {
       _expectFloors(
         s,
         minSentRight: {
-          Genre.handwritten: 65,
+          // Raised again when a bare one-word parenthetical the plan's own
+          // vocabulary knows became an area without a gazetteer:
+          // `Ogawa coffee laboratory (SHIMOKITAZAWA)` says where it is.
+          Genre.handwritten: 66,
           // Raised when stop-line self-evidence stopped being gazetteer-only:
           // without one it now reads the plan's own anchor vocabulary, which
           // is what lets `Hakuba Happo Bus Terminal` and `Shinjuku Gyoen
           // National Garden` answer for themselves instead of taking the
           // running heading sixty miles away.
-          Genre.aiWritten: 32,
+          Genre.aiWritten: 34,
           Genre.wanderlog: 85,
         },
         maxSentWrong: {
-          Genre.handwritten: 4,
+          Genre.handwritten: 3,
           // Zero, since a heading run that names no place stopped seeding a
           // day: `## Day 4: Local Gems` sent four Paris stops to a search
           // for `local`, and they were every wrong area this genre had

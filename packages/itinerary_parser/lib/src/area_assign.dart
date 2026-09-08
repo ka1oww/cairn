@@ -280,7 +280,12 @@ Map<int, AreaAssignment> anchorAssign(
             break;
           }
         }
-        if (!overridden && hasGaz()) {
+        // A bare parenthetical the evidence knows as a place is the
+        // traveller saying where the line is: `Ogawa coffee laboratory
+        // (SHIMOKITAZAWA)`. What counts as known is the gazetteer where
+        // there is one and the plan's own anchor vocabulary where there is
+        // not, exactly as for the stop-line self-evidence above.
+        if (!overridden) {
           for (final p in parens) {
             final pws = [
               for (final w in areaTokens(p))
@@ -288,9 +293,18 @@ Map<int, AreaAssignment> anchorAssign(
                     !venueGenericWords.contains(w))
                   w,
             ];
+            // One word, not three, when the vocabulary is the only evidence.
+            // A gazetteer can confirm that a phrase is a real place name;
+            // the vocabulary cannot, and a plan that writes
+            // `MOUMOU TEI (BEEF BOWL)` twice corroborates `beef` and `bowl`
+            // exactly as it corroborates a district. A multi-word
+            // parenthetical is a description far more often than an address,
+            // and a single corroborated word is the tightest this evidence
+            // gets.
             if (pws.isNotEmpty &&
-                pws.length <= 3 &&
-                gazContains(pws.join(' '))) {
+                (hasGaz()
+                    ? pws.length <= 3 && gazContains(pws.join(' '))
+                    : pws.length == 1 && vocab.contains(pws.single))) {
               assigned = pws.join(' ');
               source = 'travellerProximity';
               setBy = null;
