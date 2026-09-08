@@ -130,7 +130,7 @@ ParseResult _annotateWithAreas(
         stops: [
           for (final s in d.stops)
             AreaStopInput(
-                raw: s.sourceLine.text,
+                raw: _stopAnalysisText(d, s),
                 hasTime: s.time != null,
                 lineNumber: s.sourceLine.lineNumber),
         ],
@@ -169,7 +169,7 @@ ParseResult _annotateWithAreas(
       final assignment = assignments[s.sourceLine.lineNumber];
       final isHeading = markerLines.contains(s.sourceLine.lineNumber);
       final classified = classifyStop(
-        raw: s.sourceLine.text,
+        raw: _stopAnalysisText(d, s),
         isAreaHeading: isHeading,
         hasTime: s.time != null,
       );
@@ -229,6 +229,11 @@ ParseResult _annotateWithAreas(
     firstAmbiguousNumericDate: base.firstAmbiguousNumericDate,
     firstYearlessDate: base.firstYearlessDate,
   );
+}
+
+String _stopAnalysisText(ParsedDay day, Stop stop) {
+  final cameFromHeader = day.headerSourceLine == stop.sourceLine;
+  return cameFromHeader ? stop.text : stop.sourceLine.text;
 }
 
 AreaSource _areaSourceFromString(String s) {
@@ -293,7 +298,7 @@ enum _Kind {
 class _Classified {
   final _Kind kind;
   final _Line line;
-  final int? dayNumber;
+  final List<int>? dayNumbers;
   final String? headerTrailing;
 
   /// The header's trailing text as written, before a date fragment was
@@ -309,7 +314,7 @@ class _Classified {
   const _Classified(
     this.kind,
     this.line, {
-    this.dayNumber,
+    this.dayNumbers,
     this.headerTrailing,
     this.headerTitle,
     this.headerDateFragment,
@@ -370,7 +375,7 @@ _Classified _classifyLine(
       return _Classified(
         _Kind.dayHeader,
         line,
-        dayNumber: dayMatch.dayNumber,
+        dayNumbers: dayMatch.dayNumbers,
         headerTrailing: fragment == null
             ? trailing
             : textWithoutFragment(trailing!, fragment),
@@ -406,6 +411,111 @@ _Classified _classifyLine(
   }
   return _Classified(_Kind.stop, line,
       stopText: stopText, stopTime: extractTime(stopText));
+}
+
+class _DayHeaderParts {
+  final String? place;
+  final List<String> stops;
+  const _DayHeaderParts({this.place, this.stops = const []});
+}
+
+final RegExp _inlineDayListSeparator = RegExp(r'\s+(?:[-–—+•])\s+');
+
+/// Separates a `Day N` tail into its optional location label and content.
+///
+/// A short name alone remains the day label it was before this split. Strong
+/// list punctuation is representation evidence, though: in `Rome: - Trevi -
+/// Pantheon`, `Rome` is the label and the dashed items are stops. When no
+/// label can be identified confidently, every chunk stays visible as a stop
+/// and [place] stays null rather than promoting prose into a location fact.
+_DayHeaderParts _splitDayHeaderParts(
+  String? trailing, {
+  required bool hasFollowingStops,
+}) {
+  if (trailing == null) return const _DayHeaderParts();
+  final text = trailing.trim();
+  if (text.isEmpty) return const _DayHeaderParts();
+
+  // A parenthesised dashed list is present in the field corpus as
+  // `Venice (- Rialto bridge - ...)`.
+  final parenthesised =
+      RegExp(r'^(.*?)\s*\(\s*-\s*(.+)\)\s*$').firstMatch(text);
+  if (parenthesised != null) {
+    final prefix = parenthesised.group(1)!.trim();
+    final items = _splitInlineDayStops(parenthesised.group(2)!);
+    if (_isPlainDayLabel(prefix)) {
+      return _DayHeaderParts(place: prefix, stops: items);
+    }
+    return _DayHeaderParts(stops: [_cleanDayStop(prefix), ...items]);
+  }
+
+  // The colon must be followed by whitespace, so the colon in `07:00`
+  // cannot be mistaken for the boundary between a city and its list.
+  final colon = RegExp(r'\s*:\s+(?=\S)').firstMatch(text);
+  if (colon != null) {
+    final prefix = text.substring(0, colon.start).trim();
+    final rest = text.substring(colon.end).trim();
+    final items = _splitInlineDayStops(rest);
+    if (_isPlainDayLabel(prefix)) {
+      return _DayHeaderParts(place: prefix, stops: items);
+    }
+    return _DayHeaderParts(
+      stops: [
+        if (prefix.isNotEmpty) _cleanDayStop(prefix),
+        ...items,
+      ],
+    );
+  }
+
+  if (_inlineDayListSeparator.hasMatch(text)) {
+    return _DayHeaderParts(stops: _splitInlineDayStops(text));
+  }
+
+  // Existing multi-line plans use the whole Day tail as their label, even
+  // when it is prose-like (`Arrival & Gion (Kyoto)`). If actual stop lines
+  // follow, preserve that established interpretation. An inline list above
+  // was still split first, so mixed headers do not hide their own stops.
+  if (hasFollowingStops || _isPlainDayLabel(text)) {
+    return _DayHeaderParts(place: text);
+  }
+
+  // No trustworthy boundary exists. Preserve the whole tail as one stop;
+  // later stop classification remains responsible for what kind of stop it
+  // is. Keeping one uncertain unit is quieter than inventing smaller facts.
+  return _DayHeaderParts(stops: [text]);
+}
+
+List<String> _splitInlineDayStops(String text) {
+  final cleaned = text.replaceFirst(RegExp(r'^\s*[-–—+•]\s*'), '');
+  return cleaned
+      .split(_inlineDayListSeparator)
+      .map(_cleanDayStop)
+      .where((part) => part.isNotEmpty)
+      .toList(growable: false);
+}
+
+String _cleanDayStop(String text) =>
+    text.trim().replaceAll(RegExp(r'^[-–—+•:\s]+|[-–—+•:\s]+$'), '').trim();
+
+bool _isPlainDayLabel(String text) {
+  final trimmed = text.trim();
+  final labelShape = trimmed.replaceFirst(RegExp(r':$'), '').trim();
+  if (looksLikeProperNounHeader(labelShape)) return true;
+  if (RegExp(r'^[\p{L}\p{M}]+$', unicode: true).hasMatch(labelShape)) {
+    return true;
+  }
+
+  // Preserve two established title shapes whose numbers are descriptions,
+  // not list content or dates (`5 temples`, `Kyoto 3 nights`).
+  if (RegExp(r'^\d{1,3}\s+[\p{L}\p{M}]+$', unicode: true)
+      .hasMatch(labelShape)) {
+    return true;
+  }
+  return RegExp(
+    r'^[\p{L}\p{M}\s\x27.]+\s+\d{1,3}\s+nights?$',
+    caseSensitive: false,
+    unicode: true,
+  ).hasMatch(labelShape);
 }
 
 bool _nextNonBlankLooksLikeListItem(List<_Line> lines, int fromIndex) {
@@ -499,23 +609,46 @@ class _OpenDay {
   }
 }
 
+bool _hasFollowingStops(List<_Classified> lines, int headerIndex) {
+  for (var index = headerIndex + 1; index < lines.length; index++) {
+    switch (lines[index].kind) {
+      case _Kind.dayHeader:
+      case _Kind.dateHeader:
+      case _Kind.placeHeader:
+        return false;
+      case _Kind.stop:
+        return true;
+      case _Kind.blank:
+      case _Kind.decorative:
+      case _Kind.whatsappPlaceholder:
+      case _Kind.signature:
+      case _Kind.hotelBooking:
+      case _Kind.urlOnly:
+      case _Kind.empty:
+        break;
+    }
+  }
+  return false;
+}
+
 ParseResult _buildHeaderModeResult(
     List<_Classified> classified, DateTime? tripStartDate) {
   final days = <ParsedDay>[];
   final unplaced = <UnplacedLine>[];
-  _OpenDay? current;
+  var current = <_OpenDay>[];
   var contentLineCount = 0;
   AmbiguousNumericDate? firstAmbiguousNumericDate;
   YearlessDate? firstYearlessDate;
 
   void closeCurrent() {
-    if (current != null) {
-      days.add(current!.close());
-      current = null;
-    }
+    days.addAll(current.map((day) => day.close()));
+    current = [];
   }
 
-  for (final c in classified) {
+  for (var classifiedIndex = 0;
+      classifiedIndex < classified.length;
+      classifiedIndex++) {
+    final c = classified[classifiedIndex];
     switch (c.kind) {
       case _Kind.blank:
       case _Kind.decorative:
@@ -533,30 +666,52 @@ ParseResult _buildHeaderModeResult(
         closeCurrent();
         final fragment = c.headerDateFragment;
         firstAmbiguousNumericDate ??= fragment?.numericAsWritten;
-        current = _OpenDay(
-          index: days.length + 1,
-          // Calendar arithmetic, not Duration arithmetic: adding 24-hour
-          // blocks to a local midnight lands at 23:00 the previous day
-          // across a daylight-saving fall-back, and the truncation then
-          // dates the day a day early.
-          date: tripStartDate == null
-              ? null
-              : DateTime(tripStartDate.year, tripStartDate.month,
-                  tripStartDate.day + c.dayNumber! - 1),
-          place: c.headerTrailing,
-          headerConfidence: Confidence.high,
-          headerSourceLine: c.line.sourceLine,
-          dateCandidate: fragment == null
-              ? null
-              : DateCandidate(
-                  day: fragment.day,
-                  month: fragment.month,
-                  year: fragment.year,
-                  text: fragment.text,
-                  headerText: c.headerTitle!,
-                  ambiguousNumericOrder: fragment.ambiguousNumericOrder,
-                ),
+        final parts = _splitDayHeaderParts(
+          c.headerTrailing,
+          hasFollowingStops: _hasFollowingStops(classified, classifiedIndex),
         );
+        // A range becomes one ParsedDay per claimed number. Its inline and
+        // following content is copied to every claimed day because the source
+        // associates the block with the whole range and offers no truthful way
+        // to allocate individual items. Duplicate or overlapping numbers are
+        // kept as separate entries in source order: merging them would silently
+        // discard the later claim and choosing a winner belongs to the person.
+        for (final dayNumber in c.dayNumbers!) {
+          final openDay = _OpenDay(
+            index: days.length + current.length + 1,
+            // Calendar arithmetic, not Duration arithmetic: adding 24-hour
+            // blocks to a local midnight lands at 23:00 the previous day
+            // across a daylight-saving fall-back, and the truncation then
+            // dates the day a day early.
+            date: tripStartDate == null
+                ? null
+                : DateTime(tripStartDate.year, tripStartDate.month,
+                    tripStartDate.day + dayNumber - 1),
+            place: parts.place,
+            headerConfidence: Confidence.high,
+            headerSourceLine: c.line.sourceLine,
+            dateCandidate: fragment == null
+                ? null
+                : DateCandidate(
+                    day: fragment.day,
+                    month: fragment.month,
+                    year: fragment.year,
+                    text: fragment.text,
+                    headerText: c.headerTitle!,
+                    ambiguousNumericOrder: fragment.ambiguousNumericOrder,
+                  ),
+          );
+          for (final stopText in parts.stops) {
+            openDay.stops.add(
+              Stop(
+                text: stopText,
+                time: extractTime(stopText),
+                sourceLine: c.line.sourceLine,
+              ),
+            );
+          }
+          current.add(openDay);
+        }
       case _Kind.dateHeader:
         contentLineCount++;
         closeCurrent();
@@ -591,39 +746,45 @@ ParseResult _buildHeaderModeResult(
         } else {
           uncertainty = DayUncertainty.weekdayWithoutDate;
         }
-        current = _OpenDay(
-          index: days.length + 1,
-          date: resolvedDate,
-          place: m.trailingText,
-          headerConfidence:
-              uncertainty == null ? Confidence.high : Confidence.medium,
-          headerUncertainty: uncertainty,
-          headerWeekday: m.weekday,
-          headerSourceLine: c.line.sourceLine,
-        );
+        current = [
+          _OpenDay(
+            index: days.length + 1,
+            date: resolvedDate,
+            place: m.trailingText,
+            headerConfidence:
+                uncertainty == null ? Confidence.high : Confidence.medium,
+            headerUncertainty: uncertainty,
+            headerWeekday: m.weekday,
+            headerSourceLine: c.line.sourceLine,
+          ),
+        ];
       case _Kind.placeHeader:
         contentLineCount++;
         closeCurrent();
-        current = _OpenDay(
-          index: days.length + 1,
-          place: c.placeText,
-          headerConfidence: Confidence.medium,
-          headerUncertainty: DayUncertainty.barePlaceName,
-          headerSourceLine: c.line.sourceLine,
-        );
+        current = [
+          _OpenDay(
+            index: days.length + 1,
+            place: c.placeText,
+            headerConfidence: Confidence.medium,
+            headerUncertainty: DayUncertainty.barePlaceName,
+            headerSourceLine: c.line.sourceLine,
+          ),
+        ];
       case _Kind.stop:
         contentLineCount++;
-        if (current == null) {
+        if (current.isEmpty) {
           unplaced.add(UnplacedLine(
               sourceLine: c.line.sourceLine,
               reason: UnplacedReason.precedesFirstHeader));
         } else {
-          current!.stops.add(
-            Stop(
-                text: c.stopText!,
-                time: c.stopTime,
-                sourceLine: c.line.sourceLine),
-          );
+          for (final day in current) {
+            day.stops.add(
+              Stop(
+                  text: c.stopText!,
+                  time: c.stopTime,
+                  sourceLine: c.line.sourceLine),
+            );
+          }
         }
     }
   }

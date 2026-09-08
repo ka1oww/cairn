@@ -69,22 +69,53 @@ bool isTriviallyEmpty(String text) =>
     text.trim().replaceAll(RegExp(r'[\s\-–—:,.]'), '').isEmpty;
 
 final RegExp _dayNumberHeader = RegExp(
-  r'^day\s*[:\-]?\s*(\d{1,3})\b\s*(?:[-:–—]\s*)?(.*)$',
+  r'^day\s*[:\-]?\s*(\d{1,3})((?:(?:[-–—]\s*|\s*\+\s*)\d{1,3})*)\b\s*(?:[-:–—]\s*)?(.*)$',
   caseSensitive: false,
 );
 
 class DayNumberMatch {
-  final int dayNumber;
+  final List<int> dayNumbers;
   final String? trailingText;
-  const DayNumberMatch(this.dayNumber, this.trailingText);
+  const DayNumberMatch(this.dayNumbers, this.trailingText);
 }
 
 DayNumberMatch? tryParseDayNumberHeader(String line) {
   final m = _dayNumberHeader.firstMatch(line.trim());
   if (m == null) return null;
-  final trailing = m.group(2)?.trim();
+  final first = int.parse(m.group(1)!);
+  final continuation = m.group(2)!;
+  final writtenNumbers = <int>[
+    first,
+    for (final match in RegExp(r'\d{1,3}').allMatches(continuation))
+      int.parse(match.group(0)!),
+  ];
+
+  // A two-endpoint dash is an inclusive range in the direction written:
+  // `Day 2-5` becomes 2,3,4,5 and `Day 5-2` becomes 5,4,3,2. Three or more
+  // dashed numbers (`Day 4-5-6`) and plus-separated numbers (`Day 6 + 7`)
+  // are explicit claims and stay exactly as written. Repeated numbers are
+  // deliberately retained; the document builder also retains duplicate and
+  // overlapping claims from separate headers rather than silently merging or
+  // overwriting a traveller's text.
+  final List<int> dayNumbers;
+  if (writtenNumbers.length == 2 &&
+      !continuation.contains('+') &&
+      RegExp(r'[-–—]').hasMatch(continuation)) {
+    final start = writtenNumbers.first;
+    final end = writtenNumbers.last;
+    final step = start <= end ? 1 : -1;
+    dayNumbers = [];
+    for (var day = start;; day += step) {
+      dayNumbers.add(day);
+      if (day == end) break;
+    }
+  } else {
+    dayNumbers = writtenNumbers;
+  }
+
+  final trailing = m.group(3)?.trim();
   return DayNumberMatch(
-    int.parse(m.group(1)!),
+    List.unmodifiable(dayNumbers),
     (trailing == null || trailing.isEmpty) ? null : trailing,
   );
 }
