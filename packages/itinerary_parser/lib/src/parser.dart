@@ -333,7 +333,12 @@ String? _searchableName(Stop stop) {
 ///   * **Disagreement is silence.** Two resolved occurrences under different
 ///     areas is the ambiguity the rule exists to respect, not to resolve --
 ///     one Japan plan carries two genuinely different Shiraito Waterfalls --
-///     so a name whose twins disagree is left bare.
+///     so a name whose twins disagree is left bare. Whether they disagree is
+///     decided on the canonical form, the same normalisation the names
+///     themselves are keyed by: `shibuya` off a heading and `Shibuya Station`
+///     off the traveller's own aside are one place written two ways, and
+///     reading them as raw text called that a disagreement and refused a
+///     lend that should have happened.
 ///   * **The area must be a real place**, known to the anchor vocabulary or
 ///     to the gazetteer. An in-tail annotation reaches the engine unvalidated
 ///     because the traveller's own wording is a statement rather than a
@@ -353,6 +358,18 @@ String? _searchableName(Stop stop) {
 ///   * **It never overwrites.** Only a stop with no area at all is touched,
 ///     so every stronger provenance -- and the traveller's own correction
 ///     above this package -- is untouched by construction.
+/// The plainer of two spellings of one area, for lending onward.
+///
+/// A plan writes the same place several ways -- `shibuya`, `SHIBUYA`,
+/// `Shibuya STN` -- and the agreement test above is made on the canonical
+/// form, so one of the spellings has to be picked to actually send. Fewest
+/// words wins, because the extra word is furniture the search does not need
+/// (`UENO station` says nothing `ueno` does not), and a tie goes to the one
+/// the plan wrote first. Nothing here invents a spelling: every candidate is
+/// the traveller's own wording on some line of their own plan.
+String _plainerAreaOf(String candidate, String held) =>
+    areaTokens(candidate).length < areaTokens(held).length ? candidate : held;
+
 /// Distinct lines that must already have resolved a name to one area before
 /// that area may be lent to the name's bare occurrences.
 const int _minLendingOccurrences = 2;
@@ -362,7 +379,7 @@ List<ParsedDay> _lendAreasToRepeatedNames(
   Set<String> vocab,
   AreaGazetteer? gazetteer,
 ) {
-  final areasByName = <String, Set<String>>{};
+  final areasByName = <String, Map<String, String>>{};
   final resolvedLines = <String, Set<int>>{};
   var anyBare = false;
   for (final day in days) {
@@ -371,12 +388,17 @@ List<ParsedDay> _lendAreasToRepeatedNames(
       if (name == null) continue;
       final key = normalizedArea(name);
       if (key.isEmpty) continue;
-      final entry = areasByName.putIfAbsent(key, () => <String>{});
+      final entry = areasByName.putIfAbsent(key, () => <String, String>{});
       final area = stop.area?.text;
       if (area == null) {
         anyBare = true;
       } else {
-        entry.add(area);
+        final areaKey = normalizedArea(area);
+        entry.update(
+          areaKey.isEmpty ? area : areaKey,
+          (held) => _plainerAreaOf(area, held),
+          ifAbsent: () => area,
+        );
         resolvedLines
             .putIfAbsent(key, () => <int>{})
             .add(stop.sourceLine.lineNumber);
@@ -398,7 +420,7 @@ List<ParsedDay> _lendAreasToRepeatedNames(
     if ((resolvedLines[entry.key]?.length ?? 0) < _minLendingOccurrences) {
       continue;
     }
-    final area = entry.value.first;
+    final area = entry.value.values.first;
     if (namesARealPlace(area)) lendable[entry.key] = area;
   }
   if (lendable.isEmpty) return days;
@@ -453,6 +475,8 @@ AreaSource _areaSourceFromString(String s) {
       return AreaSource.hotelPrefix;
     case 'trainDestination':
       return AreaSource.trainDestination;
+    case 'selfEvidence':
+      return AreaSource.selfEvidence;
     case 'runningHeading':
     default:
       return AreaSource.runningHeading;

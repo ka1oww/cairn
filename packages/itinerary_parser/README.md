@@ -121,7 +121,8 @@ and several for an alternative or compound line. Where the deterministic
 extractor could work one out, a stop also carries an
 `AreaHint` — the neighbourhood/area text in force for that stop, plus an
 `AreaSource` naming why (`travellerDeclared`, `travellerProximity`,
-`inlineLocality`, `runningHeading`, `hotelPrefix`, `trainDestination`, or
+`inlineLocality`, `runningHeading`, `hotelPrefix`, `trainDestination`,
+`selfEvidence`, or
 `repeatedName`; `person` is reserved for an area the app's own editable-area
 seam set rather than the parser). `area` is null when the available evidence
 does not support one — sending nothing to a map is the correct behaviour then,
@@ -131,7 +132,9 @@ confidence.
 After the ordinary area pass, a repeated stop name may borrow an area from its
 resolved occurrences elsewhere in the same plan (`repeatedName`). The parser
 does this only when at least two distinct source lines resolved the name, every
-resolved occurrence agrees on one area, and that area is present in the anchor
+resolved occurrence agrees on one area — compared in canonical form, so
+`(Shibuya)` and `shibuya` are one area, with the plainer spelling the one
+lent — and that area is present in the anchor
 vocabulary or optional gazetteer. It never overwrites an existing area. One
 resolved occurrence is not corroboration, and names used under different areas
 remain unresolved.
@@ -140,9 +143,10 @@ remain unresolved.
 
 `parseItinerary` takes an optional `gazetteer` (an `AreaGazetteer`), and
 **`null` is a supported mode forever, not a stub**: with no gazetteer the
-extractor behaves exactly as phase 1 did, and the C7t ground-truth floors
+extractor answers from the plan's own text alone (phase-1 mode), and the
+C7t ground-truth floors
 in `test/area_ground_truth_test.dart` are pinned without one precisely so
-that stays true. Given one, a candidate area drawn from a *vocabulary run*
+that mode stays honest. Given one, a candidate area drawn from a *vocabulary run*
 must also be a real place name before it may become an area — which is
 what stops a menu word ('UNAGI', 'UDON') being sent to a map. The
 traveller's own in-tail wording ('Art & Eats in Le Marais') is trusted
@@ -155,10 +159,15 @@ prefer silence over a confident guess
 - **Stop-line self-evidence beats the running heading.** A stop line
   that names exactly one gazetteer-listed area — standing alone,
   directly after a venue/meal word (`... CAFE HARAJUKU`), written as a
-  `Name -` prefix, or already trusted this way earlier in the same day —
-  takes that area (`travellerDeclared`) instead of inheriting the day's
-  running area. A line matching two different gazetteer areas, or none,
-  says nothing and the running heading stands.
+  `Name -` prefix, or already trusted this way anywhere in the plan (the
+  assignment runs twice, so a name trusted late reaches a line earlier in
+  the plan) — takes that area (`travellerDeclared`) instead of inheriting
+  the day's running area. A line matching two different gazetteer areas, or none,
+  says nothing and the running heading stands. Without a gazetteer the
+  same rule runs over the plan's own anchor vocabulary, and the hint then
+  carries `selfEvidence`: an inference over the plan's vocabulary, never
+  the traveller declaring anything, so it sits in the parser tier and
+  anything may overwrite it.
 - **A train route's destination may continue onto the next line.** On a
   `Route:` line, and on the single line directly after one (a wrapped
   route), a gazetteer-known `... STN`/`Station` destination sets the
@@ -405,9 +414,10 @@ building UI on top of this package.
   (a coffee chain, a department store) can inherit the wrong
   neighbourhood — this is a known, pinned limitation
   (`test/area_ground_truth_test.dart`'s "known failures are documented"),
-  not something a caller should silently trust for every stop. With a
-  gazetteer, a stop line that itself uniquely names a gazetteer-listed
-  area overrides the running heading (see the gazetteer section above),
+  not something a caller should silently trust for every stop. A stop
+  line that itself uniquely names a known area — gazetteer-listed, or in
+  the plan's own anchor vocabulary without one — overrides the running
+  heading (see the gazetteer section above),
   but a line that names no area still inherits it.
 
 - **Nothing is ever silently dropped, but "unplaced" isn't "wrong."**

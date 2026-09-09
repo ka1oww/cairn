@@ -14,8 +14,15 @@
 ///
 /// [placelessWords] is deliberately a *separate* list rather than an addition
 /// to those. The lists in `area_words.dart` drive the area engine, and their
-/// header says plainly that editing one is a re-measurement event; a word
-/// added here changes what gets a maps button and changes no area at all.
+/// header says plainly that editing one is a re-measurement event.
+///
+/// This one is now a re-measurement event too, and it was not always. The
+/// area engine asks [namesNoPlace] of a heading it is about to seed a day
+/// from, because a run through the anchor vocabulary is an inference and an
+/// inference has to survive the question the tap rule already asks of a stop
+/// line: `## Day 4: Local Gems` runs `local`, and `local` names no place on
+/// a stop line or in a heading. So a word added below withholds a maps
+/// button *and* can withhold an area. Measure both.
 library;
 
 import 'area_words.dart';
@@ -72,6 +79,20 @@ const Set<String> placelessWords = {
   'tbd',
   'tba',
   'none',
+  // Units. A Wanderlog print writes a travel leg between every pair of
+  // stops -- `5 min · 2.6 mi`, `< 1 min · 0 ft`, `~1 hr 45 min` -- and a
+  // line whose only content words are units of time and distance names no
+  // place, so it is offered no tap. `min`, `mins`, `hour`, `hours` and
+  // `hrs` are already furniture in `area_words.dart`; `hr` and the
+  // distances were the gap, and one missing abbreviation was enough to put
+  // a maps button on a hundred and fifty rows of a single plan.
+  'hr',
+  'mi',
+  'ft',
+  'km',
+  'yd',
+  'mile',
+  'miles',
 };
 
 /// True when [text] carries no word that could name a specific place.

@@ -243,14 +243,27 @@ void main() {
       _expectFloors(
         s,
         minSentRight: {
-          Genre.handwritten: 65,
-          Genre.aiWritten: 31,
-          Genre.wanderlog: 78,
+          // Raised again when a bare one-word parenthetical the plan's own
+          // vocabulary knows became an area without a gazetteer:
+          // `Ogawa coffee laboratory (SHIMOKITAZAWA)` says where it is.
+          Genre.handwritten: 66,
+          // Raised when stop-line self-evidence stopped being gazetteer-only:
+          // without one it now reads the plan's own anchor vocabulary, which
+          // is what lets `Hakuba Happo Bus Terminal` and `Shinjuku Gyoen
+          // National Garden` answer for themselves instead of taking the
+          // running heading sixty miles away.
+          Genre.aiWritten: 34,
+          Genre.wanderlog: 85,
         },
         maxSentWrong: {
-          Genre.handwritten: 4,
-          Genre.aiWritten: 4,
-          Genre.wanderlog: 11,
+          Genre.handwritten: 3,
+          // Zero, since a heading run that names no place stopped seeding a
+          // day: `## Day 4: Local Gems` sent four Paris stops to a search
+          // for `local`, and they were every wrong area this genre had
+          // without a gazetteer. The gazetteer had already refused it, so
+          // C10 below is unchanged.
+          Genre.aiWritten: 0,
+          Genre.wanderlog: 7,
         },
         maxNoneWrong: {
           Genre.handwritten: 1,
@@ -372,13 +385,18 @@ void main() {
         s,
         minSentRight: {
           Genre.handwritten: 69,
-          Genre.aiWritten: 34,
-          Genre.wanderlog: 83,
+          // Raised when the areas a plan declares about its own stops became
+          // plan-wide rather than forward-only: `Hakuba Happo Bus Terminal`
+          // and `Hakuba Happo-One Snow Resort` were being sent to Nagano
+          // because the line that taught the engine `hakuba` came four stops
+          // later in the same day.
+          Genre.aiWritten: 35,
+          Genre.wanderlog: 87,
         },
         maxSentWrong: {
           Genre.handwritten: 1,
-          Genre.aiWritten: 3,
-          Genre.wanderlog: 9,
+          Genre.aiWritten: 2,
+          Genre.wanderlog: 6,
         },
         maxNoneWrong: {
           Genre.handwritten: 1,
