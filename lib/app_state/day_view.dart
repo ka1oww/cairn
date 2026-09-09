@@ -19,6 +19,7 @@
 // tracking, morning/afternoon segmentation, and any "we're up to here" mark.
 // The list is the plan, in order, as pasted.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:trip_moments/trip_moments.dart' as tm;
 
 import 'package:cairn_model/cairn_model.dart' show AreaSource, StopKind;
 
@@ -232,13 +233,9 @@ class AfterTheTrip extends DayView {
 
 /// Today, as the day page reads it.
 ///
-/// **This is an acknowledged approximation.** A trip has one clock and it
-/// follows the itinerary's leg (`docs/decisions/2026-08-22-last-calls.md`
-/// §4), but no trip clock is stored yet — nothing creates a trip row. So
-/// this slice reads the *device's* date and keeps only its calendar fields.
-/// That is right for everyone standing in the trip's own timezone and can be
-/// a day out for a phone set elsewhere; when the trip clock lands, this
-/// provider is the one place that changes.
+/// A known trip reads today in its persisted destination IANA zone. Before a
+/// zone is known this remains the phone's local date for ordinary navigation,
+/// but no ping is scheduled from that incomplete fact.
 ///
 /// **It is the app's one clock, read as a date**, which is what keeps the
 /// calendar and every instant-shaped verdict on the same asking: the app
@@ -251,8 +248,13 @@ class AfterTheTrip extends DayView {
 /// would put a phone in Tokyo on yesterday for its whole morning. Tests
 /// override it to pin a date.
 final todayProvider = Provider<DateTime>((ref) {
-  final now = ref.watch(nowProvider)().toLocal();
-  return DateTime.utc(now.year, now.month, now.day);
+  final now = ref.watch(nowProvider)();
+  final zone = ref.watch(tripTimeZoneProvider);
+  if (zone != null && tm.isKnownTimeZone(zone)) {
+    return tm.dateInTimeZone(now, zone);
+  }
+  final local = now.toLocal();
+  return DateTime.utc(local.year, local.month, local.day);
 });
 
 /// The day page's view model for one date, or null while no plan is saved.

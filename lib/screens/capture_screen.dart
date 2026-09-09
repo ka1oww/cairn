@@ -458,11 +458,18 @@ class _Breath extends ConsumerWidget {
         // The hour the photo will print beside, with the line anchored under
         // it — that is where the book sets it, so that is where it is
         // written.
-        Text(
-          '${breath.hourLabel}, yours.',
-          key: const Key('capture-hour'),
-          style: _line,
-        ),
+        if (breath.hourLabel case final hourLabel?)
+          Text(
+            '$hourLabel, yours.',
+            key: const Key('capture-hour'),
+            style: _line,
+          )
+        else
+          const Text(
+            'Your frame is safe. Its trip time is still arriving.',
+            key: Key('capture-time-pending'),
+            style: _line,
+          ),
         TextFormField(
           key: const Key('capture-word'),
           initialValue: breath.word,
@@ -496,33 +503,35 @@ class _Breath extends ConsumerWidget {
           key: Key('capture-word-whisper'),
           style: _whisper,
         ),
-        const SizedBox(height: 18),
-        FilledButton(
-          key: const Key('capture-keep'),
-          style: _primary,
-          // Never dimmed, and never a decline: the tap that skips writing is
-          // the same tap that was always there, so silence is the default the
-          // sheet is shaped around.
-          onPressed: breath.isKeeping ? null : flow.turnTheDayOver,
-          child: const Text('Turn the day over'),
-        ),
-        // Once more, and again, and again: there is no cap on retakes, so
-        // the control is simply always here. What bounds a retake is the
-        // countdown beside it — the *same* countdown the framing screen
-        // showed, because a retake buys no more of the window
-        // (capture_flow.dart's `onceMore`).
-        Row(
-          children: [
-            TextButton(
-              key: const Key('capture-once-more'),
-              style: _quiet,
-              onPressed: breath.isKeeping ? null : flow.onceMore,
-              child: const Text('Once more'),
-            ),
-            const SizedBox(width: 12),
-            _Countdown(window: window),
-          ],
-        ),
+        if (breath.hourLabel != null) ...[
+          const SizedBox(height: 18),
+          FilledButton(
+            key: const Key('capture-keep'),
+            style: _primary,
+            // Never dimmed, and never a decline: the tap that skips writing is
+            // the same tap that was always there, so silence is the default the
+            // sheet is shaped around.
+            onPressed: breath.isKeeping ? null : flow.turnTheDayOver,
+            child: const Text('Turn the day over'),
+          ),
+          // Once more, and again, and again: there is no cap on retakes, so
+          // the control is simply always here. What bounds a retake is the
+          // countdown beside it — the *same* countdown the framing screen
+          // showed, because a retake buys no more of the window
+          // (capture_flow.dart's `onceMore`).
+          Row(
+            children: [
+              TextButton(
+                key: const Key('capture-once-more'),
+                style: _quiet,
+                onPressed: breath.isKeeping ? null : flow.onceMore,
+                child: const Text('Once more'),
+              ),
+              const SizedBox(width: 12),
+              _Countdown(window: window),
+            ],
+          ),
+        ],
       ],
     );
   }

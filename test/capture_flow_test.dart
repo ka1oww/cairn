@@ -577,6 +577,7 @@ void main() {
       DateTime? today,
       required DateTime now,
       Duration utcOffset = Duration.zero,
+      String? tripTimeZone,
       CameraSource? camera,
       PendingCaptureStore? pendingCapture,
       MembershipRepository? membership,
@@ -597,6 +598,7 @@ void main() {
           today: today,
           now: now,
           utcOffset: utcOffset,
+          tripTimeZone: tripTimeZone,
           camera: camera ?? FakeCamera(frames, takenAtUtc: now),
           framePaths: FramePaths(() async => frames.path),
           pendingCapture: pendingCapture,
@@ -907,6 +909,46 @@ void main() {
       expect(kept.word, 'still here');
       expect(File(camera.taken.single).existsSync(), isTrue);
       expect(await db.readPendingCapture(), isNull);
+    });
+
+    testWidgets('a zone-less relaunch holds the breath without an hour', (
+      tester,
+    ) async {
+      final ping = pingOn(day(14));
+      final camera = FakeCamera(frames, takenAtUtc: ping.at, bothLenses: true);
+      await launch(
+        tester,
+        today: day(14),
+        now: ping.at,
+        tripTimeZone: 'Etc/UTC',
+        camera: camera,
+      );
+      await accept(tester, tripPaste);
+      await openTheCamera(tester);
+      await tester.tap(find.byKey(const Key('capture-shutter')));
+      await tester.pumpAndSettle();
+
+      await launch(
+        tester,
+        today: day(14),
+        now: ping.at.add(const Duration(minutes: 10)),
+        tripTimeZone: '',
+        camera: camera,
+      );
+
+      expect(await db.readPendingCapture(), isNotNull);
+      expect(File(camera.taken.single).existsSync(), isTrue);
+      expect(File(camera.frontTaken.single).existsSync(), isTrue);
+      expect(textOf(const Key('capture-call')), 'Your moment is waiting.');
+
+      await tester.tap(find.byKey(const Key('capture-call-action')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('capture-time-pending')), findsOneWidget);
+      expect(find.byKey(const Key('capture-hour')), findsNothing);
+      expect(find.byKey(const Key('capture-keep')), findsNothing);
+      expect(find.byKey(const Key('capture-once-more')), findsNothing);
+      expect(await db.readPendingCapture(), isNotNull);
+      expect(camera.discarded, isEmpty);
     });
 
     testWidgets('a restore that cannot read its row leaves the camera '
@@ -1354,17 +1396,15 @@ void main() {
       // for exactly that reason: pinning it would answer the question the
       // test is asking.
       //
-      // Written in the device's own zone on both sides, because the date is
-      // the device's: the trip's offset is the one in force that evening, so
-      // the ping lands in that evening's waking hours whatever zone the
-      // suite runs in.
-      final evening = DateTime(2027, 6, 14, 23, 50);
-      final zone = evening.timeZoneOffset;
-      final camera = FakeCamera(frames, takenAtUtc: evening.toUtc());
+      // 23:50 in the destination clock, expressed as an absolute instant.
+      // A DateTime built in the runner's local zone would mean a different
+      // time in Singapore on CI, where the device zone is UTC.
+      final eveningInSingapore = DateTime.utc(2027, 6, 14, 15, 50);
+      final camera = FakeCamera(frames, takenAtUtc: eveningInSingapore);
       await launch(
         tester,
-        now: evening.toUtc(),
-        utcOffset: zone,
+        now: eveningInSingapore,
+        tripTimeZone: 'Asia/Singapore',
         camera: camera,
       );
       await accept(tester, tripPaste);

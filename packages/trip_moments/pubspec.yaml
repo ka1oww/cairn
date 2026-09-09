@@ -12,6 +12,7 @@ environment:
 
 dependencies:
   crypto: ^3.0.3
+  timezone: ^0.11.1
 
 dev_dependencies:
   test: ^1.25.0

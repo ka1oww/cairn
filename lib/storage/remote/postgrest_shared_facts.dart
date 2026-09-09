@@ -41,7 +41,7 @@ class PostgrestSharedFacts implements SharedFacts {
     final auth = await _demand();
     final trip = await _get(
       '/rest/v1/trips?id=eq.${tripId.value}'
-      '&select=name,name_revised_at,created_by&limit=1',
+      '&select=name,name_revised_at,created_by,timezone&limit=1',
       auth,
     );
     final rows = _rows(trip);
@@ -64,6 +64,7 @@ class PostgrestSharedFacts implements SharedFacts {
       name: rows.first['name'] as String?,
       nameRevisedAt: _instant(rows.first['name_revised_at']),
       startedBy: MemberId(rows.first['created_by'] as String),
+      timeZone: rows.first['timezone'] as String?,
       members: [
         for (final row in roster)
           RemoteMember(

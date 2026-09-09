@@ -293,6 +293,7 @@ class RemoteTrip {
   final String? name;
   final DateTime nameRevisedAt;
   final MemberId startedBy;
+  final String? timeZone;
   final List<RemoteMember> members;
 
   RemoteTrip({
@@ -300,6 +301,7 @@ class RemoteTrip {
     this.name,
     required this.nameRevisedAt,
     required this.startedBy,
+    this.timeZone,
     List<RemoteMember> members = const [],
   }) : members = List.unmodifiable(members);
 }

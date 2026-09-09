@@ -31,10 +31,10 @@
 // Deliberately absent: removing someone (there is nobody else on this phone's
 // roster to remove, and a control that can never fire is chrome), leaving
 // (the same, and a party of one leaving would leave the trip with nobody),
-// changing the trip's clock (the shared row now carries the zone the phone
-// that created it keeps, and nothing on the phone can change it afterwards —
-// `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`), and the link
-// half of sharing (no deep link is registered, and a button that copies
+// changing the trip's clock (the shared row carries an immutable configured
+// destination zone, and nothing on the phone can change it afterwards —
+// `docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md`), and the
+// link half of sharing (no deep link is registered, and a button that copies
 // nothing is a lie).
 //
 // **Present, and new: where the plan stands.** [PlanSharing] is the sentence
@@ -224,7 +224,8 @@ final tripSettingsProvider = Provider<AsyncValue<TripSettingsView?>>((ref) {
             photos: pooled,
             you: model.MemberId(ref.watch(localMemberIdProvider)),
             now: ref.watch(nowProvider)(),
-            utcOffset: ref.watch(tripUtcOffsetProvider),
+            utcOffset: null,
+            timeZone: ref.watch(tripTimeZoneProvider),
             standing: ref.watch(tripStandingProvider),
             sharing: ref.watch(sharedFactsStandingProvider).value?.standing,
           ),
@@ -340,12 +341,13 @@ TripSettingsView? tripSettingsFor({
   required List<PooledPhoto> photos,
   required model.MemberId you,
   required DateTime now,
-  required Duration utcOffset,
+  required Duration? utcOffset,
+  String? timeZone,
   required model.TripStanding standing,
   SyncStanding? sharing,
 }) {
   if (trip == null) return null;
-  final closesAt = tripCloseFor(plan, utcOffset);
+  final closesAt = tripCloseFor(plan, utcOffset, timeZone: timeZone);
   final live = [
     for (final invite in trip.invites)
       if (invite.standingAt(now, tripClosesAt: closesAt) ==
@@ -360,7 +362,7 @@ TripSettingsView? tripSettingsFor({
     // is also what the phone publishes for a trip nobody has named, and the
     // name sync maps it back to null (`itinerary_sync.dart`).
     headline: trip.name ?? unnamedTripPlaceholder,
-    span: _span(plan, utcOffset),
+    span: _span(plan),
     people: [
       for (final member in trip.members)
         TripPerson(
@@ -373,7 +375,9 @@ TripSettingsView? tripSettingsFor({
         // The honest state of a roster on a phone that cannot yet be told
         // about anyone else. Not a spinner, and not an empty list either.
         : 'Just you so far. Nobody else\'s phone can reach this trip yet.',
-    code: live.isEmpty ? null : _codeLine(live.last, plan, closesAt, utcOffset),
+    code: live.isEmpty
+        ? null
+        : _codeLine(live.last, plan, closesAt, utcOffset, timeZone: timeZone),
     codeNote: standing.admitsJoiners
         ? 'Say it out loud — that is the whole trick. Cairn cannot carry '
               'anyone here from their phone yet, so for now the words are the '
@@ -397,6 +401,7 @@ TripSettingsView? tripSettingsFor({
       standing: standing,
       closesAt: closesAt,
       utcOffset: utcOffset,
+      timeZone: timeZone,
     ),
     sharing: planSharingFor(sharing, plan),
     deletion: _deletion(trip, you, holdsOthers),
@@ -485,8 +490,8 @@ PlanSharing? planSharingFor(SyncStanding? standing, TripPlan? plan) {
 }
 
 /// Whether the plan's last day carries a date. The trip's end is that day's
-/// and nobody else's (`cairn_model`'s `tripEndsAtFrom`), so a plan dated up
-/// to a last day left open still cannot be published.
+/// and nobody else's, through the destination-zone-aware domain rule, so a
+/// plan dated up to a last day left open still cannot be published.
 bool _lastDayUndated(TripPlan? plan) =>
     plan == null || plan.days.isEmpty || plan.days.last.date == null;
 
@@ -502,8 +507,9 @@ TripCode _codeLine(
   model.TripInvite invite,
   TripPlan? plan,
   DateTime? closesAt,
-  Duration utcOffset,
-) {
+  Duration? utcOffset, {
+  String? timeZone,
+}) {
   final code = invite.code;
   return TripCode(
     words: [code.firstWord, code.secondWord, '${code.number}'],
@@ -518,10 +524,14 @@ TripCode _codeLine(
               ? 'Dies when the trip closes. This plan has no dates yet.'
               : 'Dies when the trip closes. This plan\'s last day has no '
                     'date yet.'
-        // `closesAt` is the instant the trip shuts, which is midnight at the
-        // end of the last day it is open — so the date named is the day
-        // before it, or the line would read a day late.
-        : 'Dies with the trip, after ${dayMonthLabel(closesAt.add(utcOffset).subtract(const Duration(days: 1)))}.',
+        : switch (tripClosingLabel(
+            closesAt: closesAt,
+            utcOffset: utcOffset,
+            timeZone: timeZone,
+          )) {
+            null => 'Dies when the trip closes.',
+            final label => 'Dies with the trip, after $label.',
+          },
   );
 }
 
@@ -567,7 +577,7 @@ bool _holdsOthersPhotos(List<PooledPhoto> photos, model.MemberId you) {
 }
 
 /// `14–21 June · 8 days`, `8 days`, or null when there is no plan.
-String? _span(TripPlan? plan, Duration utcOffset) {
+String? _span(TripPlan? plan) {
   if (plan == null || plan.days.isEmpty) return null;
   final days = '${plan.days.length} ${plan.days.length == 1 ? 'day' : 'days'}';
   final dated = [

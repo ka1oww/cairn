@@ -297,21 +297,20 @@ import what is written there, not here.
   `flutter test test/hosted_smoke_test.dart --dart-define=CAIRN_HOSTED_SMOKE=true`.
   **A green suite is still no evidence the hosted project behaves** — that is
   what that one test is for, and `supabase/README.md` is the authority on the
-  defines, on why `CAIRN_TRIP_TIMEZONE` is an override rather than a gate, and
+  defines, on the destination-clock configuration, and
   on what the hosted project has and has not actually done.
-- **The plan really leaves the phone on an ordinary build, and the app says
-  when it has not.** Both halves are
-  `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`, and both were
-  one defect: `CAIRN_TRIP_TIMEZONE` used to be a gate with no default, so no
-  ordinary build could ever create the shared `trips` row — silently, forever.
-  The clock is now the phone's own IANA name
-  (`lib/app_state/device_time_zone.dart` over the hand-written
-  `cairn/time_zone` channel, `ios/Runner/DeviceTimeZone.swift`), assembled in
-  `bootstrap.dart`'s `tripRowFor`; the define survives only to pin a
-  destination's zone. A *name*, never the device's UTC offset — `Etc/GMT±N`
-  has no daylight saving and cannot spell a half-hour zone, and
-  `trips.timezone` is checked against `pg_timezone_names` at write time.
-  Reintroducing an offset-derived zone is the thing to refuse in review.
+- **The trip clock is the destination's IANA zone, and a missing zone stays
+  unknown.** `docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md`
+  is the authority. The server already stores and validates `trips.timezone`;
+  local schema v14 persists it as nullable `trip_facts.time_zone`, and a
+  reconcile copies it down before the ping scheduler reads it. `trip_moments`
+  converts each day's wall-clock slot through IANA data, not one launch-time
+  offset, so DST transitions use the offset for that date. A new shared trip
+  currently needs an explicit `CAIRN_TRIP_TIMEZONE` destination value; the
+  phone's own zone is not evidence of a destination. Old local rows and new
+  trips without that value schedule no pings until their server row supplies
+  a zone. Never fall back to the phone's offset or zone as though it were the
+  destination.
   Three rules hold this together. **An unnamed trip still publishes**, as
   `unnamedTripPlaceholder`; a clearing rename uses the same non-null wire word
   and maps it back to null locally. Names now carry their own
@@ -1027,7 +1026,7 @@ Sharp edges worth knowing before touching this directory again:
     is decided. `TripId.mint` is the package's one exception
     to "it invents nothing": it *formats* sixteen bytes a caller drew, the same
     division `InviteCode.draw` makes, so the package still has no randomness.
-  - A day's clock is fixed where the day *starts* and never moves, so a photo taken after an afternoon border crossing still reads at the hour that day was on. `TripDay.sequence`'s per-day clock overrides mirror `photo_day_assignment`'s `timeZoneOverridesByDay` deliberately -- change one and the other has to follow.
+  - `TripDay.sequence` and `photo_day_assignment` retain per-day clocks for legacy-domain and photo-placement work. They are never Cairn's live ping clock: that is the persisted destination IANA zone described in `docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md`.
 - `packages/photo_day_assignment/` — pure-Dart package that decides which day of a trip a photo belongs to, using GPS-derived timezone over EXIF timestamps where possible (see its `README.md` for the full degradation ladder). Test with `dart test` from inside that directory.
   - It calls `timezone_finder`'s `findLocation(longitude, latitude)` -- longitude first, the opposite of the usual lat/lng convention and a standing trap when wiring up callers.
 - `packages/plan_extraction/` — pure-Dart contract for the file-import feature: **bytes in, honest lines of plan text out**. `PickedBytes` / sealed `ExtractionResult` / `PlanTextExtractor` are the one shape every import slice codes against; the registry is a `const` list in `lib/app_state/import_flow.dart` and a new format is one extractor plus one line there (the picker filter and the pill's format list derive from it, so nothing else edits). Import **fills the paste box and never auto-parses** — `PasteFlow.parse()` needs zero new state for any format, which is what keeps this feature out of the merge guard's blast radius; over a running trip an imported file composes with re-paste merge semantics for free. Routing probes magic bytes first (`matches`) and uses the extension only as tiebreak — and `matches` runs on the UI thread, before the isolate hop, so it must sniff a bounded prefix and never repeat `extract`'s work over a whole file. OCR is deliberately not an extractor: recognition is a platform call, and it lives behind `TextRecognitionEdge` (see the app bullet on it). Test with `dart test`; fixtures under `test/fixtures/` are generated by `tool/make_fixtures.dart` and `tool/make_pdf_fixtures.dart` (the PDF ones need Chrome, Ghostscript and the network, and are not byte-deterministic — read the extractor's output diff, not the bytes). Docx tables are read **one line per table row**, cells joined in column order (a row down to one filled cell keeps its paragraphs apart, because a single-column table is layout): `[08:30 | Fushimi Inari]` is one stop to a reader and must be one stop in the box. That is the row model's rule reached the other way round — a Word table carries no cell typing, so `plan_rows.dart` could never pair its cells, and teaching it a time grammar over *text* cells would change what xlsx and csv already do. Xlsx/csv (slice C) share one row model, `plan_rows.dart`: structured cells lift into `PlanRow`s (heuristic v1 — a date-typed column drives the dialect, `Mon 14 June 2027 - Tokyo` / `- HH:MM stop`; no date column falls back to faithful row-major lines, never worse than pasting the same table as text) and one renderer says them back as plan text. **A sheet's own furniture is not plan**: a first row that names the date column (`Date`/`Day`/`When`) in short digit-free text, directly above a row that really carries a date there, is read as column labels and dropped rather than surfaced as lines nobody could place, and a column those labels call a place folds into the day header (`Sat 14 September 2027 - Zermatt`) instead of standing as a bare place-name stop under every day. Nothing wider is read out of a label — widening this into schema inference is the thing to refuse in review — and a sheet whose first row is real data fails the very first test (its date cell is typed, not text), so a real row is never eaten. The renderer cannot import `lib/logic/plan_text.dart` (an app file), so it carries its own tiny copy — **`plan_rows_round_trip_test.dart` is what keeps the two honest**, feeding every shape the renderer emits back through the real `parseItinerary` (a dev-only path dependency on `itinerary_parser`, never a runtime one). Three library-version traps worth knowing before touching this package again: `archive` 3.6.1's `Archive` class *is* `Iterable<ArchiveFile>` (no `.entries` getter, and `ArchiveFile(name, size, content)` is the constructor, not a `.bytes()` factory); `csv` 8.0.0 dropped `CsvToListConverter` for `Csv`/`CsvDecoder` (`const CsvDecoder().convert(text)`, fields come back as strings unless `dynamicTyping: true`); and `excel` 4.0.6's `CellValue` switch must handle `DateTimeCellValue` alongside `DateCellValue` or the switch isn't exhaustive.

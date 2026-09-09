@@ -61,9 +61,10 @@ Two things that are *not* arrows:
   returns a schedule. Return values and parameters move data up and in without
   the lower layer knowing who asked. Knowledge points down; data flows any
   direction.
-- **A shared rule is not an import.** Three packages encode "a day's clock is
-  fixed where the day starts" without referencing each other. Those couplings
-  are listed under [Invariants that cross the map](#invariants-that-cross-the-map),
+- **A shared rule is not an import.** The runtime scheduler receives one
+  persisted destination IANA zone without referencing storage directly.
+  Photo placement may use a different, GPS-derived local zone for its own
+  purpose. Those couplings are listed under [Invariants that cross the map](#invariants-that-cross-the-map),
   because they break exactly like dependencies do — just without a compiler
   noticing.
 
@@ -348,7 +349,7 @@ That is the layering rule paying rent.
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
 | **Riverpod providers** | partial — the paste-and-confirm flow's state (`paste_flow.dart`), the saved-plan stream and the photo seam's providers (`trip_providers.dart`), the day view (`day_view.dart`: which day a date *or* a plan-day number is, and whether it is behind us), the trail view (`trail_view.dart`: the whole trip as nodes, and where the flag goes), the pool view (`pool_view.dart`: the trip's photos grouped by the day already on them), the gate (`day_gate.dart`: one answer to "is this day mine to see", for every surface that draws a photograph), the capture flow (`capture_flow.dart`: where the moment stands, and the whole of the shutter-pause-word walk), the trip's own sheet (`trip_settings.dart`: the roster, the live code and when it dies, and what each of the trip's own acts is allowed to do), the second door (`join_flow.dart`: what saying three words back can answer), where the trip stands against the clock (`trip_lifecycle.dart`: `tripStandingProvider`, the one door to `cairn_model`'s `tripStandingAt`, which every surface and write path asks instead of comparing dates of its own) and the file door into the paste box (`import_flow.dart`: the extractor registry, the routing of a picked file to the extractor that claims it, and the extraction run off the UI thread — it *fills* the box and never parses, so `PasteFlow` gained no state for it) | repositories, `cairn_model`, `itinerary_parser` (the parse use case), `trip_moments` (the schedule), `plan_extraction` (the file door) | Every screen | One source of truth per question. A Drift stream flows through a provider; writing a row updates every watching screen with no manual wiring — which is exactly how a kept photo reaches the Pool with no wire between the two features. The parser's dialect is translated to screen-facing view models here — screens never import it, and no `cairn_model` type reaches one either. |
-| **Ping scheduler** | built over the real roster (`ping_schedule.dart`) — the derivation, the day's ping and the register-the-remaining-days pass are real, and the party is now the trip's stored members rather than a stub: `tripPartyProvider` reads the roster, and no trip means no pings rather than an invented member. It still holds one person, because nothing propagates membership between phones; the trip clock is still the device's offset | repositories (roster, trip clock, itinerary arrival/departure), `trip_moments`, local-notifications edge | The one interruption per person per day | Feeds `trip_moments` its inputs and registers every remaining day's local notifications in one offline pass. Registration replaces the whole future deal rather than appending to it, because the deal is re-derived whenever the plan moves and a stale ping firing alongside a fresh one is indistinguishable from two pings a day. The clock is *read* and never watched here: it only says which of the deal is already behind us, and a ping that has fired needs no unregistering — watching it would tear the whole notification set down and put it back on the app root's cadence. |
+| **Ping scheduler** | built over the real roster (`ping_schedule.dart`) — the derivation, the day's ping and the register-the-remaining-days pass are real, and the party is now the trip's stored members rather than a stub: `tripPartyProvider` reads the roster, and no trip means no pings rather than an invented member. It still holds one person, because nothing propagates membership between phones; its clock is the persisted destination IANA zone, and an unknown zone means no pings | repositories (roster, trip clock, itinerary arrival/departure), `trip_moments`, local-notifications edge | The one interruption per person per day | Feeds `trip_moments` its inputs and registers every remaining day's local notifications in one offline pass. Registration replaces the whole future deal rather than appending to it, because the deal is re-derived whenever the plan moves and a stale ping firing alongside a fresh one is indistinguishable from two pings a day. Each slot converts through its date's IANA rule, so DST is not a launch-time offset. |
 | **Pure decision cores** (`lib/logic/`) | built — six residents: the re-paste merge (`repaste_merge.dart`), the decision core of editing a plan after it was accepted; `plan_text.dart`, the plan said back as text the parser can read again; `parsed_areas.dart`, the one mapping from the parser's detailed provenances to the domain's three (`travellerOwn` > `human` > `parser`); `calendar_days.dart`, the one spelling of "n days later" over a date-only value (`calendarPlusDays`, component arithmetic — never `add(Duration(days: n))`, which lands a day early across a DST fall-back); and the tap-to-Maps rules `maps_handoff.dart` (the whole display, tap-offer and URL rule: placeless lines are inert; searchable lines use one of three app URLs — wired into the app-state band) and `area_edit.dart`, main's phase-1 scaffolding for re-deriving a day's running areas after an edit, still called from nowhere because the frontend resolves areas onto each stop directly instead | `repositories/` value types, `cairn_model`, `itinerary_parser` — no Flutter, no Riverpod, no IO | The providers that call it | A decision worth unit-testing on its own belongs below the providers, not inside one: the merge is a pure function of (saved plan, repasted plan), so it is testable without a database, a widget or a clock. Its rules are written once, in the file and in `AGENTS.md`; screens never reach it, and `mergeRepaste` is called from exactly one place (`PasteFlow._mergeReparse`). |
 | **Import sweep** | not built | camera-roll edge, `photo_day_assignment`, repositories | The completeness of the record | Runs when the app opens — the import promise commits to exactly that and no more (iOS offers no background trigger). Extracts metadata, asks the ladder, queues uploads. |
 | **File import** (`lib/app_state/import_flow.dart`) | partial. The flow is built with two doors, the `const planExtractors` registry, magic-bytes-first routing with the extension as tiebreak, `claimsImage` for pictures, the recognition route and the one-tap scanned-PDF door off a `noTextLayer` refusal, the extraction run off the UI thread behind `extractionRunnerProvider`, and a standing the box can draw. Plain text, csv, docx, xlsx and PDF are registered. Pictures go to recognition, and the real Wanderlog PDF fixture parses as its three numbered days. Calendar files are not built | file-picker and text-recognition edges, `plan_extraction`, `paste_flow.dart`, `area_gazetteer_loader.dart` | The second way to fill the paste box | Import is not a second parser. It **fills the box and never auto-parses**, so reading it is the same one tap and `PasteFlow.parse()` gains no state. This keeps the merge guard, the month-first flip and every re-read route out of this feature's blast radius. A new format is one extractor plus one registry line. The picker's filter and the pill's format sub-line derive from that list, so nothing else edits. Recognition is deliberately not an extractor. It is a platform call behind `TextRecognitionEdge`, and routing's `matches` runs on the UI thread before the isolate hop, so it sniffs a bounded prefix and never re-reads the whole file. It is also the only trigger for the area gazetteer's one load (`ensureLoaded()`, started here and nowhere else, awaited before the text reaches the box), never at launch and never on the day or Trail path. |
@@ -423,11 +424,11 @@ vocabulary for the layers *above* the packages, not a dependency of its peers.
 Couplings that behave like dependencies but appear in no import graph. Each is
 a "change one, change all" edge:
 
-1. **The day's clock is fixed where the day starts** — encoded three times, by
-   design, in three sibling packages that cannot see each other:
-   `cairn_model.TripDay` (immutable clock, no `copyWith`),
-   `trip_moments`' day handling (#8), and `photo_day_assignment`'s
-   `timeZoneOverridesByDay`. Nothing but tests and this map keeps them agreeing.
+1. **The runtime trip clock is one persisted destination IANA zone.**
+   `trip_moments` converts each day's slots through that zone's date-specific
+   rule. `cairn_model.TripDay` and `photo_day_assignment` retain separate
+   legacy or photo-placement clocks; neither may substitute a per-day offset
+   for scheduling. Nothing but tests and this map keeps these boundaries clear.
 2. **The gate rule exists twice on purpose, and only twice.** On the phone the
    rule is `cairn_model.GateState.decide` — `Trip.gateFor` answers with it for
    a whole trip, and the app's `lib/app_state/day_gate.dart` answers with it
@@ -441,10 +442,11 @@ a "change one, change all" edge:
    the thing to refuse in review. The rule, since round one: the gate applies
    to the day being lived; every day that has sealed is open to the whole
    party.
-3. **The trip clock has exactly one source**: the `trips` row. Both packages
-   take the zone as a parameter precisely so no phone ever infers it
-   independently — two phones inferring different zones is silent schedule
-   drift with no error anywhere.
+3. **The trip clock has exactly one authoritative source**: `trips.timezone`.
+   The local `trip_facts.time_zone` is its durable offline copy; a new row is
+   created only from explicit destination configuration. Neither package nor
+   phone infers a zone independently — two phones inferring different zones is
+   silent schedule drift with no error anywhere.
 4. **The `trip_moments` derivation is frozen.** Hash, seed namespace, window,
    inset, arithmetic. Changing any of it mid-trip splits the schedule between
    app versions; the only safe change is a loud one (`v2` → `v3`).
@@ -567,13 +569,12 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   the `day_pages` insert→update fallback and the deletion refetch remain
   notes, and no reconciliation of rows against R2 objects exists in any
   direction.
-- **The shared facts' sync is live on an ordinary build — since 27 August 2026
-  and not before — and one test is the only thing that says so.** It was
-  written, tested and correct for weeks while a `String.fromEnvironment` with
-  no default meant no binary anybody would run could create the shared `trips`
-  row; the clock is now the phone's own IANA zone and an unnamed trip
-  publishes under a placeholder the phone maps back to local null
-  (`docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`).
+- **The shared facts' sync is live when a new trip has an explicit destination
+  zone, and one test is the only thing that says so.** An unset destination
+  zone deliberately leaves the trip local and quiet; an unnamed trip still
+  publishes under a placeholder the phone maps back to local null. The
+  destination-clock decision owns the configuration rule
+  (`docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md`).
   A green `flutter test` still proves nothing about the hosted project:
   every widget test binds `NoSession` and an in-memory database, deliberately,
   because a sync started under `testWidgets` hangs the test. The live check is
@@ -610,9 +611,9 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   exercised against eight people through a seeded roster in
   `test/membership_test.dart`. What is still a stand-in is the *contents*: a
   phone can only write its own row, so the roster holds one member until
-  membership propagates (Phase 2), and the trip's UTC offset still comes from
-  the device because no trip clock is stored. Only the inputs change when
-  Phase 2 lands.
+  membership propagates (Phase 2). The destination IANA zone is already a
+  stored trip fact and each schedule day converts through that date's DST
+  rule; an unknown zone schedules no pings.
 - **Nothing has been registered with iOS.** The schedule reaches a
   `NotificationEdge` and stops there. Until an implementation calls into the
   OS, nobody's pocket buzzes: the whole ping path is real except its last
@@ -633,16 +634,15 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   anybody else's bytes, so `PooledPhoto.localPath` is non-null for exactly the
   photos this phone took. A pool eight people share is Phase 2, and the tile
   that says it is waiting for bytes is already drawn for it.
-- **The day page derives today from the device date.** A trip has one clock
-  and it follows the itinerary's leg (last-calls §4), but nothing creates a
-  trip row yet, so `todayProvider` (`lib/app_state/day_view.dart`) reads the
-  device's calendar date. Right for anyone standing in the trip's own
-  timezone, a day out for a phone set elsewhere, and the one place that
-  changes when the trip clock lands. It now rolls over at midnight with the
-  rest of the app's time-derived verdicts, because it reads `nowProvider`
-  and the app root asks that clock again on resume and on a cadence
-  (`lib/app.dart`); it was read once per launch until 2026-09-03, which left
-  the late door open on a day that had ended.
+- **The day page derives today from the destination date when it is known.**
+  `todayProvider` (`lib/app_state/day_view.dart`) reads the persisted IANA
+  zone through `trip_moments`, so a traveller's phone never moves Milan's
+  trip day to Singapore's date. An unknown destination deliberately falls
+  back only for local navigation; its ping schedule remains empty. It rolls
+  over at midnight with the rest of the app's time-derived verdicts, because
+  it reads `nowProvider` and the app root asks that clock again on resume and
+  on a cadence (`lib/app.dart`); it was read once per launch until 2026-09-03,
+  which left the late door open on a day that had ended.
 - **A day accepted with its date still open is not reachable by date.** The
   day page matches dates to days and never infers one from position, because
   the parser does not guess dates and neither does the layer above it. The

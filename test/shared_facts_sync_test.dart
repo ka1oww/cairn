@@ -140,6 +140,7 @@ class FakeServer implements SharedFacts {
       name: draft.name,
       nameRevisedAt: draft.nameRevisedAt,
       startedBy: draft.createdBy,
+      timeZone: draft.timeZone,
       members: [
         RemoteMember(
           id: draft.createdBy,
@@ -165,6 +166,7 @@ class FakeServer implements SharedFacts {
       name: name,
       nameRevisedAt: revisedAt,
       startedBy: current.startedBy,
+      timeZone: current.timeZone,
       members: current.members,
     );
     return answer;
@@ -284,11 +286,13 @@ RemoteTrip sharedTrip(
   List<RemoteMember> members, {
   String? name,
   DateTime? nameAt,
+  String? timeZone,
 }) => RemoteTrip(
   id: id,
   name: name,
   nameRevisedAt: nameAt ?? DateTime.utc(1970),
   startedBy: MemberId(anna),
+  timeZone: timeZone,
   members: members,
 );
 
@@ -554,6 +558,30 @@ void main() {
       expect(server.namePushes.single.revisedAt, renamedAt);
       expect(server.trip!.name, 'Norway, June');
     });
+
+    test(
+      'an existing server trip restores its destination clock locally',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await startTrip(db);
+        await TripRepository(db).saveItinerary(
+          plan([confirmed(1, 'Milan', date: CalendarDate(2027, 6, 14))]),
+          at: DateTime.utc(2027, 6, 1),
+        );
+        final server = FakeServer(
+          trip: sharedTrip(id, const [], timeZone: 'Europe/Rome'),
+        );
+
+        await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
+
+        expect((await db.readTripFacts())!.timeZone, 'Europe/Rome');
+      },
+    );
 
     test(
       'a newer name from another member wins without being pushed back',
@@ -1615,6 +1643,7 @@ void main() {
       await db.customStatement(
         'ALTER TABLE trip_facts DROP COLUMN name_revised_at_utc_iso',
       );
+      await db.customStatement('ALTER TABLE trip_facts DROP COLUMN time_zone');
       await db.customStatement('PRAGMA user_version = 5');
     }
 
@@ -1653,6 +1682,11 @@ void main() {
       addTearDown(db.close);
 
       final epoch = DateTime.parse(beforeAnySync);
+      expect(
+        (await db.readTripFacts())!.timeZone,
+        isNull,
+        reason: 'an upgraded local row must not borrow this phone\'s zone',
+      );
       expect(await db.readItineraryDays(), hasLength(1));
       expect(
         DateTime.parse((await db.readItineraryDays()).single.revisedAtUtcIso)
@@ -1959,6 +1993,26 @@ void main() {
         SyncStanding.archived,
       );
     });
+
+    test(
+      'a persisted destination zone closes without a device offset',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await aTwoDayTrip(db);
+        await db.setTripTimeZone('Europe/Rome');
+        final server = FakeServer(trip: sharedTrip(id, const []));
+
+        final outcome = await TripSync(
+          database: db,
+          facts: server,
+          now: () => DateTime.utc(2027, 6, 19, 22),
+        ).syncNow();
+
+        expect(outcome.standing, SyncStanding.archived);
+        expect(server.readTrips, 0, reason: 'not one round trip');
+      },
+    );
 
     test('a plan with no dates has not ended, so it still syncs', () async {
       final db = inMemory();

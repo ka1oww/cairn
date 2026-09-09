@@ -1,5 +1,13 @@
 import 'trip_close.dart';
 
+import 'package:timezone/data/latest.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
+
+final bool _timeZonesReady = (() {
+  tz_data.initializeTimeZones();
+  return true;
+})();
+
 /// Where a whole trip stands against an instant.
 ///
 /// **This is the only place the ending is decided.** `DayStanding` answers it
@@ -109,10 +117,10 @@ TripStanding tripStandingAt({
 /// day and so no end either.
 ///
 /// Each date is a bare calendar date carried at UTC midnight; the day itself
-/// ends at the *next* midnight on the trip's clock, which is what [utcOffset]
-/// subtracts. It is the caller's one offset for the whole trip, not the
-/// device's zone at the instant of asking — the same approximation the trip's
-/// clock makes everywhere else until a stored one lands.
+/// ends at the *next* midnight on the supplied fixed-offset clock, which is
+/// what [utcOffset] subtracts. This is retained for legacy callers; production
+/// trip-clock code uses [tripEndsAtInTimeZone] and its persisted destination
+/// IANA name instead.
 ///
 /// **Written here and not on either side of the seam**: the app's
 /// `tripEndsAtFor` and the sync's `TripSync._endsAt` both call this, so the
@@ -126,4 +134,42 @@ DateTime? tripEndsAtFrom({
   final last = dayDatesInPlanOrder.last;
   if (last == null) return null;
   return last.add(const Duration(days: 1)).subtract(utcOffset);
+}
+
+/// The instant the final day in [dayDatesInPlanOrder] seals in [timeZone].
+///
+/// A null or unrecognised IANA zone is deliberately an unknown ending. A
+/// device offset is not a substitute for the destination's DST rules.
+DateTime? tripEndsAtInTimeZone({
+  required List<DateTime?> dayDatesInPlanOrder,
+  required String? timeZone,
+}) {
+  if (timeZone == null || !_timeZonesReady) return null;
+  final calendarMidnight = tripEndsAtFrom(
+    dayDatesInPlanOrder: dayDatesInPlanOrder,
+    utcOffset: Duration.zero,
+  );
+  if (calendarMidnight == null) return null;
+  try {
+    final location = tz.getLocation(timeZone);
+    return tz.TZDateTime(
+      location,
+      calendarMidnight.year,
+      calendarMidnight.month,
+      calendarMidnight.day,
+    ).toUtc();
+  } on Object {
+    return null;
+  }
+}
+
+/// The wall-clock time for [instant] in [timeZone], or null when unknown.
+Duration? timeOfDayInTimeZone(DateTime instant, String? timeZone) {
+  if (timeZone == null || !_timeZonesReady) return null;
+  try {
+    final local = tz.TZDateTime.from(instant.toUtc(), tz.getLocation(timeZone));
+    return Duration(hours: local.hour, minutes: local.minute);
+  } on Object {
+    return null;
+  }
 }

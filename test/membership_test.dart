@@ -112,6 +112,7 @@ void main() {
         today: today,
         now: today,
         utcOffset: Duration.zero,
+        tripTimeZone: 'Etc/UTC',
         photos: InMemoryPhotoPool(pool),
       ),
     );
@@ -222,7 +223,7 @@ void main() {
     // works through the 20th and is dead when the 21st begins.
     expect(
       textOf(const Key('trip-code-expiry')),
-      'Dies with the trip, after 20 June.',
+      'Dies with the trip, after the end of 20 June.',
     );
   });
 
@@ -371,6 +372,7 @@ void main() {
             ),
           ),
           tripUtcOffsetProvider.overrideWithValue(Duration.zero),
+          tripTimeZoneProvider.overrideWithValue('Etc/UTC'),
           nowProvider.overrideWithValue(pinnedClock(from: day(14))),
         ],
       );

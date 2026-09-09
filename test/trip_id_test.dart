@@ -97,6 +97,7 @@ Future<void> windBackToV4(AppDatabase db) async {
   await db.customStatement(
     'ALTER TABLE trip_facts DROP COLUMN name_revised_at_utc_iso',
   );
+  await db.customStatement('ALTER TABLE trip_facts DROP COLUMN time_zone');
   await db.customStatement('PRAGMA user_version = 4');
 }
 
@@ -269,6 +270,11 @@ void main() {
       final trip = await db.readTripFacts();
       expect(trip!.tripId, healed.value);
       expect(TripId(trip.tripId).isCanonical, isTrue);
+      expect(
+        trip.timeZone,
+        isNull,
+        reason: 'an old local row has no evidence of its destination clock',
+      );
     });
 
     test('and a trip that already has one is left alone', () async {

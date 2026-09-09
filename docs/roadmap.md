@@ -233,20 +233,15 @@ than spinning. That last step is Phase 2 and nothing else.
 and `0014` are applied to it (`0011`, the photo transport delta, and `0013`,
 its area-sync companion, are not), an ordinary build
 points at it, and the phone signs in as an anonymous GoTrue
-account until Apple lands. But until today, `CAIRN_TRIP_TIMEZONE` was a
-compile-time constant with **no default**, so an ordinary `flutter build ios`
-produced a binary that could never create the shared `trips` row, never pushed
-a plan, and **never said so on any screen**. This file previously said the
-itinerary "syncs for real"; that was true of the code and false of every binary
-anybody would have run. Both halves are fixed and both are recorded in
-[the trip's clock](decisions/2026-08-27-the-trip-clock-is-the-phones.md): the
-clock is now the phone's own IANA zone, an unnamed trip publishes rather than
-waiting for a title, and a plan that has *not* reached the server now says so
-on the Trail and in the trip sheet, in the app's own voice. What remains false
-about "syncs for real" is the audience: **no itinerary has ever been read by a
-second phone**, because nothing carries a membership to one. A pool of one
-phone's photos is likewise only half the Pool, and that is what the gate is
-waiting on to matter.
+account until Apple lands. The former phone-clock configuration is superseded:
+a new shared trip now needs an explicit destination IANA zone, while an unknown
+zone stays local and quiet. The standing remains visible on the Trail and in the
+trip sheet, and an unnamed trip still publishes under its placeholder. See
+[the destination clock](decisions/2026-09-08-the-trip-clock-is-the-destination.md).
+What remains false about "syncs for real" is the audience: **no itinerary has
+ever been read by a second phone**, because nothing carries a membership to one.
+A pool of one phone's photos is likewise only half the Pool, and that is what
+the gate is waiting on to matter.
 
 The 27 August proof rows are gone from the hosted project as of 1 September:
 the “Bug sweep trip”, its itinerary and its one unambiguous linked anonymous
@@ -511,18 +506,9 @@ are the ones that stand between Cairn and being a group at all.
   derive it correctly now — `cairn_model`'s `tripStandingAt` on the phone, and
   `trip_closes_at()` on the server, which is what kills an invite code and
   what shuts `photos_insert_trip_member` — and since `0016` both read the same
-  plan rather than the server reading a snapshot frozen at first sync. What is
-  left is the *clock*: the phone's half reads the **device's** offset while the
-  server reads `trips.timezone`, so two travellers in different zones can still
-  disagree about the hour it shuts.
-- **Finish the trip's own clock.** The shared `trips` row now carries one — the
-  creating phone's IANA zone, or a zone the build pinned
-  ([the trip's clock](decisions/2026-08-27-the-trip-clock-is-the-phones.md)) —
-  but nothing on the phone *reads* it back, so the two places that admit a
-  clock still use the device's offset, and the timezone power the
-  starter-and-container decision settled still has nothing to act on. The row
-  is also written once and never revised, so a trip's clock does not follow the
-  trip; whether it should is undecided.
+  plan rather than the server reading a snapshot frozen at first sync. The
+  phone now persists and reads the server's destination IANA zone, so both
+  sides apply the same date-specific DST rule; an unknown zone stays quiet.
 - Show the frame on today's page and on the Trail's nodes, and put the live
   viewfinder behind the shutter.
 - Authored words: the one line typed at the breath is built. What is *not* is
@@ -562,15 +548,11 @@ trip that crosses several timezones in one day.
 
 Each of these has already cost time, or is certain to.
 
-- **A feature can be complete and switched off, and nothing will say so.** This
-  is what happened to the itinerary sync: every line of it was written, tested
-  and correct, and one `String.fromEnvironment` with no default meant no
-  ordinary build had ever pushed a plan — with no banner, no spinner and no
-  error, because a standing the code knew perfectly well was never allowed
-  above the repository seam. The lesson generalises past this one bug: **a
-  build-time constant that gates a whole capability, and a state a person
-  cannot see, are the same defect twice.** See
-  `docs/decisions/2026-08-27-the-trip-clock-is-the-phones.md`.
+- **A feature may wait for a fact, but it must say so.** The itinerary sync
+  deliberately stays local until it has an explicit destination zone and
+  resolved dates. The standing must be visible above the repository seam: a
+  person cannot repair an unexplained capability gate. See
+  `docs/decisions/2026-09-08-the-trip-clock-is-the-destination.md`.
 - **Re-pasting an undated plan can move photographs onto another day's
   content.** Reproduced; the fix is queued above. A dated plan is safe. The
   paste flow pushes hard toward dating — dating day 1 fills the whole plan

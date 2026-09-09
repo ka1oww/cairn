@@ -168,6 +168,42 @@ void main() {
       );
     });
 
+    test('the destination zone controls ends and capture labels', () {
+      final plan = datedPlan([24, 25]);
+      const zone = 'Europe/Rome';
+      final endsAt = tripEndsAtFor(plan, null, timeZone: zone);
+      final closesAt = tripCloseFor(plan, null, timeZone: zone);
+
+      expect(endsAt, DateTime.utc(2027, 6, 25, 22));
+      expect(closesAt, DateTime.utc(2027, 6, 28, 22));
+      expect(
+        clockLabel(DateTime.utc(2027, 6, 14, 12), null, timeZone: zone),
+        '14:00',
+      );
+      expect(
+        tripEndingLine(
+          standing: model.TripStanding.grace,
+          closesAt: closesAt,
+          utcOffset: null,
+          timeZone: zone,
+        ),
+        'Still open for anything you are holding, until the end of 28 June.',
+      );
+      expect(tripEndsAtFor(plan, null), isNull);
+      expect(clockLabel(DateTime.utc(2027, 6, 14, 12), null), isNull);
+    });
+
+    test('a DST-crossing grace period keeps its real destination hour', () {
+      expect(
+        tripClosingLabel(
+          closesAt: DateTime.utc(2027, 11, 2, 22),
+          utcOffset: null,
+          timeZone: 'Europe/Rome',
+        ),
+        '23:00 on 2 November',
+      );
+    });
+
     test('a plan with no dates has not ended, and never times out', () {
       final undated = TripPlan(
         days: [
@@ -406,6 +442,7 @@ void main() {
           todayProvider.overrideWithValue(june(16)),
           nowProvider.overrideWith((ref) => pinnedClock(from: clock)),
           tripUtcOffsetProvider.overrideWithValue(Duration.zero),
+          tripTimeZoneProvider.overrideWithValue('Etc/UTC'),
           cameraSourceProvider.overrideWithValue(camera),
         ],
       );

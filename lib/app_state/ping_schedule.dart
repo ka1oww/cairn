@@ -18,7 +18,7 @@ import 'day_view.dart';
 import 'trip_providers.dart';
 
 // ---------------------------------------------------------------------------
-// The party, and the one input that is still not real.
+// The party and destination clock.
 //
 // **The trip id is no longer among them.** It used to be the constant
 // `localTripId`, standing in for a uuid Postgres had not minted yet; the phone
@@ -75,13 +75,16 @@ final tripPartyProvider = Provider<tm.Party?>((ref) {
   return tm.Party([for (final member in trip.members) member.id.value]);
 });
 
-/// The clock the trip is read in.
-///
-/// **The same acknowledged approximation as `todayProvider`.** A trip has one
-/// clock and it follows the itinerary's leg
-/// (docs/decisions/2026-08-22-last-calls.md §4), but no trip row is stored,
-/// so this reads the device's offset. It is the second of the two places that
-/// change when the trip clock lands, and tests pin it.
+/// The persisted destination clock. Null is an honest answer: without an
+/// IANA zone, a local-time ping cannot be converted through DST rules, so the
+/// schedule stays quiet rather than pretending the phone's clock is the trip.
+final tripTimeZoneProvider = Provider<String?>(
+  (ref) => ref.watch(tripMembershipProvider).value?.timeZone,
+);
+
+/// Legacy fixed-offset seam for lifecycle callers that have not yet moved to
+/// the stored IANA clock. It is intentionally not an input to ping scheduling.
+@Deprecated('Pings must use tripTimeZoneProvider.')
 final tripUtcOffsetProvider = Provider<Duration>(
   (ref) => DateTime.now().timeZoneOffset,
 );
@@ -206,7 +209,7 @@ final pingScheduleProvider = Provider<List<tm.Ping>>((ref) {
   return pingsForPlan(
     plan: ref.watch(savedItineraryProvider).value,
     party: party,
-    utcOffset: ref.watch(tripUtcOffsetProvider),
+    timeZone: ref.watch(tripTimeZoneProvider),
     memberId: ref.watch(localMemberIdProvider),
     tripId: trip.tripId,
   );
@@ -222,10 +225,14 @@ final pingScheduleProvider = Provider<List<tm.Ping>>((ref) {
 final todaysPingProvider = Provider<tm.Ping?>((ref) {
   final today = ref.watch(todayProvider);
   for (final ping in ref.watch(pingScheduleProvider)) {
-    final local = ping.at.add(ref.watch(tripUtcOffsetProvider));
-    if (local.year == today.year &&
-        local.month == today.month &&
-        local.day == today.day) {
+    final zone = ref.watch(tripTimeZoneProvider);
+    if (zone == null) return null;
+    // The package owns IANA conversion, so this phone's calendar never leaks
+    // into the comparison.
+    final localDate = tm.dateInTimeZone(ping.at, zone);
+    if (localDate.year == today.year &&
+        localDate.month == today.month &&
+        localDate.day == today.day) {
       return ping;
     }
   }
@@ -237,11 +244,16 @@ final todaysPingProvider = Provider<tm.Ping?>((ref) {
 List<tm.Ping> pingsForPlan({
   required TripPlan? plan,
   required tm.Party party,
-  required Duration utcOffset,
+  String? timeZone,
+  @Deprecated('Use timeZone.') Duration? utcOffset,
   required String memberId,
   required TripId tripId,
 }) {
-  if (plan == null) return const [];
+  if (plan == null ||
+      (timeZone == null && utcOffset == null) ||
+      (timeZone != null && !tm.isKnownTimeZone(timeZone))) {
+    return const [];
+  }
   final pings = <tm.Ping>[];
   for (final day in plan.days) {
     final date = day.date;
@@ -254,7 +266,7 @@ List<tm.Ping> pingsForPlan({
       // time yet, so every day here is a full waking day; when the trip's
       // arrival and departure are real facts they arrive as `opensAt` and
       // `closesAt` and nothing else in this file moves.
-      day: tm.TripDay(date: date, utcOffset: utcOffset),
+      day: tm.TripDay(date: date, timeZone: timeZone, utcOffset: utcOffset),
     );
     final mine = assignment.pingFor(memberId);
     if (mine != null) pings.add(mine);

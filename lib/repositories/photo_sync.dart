@@ -39,8 +39,6 @@ import '../storage/drift/app_database.dart';
 import '../storage/remote/shared_facts.dart';
 import 'photo_repository.dart';
 
-Duration _deviceOffset() => DateTime.now().timeZoneOffset;
-
 /// Pushes this phone's photographs into the trip's shared pool, one at a
 /// time, oldest first, and keeps trying until each has crossed or the server
 /// has ruled.
@@ -55,7 +53,7 @@ class PhotoSync {
     required this.facts,
     required this.framePaths,
     this.now = DateTime.now,
-    this.utcOffset = _deviceOffset,
+    this.utcOffset,
     Random? jitter,
   }) : _jitter = jitter ?? Random();
 
@@ -67,10 +65,9 @@ class PhotoSync {
   /// backoff counts from. Injected so a test can stand anywhere in time.
   final DateTime Function() now;
 
-  /// The trip's clock as an offset — the same acknowledged approximation
-  /// `TripSync.utcOffset` names, feeding the same `tripEndsAtFrom` rule, so
-  /// the trip cannot be archived to one sync and open to the other.
-  final Duration Function() utcOffset;
+  /// Legacy fixed-offset seam for older isolated tests. Production reads the
+  /// persisted destination IANA zone from the same row as [TripSync].
+  final Duration Function()? utcOffset;
 
   /// The backoff's spread. Eight phones share one hotel wifi; jitter is what
   /// keeps them from retrying in lockstep. Injected so a test can pin it.
@@ -322,20 +319,28 @@ class PhotoSync {
 
   /// The instant this phone's plan ends, on the trip's clock, or null while
   /// its last day's date is still open. The same read `TripSync._endsAt`
-  /// makes, feeding the same `tripEndsAtFrom` — the rule lives in
-  /// `cairn_model` and is not restated by either caller.
+  /// makes, feeding the same destination-zone-aware ending rule — the rule
+  /// lives in `cairn_model` and is not restated by either caller.
   Future<DateTime?> _endsAt() async {
     final days = (await database.readItineraryDays()).toList()
       ..sort((a, b) => a.number.compareTo(b.number));
-    return tripEndsAtFrom(
-      dayDatesInPlanOrder: [
-        for (final day in days)
-          if (day.dateIso case final iso?)
-            DateTime.parse('${iso}T00:00:00Z').toUtc()
-          else
-            null,
-      ],
-      utcOffset: utcOffset(),
-    );
+    final dates = [
+      for (final day in days)
+        if (day.dateIso case final iso?)
+          DateTime.parse('${iso}T00:00:00Z').toUtc()
+        else
+          null,
+    ];
+    final timeZone = (await database.readTripFacts())?.timeZone;
+    if (timeZone != null) {
+      return tripEndsAtInTimeZone(
+        dayDatesInPlanOrder: dates,
+        timeZone: timeZone,
+      );
+    }
+    final offset = utcOffset;
+    return offset == null
+        ? null
+        : tripEndsAtFrom(dayDatesInPlanOrder: dates, utcOffset: offset());
   }
 }

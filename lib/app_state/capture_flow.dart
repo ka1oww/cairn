@@ -189,7 +189,7 @@ class TheBreath extends CaptureState {
 
   /// `14:50` — the hour this will print beside, in the trip's clock. The
   /// word is anchored under it because that is where the book sets it.
-  final String hourLabel;
+  final String? hourLabel;
 
   /// What is on the line right now. Empty is the usual.
   final String word;
@@ -207,7 +207,7 @@ class TheBreath extends CaptureState {
     required this.framePath,
     this.frontFramePath,
     required this.takenAtUtc,
-    required this.hourLabel,
+    this.hourLabel,
     this.word = '',
     required this.closesAt,
     this.isKeeping = false,
@@ -329,7 +329,8 @@ final captureCallProvider = Provider.family<CaptureCall, DateTime>((ref, date) {
     ping: ref.watch(todaysPingProvider),
     now: ref.watch(nowProvider)(),
     answeredAt: _myPhotoToday(ref, dayNumber)?.ref.takenAt,
-    utcOffset: ref.watch(tripUtcOffsetProvider),
+    utcOffset: null,
+    timeZone: ref.watch(tripTimeZoneProvider),
     standing: ref.watch(tripStandingProvider),
   );
 });
@@ -354,13 +355,15 @@ CaptureCall captureCallFor({
   required tm.Ping? ping,
   required DateTime now,
   required DateTime? answeredAt,
-  required Duration utcOffset,
+  required Duration? utcOffset,
+  String? timeZone,
   required model.TripStanding standing,
 }) {
   // Answered outranks everything, including a window that is still open: one
   // ping is one photograph, and the day is now open to you.
   if (answeredAt != null) {
-    return MomentAnswered(clockLabel(answeredAt, utcOffset));
+    final label = clockLabel(answeredAt, utcOffset, timeZone: timeZone);
+    return label == null ? const NoMomentHere() : MomentAnswered(label);
   }
   // A closed trip asks nothing of anybody. Not a refusal drawn on the page —
   // there is simply no moment here any more, which is the same shape as a
@@ -376,15 +379,27 @@ CaptureCall captureCallFor({
 
 /// `14:50` — an instant read in the trip's own clock.
 ///
-/// The day's clock is fixed where the day starts and never moves, so a photo
-/// taken after an afternoon border crossing still reads at the hour that day
-/// was on (`cairn_model.TripDay`, and the same rule in two other packages —
-/// docs/architecture.md, invariant 1). One offset per trip is all this slice
-/// has; when the trip clock lands, that is what changes.
-String clockLabel(DateTime utcInstant, Duration utcOffset) {
-  final local = utcInstant.add(utcOffset);
-  return '${local.hour.toString().padLeft(2, '0')}:'
-      '${local.minute.toString().padLeft(2, '0')}';
+/// A capture instant read in the destination clock, or null when it is not
+/// known. A device clock would label somebody's Milan photograph in Singapore
+/// time, so it is never a production fallback.
+String? clockLabel(
+  DateTime utcInstant,
+  Duration? utcOffset, {
+  String? timeZone,
+}) {
+  final Duration? local;
+  if (timeZone == null) {
+    final offset = utcOffset;
+    final reading = offset == null ? null : utcInstant.toUtc().add(offset);
+    local = reading == null
+        ? null
+        : Duration(hours: reading.hour, minutes: reading.minute);
+  } else {
+    local = model.timeOfDayInTimeZone(utcInstant, timeZone);
+  }
+  if (local == null) return null;
+  return '${local.inHours.toString().padLeft(2, '0')}:'
+      '${(local.inMinutes % Duration.minutesPerHour).toString().padLeft(2, '0')}';
 }
 
 final captureFlowProvider = NotifierProvider<CaptureFlow, CaptureState>(
@@ -409,6 +424,9 @@ class CaptureFlow extends Notifier<CaptureState> {
 
   @override
   CaptureState build() {
+    ref.listen(tripTimeZoneProvider, (_, _) {
+      unawaited(_readPendingBreath(restoring: false));
+    });
     unawaited(_restorePending());
     return const CaptureClosed(isRestoring: true);
   }
@@ -423,7 +441,7 @@ class CaptureFlow extends Notifier<CaptureState> {
   /// the launch: the standing rule is no lockout, ever.
   Future<void> _restorePending() async {
     try {
-      await _readPendingBreath();
+      await _readPendingBreath(restoring: true);
     } catch (_) {
       if (!ref.mounted) return;
       if (state case CaptureClosed(isRestoring: true)) {
@@ -432,13 +450,23 @@ class CaptureFlow extends Notifier<CaptureState> {
     }
   }
 
-  Future<void> _readPendingBreath() async {
+  Future<void> _readPendingBreath({required bool restoring}) async {
     final pending = await ref.read(pendingCaptureStoreProvider).read();
     if (!ref.mounted) return;
     final closed = state;
-    if (closed is! CaptureClosed || !closed.isRestoring) return;
+    if (restoring) {
+      if (closed is! CaptureClosed || !closed.isRestoring) return;
+    } else if (closed is! TheBreath) {
+      return;
+    }
     if (pending == null) {
-      state = const CaptureClosed();
+      if (restoring) state = const CaptureClosed();
+      return;
+    }
+
+    final timeZone = ref.read(tripTimeZoneProvider);
+    if (timeZone == null || !tm.isKnownTimeZone(timeZone)) {
+      state = _breathFor(pending, null);
       return;
     }
 
@@ -450,17 +478,26 @@ class CaptureFlow extends Notifier<CaptureState> {
       return;
     }
 
-    state = TheBreath(
-      framePath: pending.framePath,
-      frontFramePath: pending.frontFramePath,
-      takenAtUtc: pending.takenAtUtc,
-      hourLabel: clockLabel(
-        pending.takenAtUtc,
-        ref.read(tripUtcOffsetProvider),
-      ),
-      word: pending.word,
-      closesAt: pending.closesAt,
-    );
+    final hourLabel = clockLabel(pending.takenAtUtc, null, timeZone: timeZone);
+    if (hourLabel == null) {
+      state = _breathFor(pending, null);
+      return;
+    }
+    state = _breathFor(pending, hourLabel);
+  }
+
+  TheBreath _breathFor(PendingCapture pending, String? hourLabel) => TheBreath(
+    framePath: pending.framePath,
+    frontFramePath: pending.frontFramePath,
+    takenAtUtc: pending.takenAtUtc,
+    hourLabel: hourLabel,
+    word: pending.word,
+    closesAt: pending.closesAt,
+  );
+
+  bool _hasKnownTripTimeZone() {
+    final timeZone = ref.read(tripTimeZoneProvider);
+    return timeZone != null && tm.isKnownTimeZone(timeZone);
   }
 
   /// Opens the camera, if the moment is yours to answer.
@@ -532,14 +569,16 @@ class CaptureFlow extends Notifier<CaptureState> {
         await _discard([frame.path, frame.frontPath]);
         return;
       }
+      final hourLabel = clockLabel(
+        frame.takenAtUtc,
+        null,
+        timeZone: ref.read(tripTimeZoneProvider),
+      );
       state = TheBreath(
         framePath: frame.path,
         frontFramePath: frame.frontPath,
         takenAtUtc: frame.takenAtUtc,
-        hourLabel: clockLabel(
-          frame.takenAtUtc,
-          ref.read(tripUtcOffsetProvider),
-        ),
+        hourLabel: hourLabel,
         closesAt: framing.closesAt,
       );
     } on CameraRefused catch (e) {
@@ -561,6 +600,7 @@ class CaptureFlow extends Notifier<CaptureState> {
   Future<void> onceMore() async {
     final breath = state;
     if (breath is! TheBreath || breath.isKeeping) return;
+    if (!_hasKnownTripTimeZone()) return;
     // Both halves of the capture event go: an attempt is one moment, and a
     // retake that kept its front frame would leave an orphan on disk.
     await ref.read(pendingCaptureStoreProvider).clear();
@@ -589,6 +629,7 @@ class CaptureFlow extends Notifier<CaptureState> {
   Future<void> turnTheDayOver() async {
     final breath = state;
     if (breath is! TheBreath || breath.isKeeping) return;
+    if (!_hasKnownTripTimeZone()) return;
     // **The last gate before the pool, and the one that matters.** A frame
     // taken while the trip was still open cannot be kept into a trip that
     // has closed since — the archive is fixed, and a photograph landing in
@@ -642,11 +683,12 @@ class CaptureFlow extends Notifier<CaptureState> {
   Future<void> abandon() async {
     final breath = state;
     if (breath is TheBreath && breath.isKeeping) return;
-    state = const CaptureClosed();
     if (breath is TheBreath) {
+      if (!_hasKnownTripTimeZone()) return;
       await ref.read(pendingCaptureStoreProvider).clear();
       await _discard([breath.framePath, breath.frontFramePath]);
     }
+    state = const CaptureClosed();
   }
 
   /// The one spelling of "these files of the capture event go".

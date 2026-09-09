@@ -115,6 +115,7 @@ void main() {
         today: day(14),
         now: day(14),
         utcOffset: Duration.zero,
+        tripTimeZone: 'Etc/UTC',
         memberId: memberId,
         lateAccountId: lateAccountId,
       ),

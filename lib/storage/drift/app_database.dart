@@ -282,6 +282,12 @@ class TripFacts extends Table {
   /// it happens here, and this row is where it becomes durable.
   TextColumn get tripId => text()();
 
+  /// The destination clock, as an IANA name (`Europe/Rome`), or null while
+  /// this phone has not been told one. Null is deliberately not replaced by
+  /// the phone's own zone: an unknown destination cannot schedule a truthful
+  /// local-time notification.
+  TextColumn get timeZone => text().nullable()();
+
   /// What the trip is called, or null while nobody has named it. Any member
   /// may rename it (docs/decisions/2026-08-22-starter-and-container.md §2),
   /// so this column is not the starter's.
@@ -484,7 +490,7 @@ class AppDatabase extends _$AppDatabase {
   final TripId Function() mint;
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -677,6 +683,12 @@ class AppDatabase extends _$AppDatabase {
       if (from < 13) {
         await m.addColumn(itineraryStops, itineraryStops.placeText);
         await m.addColumn(itineraryStops, itineraryStops.placeCandidatesJson);
+      }
+      if (from < 14 && !tripFactsBornCurrent) {
+        // Existing local trips predate a persisted destination clock. Leave
+        // them unknown until their already-existing server row tells us: a
+        // phone's zone is not evidence of where the trip is.
+        await m.addColumn(tripFacts, tripFacts.timeZone);
       }
     },
   );
@@ -1443,6 +1455,17 @@ class AppDatabase extends _$AppDatabase {
   /// The same facts, read once instead of watched — the trip's counterpart of
   /// [readPhotos], and what a caller wanting one answer should take.
   Future<TripFact?> readTripFacts() => select(tripFacts).getSingleOrNull();
+
+  /// Records the shared destination clock. The server's row is the authority
+  /// for an existing trip; this is deliberately a plain local fact so pings
+  /// can still be derived offline after a relaunch.
+  Future<int> setTripTimeZone(String? timeZone) => transaction(() async {
+    final current = await select(tripFacts).getSingleOrNull();
+    if (current == null || current.timeZone == timeZone) return 0;
+    return (update(tripFacts)..where((t) => t.id.equals(_theOneTrip))).write(
+      TripFactsCompanion(timeZone: Value(timeZone)),
+    );
+  });
 
   Future<List<TripMember>> readTripMembers() =>
       (select(tripMembers)..orderBy([

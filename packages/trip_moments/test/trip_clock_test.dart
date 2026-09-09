@@ -3,6 +3,7 @@
 
 import 'package:test/test.dart';
 import 'package:trip_moments/trip_moments.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 /// Wall-clock minutes since local midnight for [ping], read in [offset].
 int _wallClockMinutes(Ping ping, Duration offset) {
@@ -12,6 +13,52 @@ int _wallClockMinutes(Ping ping, Duration offset) {
 
 void main() {
   final party = Party(const ['alice', 'bob', 'carla', 'dan', 'eve']);
+
+  group('an IANA clock follows its DST rule on each date', () {
+    test('Milan keeps waking-hour slots across the autumn transition', () {
+      final before = dayAssignment(
+        tripId: 'trip-milan',
+        party: party,
+        day: TripDay(
+          date: DateTime.utc(2026, 10, 24),
+          timeZone: 'Europe/Rome',
+        ),
+      );
+      final after = dayAssignment(
+        tripId: 'trip-milan',
+        party: party,
+        day: TripDay(
+          date: DateTime.utc(2026, 10, 25),
+          timeZone: 'Europe/Rome',
+        ),
+      );
+
+      for (final ping in [...before.pings, ...after.pings]) {
+        final local = tz.TZDateTime.from(
+          ping.at,
+          tz.getLocation('Europe/Rome'),
+        );
+        expect(
+          local.hour * 60 + local.minute,
+          inInclusiveRange(8 * 60, 22 * 60 + 30),
+          reason: '${ping.at} was dealt outside the Milan waking window',
+        );
+      }
+
+      // CEST is UTC+2; CET on Sunday is UTC+1. The identical local slot is
+      // therefore an hour later in UTC after the real transition.
+      final saturdayNoon = TripDay(
+        date: DateTime.utc(2026, 10, 24),
+        timeZone: 'Europe/Rome',
+      ).instantAt(const Duration(hours: 12));
+      final sundayNoon = TripDay(
+        date: DateTime.utc(2026, 10, 25),
+        timeZone: 'Europe/Rome',
+      ).instantAt(const Duration(hours: 12));
+      expect(saturdayNoon, DateTime.utc(2026, 10, 24, 10));
+      expect(sundayNoon, DateTime.utc(2026, 10, 25, 11));
+    });
+  });
 
   group('pings land in the trip\'s clock, not the phone\'s', () {
     test('an Auckland trip booked from a Pacific-time phone', () {
