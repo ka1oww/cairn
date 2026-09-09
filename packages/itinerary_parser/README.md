@@ -121,7 +121,8 @@ and several for an alternative or compound line. Where the deterministic
 extractor could work one out, a stop also carries an
 `AreaHint` — the neighbourhood/area text in force for that stop, plus an
 `AreaSource` naming why (`travellerDeclared`, `travellerProximity`,
-`inlineLocality`, `runningHeading`, `hotelPrefix`, `trainDestination`, or
+`inlineLocality`, `runningHeading`, `hotelPrefix`, `trainDestination`,
+`selfEvidence`, or
 `repeatedName`; `person` is reserved for an area the app's own editable-area
 seam set rather than the parser). `area` is null when the available evidence
 does not support one — sending nothing to a map is the correct behaviour then,
@@ -158,7 +159,11 @@ prefer silence over a confident guess
   `Name -` prefix, or already trusted this way earlier in the same day —
   takes that area (`travellerDeclared`) instead of inheriting the day's
   running area. A line matching two different gazetteer areas, or none,
-  says nothing and the running heading stands.
+  says nothing and the running heading stands. Without a gazetteer the
+  same rule runs over the plan's own anchor vocabulary, and the hint then
+  carries `selfEvidence`: an inference over the plan's vocabulary, never
+  the traveller declaring anything, so it sits in the parser tier and
+  anything may overwrite it.
 - **A train route's destination may continue onto the next line.** On a
   `Route:` line, and on the single line directly after one (a wrapped
   route), a gazetteer-known `... STN`/`Station` destination sets the

@@ -193,6 +193,14 @@ enum AreaSource {
   hotelPrefix,
   trainDestination,
 
+  /// The stop line named the area about itself: the parser inferred it from
+  /// a substring of the stop's own line that the plan's own anchor vocabulary
+  /// corroborates. An inference over the plan's vocabulary, not the traveller
+  /// declaring anything, so it belongs in the parser tier and anything may
+  /// overwrite it. When a gazetteer confirmed the same window instead, the
+  /// hint carries [travellerDeclared], as it did before this value existed.
+  selfEvidence,
+
   /// Lent by another stop in the same plan that carries the very same name.
   ///
   /// The weakest provenance the parser has, and the only one that is not a

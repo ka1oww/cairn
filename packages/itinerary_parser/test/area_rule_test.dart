@@ -190,6 +190,50 @@ void main() {
     expect(stops.last.area?.text, 'shibuya');
   });
 
+  test(
+      'vocabulary-backed self-evidence carries parser-tier provenance, '
+      'gazetteer-backed keeps the traveller\'s', () {
+    // The same plan read both ways. Without a gazetteer the plan's own
+    // vocabulary is the only evidence, so the hint is the parser's inference
+    // (`selfEvidence`) and anything above may overwrite it; with one, the
+    // name is a confirmed place and the hint stays `travellerDeclared`,
+    // exactly as it did before the no-gazetteer path existed.
+    const plan = 'Trip to Nagano\n'
+        'Day 1 - Nagano\n'
+        '- Hakuba Happo Bus Terminal\n'
+        '- SKY CAFE HAKUBA\n'
+        '- Walk to Hakuba Station\n'
+        '- Bus from Hakuba Station\n'
+        '- Zenkoji Temple\n';
+
+    final blind = parseItinerary(plan).days.single.stops;
+    expect(blind[1].area?.text, 'hakuba');
+    expect(blind[1].area?.source, AreaSource.selfEvidence);
+
+    final seen = parseItinerary(
+      plan,
+      gazetteer: SortedListAreaGazetteer(['hakuba', 'nagano']),
+    ).days.single.stops;
+    expect(seen[1].area?.text, 'hakuba');
+    expect(seen[1].area?.source, AreaSource.travellerDeclared);
+  });
+
+  test('a bare parenthetical stays the traveller\'s own words', () {
+    // `(Shimokitazawa)` really is the traveller writing the district on the
+    // line, gazetteer or not, so its provenance stays in the traveller tier
+    // and outranks an older correction — unlike self-evidence above.
+    const plan = 'Tokyo trip\n'
+        'Day 1 - Shibuya\n'
+        '- Start at Shibuya Station\n'
+        '- Walk to Shimokitazawa Station\n'
+        '- Ogawa coffee laboratory (Shimokitazawa)\n'
+        '- Nintendo Tokyo\n';
+
+    final stops = parseItinerary(plan).days.single.stops;
+    expect(stops[2].area?.text, 'shimokitazawa');
+    expect(stops[2].area?.source, AreaSource.travellerProximity);
+  });
+
   test('a longer parenthetical is a description, not an address', () {
     // `MOUMOU TEI (BEEF BOWL)` is written twice in one real plan and
     // capitalised both times, so `beef` and `bowl` reach the anchor

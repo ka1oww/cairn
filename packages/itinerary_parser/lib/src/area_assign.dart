@@ -244,7 +244,7 @@ Map<int, AreaAssignment> anchorAssign(
           );
           if (selfArea != null) {
             assignedOwn = selfArea;
-            assignedSource = 'travellerDeclared';
+            assignedSource = hasGaz() ? 'travellerDeclared' : 'selfEvidence';
             trustedSelfAreas.add(joinedAreaWords(selfArea));
           }
         }
@@ -354,11 +354,14 @@ bool _destinationInGazetteer(
   return candidates.any(contains);
 }
 
-/// A gazetteer-listed area the stop line names about itself, or null. A
-/// candidate only counts in a position where it reads as a locality — after
-/// a venue/meal/furniture word, standing alone, as a `Name -` prefix, or
-/// already trusted earlier the same day — and the line must name exactly one
-/// distinct area: two candidates, or none, is designed silence, never a pick.
+/// A known area the stop line names about itself, or null — known meaning the
+/// gazetteer where there is one and the plan's own anchor vocabulary where
+/// there is not. A candidate only counts in a position where it reads as a
+/// locality — after a venue/meal/furniture word, standing alone, as a
+/// `Name -` prefix, or already in [trustedSelfAreas], which is plan-wide and
+/// accumulates across both assignment passes — and the line must name exactly
+/// one distinct area: two candidates, or none, is designed silence, never a
+/// pick.
 final RegExp _segmentSplit = RegExp(r'[/,+&;]');
 
 String? _gazetteerAreaInStop(

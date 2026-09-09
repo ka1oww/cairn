@@ -475,6 +475,8 @@ AreaSource _areaSourceFromString(String s) {
       return AreaSource.hotelPrefix;
     case 'trainDestination':
       return AreaSource.trainDestination;
+    case 'selfEvidence':
+      return AreaSource.selfEvidence;
     case 'runningHeading':
     default:
       return AreaSource.runningHeading;

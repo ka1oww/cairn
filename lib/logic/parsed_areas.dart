@@ -32,7 +32,10 @@ StopKind stopKindOf(ip.StopKind kind) => switch (kind) {
 /// parser's, and anything may overwrite that. So is an area lent from the
 /// name's own resolved twins elsewhere in the plan (`repeatedName`): it is
 /// the weakest thing the parser knows, never the traveller's own words, and
-/// it must never sit above a correction made on the phone.
+/// it must never sit above a correction made on the phone. And so is
+/// `selfEvidence`: an area the parser inferred from the line's own words
+/// against the plan's vocabulary is the parser's, never the traveller's, so
+/// a correction made on the phone survives a re-paste.
 AreaSource areaSourceOf(ip.AreaSource source) => switch (source) {
   ip.AreaSource.travellerDeclared ||
   ip.AreaSource.travellerProximity ||
@@ -41,5 +44,6 @@ AreaSource areaSourceOf(ip.AreaSource source) => switch (source) {
   ip.AreaSource.runningHeading ||
   ip.AreaSource.hotelPrefix ||
   ip.AreaSource.trainDestination ||
+  ip.AreaSource.selfEvidence ||
   ip.AreaSource.repeatedName => AreaSource.parser,
 };
