@@ -443,28 +443,20 @@ DayStop _dayStop(
   // Only a committed single place and a meal with a venue payload are safe
   // searches. Alternatives, compound lines, section labels, notes and loose
   // instructions all render as written while remaining inert.
-  final resolvable =
-      stop.kind == StopKind.place || stop.kind == StopKind.mealLabel;
-  final candidatePlaces = stop.placeCandidates.isNotEmpty
-      ? stop.placeCandidates
-      : stop.placeText == null
-      ? const <String>[]
-      : [stop.placeText!];
-  final candidateText = stop.placeText ?? rest;
-  final searchText =
-      !resolvable ||
-          candidateText == null ||
-          candidatePlaces.length > 1 ||
-          isPlaceholderText(candidateText)
-      ? null
-      : candidateText;
+  final searchText = sendableSearchText(
+    isPlace: stop.kind == StopKind.place,
+    isMealLabel: stop.kind == StopKind.mealLabel,
+    placeText: stop.placeText,
+    placeCandidates: stop.placeCandidates,
+    mealRest: rest,
+  );
   return DayStop(
     position: position,
     text: meal.label == null ? stop.text : rest ?? stop.text,
     timeLabel: stop.timeLabel,
     kind: stop.kind,
     placeText: stop.placeText,
-    placeCandidates: candidatePlaces,
+    placeCandidates: stop.placeCandidates,
     mealLabel: meal.label,
     searchText: searchText,
     area: stop.area,

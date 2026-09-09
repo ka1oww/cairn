@@ -122,12 +122,19 @@ extractor could work one out, a stop also carries an
 `AreaHint` — the neighbourhood/area text in force for that stop, plus an
 `AreaSource` naming why (`travellerDeclared`, `travellerProximity`,
 `inlineLocality`, `runningHeading`, `hotelPrefix`, `trainDestination`, or
-`person`, the last reserved for an area the app's own editable-area seam
-set rather than the parser). `area` is null when nothing in the text lets
-the extractor say — sending nothing to a map is the correct behaviour
-then, not a bug. This is the same "ask, not guess" posture as the star
-rule and confidence: an area is only ever attached when the source text
-actually supports it.
+`repeatedName`; `person` is reserved for an area the app's own editable-area
+seam set rather than the parser). `area` is null when the available evidence
+does not support one — sending nothing to a map is the correct behaviour then,
+not a bug. This is the same "ask, not guess" posture as the star rule and
+confidence.
+
+After the ordinary area pass, a repeated stop name may borrow an area from its
+resolved occurrences elsewhere in the same plan (`repeatedName`). The parser
+does this only when at least two distinct source lines resolved the name, every
+resolved occurrence agrees on one area, and that area is present in the anchor
+vocabulary or optional gazetteer. It never overwrites an existing area. One
+resolved occurrence is not corroboration, and names used under different areas
+remain unresolved.
 
 ### The gazetteer (phase 2, the C10 validator)
 
@@ -169,15 +176,24 @@ is what keeps it dependency-free. In Cairn the assets are built by
 on import only, by `lib/app_state/area_gazetteer_loader.dart`.
 
 Names on both sides go through this package's own `areaTokens`, so the
-builder and the lookup share one normaliser. That matters more than it
-looks: the asset was frozen against Python's NFD in the measurement lab,
-so `area_words.dart`'s decomposition map has to spell the same
-macrons, breves and carons the dumps carry, or a name is built one way
-and looked up another and simply never matches.
+builder and the lookup share one Unicode-aware normaliser. Alphabetic scripts
+use a three-character anchor floor; caseless scripts such as CJK and Hangul use
+a two-code-point floor because a complete place name can be that short. The
+asset was frozen against Python's NFD in the measurement lab, so
+`area_words.dart`'s decomposition map has to spell the same macrons, breves and
+carons the dumps carry, or a name is built one way and looked up another and
+simply never matches.
 
 `placesOnLine(stop)` splits a stop's `placeText` on `/`, `,`, `+`, `&`,
 and `;` into the individual place names a multi-place line named, for a
 caller that wants to offer more than one Maps query per line.
+
+`namesNoPlace(text)` is the shared guard for Maps affordances. It returns true
+when every content word is generic (`Free morning`, a bare `Station`, or
+`LUNCH: OUTLET`) and for tokenless punctuation or table rules. It deliberately
+returns false when the tokenizer finds no words but the line still contains a
+letter or digit, so an unfamiliar script or a numeric shop name remains
+searchable instead of being rejected without evidence.
 
 ## Numbered day headers
 
@@ -299,11 +315,12 @@ building UI on top of this package.
   a stop, not promoted to a header. When nothing in the whole paste ever
   looks like a header, the parser falls back to one day per blank-line
   block and marks everything low confidence rather than guess which
-  lines were meant as headers. And a plan that carries even one explicit
-  `Day N` header never promotes a bare place line at all: numbered
-  structure outranks the inference, so a printed guide's place cards read
-  as stops inside their numbered day instead of splitting it into
-  invented ones.
+  lines were meant as headers. And a plan that carries any explicit day
+  heading — a `Day N` header or a date header — never promotes a bare place
+  line at all: explicit structure outranks the inference, so a printed guide's
+  place cards read as stops inside their real day instead of splitting it into
+  invented ones. A demoted place line still contributes place-name evidence to
+  the area vocabulary; only its day boundary is suppressed.
 
 - **A bare place header is judged by shape, in any script.** The word test
   is Unicode-aware (`unicode: true` and property escapes, not widened
@@ -416,3 +433,11 @@ one of these loudly rather than silently drifting — if the new output is
 actually correct, regenerate with `dart run tool/regen_goldens.dart` and
 review the diff line by line before committing; the goldens are the spec,
 not a cache.
+
+The hand-labelled area fixtures under `test/fixtures/areas/gt/` are different:
+they are the ground truth used to score the parser and must not be regenerated
+or edited to agree with an implementation. Run the full per-genre measurement,
+including written day counts and Maps-tap outcomes, from the repository root
+with `dart run tool/measure_plan_corpus.dart`; it reports handwritten,
+AI-written, and Wanderlog documents separately and never blends wrong-area
+answers with missing-area answers.

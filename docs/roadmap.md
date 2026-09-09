@@ -478,8 +478,9 @@ are the ones that stand between Cairn and being a group at all.
   real PDF fixture. Repeated page controls are removed conservatively, and an
   explicit `Day N` structure outranks inferred bare-place headings.
 - **The Maps hand-off.** Built. `maps_handoff.dart` owns the display and URL
-  rules for Google Maps, Apple Maps, and Waze, and `LinkOpenerEdge` opens the
-  selected keyless universal link from day and Trail surfaces.
+  rules for Google Maps, Apple Maps, and Waze, including withholding the tap
+  when a row names no place; `LinkOpenerEdge` opens the selected keyless
+  universal link from day and Trail surfaces.
 - Finish reconciling the schema with the settled decisions. The three-word
   grammar is on the server now — `supabase/migrations/0005_trip_invites.sql`
   mints two words and a number, forgives order and spelling by the same rule

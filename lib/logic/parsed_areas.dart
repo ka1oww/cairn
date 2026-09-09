@@ -24,12 +24,15 @@ StopKind stopKindOf(ip.StopKind kind) => switch (kind) {
 
 /// The tier an area's provenance belongs to.
 ///
-/// The parser names seven provenances; the app keeps three, because what it
+/// The parser names detailed provenances; the app keeps three, because what it
 /// has to know is who may overwrite whom. The person's own words on the
 /// pasted line — `(near Akihabara)`, `@ Shibuya`, a locality written into the
 /// stop itself — are the traveller's, and outrank a correction made earlier.
 /// Everything the extractor worked out by running a heading down a day is the
-/// parser's, and anything may overwrite that.
+/// parser's, and anything may overwrite that. So is an area lent from the
+/// name's own resolved twins elsewhere in the plan (`repeatedName`): it is
+/// the weakest thing the parser knows, never the traveller's own words, and
+/// it must never sit above a correction made on the phone.
 AreaSource areaSourceOf(ip.AreaSource source) => switch (source) {
   ip.AreaSource.travellerDeclared ||
   ip.AreaSource.travellerProximity ||
@@ -37,5 +40,6 @@ AreaSource areaSourceOf(ip.AreaSource source) => switch (source) {
   ip.AreaSource.person => AreaSource.human,
   ip.AreaSource.runningHeading ||
   ip.AreaSource.hotelPrefix ||
-  ip.AreaSource.trainDestination => AreaSource.parser,
+  ip.AreaSource.trainDestination ||
+  ip.AreaSource.repeatedName => AreaSource.parser,
 };

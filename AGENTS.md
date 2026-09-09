@@ -78,9 +78,11 @@ import what is written there, not here.
   once: the query (`searchText, area`, or bare `searchText` when there is no
   area), the three keyless app URLs (Google/Apple/Waze), the meal-label
   split, the placeholder test, the places on a line and the badge threshold.
+  `sendableSearchText` is the whole tap-offer rule and delegates the placeless
+  predicate to `itinerary_parser`; the package README owns that contract.
   A second copy of any of them is the thing to refuse in review — the
   screens compose nothing. `parsed_areas.dart` is the only mapping from the
-  parser's seven provenances to the domain's three
+  parser's detailed provenances to the domain's three
   (`travellerOwn` > `human` > `parser`, which is also the priority order),
   and both `paste_flow.dart` and `repaste_merge.dart` go through it.
   `calendar_days.dart` is the one spelling of "n days later" over a
@@ -980,6 +982,12 @@ Sharp edges worth knowing before touching this directory again:
     null, which is a plan read the phase-1 way, never a failed import.
     `test/area_gazetteer_test.dart` pins all of that, because every wrong
     answer to "when" is silent.
+  - **Area parsing, explicit-heading suppression and repeated-name lending are
+    measured contracts.** The package README owns their current rules and
+    `tool/measure_plan_corpus.dart` owns the per-genre measurement definitions.
+    The hand-labelled fixtures under `test/fixtures/areas/gt/` are ground truth:
+    ratchet a floor upward when evidence improves, but never edit a label to
+    agree with the parser.
   - **The bare place-name day header is script-agnostic, and its narrowness is
     bought twice.** `looksLikeProperNounHeader` (`src/line_classifier.dart`)
     tested `^[A-Z][A-Za-z'.]*$` until 2026-08-30, so `München`, `Αθήνα`,

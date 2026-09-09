@@ -16,6 +16,8 @@
 //      `Ichiran`, because "Lunch" is not part of any restaurant's name.
 library;
 
+import 'package:itinerary_parser/itinerary_parser.dart' show namesNoPlace;
+
 /// The maps app a search opens in. All three are keyless https links, so
 /// nothing here needs an API key, a project or a billing account.
 enum MapsApp { google, apple, waze }
@@ -136,3 +138,49 @@ List<String> placesOn(String text) {
 /// genuinely names more than one place.
 bool showsPlaceCountBadge(String text, List<String> places) =>
     places.length > 1 && text.trim().length > multiPlaceTruncationThreshold;
+
+/// The words a tap on one row actually searches for, or null when the row
+/// offers no tap at all.
+///
+/// This is the *whole* offer rule, and it lives here rather than on the day
+/// page because two surfaces ask it and a second copy drifts. It re-decides
+/// nothing: [kind], [placeText] and [placeCandidates] were all settled by
+/// `itinerary_parser` at the paste and carried on `cairn_model.Stop`.
+///
+/// A row is inert — no tap — when any of these holds:
+///   * the line is not a committed single place or a meal with a venue on it
+///     (an alternative, a compound instruction, a section label, a note);
+///   * the line names several places, which the row offers individually
+///     instead of as one search;
+///   * the words left are a placeholder (`TBD`) or nothing at all;
+///   * the words left name no place — `Free morning`, `LUNCH: OUTLET`,
+///     `Shopping / CHILLING / EVERYTHING`, a table rule a spreadsheet import
+///     brought along. A missing button is honest. A button that opens rubbish
+///     is what makes the app feel broken, and there is nothing a search of
+///     `Free morning, Shibuya` can return that the traveller wanted.
+///
+/// That last test is `itinerary_parser`'s [namesNoPlace] and is deliberately
+/// not a second word list living here: the vocabularies it reads are the same
+/// ones the area engine reads, and two copies of a word list drift apart
+/// silently. It is a predicate over words, not a re-classification — nothing
+/// here re-decides what the parser said a line *is*.
+///
+/// [mealRest] is what [mealLabelSplit] left of a meal line after its label.
+String? sendableSearchText({
+  required bool isPlace,
+  required bool isMealLabel,
+  required String? placeText,
+  required List<String> placeCandidates,
+  required String? mealRest,
+}) {
+  if (!isPlace && !isMealLabel) return null;
+  final candidates = placeCandidates.isNotEmpty
+      ? placeCandidates
+      : (placeText == null ? const <String>[] : [placeText]);
+  if (candidates.length > 1) return null;
+  final text = placeText ?? mealRest;
+  if (text == null || text.trim().isEmpty) return null;
+  if (isPlaceholderText(text)) return null;
+  if (namesNoPlace(text)) return null;
+  return text;
+}
