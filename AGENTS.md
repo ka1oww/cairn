@@ -953,7 +953,8 @@ Sharp edges worth knowing before touching this directory again:
     destination on a wrapped train-route continuation may set it — stated in
     the package README's gazetteer section and pinned by
     `test/area_rule_test.dart`; a third rule needs the same measurement bar.
-    Given none, the extractor is phase-1 exactly — the C7t floors in
+    Given none, the extractor answers from the plan's own text alone
+    (phase-1 mode) — the C7t floors in
     `test/area_ground_truth_test.dart` are pinned **without** a gazetteer and
     must stay that way, and the C10 floors beside them are the same corpus
     scored **with** the committed assets. Four things worth knowing before

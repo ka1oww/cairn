@@ -45,11 +45,13 @@ class AreaAssignment {
   });
 }
 
-/// Assigns areas to all stops. Mirrors scorer's `anchor_assign` with
+/// Assigns areas to all stops. Grew out of scorer's `anchor_assign` with
 /// `train_rule=True` (C7t). When [gazetteer] is non-null, enables C10
 /// validator behaviour (seed must be gazetteer-listed, bare parenthetical)
-/// plus the two gazetteer-evidence rules (stop-line self-evidence and the
-/// train-route continuation; the package README states both). Results are
+/// and upgrades the two evidence rules stated in the package README:
+/// stop-line self-evidence runs in both modes (against the gazetteer where
+/// there is one, the plan's own anchor vocabulary where there is not), and
+/// the train-route continuation line needs a gazetteer. Results are
 /// keyed by [AreaStopInput.assignmentId], which stays distinct when several
 /// stops were derived from one source line.
 Map<int, AreaAssignment> anchorAssign(
@@ -93,7 +95,8 @@ Map<int, AreaAssignment> anchorAssign(
   // Bus Terminal`, `Hakuba Happo-One Snow Resort` -- had already been sent to
   // Nagano, sixty miles away. So it is plan-wide, and the whole assignment
   // runs twice: the second pass starts knowing everything the first one
-  // learned. Trust is still earned the same way, from a gazetteer-listed name
+  // learned. Trust is still earned the same way, from a name the mode's
+  // evidence knows (the gazetteer, or the anchor vocabulary without one)
   // that is the only area its own line can be read as; only when it counts
   // has changed.
   final trustedSelfAreas = <String>{};
