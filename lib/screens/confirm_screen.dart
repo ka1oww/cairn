@@ -624,6 +624,13 @@ class _AreaRow extends ConsumerWidget {
           child: TextButton(
             key: Key('add-area-${day.number}-${stop.id}'),
             onPressed: () async {
+              // The fallback for a stop the parser stayed silent on: what
+              // the plan already names elsewhere, nearest first, as one-tap
+              // answers over the same blank field as before. Empty when the
+              // plan names no area at all, and the dialog is that field.
+              final candidates = ref
+                  .read(pasteFlowProvider.notifier)
+                  .areaCandidates(stop.id);
               final typed = await _askForText(
                 context,
                 title: 'Add an area',
@@ -631,6 +638,8 @@ class _AreaRow extends ConsumerWidget {
                 action: 'Add',
                 fieldKey: const Key('add-area-input'),
                 saveKey: const Key('add-area-save'),
+                candidates: candidates,
+                candidateKeyPrefix: 'add-area-choice',
               );
               if (typed == null || typed.trim().isEmpty) return;
               ref
@@ -1431,6 +1440,10 @@ Future<String?> _askForText(
   required Key fieldKey,
   required Key saveKey,
   String initial = '',
+  // One-tap answers above the field. Only the add-area fallback passes
+  // any today; every other prompt keeps the blank field it has always had.
+  List<String> candidates = const [],
+  String candidateKeyPrefix = 'area-choice',
 }) {
   return showDialog<String>(
     context: context,
@@ -1441,6 +1454,8 @@ Future<String?> _askForText(
       fieldKey: fieldKey,
       saveKey: saveKey,
       initial: initial,
+      candidates: candidates,
+      candidateKeyPrefix: candidateKeyPrefix,
     ),
   );
 }
@@ -1456,6 +1471,8 @@ class _TextPrompt extends StatefulWidget {
     required this.fieldKey,
     required this.saveKey,
     required this.initial,
+    this.candidates = const [],
+    this.candidateKeyPrefix = 'area-choice',
   });
 
   final String title;
@@ -1464,6 +1481,8 @@ class _TextPrompt extends StatefulWidget {
   final Key fieldKey;
   final Key saveKey;
   final String initial;
+  final List<String> candidates;
+  final String candidateKeyPrefix;
 
   @override
   State<_TextPrompt> createState() => _TextPromptState();
@@ -1484,11 +1503,29 @@ class _TextPromptState extends State<_TextPrompt> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.title),
-      content: TextField(
-        key: widget.fieldKey,
-        controller: _controller,
-        autofocus: true,
-        decoration: InputDecoration(hintText: widget.hint),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The plan's own areas, nearest first: tapping one answers with
+          // it directly, which is the whole fallback. The field below stays
+          // for somewhere the plan never names.
+          for (final candidate in widget.candidates)
+            TextButton(
+              key: Key('${widget.candidateKeyPrefix}-$candidate'),
+              onPressed: () => Navigator.of(context).pop(candidate),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(candidate),
+              ),
+            ),
+          TextField(
+            key: widget.fieldKey,
+            controller: _controller,
+            autofocus: widget.candidates.isEmpty,
+            decoration: InputDecoration(hintText: widget.hint),
+          ),
+        ],
       ),
       actions: [
         TextButton(
