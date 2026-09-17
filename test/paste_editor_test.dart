@@ -204,6 +204,59 @@ void main() {
       expect(dayNumbered(4).stops.single.text, 'Dotonbori');
     });
 
+    group('picking a place among candidates', () {
+      void pasteMulti() =>
+          flow().parse('Day 1 - Italy\n- Flight to Milan, train to Como');
+
+      test('a pick writes the choice and nothing else', () {
+        pasteMulti();
+        final stop = dayNumbered(1).stops.single;
+        expect(stop.placeCandidates, ['Milan', 'Como']);
+        expect(stop.chosenPlace, isNull);
+
+        flow().choosePlace(stop.id, 'Como');
+
+        final picked = dayNumbered(1).stops.single;
+        expect(picked.chosenPlace, 'Como');
+        // Alongside, not inside: the parser's fields stand as they were.
+        expect(picked.text, 'Flight to Milan, train to Como');
+        expect(picked.kind.name, 'multiPlace');
+        expect(picked.placeText, 'Milan; Como');
+        expect(picked.placeCandidates, ['Milan', 'Como']);
+      });
+
+      test('a candidate that is not on offer is not a choice', () {
+        pasteMulti();
+        final stop = dayNumbered(1).stops.single;
+
+        flow().choosePlace(stop.id, 'Rome');
+
+        expect(dayNumbered(1).stops.single.chosenPlace, isNull);
+      });
+
+      test('rewording a picked stop clears its choice with its candidates', () {
+        pasteMulti();
+        final id = dayNumbered(1).stops.single.id;
+        flow().choosePlace(id, 'Como');
+
+        flow().editStopText(id, 'Flight to Milan');
+
+        final stop = dayNumbered(1).stops.single;
+        expect(stop.placeCandidates, isEmpty);
+        expect(stop.chosenPlace, isNull);
+      });
+
+      test('a pick can be taken back, returning the row to inert', () {
+        pasteMulti();
+        final id = dayNumbered(1).stops.single.id;
+        flow().choosePlace(id, 'Como');
+
+        flow().clearChosenPlace(id);
+
+        expect(dayNumbered(1).stops.single.chosenPlace, isNull);
+      });
+    });
+
     test('a day can be renamed, and unnamed', () {
       paste();
       expect(dayNumbered(4).title, 'Osaka');
@@ -545,8 +598,7 @@ void main() {
       expect(find.textContaining('Removed by you'), findsOneWidget);
     });
 
-    testWidgets('a chip can be reworded through its menu', (tester) async {
-      await launch(tester);
+    testWidgets('a chip can be reworded through its menu', (tester) async {      await launch(tester);
       await paste(tester, fiveDaySample);
 
       await tester.tap(find.text('Dotonbori'));
@@ -563,6 +615,67 @@ void main() {
 
       expect(find.text('Dotonbori at night'), findsOneWidget);
       expect(find.text('Dotonbori'), findsNothing);
+    });
+
+    testWidgets('a multi-place chip offers one tile per candidate', (
+      tester,
+    ) async {
+      const multiPaste = 'Day 1 - Italy\n- Flight to Milan, train to Como';
+      await launch(tester);
+      await paste(tester, multiPaste);
+
+      await tester.tap(find.text('Flight to Milan, train to Como'));
+      await tester.pumpAndSettle();
+
+      // One entry point, and only on a line with somewhere to choose from.
+      expect(find.byKey(const Key('stop-menu-pick-place')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('stop-menu-pick-place')));
+      await tester.pumpAndSettle();
+
+      // One tile per candidate in the parser's order, plus the way out.
+      expect(find.byKey(const Key('pick-place-0')), findsOneWidget);
+      expect(find.byKey(const Key('pick-place-1')), findsOneWidget);
+      expect(find.text('Milan'), findsOneWidget);
+      expect(find.text('Como'), findsOneWidget);
+      expect(find.byKey(const Key('pick-place-none')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('pick-place-1')));
+      await tester.pumpAndSettle();
+
+      // The pick is recorded: re-opening the menu names the choice.
+      await tester.tap(find.text('Flight to Milan, train to Como'));
+      await tester.pumpAndSettle();
+      expect(find.text('Chosen: Como'), findsOneWidget);
+    });
+
+    testWidgets('keeping a line as written decides nothing', (tester) async {
+      const multiPaste = 'Day 1 - Italy\n- Flight to Milan, train to Como';
+      await launch(tester);
+      await paste(tester, multiPaste);
+
+      await tester.tap(find.text('Flight to Milan, train to Como'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('stop-menu-pick-place')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pick-place-none')));
+      await tester.pumpAndSettle();
+
+      // Dismissed, not decided: re-opening re-offers with nothing chosen.
+      await tester.tap(find.text('Flight to Milan, train to Como'));
+      await tester.pumpAndSettle();
+      expect(find.text('Chosen: Como'), findsNothing);
+      expect(find.text('2 places on this line'), findsOneWidget);
+    });
+
+    testWidgets('a single-place chip offers no picker', (tester) async {
+      await launch(tester);
+      await paste(tester, fiveDaySample);
+
+      await tester.tap(find.text('Dotonbori'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('stop-menu-pick-place')), findsNothing);
     });
 
     testWidgets('a day header renames the day', (tester) async {

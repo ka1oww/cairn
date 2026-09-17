@@ -1639,6 +1639,11 @@ void main() {
       await db.customStatement(
         'ALTER TABLE itinerary_stops DROP COLUMN area_source',
       );
+      // v15 gave stops the traveller's candidate-place pick; it has to go
+      // too, for the same reason as everything above.
+      await db.customStatement(
+        'ALTER TABLE itinerary_stops DROP COLUMN chosen_place',
+      );
       await db.customStatement('DROP TABLE app_preferences');
       await db.customStatement(
         'ALTER TABLE trip_facts DROP COLUMN name_revised_at_utc_iso',
@@ -2202,5 +2207,104 @@ void main() {
         expect(stops.single.areaSource, isNull);
       },
     );
+  });
+
+  group('a server that does not know about chosen places yet', () {
+    Future<TripId> aTripWithAChoice(AppDatabase db) async {
+      final id = await startTrip(db);
+      await TripRepository(db).saveItinerary(
+        ConfirmedItinerary(
+          days: [
+            ConfirmedDay(
+              number: 1,
+              date: CalendarDate(2027, 6, 14),
+              place: 'Italy',
+              stops: [
+                Stop(
+                  text: 'Flight to Milan, train to Como',
+                  kind: StopKind.multiPlace,
+                  placeText: 'Milan; Como',
+                  placeCandidates: const ['Milan', 'Como'],
+                  chosenPlace: 'Como',
+                ),
+              ],
+            ),
+          ],
+        ),
+        at: DateTime.utc(2027, 6, 1),
+      );
+      return id;
+    }
+
+    test('a pull that carries no choice leaves the local pick standing', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await aTripWithAChoice(db);
+      // Today's server: no chosen-place column, so no key on the answer —
+      // "does not know", never "says none".
+      final server = FakeServer(trip: sharedTrip(id, const []))
+        ..holds = serverHolds([
+          RemoteDay(
+            number: 1,
+            dateIso: '2027-06-14',
+            place: 'Italy',
+            revisedAt: DateTime.utc(2027, 6, 3),
+            stops: const [
+              RemoteStop(
+                position: 0,
+                text: 'Flight to Milan, train to Como',
+                carriesChosenPlace: false,
+              ),
+            ],
+          ),
+        ]);
+
+      final outcome = await TripSync(
+        database: db,
+        facts: server,
+        now: duringTheTrip,
+      ).syncNow();
+
+      expect(outcome.standing, SyncStanding.synced);
+      expect((await db.readItineraryStops()).single.chosenPlace, 'Como');
+    });
+
+    test('an answer that carries a choice applies it', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await aTripWithAChoice(db);
+      final server = FakeServer(trip: sharedTrip(id, const []))
+        ..holds = serverHolds([
+          RemoteDay(
+            number: 1,
+            dateIso: '2027-06-14',
+            place: 'Italy',
+            revisedAt: DateTime.utc(2027, 6, 3),
+            stops: const [
+              RemoteStop(
+                position: 0,
+                text: 'Flight to Milan, train to Como',
+                chosenPlace: 'Milan',
+              ),
+            ],
+          ),
+        ]);
+
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
+
+      expect((await db.readItineraryStops()).single.chosenPlace, 'Milan');
+    });
+
+    test('the push carries the pick for a server that learns the column', () async {
+      final db = inMemory();
+      addTearDown(db.close);
+      final id = await aTripWithAChoice(db);
+      final server = FakeServer(trip: sharedTrip(id, const []));
+
+      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
+
+      final pushed = server.pushes.single.days.single.stops.single;
+      expect(pushed.chosenPlace, 'Como');
+    });
   });
 }

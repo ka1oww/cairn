@@ -29,11 +29,18 @@ import what is written there, not here.
 - Drift's generated code (`lib/**/*.g.dart`) is not checked in (root
   `.gitignore`): run `dart run build_runner build` after checkout, before
   analyzing or testing the app.
-- Schema is at v13. A test that stands up an *old* schema by winding
+- Schema is at v15. A test that stands up an *old* schema by winding
   `user_version` back must also drop everything later versions added
   (`test/trip_id_test.dart`'s `windBackToV4` is the pattern) -- an upgrade that
   finds its own column already there fails outright, and the failure reads like
-  a bug in the migration rather than in the fixture.
+  a bug in the migration rather than in the fixture. There are five such
+  fixtures, not one: `trip_id_test` (v4), `photo_storage_test` (v2),
+  `shared_facts_sync_test` (v5) and three sites in `photo_outbox_test`
+  (v7, v10, v11) — a new column on an old table must be dropped in all of them.
+  Schema v15 added the traveller's nullable candidate-place pick
+  (`itinerary_stops.chosen_place`), carried alongside the parser's
+  `placeCandidatesJson` through the draft, the store, the sync cargo (retained
+  locally when the answer carries no key) and the re-paste merge.
 - Analyze with `flutter analyze lib test tool` from the root. A bare
   `flutter analyze` also walks `learning/` and `packages/` -- separate
   projects with their own dependency contexts -- and reports their

@@ -163,6 +163,12 @@ class PostgrestSharedFacts implements SharedFacts {
                     'kind': stop.kind,
                     'area_text': stop.areaText,
                     'area_source': stop.areaSource,
+                    // The candidate-place pick. No server migration carries
+                    // it yet, so today's servers ignore this key and the pull
+                    // keeps what this phone holds (see `carriesChosenPlace`);
+                    // a future migration can store and echo it with no app
+                    // change.
+                    'chosen_place': stop.chosenPlace,
                   },
               ],
             },
@@ -400,6 +406,8 @@ class PostgrestSharedFacts implements SharedFacts {
                   areaText: stop['area_text'] as String?,
                   areaSource: stop['area_source'] as String?,
                   carriesAreas: stop.containsKey('area_text'),
+                  chosenPlace: stop['chosen_place'] as String?,
+                  carriesChosenPlace: stop.containsKey('chosen_place'),
                 ),
             ],
           ),

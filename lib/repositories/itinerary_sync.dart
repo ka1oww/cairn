@@ -547,6 +547,7 @@ class TripSync {
                     kind: stop.kind,
                     areaText: stop.areaText,
                     areaSource: stop.areaSource,
+                    chosenPlace: stop.chosenPlace,
                   ),
             ],
           ),
@@ -587,6 +588,14 @@ class TripSync {
           stop.areaSource,
         ),
     };
+    // A server without a chosen-place column answers with no choice at all.
+    // That is "this server does not know", not "this server says none", so
+    // what this phone holds stands rather than being wiped by a round trip —
+    // the same contract as the area columns above.
+    final localChoices = {
+      for (final stop in localStops)
+        (stop.dayNumber, stop.position): stop.chosenPlace,
+    };
     final lineMetadata = {
       for (final day in merged.days)
         for (final stop in day.stops)
@@ -611,6 +620,12 @@ class TripSync {
               placeText: lineMetadata[(day.number, stop.position)]!.placeText,
               placeCandidatesJson: lineMetadata[(day.number, stop.position)]!
                   .placeCandidatesJson,
+              // Rehydration re-derives the parser's fields from the text, but
+              // the choice is the traveller's, not the parser's: the answer's
+              // own when it carries one, else what this phone already holds.
+              chosenPlace: stop.carriesChosenPlace
+                  ? stop.chosenPlace
+                  : localChoices[(day.number, stop.position)],
               areaText: stop.areaText,
               areaSource: stop.areaSource,
             )
@@ -624,6 +639,9 @@ class TripSync {
               placeText: lineMetadata[(day.number, stop.position)]!.placeText,
               placeCandidatesJson: lineMetadata[(day.number, stop.position)]!
                   .placeCandidatesJson,
+              chosenPlace: stop.carriesChosenPlace
+                  ? stop.chosenPlace
+                  : localChoices[(day.number, stop.position)],
               areaText: localAreas[(day.number, stop.position)]?.$2,
               areaSource: localAreas[(day.number, stop.position)]?.$3,
             ),
@@ -724,8 +742,8 @@ class TripSync {
             [stop.dayNumber, stop.position],
             '${stop.dayNumber}|${stop.position}|${stop.stopText}'
                 '|${stop.timeIso}|${stop.kind}|${stop.placeText}'
-                '|${stop.placeCandidatesJson}|${stop.areaText}'
-                '|${stop.areaSource}',
+                '|${stop.placeCandidatesJson}|${stop.chosenPlace}'
+                '|${stop.areaText}|${stop.areaSource}',
           ),
       ]),
       '--',
@@ -754,7 +772,7 @@ class TripSync {
             [stop.dayNumber, stop.position],
             '${stop.dayNumber}|${stop.position}|${stop.text}|${stop.timeIso}'
                 '|${stop.kind}|${stop.placeText}|${stop.placeCandidatesJson}'
-                '|${stop.areaText}|${stop.areaSource}',
+                '|${stop.chosenPlace}|${stop.areaText}|${stop.areaSource}',
           ),
       ]),
       '--',

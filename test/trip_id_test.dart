@@ -93,6 +93,9 @@ Future<void> windBackToV4(AppDatabase db) async {
   await db.customStatement(
     'ALTER TABLE itinerary_stops DROP COLUMN area_source',
   );
+  await db.customStatement(
+    'ALTER TABLE itinerary_stops DROP COLUMN chosen_place',
+  );
   await db.customStatement('DROP TABLE app_preferences');
   await db.customStatement(
     'ALTER TABLE trip_facts DROP COLUMN name_revised_at_utc_iso',

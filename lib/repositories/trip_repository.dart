@@ -96,6 +96,7 @@ class TripRepository {
                         placeCandidates: placeCandidatesFromStored(
                           stop.placeCandidatesJson,
                         ),
+                        chosenPlace: stop.chosenPlace,
                         area: stop.areaText,
                         areaSource: stop.areaText == null
                             ? null
@@ -160,6 +161,7 @@ class TripRepository {
               placeCandidatesJson: stop.placeCandidates.isEmpty
                   ? null
                   : jsonEncode(stop.placeCandidates),
+              chosenPlace: stop.chosenPlace,
               areaText: stop.area,
               areaSource: stop.area == null ? null : stop.areaSource?.name,
             ),

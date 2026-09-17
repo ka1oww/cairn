@@ -196,6 +196,7 @@ void main() {
           kind: null,
           placeText: null,
           placeCandidatesJson: null,
+          chosenPlace: null,
           areaText: null,
           areaSource: null,
         ),
@@ -227,6 +228,9 @@ void main() {
     );
     await before.customStatement(
       'ALTER TABLE itinerary_stops DROP COLUMN area_source',
+    );
+    await before.customStatement(
+      'ALTER TABLE itinerary_stops DROP COLUMN chosen_place',
     );
     await before.customStatement('DROP TABLE app_preferences');
     await before.customStatement('PRAGMA user_version = 2');

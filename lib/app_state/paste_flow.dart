@@ -104,6 +104,10 @@ class ReviewStop {
   final String? placeText;
   final List<String> placeCandidates;
 
+  /// The traveller's pick among [placeCandidates], or null while unchosen.
+  /// Alongside the parser's fields, never rewriting them.
+  final String? chosenPlace;
+
   /// The area in force, and whose it is. A person's edit here is
   /// [model.AreaSource.human] and outranks the parser from then on.
   final String? area;
@@ -116,6 +120,7 @@ class ReviewStop {
     this.kind = model.StopKind.place,
     this.placeText,
     this.placeCandidates = const [],
+    this.chosenPlace,
     this.area,
     this.areaSource,
   });
@@ -426,6 +431,7 @@ class _DraftStop {
     this.kind = model.StopKind.place,
     this.placeText,
     this.placeCandidates = const [],
+    this.chosenPlace,
     this.area,
     this.areaSource,
   });
@@ -436,6 +442,7 @@ class _DraftStop {
   model.StopKind kind;
   String? placeText;
   List<String> placeCandidates;
+  String? chosenPlace;
   String? area;
   model.AreaSource? areaSource;
 
@@ -813,6 +820,27 @@ class PasteFlow extends Notifier<PasteFlowState> {
     found.stop.text = trimmed;
     found.stop.placeText = null;
     found.stop.placeCandidates = const [];
+    found.stop.chosenPlace = null;
+    _rebuildReview();
+  }
+
+  /// Records the traveller's pick among a stop's parser candidates. The
+  /// choice constrains display and tap only: the stop's words, kind and
+  /// candidates stay byte-identical, so the parser's provenance is untouched.
+  /// A candidate that is not on offer is not a choice — it is ignored.
+  void choosePlace(String stopId, String place) {
+    final found = _findStop(stopId);
+    if (found == null) return;
+    if (!found.stop.placeCandidates.contains(place)) return;
+    found.stop.chosenPlace = place;
+    _rebuildReview();
+  }
+
+  /// Clears a stop's candidate-place pick, returning its row to inert.
+  void clearChosenPlace(String stopId) {
+    final found = _findStop(stopId);
+    if (found == null) return;
+    found.stop.chosenPlace = null;
     _rebuildReview();
   }
 
@@ -943,6 +971,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   kind: stop.kind,
                   placeText: stop.placeText,
                   placeCandidates: stop.placeCandidates,
+                  chosenPlace: stop.chosenPlace,
                   area: stop.area,
                   areaSource: stop.areaSource,
                 ),
@@ -1119,6 +1148,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   kind: stop.kind,
                   placeText: stop.placeText,
                   placeCandidates: stop.placeCandidates,
+                  chosenPlace: stop.chosenPlace,
                   area: stop.area,
                   areaSource: stop.areaSource,
                 ),
@@ -1324,6 +1354,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
                   kind: stop.kind,
                   placeText: stop.placeText,
                   placeCandidates: stop.placeCandidates,
+                  chosenPlace: stop.chosenPlace,
                   area: stop.area,
                   areaSource: stop.areaSource,
                 ),
@@ -1386,6 +1417,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
               kind: stop.kind,
               placeText: stop.placeText,
               placeCandidates: stop.placeCandidates,
+              chosenPlace: stop.chosenPlace,
               area: stop.area,
               areaSource: stop.areaSource,
             ),
@@ -1508,6 +1540,7 @@ class PasteFlow extends Notifier<PasteFlowState> {
             kind: stop.kind,
             placeText: stop.placeText,
             placeCandidates: stop.placeCandidates,
+            chosenPlace: stop.chosenPlace,
             area: stop.area,
             areaSource: stop.areaSource,
           ),

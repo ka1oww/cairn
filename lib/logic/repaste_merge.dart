@@ -405,6 +405,7 @@ RepasteMergeResult mergeRepaste({
             kind: stop.kind,
             placeText: stop.placeText,
             placeCandidates: stop.placeCandidates,
+            chosenPlace: stop.chosenPlace,
             area: correction.area,
             areaSource: correction.areaSource,
           ),
@@ -445,7 +446,18 @@ MergedDay _mergeMatched(
   List<SetAsideItem> setAside, {
   MergedDayOrigin? origin,
 }) {
-  final newStops = _convertStops(parsed.stops);
+  final newStops = _convertStops(
+    parsed.stops,
+    // A choice outlives a re-paste when the thing chosen still exists: the
+    // same words still offering the same candidate. A stop whose text changed
+    // enough to reclassify drops the choice — honestly, since the chosen
+    // thing is gone.
+    choiceCarry: {
+      for (final stop in currentDay.stops)
+        if (stop.chosenPlace != null)
+          _normalize(stop.text): stop.chosenPlace!,
+    },
+  );
 
   // Which current stops survive? Anything the revised plan still says, on any
   // of its days: a stop that moved to another day was moved, not displaced.
@@ -503,7 +515,10 @@ String? _contentSignature(String? place, List<String> stops) {
   return '${field(normalizedPlace)}|${normalizedStops.map(field).join('|')}';
 }
 
-List<Stop> _convertStops(List<ip.Stop> stops) => List.unmodifiable([
+List<Stop> _convertStops(
+  List<ip.Stop> stops, {
+  Map<String, String> choiceCarry = const {},
+}) => List.unmodifiable([
   for (final stop in stops)
     Stop(
       text: stop.text,
@@ -514,6 +529,13 @@ List<Stop> _convertStops(List<ip.Stop> stops) => List.unmodifiable([
       kind: stopKindOf(stop.kind),
       placeText: stop.placeText,
       placeCandidates: stop.placeCandidates,
+      chosenPlace:
+          choiceCarry[_normalize(stop.text)] != null &&
+              stop.placeCandidates.contains(
+                choiceCarry[_normalize(stop.text)],
+              )
+          ? choiceCarry[_normalize(stop.text)]
+          : null,
       area: stop.area?.text,
       areaSource: stop.area == null ? null : areaSourceOf(stop.area!.source),
     ),

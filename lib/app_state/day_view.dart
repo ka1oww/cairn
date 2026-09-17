@@ -61,6 +61,10 @@ class DayStop {
   final String? placeText;
   final List<String> placeCandidates;
 
+  /// The traveller's pick among [placeCandidates], or null while unchosen.
+  /// A chosen row searches for the choice alone; an unchosen one stays inert.
+  final String? chosenPlace;
+
   /// `Lunch` on `Lunch: Ichiran` — shown, and never sent to a maps app,
   /// because no restaurant is called that.
   final String? mealLabel;
@@ -96,6 +100,7 @@ class DayStop {
     this.kind = StopKind.place,
     this.placeText,
     this.placeCandidates = const [],
+    this.chosenPlace,
     this.mealLabel,
     this.searchText,
     this.area,
@@ -108,11 +113,14 @@ class DayStop {
   bool get isStarred => timeLabel != null;
 
   /// Whether tapping this row opens a maps search. Only a committed single
-  /// place, or a meal label with a venue payload, is resolvable. Every other
-  /// line type remains visible and inert.
+  /// place, a meal label with a venue payload, or a candidate row the
+  /// traveller has chosen from is resolvable. Every other line type remains
+  /// visible and inert.
   bool get opensMaps =>
       searchText != null &&
-      (kind == StopKind.place || kind == StopKind.mealLabel);
+      (kind == StopKind.place ||
+          kind == StopKind.mealLabel ||
+          chosenPlace != null);
 
   /// Whether the row is drawn short with an "N places" badge. Length decides,
   /// so a row that fits is drawn as written however many places it names.
@@ -431,13 +439,16 @@ DayStop _dayStop(
   final rest = meal.rest;
   // Only a committed single place and a meal with a venue payload are safe
   // searches. Alternatives, compound lines, section labels, notes and loose
-  // instructions all render as written while remaining inert.
+  // instructions all render as written while remaining inert — unless the
+  // traveller has picked one of the line's own candidates, which is the one
+  // search the row then offers.
   final searchText = sendableSearchText(
     isPlace: stop.kind == StopKind.place,
     isMealLabel: stop.kind == StopKind.mealLabel,
     placeText: stop.placeText,
     placeCandidates: stop.placeCandidates,
     mealRest: rest,
+    chosenPlace: stop.chosenPlace,
   );
   return DayStop(
     position: position,
@@ -446,6 +457,7 @@ DayStop _dayStop(
     kind: stop.kind,
     placeText: stop.placeText,
     placeCandidates: stop.placeCandidates,
+    chosenPlace: stop.chosenPlace,
     mealLabel: meal.label,
     searchText: searchText,
     area: stop.area,

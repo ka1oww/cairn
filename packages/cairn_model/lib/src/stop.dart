@@ -88,6 +88,13 @@ final class Stop {
   /// committed stops.
   final List<String> placeCandidates;
 
+  /// The traveller's pick among [placeCandidates], written verbatim from that
+  /// list and in its order. Null until chosen — an unchosen multi-place row
+  /// stays inert. Lives *alongside* the parser's fields, never inside them:
+  /// [kind] stays `multiPlace` and [placeText]/[placeCandidates] are never
+  /// rewritten, so the parser's provenance survives the choice.
+  final String? chosenPlace;
+
   /// The area in force for this stop — what a Maps search appends.
   /// Null means "send the stop's own words alone" (rule 3: a miss sends
   /// nothing rather than guessing).
@@ -102,6 +109,7 @@ final class Stop {
     this.kind = StopKind.place,
     this.placeText,
     this.placeCandidates = const [],
+    this.chosenPlace,
     this.area,
     this.areaSource,
   }) {
@@ -142,6 +150,7 @@ final class Stop {
       other.kind == kind &&
       other.placeText == placeText &&
       _sameStrings(other.placeCandidates, placeCandidates) &&
+      other.chosenPlace == chosenPlace &&
       other.area == area &&
       other.areaSource == areaSource;
 
@@ -152,6 +161,7 @@ final class Stop {
         kind,
         placeText,
         Object.hashAll(placeCandidates),
+        chosenPlace,
         area,
         areaSource,
       );

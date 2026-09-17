@@ -75,6 +75,11 @@ class ItineraryStops extends Table {
   /// metadata, so an older server's itinerary row is reclassified on pull.
   TextColumn get placeCandidatesJson => text().nullable()();
 
+  /// The traveller's pick among the parser's place candidates, written
+  /// verbatim from that list. Null until chosen. Alongside — never inside —
+  /// the parser's columns above, so a choice survives reclassification.
+  TextColumn get chosenPlace => text().nullable()();
+
   /// Area in force for this stop, or null = send nothing (rule 3).
   TextColumn get areaText => text().nullable()();
 
@@ -490,7 +495,7 @@ class AppDatabase extends _$AppDatabase {
   final TripId Function() mint;
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -690,6 +695,12 @@ class AppDatabase extends _$AppDatabase {
         // phone's zone is not evidence of where the trip is.
         await m.addColumn(tripFacts, tripFacts.timeZone);
       }
+      if (from < 15) {
+        // The traveller's candidate-place pick. Nullable, so every existing
+        // row upgrades unchosen — an old plan's ambiguous rows stay inert
+        // until somebody chooses.
+        await m.addColumn(itineraryStops, itineraryStops.chosenPlace);
+      }
     },
   );
 
@@ -766,6 +777,7 @@ class AppDatabase extends _$AppDatabase {
                     stop.kind,
                     stop.placeText,
                     stop.placeCandidatesJson,
+                    stop.chosenPlace,
                     stop.areaText,
                     stop.areaSource,
                   ),
@@ -788,6 +800,7 @@ class AppDatabase extends _$AppDatabase {
                   stop.kind ?? 'place',
                   stop.placeText,
                   stop.placeCandidatesJson,
+                  stop.chosenPlace,
                   stop.areaText,
                   stop.areaSource,
                 ),
@@ -971,6 +984,7 @@ class AppDatabase extends _$AppDatabase {
                   kind: stop.kind,
                   placeText: stop.placeText,
                   placeCandidatesJson: stop.placeCandidatesJson,
+                  chosenPlace: stop.chosenPlace,
                   areaText: stop.areaText,
                   areaSource: stop.areaSource,
                 ),
@@ -1094,6 +1108,7 @@ class AppDatabase extends _$AppDatabase {
             kind: stop.kind == null ? const Value.absent() : Value(stop.kind!),
             placeText: Value(stop.placeText),
             placeCandidatesJson: Value(stop.placeCandidatesJson),
+            chosenPlace: Value(stop.chosenPlace),
             areaText: Value(stop.areaText),
             areaSource: Value(stop.areaSource),
           ),
@@ -1116,7 +1131,7 @@ class AppDatabase extends _$AppDatabase {
     required String? dateIso,
     required String? place,
     required List<
-      (int, String, String?, String?, String?, String?, String?, String?)
+      (int, String, String?, String?, String?, String?, String?, String?, String?)
     >
     stops,
   }) {
@@ -1131,12 +1146,14 @@ class AppDatabase extends _$AppDatabase {
             kind,
             placeText,
             placeCandidatesJson,
+            chosenPlace,
             areaText,
             areaSource,
           )
           in ordered)
         '$position\u0000$text\u0000${timeIso ?? ''}\u0000${kind ?? ''}'
             '\u0000${placeText ?? ''}\u0000${placeCandidatesJson ?? ''}'
+            '\u0000${chosenPlace ?? ''}'
             '\u0000${areaText ?? ''}\u0000${areaSource ?? ''}',
     ].join('\u0001');
   }
@@ -1841,6 +1858,7 @@ typedef ItineraryStopRecord = ({
   String? kind,
   String? placeText,
   String? placeCandidatesJson,
+  String? chosenPlace,
   String? areaText,
   String? areaSource,
 });
