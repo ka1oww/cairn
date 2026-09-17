@@ -28,6 +28,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
 import '../logic/calendar_days.dart';
+import '../logic/nearest_areas.dart';
 import '../logic/parsed_areas.dart';
 import '../logic/plan_text.dart';
 import '../logic/repaste_merge.dart' as merge;
@@ -779,24 +780,9 @@ class PasteFlow extends Notifier<PasteFlowState> {
     final day = found.day;
     final index = day.stops.indexWhere((s) => s.id == firstStopId);
     if (index < 0) return const [];
-    String? before;
-    for (var i = index - 1; i >= 0; i--) {
-      if (day.stops[i].area != null) {
-        before = day.stops[i].area;
-        break;
-      }
-    }
-    String? after;
-    for (var i = index + 1; i < day.stops.length; i++) {
-      if (day.stops[i].area != null) {
-        after = day.stops[i].area;
-        break;
-      }
-    }
-    final ordered = <String>[
-      ?before,
-      if (after != null && after != before) after,
-    ];
+    final ordered = nearestAreas([
+      for (final stop in day.stops) stop.area,
+    ], index).toList();
     final seen = ordered.toSet();
     for (final draftDay in _draft?.days ?? const <_DraftDay>[]) {
       for (final stop in draftDay.stops) {

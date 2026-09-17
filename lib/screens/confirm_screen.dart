@@ -1502,6 +1502,11 @@ class _TextPromptState extends State<_TextPrompt> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      // Scrollable because the candidate list is the plan's own areas and a
+      // long plan names many: without it the field below them is clipped
+      // away, and that field is the only way to name somewhere the plan
+      // never does.
+      scrollable: true,
       title: Text(widget.title),
       content: Column(
         mainAxisSize: MainAxisSize.min,

@@ -24,6 +24,7 @@ import 'package:trip_moments/trip_moments.dart' as tm;
 import 'package:cairn_model/cairn_model.dart' show AreaSource, StopKind;
 
 import '../logic/maps_handoff.dart';
+import '../logic/nearest_areas.dart';
 import 'date_labels.dart';
 import 'ping_schedule.dart';
 import 'trip_lifecycle.dart';
@@ -389,24 +390,10 @@ PlannedDay _planned(TripPlan plan, PlanDay day, {required bool isOver}) {
 
   // For a stop with no area of its own: the nearest area either side of it,
   // nearer first. These are offered as search hints ("nearest to Shibuya"),
-  // which is why the closer one leads and why a duplicate is dropped.
-  List<String> adjacentTo(int index) {
-    String? before;
-    for (var i = index - 1; i >= 0; i--) {
-      if (stops[i].area != null) {
-        before = stops[i].area;
-        break;
-      }
-    }
-    String? after;
-    for (var i = index + 1; i < stops.length; i++) {
-      if (stops[i].area != null) {
-        after = stops[i].area;
-        break;
-      }
-    }
-    return [?before, if (after != null && after != before) after];
-  }
+  // and the ordering rule is `lib/logic/nearest_areas.dart`'s, shared with
+  // the confirm screen's add-area fallback.
+  final stopAreas = [for (final stop in stops) stop.area];
+  List<String> adjacentTo(int index) => nearestAreas(stopAreas, index);
 
   return PlannedDay(
     number: day.number,

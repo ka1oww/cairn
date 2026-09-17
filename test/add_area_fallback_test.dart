@@ -38,6 +38,27 @@ Mon 14 June 2027 - Tokyo
 - Standing sushi bar
 ''';
 
+/// A plan naming many areas, on a phone-sized screen: every one of them is
+/// a candidate, so the list outgrows the dialog and the blank field below it
+/// must still be reachable — that field is the only way to name somewhere
+/// the plan never says.
+const manyAreasPaste = '''
+Mon 14 June 2027 - Tokyo
+- Standing sushi bar
+- Senso-ji in Asakusa
+- Ameyoko in Ueno
+- Crossing in Shibuya
+- Takeshita Street in Harajuku
+- Omoide Yokocho in Shinjuku
+- Tsukiji Outer Market in Tsukiji
+- Skytree in Oshiage
+- Electric Town in Akihabara
+- Kaminarimon in Taito
+- Teamlab in Toyosu
+- Gundam in Odaiba
+- Imperial Palace in Chiyoda
+''';
+
 /// The date every test in this file reads as today: the plan's own day, so
 /// an accepted plan lands straight on its day page.
 final _today = DateTime.utc(2027, 6, 14);
@@ -57,8 +78,11 @@ void main() {
   });
   tearDown(() => db.close());
 
-  Future<void> launch(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(800, 2600);
+  Future<void> launch(
+    WidgetTester tester, {
+    Size size = const Size(800, 2600),
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
@@ -264,5 +288,56 @@ void main() {
           'answer with nothing',
     );
     expect(answered.areaSource, 'human');
+  });
+
+  testWidgets('a plan naming many areas still reaches the blank field', (
+    tester,
+  ) async {
+    // A short view, not the tall harness one the other tests use: the
+    // candidate list is longer than the dialog can draw.
+    await launch(tester, size: const Size(800, 700));
+    await paste(tester, manyAreasPaste);
+
+    await tester.tap(find.text('+ Add an area'));
+    await tester.pumpAndSettle();
+
+    // The nearest area leads, and every other area the plan names follows.
+    final ids = reviewStopIds(tester);
+    expect(candidatesOf(tester, ids[0]), hasLength(12));
+    expect(find.byKey(const Key('add-area-choice-Asakusa')), findsOneWidget);
+
+    // The field is below them all, off the drawn dialog until scrolled to.
+    final content = find
+        .descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('add-area-input')),
+      120,
+      scrollable: content,
+    );
+    await tester.pumpAndSettle();
+
+    // And it still answers: somewhere the plan never names.
+    await tester.enterText(
+      find.byKey(const Key('add-area-input')),
+      'Nakameguro',
+    );
+    await tester.tap(find.byKey(const Key('add-area-save')));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.text('Standing sushi bar')),
+    );
+    final answered =
+        ((container.read(
+          pasteFlowProvider,
+        ) as PasteReview).review.days.first.stops).firstWhere(
+          (stop) => stop.text == 'Standing sushi bar',
+        );
+    expect(answered.area, 'Nakameguro');
+    expect(answered.areaSource, AreaSource.human);
   });
 }
