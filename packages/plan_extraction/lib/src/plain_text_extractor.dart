@@ -198,8 +198,9 @@ String _decodeUtf16(Uint8List bytes, {required bool littleEndian}) {
           : (bytes[i] << 8) | bytes[i + 1];
       if (low >= 0xDC00 && low <= 0xDFFF) {
         i += 2;
-        buffer
-            .writeCharCode(0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00));
+        buffer.writeCharCode(
+          0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00),
+        );
         continue;
       }
     }

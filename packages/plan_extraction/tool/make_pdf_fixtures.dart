@@ -113,9 +113,8 @@ Future<void> main() async {
   // an honest refusal unless the extractor is careful.
   // ---------------------------------------------------------------------
   final whole = File('test/fixtures/garbled-itinerary.pdf').readAsBytesSync();
-  File(
-    'test/fixtures/truncated.pdf',
-  ).writeAsBytesSync(whole.sublist(0, whole.length ~/ 3));
+  File('test/fixtures/truncated.pdf')
+      .writeAsBytesSync(whole.sublist(0, whole.length ~/ 3));
 
   work.deleteSync(recursive: true);
   stdout.writeln('PDF fixtures written under test/fixtures/');

@@ -94,32 +94,34 @@ class XlsxExtractor implements PlanTextExtractor {
 
   /// One container cell mapped onto the row model's typed cells.
   static SourceCell? _sourceCell(CellValue? value) => switch (value) {
-        null => null,
-        DateCellValue(:final year, :final month, :final day) =>
-          DateCell(DateTime(year, month, day)),
-        // A combined date+time cell splits along the same line the row
-        // model does: its calendar part is the certain date, its
-        // time-of-day is dropped rather than smuggled in as a second date
-        // fact — a sheet that wants the time typed separately already has
-        // TimeCellValue for that.
-        DateTimeCellValue(:final year, :final month, :final day) =>
-          DateCell(DateTime(year, month, day)),
-        TimeCellValue(:final hour, :final minute) => TimeCell(hour, minute),
-        TextCellValue() => TextCell(value.toString()),
-        IntCellValue() => TextCell(value.value.toString()),
-        DoubleCellValue() => TextCell(_doubleAsText(value.value)),
-        BoolCellValue() => TextCell(value.value ? 'TRUE' : 'FALSE'),
-        // A formula's cached value isn't exposed by this package, and
-        // pasting a range out of Excel yields values, not formulas — so a
-        // formula cell contributes nothing rather than formula junk.
-        FormulaCellValue() => null,
-      };
+    null => null,
+    DateCellValue(:final year, :final month, :final day) => DateCell(
+      DateTime(year, month, day),
+    ),
+    // A combined date+time cell splits along the same line the row
+    // model does: its calendar part is the certain date, its
+    // time-of-day is dropped rather than smuggled in as a second date
+    // fact — a sheet that wants the time typed separately already has
+    // TimeCellValue for that.
+    DateTimeCellValue(:final year, :final month, :final day) => DateCell(
+      DateTime(year, month, day),
+    ),
+    TimeCellValue(:final hour, :final minute) => TimeCell(hour, minute),
+    TextCellValue() => TextCell(value.toString()),
+    IntCellValue() => TextCell(value.value.toString()),
+    DoubleCellValue() => TextCell(_doubleAsText(value.value)),
+    BoolCellValue() => TextCell(value.value ? 'TRUE' : 'FALSE'),
+    // A formula's cached value isn't exposed by this package, and
+    // pasting a range out of Excel yields values, not formulas — so a
+    // formula cell contributes nothing rather than formula junk.
+    FormulaCellValue() => null,
+  };
 
   /// `14` stays `14`; only genuine fractions keep their decimal part
   /// (`14.5`). Dart renders `14.0` for a whole double, which would read as
   /// noise in an itinerary line.
   static String _doubleAsText(double d) =>
       d == d.roundToDouble() && d.abs() < 1e15
-          ? d.toInt().toString()
-          : d.toString();
+      ? d.toInt().toString()
+      : d.toString();
 }
