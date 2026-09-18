@@ -28,6 +28,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
 import '../logic/calendar_days.dart';
+import '../logic/nearest_areas.dart';
 import '../logic/parsed_areas.dart';
 import '../logic/plan_text.dart';
 import '../logic/repaste_merge.dart' as merge;
@@ -761,6 +762,35 @@ class PasteFlow extends Notifier<PasteFlowState> {
     found.stop.area = area;
     found.stop.areaSource = area == null ? null : model.AreaSource.human;
     _rebuildReview();
+  }
+
+  /// The areas the add-area fallback offers for the silent run starting at
+  /// [firstStopId]: the nearest area on either side of it in its own day —
+  /// the before side first, exactly as the day page orders its "nearest to"
+  /// search hints — then every other area the draft already names, in plan
+  /// order. One tap answers the whole run through [setAreaRun], which writes
+  /// [model.AreaSource.human], so an answer outranks the parser from then on
+  /// and rides re-paste and sync like any other correction. Callers only ask
+  /// for silent runs, whose own area is null and so needs no exclusion.
+  /// Empty when the plan names no area at all, and the dialog stays the
+  /// blank field it has always been.
+  List<String> areaCandidates(String firstStopId) {
+    final found = _findStop(firstStopId);
+    if (found == null) return const [];
+    final day = found.day;
+    final index = day.stops.indexWhere((s) => s.id == firstStopId);
+    if (index < 0) return const [];
+    final ordered = nearestAreas([
+      for (final stop in day.stops) stop.area,
+    ], index).toList();
+    final seen = ordered.toSet();
+    for (final draftDay in _draft?.days ?? const <_DraftDay>[]) {
+      for (final stop in draftDay.stops) {
+        final area = stop.area;
+        if (area != null && seen.add(area)) ordered.add(area);
+      }
+    }
+    return ordered;
   }
 
   // -- editing a stop ------------------------------------------------------
