@@ -821,8 +821,9 @@ Sharp edges worth knowing before touching this directory again:
   in place rather than re-pushed, per the bullet above;
   `0011`, the photo transport delta, `0013`, which teaches
   `sync_trip_itinerary` those columns, `0015`, the day-gate and tenancy
-  hardening, `0016`, the close derived from the itinerary, and `0017`, which
-  widens `0016`'s closed-trip guard to all four itinerary tables, are written
+  hardening, `0016`, the close derived from the itinerary, `0017`, which
+  widens `0016`'s closed-trip guard to all four itinerary tables, and `0018`,
+  the durable date guards for deletes and earlier date moves, are written
   and locally probed but
   applied nowhere else — until `0013` runs, an area correction is stripped on
   push and absent on pull, so it never leaves the phone that made it, and
@@ -921,10 +922,12 @@ Sharp edges worth knowing before touching this directory again:
   date, and contributing to an undated day opens it (`record_day_unlock` has no
   `trip_day is not null` guard any more — that guard was the hole). Since
   `0015` the permissive default cannot be forged: an unlock follows a moved
-  photograph (deleting one still never re-locks its day), and re-dating or
-  un-dating a still current or future day holds the gate shut until the old
-  date passes (`day_gate_date_guards`) — `supabase/README.md`'s gate section
-  owns the detail.
+  photograph (deleting one still never re-locks its day), and re-dating,
+  un-dating, shortening, or deleting a still current or future day holds the
+  gate shut until the old date passes (`day_gate_date_guards` — since `0018`
+  recorded on every earlier date move and on the delete itself, hanging off
+  the trip so a delete-then-reinsert finds it) — `supabase/README.md`'s gate
+  section owns the detail.
 - **Every photograph read goes through one seat.** `may_read_trip_photos`
   (`0011`) today answers exactly `is_trip_member`, and both the `photos` SELECT
   policy and `r2-download-url` go through it. It exists so that when leaving

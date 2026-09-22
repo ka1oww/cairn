@@ -24,7 +24,7 @@ once review added the closed-trip refusal, so the hosted function bodies match
 this repo). `0011`, the photo
 transport delta, and
 `0013`, which teaches `sync_trip_itinerary` those columns, exist only here and
-in the local probe, as do `0015`, `0016` and `0017`. The app
+in the local probe, as do `0015`, `0016`, `0017` and `0018`. The app
 points at it by default — see
 [Pointing the app at it](#pointing-the-app-at-it) — and
 [Verification](#verification-what-was-actually-run) at the bottom says what has
@@ -41,7 +41,7 @@ the real sign-in providers are still untouched.
 | `trip_invites` | Invite codes — three spoken words each — kept in their own table rather than a column on `trips` so a code can be rotated, revoked, or usage-limited without touching trip identity, and a trip can have more than one outstanding code. Carries **no expiry column**; a code dies when its trip closes and at no other time. See [How someone joins](#how-someone-joins-a-trip). |
 | `photos` | One row per photo in the pool. The bytes live in R2; this row is the index the app queries and the thing RLS protects. Since `0011` it carries **`day_number`** — the photograph's home on the trail, and what the gate keys on — beside the retained `trip_day` date, and an optional **`caption`**. |
 | `day_unlocks` | The gate, as a durable fact: "this person contributed to this day". Keyed on `(trip_id, day_number, user_id)` since `0011`. Since `0015`, an unlock follows its photograph when it is moved, while `retained_after_delete` preserves the separate rule that deleting a photograph never re-locks its day. Clients cannot write either state. See [The gate](#the-gate). |
-| `day_gate_date_guards` | The previous date of a day that was re-dated or un-dated while still current or future. `0015` makes the gate honour that date until it naturally passes, so a plan edit cannot forge an early unlock while an honestly undated or not-yet-synced day stays permissive. RLS on, no client policies. |
+| `day_gate_date_guards` | The previous date of a day that was re-dated, un-dated, or deleted while still current or future — recorded on every earlier date move since `0018`, so a shortened future date or a delete-then-reinsert cannot open the gate before that date has passed. Hangs off the trip, not the day row, so the guard outlives the day it was recorded for; deleting the trip still sweeps it. RLS on, no client policies. |
 | `photo_tombstones` | The R2 keys of deleted photographs, so the bytes can be swept later. RLS on and **no policies at all**: no client reads or writes it, only the delete trigger and a service-role sweeper. A tombstone is a *candidate*, not an instruction — a sweeper must re-check that no `photos` row claims the key before deleting an object. |
 | `day_pages` | A day's finished, composed page — one image per trip per day, made lazily at share or bind time. This was `daily_moments` and modelled a four-up panel; the four-up is retired. `day_pages_lock_trip_id` (`0015`) keeps a composed row in the trip where it was created. |
 | `day_page_photos` | Which photos went into a composed page, and in what order. Ordered by `ordinal`, not seated in a 1-to-4 slot. |
@@ -576,7 +576,7 @@ directions.
 | **Nobody edits anyone else's photos or placements** | `photos_update_contributor` and `photos_delete_contributor` (`0006`) test `contributor_id = auth.uid()` and nothing else — the trip's starter included. |
 | **A person can delete their own photo** | `photos_delete_contributor` (`0006`). A hard delete, no tombstone row: the day leaves no visible gap. |
 | **…and the day stays open** | `day_unlocks` (`0007`, re-keyed by `0011`) has **no client write policies**. `record_day_unlock` (`0015`) marks an unlock retained before a photograph is deleted, so no client can re-lock that day; the same trigger removes a non-retained unlock when its last supporting photograph moves away. |
-| **The gate holds a day's page shut until you have contributed to it** | `day_page_is_open(trip_id, day_number, user)` (`0007`, re-keyed onto the day number by `0011`). `day_gate_date_guards` and its trigger (`0015`) prevent a member from opening a current or future day early by changing its date, without changing the permissive default for a genuinely undated day. Not an RLS policy, on purpose — see below. |
+| **The gate holds a day's page shut until you have contributed to it** | `day_page_is_open(trip_id, day_number, user)` (`0007`, re-keyed onto the day number by `0011`). `day_gate_date_guards` and its trigger (`0015`, widened by `0018`) prevent a member from opening a current or future day early by changing its date, shortening it, or deleting and re-inserting the day — while an honestly undated, not-yet-synced, or no-longer-claimed day stays permissive. Not an RLS policy, on purpose — see below. |
 | **Every photograph read asks one question, so the leaver rule has one seat** | `may_read_trip_photos(trip_id, user)` (`0011`). Today it answers exactly `is_trip_member`. Both the `photos` SELECT policy and `r2-download-url` go through it from day one, so when leaving and being removed land, changing what a leaver may still see is a change to one function body and to nothing else. |
 | **A row can only point at its own object** | `photos_object_key_own_prefix_check` and `photos_thumbnail_key_own_prefix_check` (`0011`, tightened by `0015`) bind both keys to `trips/<this trip>/photos/<this row>/…` with literal, non-empty, non-traversing segments, and `photos_lock_object_keys` (`0011`) stops either changing afterwards. `r2-download-url` repeats that validation before it signs the row's stored key. |
 | **A caption is its own contributor's** | `photos_update_contributor` (`0006`) already restricted every UPDATE to the contributor, so `caption` (`0011`) needed no new policy. Worth watching refuse rather than assuming: `tests/rls_probe.py` does. |
@@ -616,12 +616,18 @@ people who took the photographs, and the phone would show what the server
 refuses.
 
 That permissive default does not trust a date that was just changed out from
-under the gate. When a current or future day is re-dated into the past or set
-back to null, `0015` records its former date in `day_gate_date_guards`; the edit
-still propagates, but the walked branch stays shut until that former date has
-actually passed. A photograph's unlock still wins immediately. The guard table
-has RLS and no client policies, so the member making the change cannot erase or
-shorten the hold.
+under the gate. When a current or future day is re-dated, un-dated, or moved
+*earlier* — even to a date that is still future — `0015`/`0018` record its
+former date in `day_gate_date_guards`; when such a day is deleted, `0018`
+records the same, so a delete-then-reinsert finds the guard the delete left
+behind rather than a clean permissive slate. The edit still propagates, but
+the walked branch stays shut until the former date has actually passed — and
+it asks the guard only about a day the plan still claims, so a day number the
+plan no longer draws at all stays the walked, open thing the phone says it is.
+A photograph's unlock still wins immediately. The guard table has RLS and no
+client policies, so the member making the change cannot erase or shorten the
+hold; it hangs off the trip rather than the day row (`0018`), so deleting the
+day cannot sweep it either, while deleting the trip still does.
 
 Knowing an `r2_object_key` is useless on its own — the bucket is private and
 every read needs a signature — which is what makes gating the signature rather
@@ -1135,7 +1141,7 @@ not an artefact of one machine's setup.
 current to 2026-09-05). Migrations `0001` through `0010`, `0012` and `0014`
 are applied to it. `0014` ran twice: once as first written, and again on
 1 September once review added the closed-trip refusal, the allowlist guard and
-the starter half of that refusal. `0011`, `0013`, `0015`, `0016` and `0017` are not
+the starter half of that refusal. `0011`, `0013`, `0015`, `0016`, `0017` and `0018` are not
 applied; the hosted project's stored object keys therefore do not yet carry
 either prefix constraint, and **hosted still closes every trip on the frozen
 `trips.end_date`** — the defect `0016` repairs is live there until `0016` runs.

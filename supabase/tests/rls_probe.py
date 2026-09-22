@@ -514,6 +514,104 @@ def main():
     check(d.run(is_open, t=japan, d=TODAY_DAY, u=dave)[0][0] is False,
           "and the restored current day remains shut for that member")
 
+    # The two bypasses 0018 closes. Both reach the same forgery as re-dating a
+    # day -- the walked branch opening before the date the day used to carry
+    # has passed -- without ever taking the UPDATE path 0015 guards: deleting
+    # the row and re-inserting it, and moving a future date earlier while it is
+    # still future. Each is asserted on the durable guard row as well as on the
+    # gate, because the guard is what has to outlive the write.
+    print("\n== deleting a day and re-inserting it cannot forge an early unlock ==")
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 20, :d, now())""",
+           t=japan, d=today + datetime.timedelta(days=3))
+    check(d.run(is_open, t=japan, d=20, u=dave)[0][0] is False,
+          "a future day of the plan is shut before anything is deleted")
+    status, rows = d.try_run(
+        "delete from public.trip_itinerary_days where trip_id = :t and day_number = 20",
+        t=japan)
+    check(status == "ok" and db.run(
+        "select count(*) from public.trip_itinerary_days "
+        "where trip_id = :t and day_number = 20", t=japan)[0][0] == 0,
+          "a member may still delete a day of the plan", repr(rows)[:90])
+    guards20 = db.run(
+        "select not_before from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 20", t=japan)
+    check(guards20 and guards20[0][0] == today + datetime.timedelta(days=3),
+          "and deleting a current or future day records the date it used to carry",
+          repr(guards20))
+    status, rows = d.try_run(
+        """insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+           values (:t, 20, :past, now())""",
+        t=japan, past=today - datetime.timedelta(days=1))
+    check(status == "ok",
+          "re-inserting that day dated in the past is still a plain write", repr(rows)[:90])
+    check(d.run(is_open, t=japan, d=20, u=dave)[0][0] is False,
+          "but the re-inserted day does not open the gate before its date has passed")
+    status, rows = d.try_run(
+        "delete from public.day_gate_date_guards where trip_id = :t and day_number = 20",
+        t=japan)
+    check(status == "ok" and db.run(
+        "select count(*) from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 20", t=japan)[0][0] == 1,
+          "and the guard the delete left behind erases no more easily than any other",
+          repr(rows)[:90])
+
+    print("\n== shortening a future date holds the gate to the date it used to carry ==")
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 21, :d, now())""",
+           t=japan, d=today + datetime.timedelta(days=5))
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :earlier
+            where trip_id = :t and day_number = 21""",
+        earlier=today + datetime.timedelta(days=2), t=japan)
+    check(status == "ok",
+          "a member may move a future day's date earlier", repr(rows)[:90])
+    guards21 = db.run(
+        "select not_before from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 21", t=japan)
+    check(guards21 and guards21[0][0] == today + datetime.timedelta(days=5),
+          "and moving it earlier records the date it used to carry, "
+          "even though the new date is still future",
+          repr(guards21))
+    status, rows = d.try_run(
+        "update public.trip_itinerary_days set day_date = null "
+        "where trip_id = :t and day_number = 21",
+        t=japan)
+    guards21 = db.run(
+        "select not_before from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 21", t=japan)
+    check(status == "ok" and guards21 and guards21[0][0]
+            == today + datetime.timedelta(days=5),
+          "shortening again cannot walk the guard down off that date", repr(rows)[:90])
+    check(d.run(is_open, t=japan, d=21, u=dave)[0][0] is False,
+          "so un-dating the shortened day still does not open it early")
+
+    # A guard is durable across the day's own deletion but must not make
+    # deleting the trip itself fail: the trip row is already gone when the
+    # day's delete trigger runs, so no guard is written for a trip that no
+    # longer exists, and the rows any earlier edit left are swept by the
+    # foreign key to trips.
+    print("\n== a durable date guard does not outlive its trip ==")
+    doomed = str(a.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Doomed', :u, 'Asia/Tokyo', current_date, current_date + 5)
+           returning id""", u=alice)[0][0])
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 1, :d, now())""",
+           t=doomed, d=today + datetime.timedelta(days=3))
+    a.run("delete from public.trip_itinerary_days where trip_id = :t and day_number = 1",
+          t=doomed)
+    doomed_guards = db.run(
+        "select count(*) from public.day_gate_date_guards where trip_id = :t", t=doomed)
+    check(doomed_guards[0][0] == 1,
+          "deleting a future day of this trip records its guard", repr(doomed_guards))
+    status, rows = a.try_run("delete from public.trips where id = :t", t=doomed)
+    check(status == "ok" and db.run(
+        "select count(*) from public.day_gate_date_guards where trip_id = :t",
+        t=doomed)[0][0] == 0,
+          "and the starter still deletes the trip whole, guard rows and all",
+          repr(rows)[:90])
+
     print("\n== you can delete your own photo, and the day stays open ==")
     status, _ = c.try_run("delete from public.photos where id = :id", id=PHOTO_C)
     check(status == "ok" and db.run("select count(*) from public.photos where id = :id",
