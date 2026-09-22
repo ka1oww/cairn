@@ -445,6 +445,7 @@ class _AddArea extends ConsumerWidget {
         child: TextButton(
           key: Key('add-area-$dayNumber-$position'),
           onPressed: () async {
+            final actions = ref.read(dayActionsProvider);
             final typed = await askForText(
               context,
               title: 'Add an area',
@@ -456,13 +457,11 @@ class _AddArea extends ConsumerWidget {
               candidateKeyPrefix: 'add-area-choice',
             );
             if (typed == null || typed.trim().isEmpty) return;
-            await ref
-                .read(dayActionsProvider)
-                .setAreaRun(
-                  dayNumber: dayNumber,
-                  position: position,
-                  area: typed.trim(),
-                );
+            await actions.setAreaRun(
+              dayNumber: dayNumber,
+              position: position,
+              area: typed.trim(),
+            );
           },
           child: const Text('+ Add an area'),
         ),

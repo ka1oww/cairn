@@ -248,6 +248,25 @@ void main() {
     expect(stored[1].areaSource, 'human');
   });
 
+  testWidgets('the keyboard alone answers the field', (tester) async {
+    await seed();
+    await openTheDay(tester);
+
+    await tester.tap(find.byKey(const Key('add-area-1-2')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('add-area-input')),
+      '  Nakameguro  ',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('area-heading-2-Nakameguro')), findsOneWidget);
+    final stored = await db.readItineraryStops();
+    expect(stored[1].areaText, 'Nakameguro');
+    expect(stored[1].areaSource, 'human');
+  });
+
   testWidgets('an inert line with no area gets the door, and a plan naming '
       'no area keeps the blank field', (tester) async {
     await seed([

@@ -3,10 +3,16 @@
 // The one-field text prompt both add-area doors share: the confirm screen's
 // "+ Add an area" (and its rename prompts) and the day page's. One dialog,
 // one behaviour — the plan's own areas as one-tap answers above the field,
-// the field itself for somewhere the plan never names — because a second
-// copy of this dialog is the thing to refuse in review. Keys are passed in
+// the field itself for somewhere the plan never names. Keys are passed in
 // by each caller so each door's tests can find it; the dialog itself draws
 // exactly the same either way.
+//
+// It is not yet the only one-field area prompt on the day page:
+// `day_page.dart` still carries its own `_AreaDialog` ("Where is this?")
+// behind the stop menu's and the heading's "Somewhere else…". Folding that
+// one into this is follow-up work — it changes wording a person already
+// reads — and this change deliberately did not do it. New one-field
+// prompts belong here rather than beside it.
 import 'package:flutter/material.dart';
 
 /// Shows the shared text prompt and answers with what the person submitted,
@@ -111,6 +117,7 @@ class _TextPromptState extends State<_TextPrompt> {
             controller: _controller,
             autofocus: widget.candidates.isEmpty,
             decoration: InputDecoration(hintText: widget.hint),
+            onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
           ),
         ],
       ),
