@@ -36,8 +36,9 @@ void main() {
     });
 
     test('UTF-8 BOM is stripped, not shown in the box', () {
-      final result = extractor
-          .extract(named('a.txt', [0xEF, 0xBB, 0xBF, ...utf8.encode('Day 1')]));
+      final result = extractor.extract(
+        named('a.txt', [0xEF, 0xBB, 0xBF, ...utf8.encode('Day 1')]),
+      );
       expect(result, isA<ExtractedText>());
       expect((result as ExtractedText).text, 'Day 1');
     });
@@ -117,8 +118,7 @@ void main() {
       expect((result as ExtractedText).text, '\u201Chi\u201D');
     });
 
-    test(
-        'invalid UTF-8 that is also invalid Latin-1 prose still lands as '
+    test('invalid UTF-8 that is also invalid Latin-1 prose still lands as '
         'something readable — the ladder never refuses honest prose', () {
       // Mixed UTF-8 fragment + high bytes: falls off the strict rung into
       // the wide rung and comes out readable rather than refused.
@@ -137,8 +137,9 @@ void main() {
     });
 
     test('whitespace-only file -> empty failure too', () {
-      final result =
-          extractor.extract(named('blank.txt', utf8.encode('\n \t\n')));
+      final result = extractor.extract(
+        named('blank.txt', utf8.encode('\n \t\n')),
+      );
       expect(asFailure(result).kind, ExtractionFailureKind.empty);
     });
 
@@ -163,8 +164,9 @@ void main() {
 
     test('known binary magic is refused even when ASCII-decodable', () {
       // %PDF- is plain ASCII, but a PDF is slice B's job, never ours.
-      final result =
-          extractor.extract(named('x.txt', utf8.encode('%PDF-1.7\n%âãÏÓ\n')));
+      final result = extractor.extract(
+        named('x.txt', utf8.encode('%PDF-1.7\n%âãÏÓ\n')),
+      );
       expect(asFailure(result).kind, ExtractionFailureKind.unreadable);
     });
 
@@ -251,8 +253,11 @@ void main() {
       for (final name in ['empty.txt', 'blank.txt']) {
         final bytes = File('test/fixtures/$name').readAsBytesSync();
         final result = extractor.extract(named(name, bytes));
-        expect(asFailure(result).kind, ExtractionFailureKind.empty,
-            reason: name);
+        expect(
+          asFailure(result).kind,
+          ExtractionFailureKind.empty,
+          reason: name,
+        );
       }
     });
   });
@@ -268,23 +273,27 @@ void main() {
     });
 
     test('lone CR line endings read as lines too', () {
-      final picked =
-          named('classic.txt', utf8.encode('Day 1\rSenso-ji\rUeno\r'));
+      final picked = named(
+        'classic.txt',
+        utf8.encode('Day 1\rSenso-ji\rUeno\r'),
+      );
       expect(extractor.matches(picked), isTrue);
       final result = extractor.extract(picked);
       expect((result as ExtractedText).text, 'Day 1\nSenso-ji\nUeno\n');
     });
 
-    test('routing sniffs a prefix, so a huge file still claims and refuses',
-        () {
-      final bytes = utf8.encode('Day 1 - Tokyo\r\n' * 3000000);
-      expect(bytes.length, greaterThan(maxPlainBytes));
-      final picked = named('huge.txt', bytes);
-      expect(extractor.matches(picked), isTrue);
-      final failure = asFailure(extractor.extract(picked));
-      expect(failure.kind, ExtractionFailureKind.unreadable);
-      expect(failure.explanation, contains('25 MB'));
-    });
+    test(
+      'routing sniffs a prefix, so a huge file still claims and refuses',
+      () {
+        final bytes = utf8.encode('Day 1 - Tokyo\r\n' * 3000000);
+        expect(bytes.length, greaterThan(maxPlainBytes));
+        final picked = named('huge.txt', bytes);
+        expect(extractor.matches(picked), isTrue);
+        final failure = asFailure(extractor.extract(picked));
+        expect(failure.kind, ExtractionFailureKind.unreadable);
+        expect(failure.explanation, contains('25 MB'));
+      },
+    );
 
     test('a huge binary file is still refused by the prefix sniff', () {
       final bytes = <int>[

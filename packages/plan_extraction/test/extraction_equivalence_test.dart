@@ -13,10 +13,10 @@ import 'package:plan_extraction/plan_extraction.dart';
 import '../tool/make_fixtures.dart' show garbledPlanLines;
 
 PickedBytes fixture(String name, String extension) => PickedBytes(
-      fileName: name,
-      extension: extension,
-      bytes: Uint8List.fromList(File('test/fixtures/$name').readAsBytesSync()),
-    );
+  fileName: name,
+  extension: extension,
+  bytes: Uint8List.fromList(File('test/fixtures/$name').readAsBytesSync()),
+);
 
 /// Normalizes extracted text the same way [garbledPlanLines] was built:
 /// collapse internal whitespace, trim, drop blank lines. What differs
@@ -52,12 +52,12 @@ void main() {
     const plainText = PlainTextExtractor();
     const docx = DocxExtractor();
 
-    final txt =
-        (plainText.extract(fixture('garbled-itinerary.txt', 'txt')) as ExtractedText)
-            .text;
-    final fromDocx =
-        (docx.extract(fixture('garbled-itinerary.docx', 'docx')) as ExtractedText)
-            .text;
+    final txt = (plainText.extract(
+      fixture('garbled-itinerary.txt', 'txt'),
+    ) as ExtractedText).text;
+    final fromDocx = (docx.extract(
+      fixture('garbled-itinerary.docx', 'docx'),
+    ) as ExtractedText).text;
 
     final parsedTxt = parseItinerary(txt);
     final parsedDocx = parseItinerary(fromDocx);
@@ -68,10 +68,16 @@ void main() {
       final a = parsedTxt.days[i];
       final b = parsedDocx.days[i];
       expect(b.date, a.date, reason: 'day $i date');
-      expect(b.stops.map((s) => s.text), a.stops.map((s) => s.text),
-          reason: 'day $i stop text');
-      expect(b.stops.map((s) => s.time), a.stops.map((s) => s.time),
-          reason: 'day $i stop times');
+      expect(
+        b.stops.map((s) => s.text),
+        a.stops.map((s) => s.text),
+        reason: 'day $i stop text',
+      );
+      expect(
+        b.stops.map((s) => s.time),
+        a.stops.map((s) => s.time),
+        reason: 'day $i stop times',
+      );
     }
   });
 }
