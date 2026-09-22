@@ -41,7 +41,7 @@ the real sign-in providers are still untouched.
 | `trip_invites` | Invite codes — three spoken words each — kept in their own table rather than a column on `trips` so a code can be rotated, revoked, or usage-limited without touching trip identity, and a trip can have more than one outstanding code. Carries **no expiry column**; a code dies when its trip closes and at no other time. See [How someone joins](#how-someone-joins-a-trip). |
 | `photos` | One row per photo in the pool. The bytes live in R2; this row is the index the app queries and the thing RLS protects. Since `0011` it carries **`day_number`** — the photograph's home on the trail, and what the gate keys on — beside the retained `trip_day` date, and an optional **`caption`**. |
 | `day_unlocks` | The gate, as a durable fact: "this person contributed to this day". Keyed on `(trip_id, day_number, user_id)` since `0011`. Since `0015`, an unlock follows its photograph when it is moved, while `retained_after_delete` preserves the separate rule that deleting a photograph never re-locks its day. Clients cannot write either state. See [The gate](#the-gate). |
-| `day_gate_date_guards` | The previous date of a day that was re-dated, un-dated, deleted, or renumbered while still current or future — recorded on every earlier date move and on vacating the day number entirely since `0018`, so a shortened future date, a delete-then-reinsert, or a renumber cannot open the gate before that date has passed. Hangs off the trip, not the day row, so the guard outlives the day it was recorded for; deleting the trip still sweeps it. RLS on, no client policies. |
+| `day_gate_date_guards` | The previous date of a day that was re-dated, un-dated, deleted, or renumbered while still current or future — recorded on every earlier date move and on vacating the day number entirely since `0018`, so a shortened future date, a delete-then-reinsert, or a renumber cannot open the gate before that date has passed. Capped at the trip's own derived close (`trip_closes_at`, `0016`) so a hold can never outlive the trip. Hangs off the trip, not the day row, so the guard outlives the day it was recorded for; deleting the trip still sweeps it. RLS on, no client policies. |
 | `photo_tombstones` | The R2 keys of deleted photographs, so the bytes can be swept later. RLS on and **no policies at all**: no client reads or writes it, only the delete trigger and a service-role sweeper. A tombstone is a *candidate*, not an instruction — a sweeper must re-check that no `photos` row claims the key before deleting an object. |
 | `day_pages` | A day's finished, composed page — one image per trip per day, made lazily at share or bind time. This was `daily_moments` and modelled a four-up panel; the four-up is retired. `day_pages_lock_trip_id` (`0015`) keeps a composed row in the trip where it was created. |
 | `day_page_photos` | Which photos went into a composed page, and in what order. Ordered by `ordinal`, not seated in a 1-to-4 slot. |
@@ -633,6 +633,22 @@ RLS and no client policies, so the member making the change cannot erase or
 shorten the hold; it hangs off the trip rather than the day row (`0018`), so
 deleting or renumbering the day cannot sweep it either, while deleting the
 trip still does.
+
+That hold has a real cost worth stating plainly, not just for the day it was
+recorded on. Moving a whole plan earlier — postponing a trip by a week in the
+other direction, or correcting a mistyped year — rewrites every day's
+`day_date` in one push, so `0018`'s trigger fires once per day and holds
+every one of the plan's current-or-future dates at its superseded value:
+until each of those dates passes, only the member who personally contributed
+photos to that day can see it, and everyone else is shut out of days they
+may have been on. That is the price of closing the "shorten a future date"
+bypass honestly rather than only for the one case this migration was asked
+to close. `0018` bounds how bad that price can get: a hold's `not_before` is
+capped at the trip's own derived close (`trip_closes_at`, `0016`), so it
+never outlives the trip and a far-future typo corrected back cannot lock a
+day shut for longer than the trip already runs — but inside the trip's own
+window, an earlier shift still holds every day it touches until its old date
+passes.
 
 Knowing an `r2_object_key` is useless on its own — the bucket is private and
 every read needs a signature — which is what makes gating the signature rather

@@ -7,9 +7,12 @@
 -- recording trigger must fire on delete and on every update (not only one
 -- that touches `day_date`, since a day-number move vacates its old number
 -- just as a delete does), and the gate must keep asking the guard about a
--- day number the plan no longer claims rather than exempting it. This is a
--- forward migration; every earlier migration is a recorded fact and stays
--- byte-for-byte unchanged.
+-- day number the plan no longer claims rather than exempting it. A hold is
+-- also capped at the trip's own derived close (`trip_closes_at`, `0016`), so
+-- an ordinary edit that shifts a whole plan earlier -- or corrects a mistyped
+-- far-future date -- cannot lock a day shut for longer than the trip already
+-- lasts. This is a forward migration; every earlier migration is a recorded
+-- fact and stays byte-for-byte unchanged.
 
 -- ---------------------------------------------------------------------------
 -- The guard outlives the day row it was recorded for
@@ -60,6 +63,21 @@ alter table public.day_gate_date_guards
 --     day-number change is treated as vacating the old number regardless of
 --     what date rides along with it.
 --
+-- A hold is capped at the trip's own close (`trip_closes_at`, `0016`), never
+-- at the raw date the day used to carry. Review of an earlier draft found the
+-- uncapped version had a real cost: moving a whole plan a week earlier, or
+-- correcting a mistyped year, rewrites every day's `day_date` downward in one
+-- `sync_trip_itinerary` upsert, so the trigger fires once per day and records
+-- `not_before = <the old date>` for every one of them -- and because
+-- `on conflict ... set not_before = greatest(...)` only ever grows a hold,
+-- none of that is repairable by any later edit. A far-future typo (`2127`)
+-- corrected back would have locked its day for a hundred years. Capping at
+-- the close means the worst a hold can do is what deleting the trip already
+-- does -- shut every day until the trip's own end, never longer -- while the
+-- two bypasses this migration exists to close (delete-then-reinsert,
+-- shorten-while-future) are unaffected: both move a day to a date nearer to
+-- today, well inside the trip's own close.
+--
 -- The trip lookup deliberately happens first and may find nothing: when a trip
 -- is deleted, its rows cascade and the trip is already gone by the time this
 -- runs, so no guard is written for a trip that no longer exists -- the
@@ -73,6 +91,7 @@ set search_path = public, pg_temp
 as $$
 declare
   v_today date;
+  v_close_date date;
   v_vacated boolean := false;
 begin
   if tg_op = 'UPDATE'
@@ -81,8 +100,9 @@ begin
     return new;
   end if;
 
-  select (now() at time zone t.timezone)::date
-    into v_today
+  select (now() at time zone t.timezone)::date,
+         (public.trip_closes_at(t.id) at time zone t.timezone)::date
+    into v_today, v_close_date
     from public.trips t
    where t.id = old.trip_id;
 
@@ -100,11 +120,14 @@ begin
 
   if v_vacated then
     insert into public.day_gate_date_guards (trip_id, day_number, not_before)
-    values (old.trip_id, old.day_number, old.day_date)
+    values (old.trip_id, old.day_number, least(old.day_date, v_close_date))
     on conflict (trip_id, day_number) do update
-      set not_before = greatest(
-        public.day_gate_date_guards.not_before,
-        excluded.not_before
+      set not_before = least(
+        greatest(
+          public.day_gate_date_guards.not_before,
+          excluded.not_before
+        ),
+        v_close_date
       );
   end if;
 
@@ -135,6 +158,11 @@ create trigger trip_itinerary_days_record_gate_date_guard
 -- has never claimed still opens, because nothing has ever recorded a guard
 -- for it -- the permissive property is preserved by the absence of a guard
 -- row, not by a shortcut around the guard check.
+--
+-- The body below is byte-for-byte unchanged from 0015's: this `create or
+-- replace` exists only to re-validate it against the post-0017 schema (the
+-- `language sql` double-apply trap `AGENTS.md` describes), and to give the
+-- comment above it somewhere to live.
 create or replace function public.day_page_is_open(
   p_trip_id uuid,
   p_day_number integer,

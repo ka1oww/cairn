@@ -614,6 +614,35 @@ def main():
         "where trip_id = :t and day_number = 23", t=japan)[0][0] == 0,
           "while the number it moved to records no guard of its own")
 
+    # An uncapped hold has a real cost: correcting a mistyped far-future date
+    # would otherwise lock its day for as long as the typo was far off by.
+    # 0018 bounds that at the trip's own derived close, so the worst an
+    # uncorrectable hold can do is what deleting the trip already does -- shut
+    # the day until the trip's own end, never longer.
+    print("\n== a hold is capped at the trip's own close, never at the raw superseded date ==")
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 24, :d, now())""",
+           t=japan, d=today + datetime.timedelta(days=400))
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :corrected
+            where trip_id = :t and day_number = 24""",
+        corrected=today + datetime.timedelta(days=10), t=japan)
+    check(status == "ok",
+          "a member may correct a mistyped far-future date", repr(rows)[:90])
+    close_date = db.run(
+        "select (public.trip_closes_at(:t) at time zone 'Asia/Tokyo')::date",
+        t=japan)[0][0]
+    guards24 = db.run(
+        "select not_before from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 24", t=japan)
+    check(guards24 and guards24[0][0] == close_date,
+          "and the hold is capped at the trip's derived close, "
+          "not at the far-future date it corrected",
+          repr((guards24, close_date)))
+    check(guards24 and guards24[0][0] < today + datetime.timedelta(days=400),
+          "so a typo a century out cannot lock the day for a century",
+          repr(guards24))
+
     # A guard is durable across the day's own deletion but must not make
     # deleting the trip itself fail: the trip row is already gone when the
     # day's delete trigger runs, so no guard is written for a trip that no
