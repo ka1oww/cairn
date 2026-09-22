@@ -471,10 +471,12 @@ void main() {
         memberId: localMemberId,
         tripId: testTripId,
       );
+      final edge = RecordingNotificationEdge();
       final container = ProviderContainer(
         overrides: [
           pingScheduleProvider.overrideWithValue(schedule),
           nowProvider.overrideWithValue(pinnedClock(from: day(15))),
+          notificationEdgeProvider.overrideWithValue(edge),
         ],
       );
       addTearDown(container.dispose);
@@ -482,8 +484,6 @@ void main() {
       final due = container.read(pingRegistrationProvider);
       expect(due, hasLength(2), reason: '14 June is behind us');
 
-      final edge =
-          container.read(notificationEdgeProvider) as RecordingNotificationEdge;
       expect(edge.registered, hasLength(2));
       expect(edge.registered.first.title, 'Cairn now');
       expect(

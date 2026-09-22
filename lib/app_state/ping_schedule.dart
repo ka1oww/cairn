@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trip_moments/trip_moments.dart' as tm;
 
 import 'day_view.dart';
+import 'local_notification_edge.dart';
 import 'trip_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -331,7 +332,7 @@ class RecordingNotificationEdge implements NotificationEdge {
 }
 
 final notificationEdgeProvider = Provider<NotificationEdge>(
-  (ref) => RecordingNotificationEdge(),
+  (ref) => LocalNotificationEdge(),
 );
 
 /// Registers every ping still to come, in one pass, and re-registers when the
