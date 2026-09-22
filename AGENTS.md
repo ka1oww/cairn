@@ -266,6 +266,23 @@ import what is written there, not here.
   `lib/storage/remote/shared_facts.dart` is the authority), but no flow
   above the seam asks it, so nothing carries a membership to another phone,
   and the join door says so rather than spinning.
+  **`MembershipStore.adoptTrip(TripId)` is `startTrip`'s
+  counterpart for the other door onto a trip**: given an id already admitted
+  elsewhere (redeeming an invite code is a network call this store does not
+  make), it writes that trip's facts and roster locally through the additive
+  `AppDatabase.adoptTripFacts` (an insert carrying the caller's id, never
+  minting one, kept separate from `startTripIfAbsent` on purpose) and pulls
+  its plan with `SharedFacts.syncItinerary` pushing nothing. It refuses a
+  different trip already held (`DifferentTripHeldException`) rather than
+  replacing it, treats a null `SharedFacts.readTrip` answer as a refusal
+  (`UnknownTripException`) rather than an empty trip, and is a no-op on the
+  trip already held rather than re-dealing anything. Any failure after the
+  local writes begin rolls back through `deleteTripWholesale` so a
+  half-adopted trip — a row with no plan — never survives to be read. It needs a
+  `SharedFacts` backend passed as `MembershipStore(db, facts: ...)`; every
+  existing caller omits it and gets a store that can start and manage a trip
+  but refuses `adoptTrip` with a `StateError`, so wiring a real backend into
+  `bootstrap.dart` and calling this from the join screen are still open.
 - **The itinerary and the roster are shared facts, and the seam is what makes
   them shared.** `lib/repositories/itinerary_sync.dart` and its deliberate
   sibling `photo_sync.dart` (the outbox bullet, below) are the only two files
