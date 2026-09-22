@@ -43,8 +43,8 @@ class TimeCell extends SourceCell {
   final int minute;
 
   const TimeCell(this.hour, this.minute)
-      : assert(hour >= 0 && hour <= 23),
-        assert(minute >= 0 && minute <= 59);
+    : assert(hour >= 0 && hour <= 23),
+      assert(minute >= 0 && minute <= 59);
 
   /// The form the parser reads at a line's head (`09:30`).
   String get iso =>
@@ -76,11 +76,11 @@ class DayRow extends PlanRow {
   final String? place;
 
   const DayRow({this.date, this.number, this.place})
-      : assert(
-          date != null || number != null,
-          'a DayRow must carry a date or a number — the dialect has no '
-          'header form for a day with neither',
-        );
+    : assert(
+        date != null || number != null,
+        'a DayRow must carry a date or a number — the dialect has no '
+        'header form for a day with neither',
+      );
 }
 
 /// One stop under the day opened before it. [text] is single-line (the
@@ -294,8 +294,9 @@ List<PlanRow> _rowsFromDatedGrid(
         : rest.indexWhere(
             (cell) => cell.column == placeColumn && cell.cell is TextCell,
           );
-    final rowPlace =
-        placeAt < 0 ? null : (rest[placeAt].cell as TextCell).text.trim();
+    final rowPlace = placeAt < 0
+        ? null
+        : (rest[placeAt].cell as TextCell).text.trim();
 
     final opensADay = rowDate != null && currentDate != rowDate.date;
     if (opensADay) {
@@ -356,10 +357,10 @@ List<StopRow> _stopsFor(List<SourceCell> cells) {
 }
 
 String _textOf(SourceCell cell) => switch (cell) {
-      TextCell(:final text) => text,
-      DateCell(:final iso) => iso,
-      TimeCell(:final iso) => iso,
-    };
+  TextCell(:final text) => text,
+  DateCell(:final iso) => iso,
+  TimeCell(:final iso) => iso,
+};
 
 // ---------------------------------------------------------------------------
 // The dialect renderer.

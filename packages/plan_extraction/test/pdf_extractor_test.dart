@@ -105,9 +105,8 @@ void main() {
       // PDF read has a page-furniture rule to strip it with.
       expect(
         contentLines(fromPdf.text),
-        contentLines(
-          (fromTxt as ExtractedText).text,
-        ).where((line) => line != printedPageMarker),
+        contentLines((fromTxt as ExtractedText).text)
+            .where((line) => line != printedPageMarker),
       );
     });
 
@@ -116,9 +115,9 @@ void main() {
         (await readText('garbled-itinerary.pdf')).text,
       );
       final fromTxt = parseItinerary(
-        (const PlainTextExtractor().extract(fixture('garbled-itinerary.txt'))
-                as ExtractedText)
-            .text,
+        (const PlainTextExtractor().extract(
+          fixture('garbled-itinerary.txt'),
+        ) as ExtractedText).text,
       );
 
       String shape(ParseResult r) => [
@@ -428,9 +427,8 @@ Uint8List _manyPagePdf(int pageCount) {
 
   out.add(ascii.encode('%PDF-1.4\n'));
   // 1 = catalog, 2 = the page tree, 3 = the font, then a page/content pair.
-  final kids = [
-    for (var i = 0; i < pageCount; i++) '${4 + i * 2} 0 R',
-  ].join(' ');
+  final kids = [for (var i = 0; i < pageCount; i++) '${4 + i * 2} 0 R']
+      .join(' ');
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   obj(2, '<< /Type /Pages /Count $pageCount /Kids [$kids] >>');
   obj(3, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');

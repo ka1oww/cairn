@@ -32,8 +32,10 @@ void main() {
       // Stop.text keeps the leading time text as-written (the parser strips
       // only the bullet marker), so a starred stop's text carries its own
       // time prefix alongside the separately-parsed ParsedTime.
-      expect(day1.stops.map((s) => s.text),
-          ['Senso-ji', '12:30 Ramen in Asakusa']);
+      expect(day1.stops.map((s) => s.text), [
+        'Senso-ji',
+        '12:30 Ramen in Asakusa',
+      ]);
       expect(day1.stops[0].isStarred, isFalse);
       expect(day1.stops[1].isStarred, isTrue);
       expect(day1.stops[1].time, const ParsedTime(12, 30));
@@ -70,8 +72,7 @@ void main() {
       expect(result.days[1].stops.single.text, 'Bamboo grove');
     });
 
-    test('given a trip start date, Day N resolves to a real calendar date',
-        () {
+    test('given a trip start date, Day N resolves to a real calendar date', () {
       final rows = <PlanRow>[
         const DayRow(number: 1, place: 'Kyoto'),
         const StopRow('Arrive'),
@@ -96,10 +97,10 @@ void main() {
         const StopRow('Senso-ji'),
       ];
       final result = parseItinerary(renderPlanRows(rows));
-      expect(
-        result.unplacedLines.map((u) => u.sourceLine.text.trim()),
-        ['Date', 'City'],
-      );
+      expect(result.unplacedLines.map((u) => u.sourceLine.text.trim()), [
+        'Date',
+        'City',
+      ]);
       expect(result.days.single.stops.single.text, 'Senso-ji');
     });
   });
@@ -107,7 +108,11 @@ void main() {
   group('planRowsFromGrid heuristic v1 (the import plan risk 5)', () {
     test('a date-typed column drives the dialect path end to end', () {
       final grid = <List<SourceCell?>>[
-        [const TextCell('Date'), const TextCell('City'), const TextCell('Plan')],
+        [
+          const TextCell('Date'),
+          const TextCell('City'),
+          const TextCell('Plan'),
+        ],
         [
           DateCell(DateTime(2027, 6, 14)),
           const TextCell('Tokyo'),
@@ -127,8 +132,10 @@ void main() {
       expect(result.days[0].date, DateTime(2027, 6, 14));
       // The place column folds into the header, not a bare stop under it.
       expect(result.days[0].place, 'Tokyo');
-      expect(result.days[0].stops.map((s) => s.text),
-          ['Senso-ji at 9:00', 'Ueno Park picnic']);
+      expect(result.days[0].stops.map((s) => s.text), [
+        'Senso-ji at 9:00',
+        'Ueno Park picnic',
+      ]);
       expect(result.days[1].date, DateTime(2027, 6, 15));
       expect(result.days[1].place, 'Kyoto');
       // The time-typed cell stars the first text line of its own row.
@@ -141,18 +148,11 @@ void main() {
       expect(result.unplacedLines, isEmpty);
     });
 
-    test('a labelled sheet with no place column keeps its stops as stops',
-        () {
+    test('a labelled sheet with no place column keeps its stops as stops', () {
       final grid = <List<SourceCell?>>[
         [const TextCell('Date'), const TextCell('Plan')],
-        [
-          DateCell(DateTime(2027, 6, 14)),
-          const TextCell('Senso-ji'),
-        ],
-        [
-          DateCell(DateTime(2027, 6, 15)),
-          const TextCell('Fushimi Inari'),
-        ],
+        [DateCell(DateTime(2027, 6, 14)), const TextCell('Senso-ji')],
+        [DateCell(DateTime(2027, 6, 15)), const TextCell('Fushimi Inari')],
       ];
       final result = parseItinerary(renderPlanRows(planRowsFromGrid(grid)));
 
@@ -180,76 +180,89 @@ void main() {
       expect(result.days, hasLength(2));
       // With no labels there is no place column, so the place stays a stop
       // rather than being guessed into the header — but the row survives.
-      expect(result.days[0].stops.map((s) => s.text),
-          ['Lisbon', 'Alfama wander']);
-      expect(result.days[1].stops.map((s) => s.text),
-          ['Sintra', 'Pena Palace']);
+      expect(result.days[0].stops.map((s) => s.text), [
+        'Lisbon',
+        'Alfama wander',
+      ]);
+      expect(result.days[1].stops.map((s) => s.text), [
+        'Sintra',
+        'Pena Palace',
+      ]);
     });
 
     test('a first row of two plain words is not mistaken for labels', () {
       final grid = <List<SourceCell?>>[
         [const TextCell('Porto trip'), const TextCell('prepared by Ana')],
-        [
-          DateCell(DateTime(2027, 6, 14)),
-          const TextCell('Livraria Lello'),
-        ],
+        [DateCell(DateTime(2027, 6, 14)), const TextCell('Livraria Lello')],
       ];
       final result = parseItinerary(renderPlanRows(planRowsFromGrid(grid)));
 
       // Nothing names the date column, so the row is kept and filed
       // visibly, exactly as before.
-      expect(
-        result.unplacedLines.map((u) => u.sourceLine.text.trim()),
-        ['Porto trip', 'prepared by Ana'],
-      );
+      expect(result.unplacedLines.map((u) => u.sourceLine.text.trim()), [
+        'Porto trip',
+        'prepared by Ana',
+      ]);
       expect(result.days.single.stops.single.text, 'Livraria Lello');
     });
 
-    test('the place repeats down a day\'s rows without repeating as a stop',
-        () {
-      final grid = <List<SourceCell?>>[
-        [const TextCell('Date'), const TextCell('City'), const TextCell('Plan')],
-        [
-          DateCell(DateTime(2027, 9, 14)),
-          const TextCell('Zermatt'),
-          const TextCell('Gornergrat railway'),
-        ],
-        [
-          DateCell(DateTime(2027, 9, 14)),
-          const TextCell('Zermatt'),
-          const TextCell('Fondue in the old village'),
-        ],
-        [
-          DateCell(DateTime(2027, 9, 15)),
-          const TextCell('Zermatt'),
-          const TextCell('Matterhorn glacier paradise'),
-        ],
-        [
-          DateCell(DateTime(2027, 9, 15)),
-          const TextCell('Tasch'),
-          const TextCell('Drive down, drop the car'),
-        ],
-      ];
-      final result = parseItinerary(renderPlanRows(planRowsFromGrid(grid)));
+    test(
+      'the place repeats down a day\'s rows without repeating as a stop',
+      () {
+        final grid = <List<SourceCell?>>[
+          [
+            const TextCell('Date'),
+            const TextCell('City'),
+            const TextCell('Plan'),
+          ],
+          [
+            DateCell(DateTime(2027, 9, 14)),
+            const TextCell('Zermatt'),
+            const TextCell('Gornergrat railway'),
+          ],
+          [
+            DateCell(DateTime(2027, 9, 14)),
+            const TextCell('Zermatt'),
+            const TextCell('Fondue in the old village'),
+          ],
+          [
+            DateCell(DateTime(2027, 9, 15)),
+            const TextCell('Zermatt'),
+            const TextCell('Matterhorn glacier paradise'),
+          ],
+          [
+            DateCell(DateTime(2027, 9, 15)),
+            const TextCell('Tasch'),
+            const TextCell('Drive down, drop the car'),
+          ],
+        ];
+        final result = parseItinerary(renderPlanRows(planRowsFromGrid(grid)));
 
-      expect(result.unplacedLines, isEmpty);
-      expect(result.days, hasLength(2));
-      expect(result.days[0].place, 'Zermatt');
-      expect(result.days[0].stops.map((s) => s.text),
-          ['Gornergrat railway', 'Fondue in the old village']);
-      expect(result.days[1].place, 'Zermatt');
-      // A place that *changes* mid-day is content, and stays visible.
-      expect(result.days[1].stops.map((s) => s.text), [
-        'Matterhorn glacier paradise',
-        'Tasch',
-        'Drive down, drop the car',
-      ]);
-    });
+        expect(result.unplacedLines, isEmpty);
+        expect(result.days, hasLength(2));
+        expect(result.days[0].place, 'Zermatt');
+        expect(result.days[0].stops.map((s) => s.text), [
+          'Gornergrat railway',
+          'Fondue in the old village',
+        ]);
+        expect(result.days[1].place, 'Zermatt');
+        // A place that *changes* mid-day is content, and stays visible.
+        expect(result.days[1].stops.map((s) => s.text), [
+          'Matterhorn glacier paradise',
+          'Tasch',
+          'Drive down, drop the car',
+        ]);
+      },
+    );
 
     test('no date-typed column falls back to faithful row-major lines '
         'that still parse — the floor the plan promises', () {
       final grid = <List<SourceCell?>>[
-        [const TextCell('Day'), const TextCell('Place'), const TextCell('Notes')],
+        [
+          const TextCell('Day'),
+          const TextCell('Place'),
+          const TextCell('Notes'),
+        ],
         [
           const TextCell('1'),
           const TextCell('Kyoto'),

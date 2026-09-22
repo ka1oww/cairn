@@ -127,11 +127,7 @@ void main() {
       _p('Tue 15 June 2027 - Kyoto'),
       _table([
         [
-          _pRuns([
-            _t('Fushimi Inari'),
-            _raw('<w:br/>'),
-            _t('at dawn'),
-          ]),
+          _pRuns([_t('Fushimi Inari'), _raw('<w:br/>'), _t('at dawn')]),
         ],
       ]),
     ]),
@@ -181,7 +177,14 @@ void main() {
   // An encrypted Office file is a CFB container, not a zip: refused as
   // unreadable, never decoded as junk. Bytes are just the 8-byte magic.
   write('encrypted.docx', [
-    0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0xAE, 0x1A,
+    0xD0,
+    0xCF,
+    0x11,
+    0xE0,
+    0xA1,
+    0xB1,
+    0xAE,
+    0x1A,
     ...List.filled(64, 0),
   ]);
 
@@ -290,32 +293,32 @@ String _escape(String raw) => raw
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
 
-String _t(String text) => '<w:r><w:t xml:space="preserve">'
+String _t(String text) =>
+    '<w:r><w:t xml:space="preserve">'
     '${_escape(text)}</w:t></w:r>';
 
-String _p(String text) =>
-    '<w:p>${text.isEmpty ? '' : _t(text)}</w:p>';
+String _p(String text) => '<w:p>${text.isEmpty ? '' : _t(text)}</w:p>';
 
 String _pRuns(List<String> runs) => '<w:p>${runs.join()}</w:p>';
 
 String _raw(String xml) => xml;
 
-String _table(List<List<String>> rowsInXml) => '<w:tbl>'
+String _table(List<List<String>> rowsInXml) =>
+    '<w:tbl>'
     '${[
-      for (final row in rowsInXml)
-        '<w:tr>${[
-          for (final cell in row) '<w:tc>$cell</w:tc>',
-        ].join()}</w:tr>',
+      for (final row in rowsInXml) '<w:tr>${[for (final cell in row) '<w:tc>$cell</w:tc>'].join()}</w:tr>',
     ].join()}</w:tbl>';
 
 List<int> _docx(List<String> bodyChildrenXml) {
   const xmlDeclaration =
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
-  final document = '$xmlDeclaration'
+  final document =
+      '$xmlDeclaration'
       '<w:document '
       'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
       '<w:body>${bodyChildrenXml.join()}<w:sectPr/></w:body></w:document>';
-  const contentTypes = '$xmlDeclaration'
+  const contentTypes =
+      '$xmlDeclaration'
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/'
       'content-types">'
       '<Default Extension="rels" ContentType="application/vnd.'
@@ -324,7 +327,8 @@ List<int> _docx(List<String> bodyChildrenXml) {
       '<Override PartName="/word/document.xml" ContentType="application/vnd.'
       'openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
       '</Types>';
-  const rels = '$xmlDeclaration'
+  const rels =
+      '$xmlDeclaration'
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
       'relationships">'
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/'

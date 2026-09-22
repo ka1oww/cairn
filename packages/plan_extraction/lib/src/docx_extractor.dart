@@ -58,7 +58,10 @@ class DocxExtractor implements PlanTextExtractor {
   @override
   ExtractionResult extract(PickedBytes file) {
     if (file.bytes.isEmpty) {
-      return const ExtractionFailure(ExtractionFailureKind.empty, emptyFileSentence);
+      return const ExtractionFailure(
+        ExtractionFailureKind.empty,
+        emptyFileSentence,
+      );
     }
     if (file.bytes.length > maxPlainBytes) {
       return const ExtractionFailure(
@@ -122,13 +125,11 @@ class DocxExtractor implements PlanTextExtractor {
   /// nested tables and their own rows land in order), and anything else
   /// with children is descended into (content controls, textboxes).
   static List<String> _documentLines(XmlDocument xml) {
-    final body = xml.children
-        .whereType<XmlElement>()
-        .expand(
-          (node) => node.name.local == 'body'
-              ? node.children.whereType<XmlElement>()
-              : [node],
-        );
+    final body = xml.children.whereType<XmlElement>().expand(
+      (node) => node.name.local == 'body'
+          ? node.children.whereType<XmlElement>()
+          : [node],
+    );
     return _linesOf(body);
   }
 
@@ -209,5 +210,4 @@ bool _startsWith(List<int> bytes, List<int> magic) {
 /// Runs of whitespace collapse to single spaces: breaks and tabs were
 /// joined as spaces above, and Word splits runs mid-word harmlessly. This
 /// keeps one line per paragraph literally true.
-String _collapse(String raw) =>
-    raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+String _collapse(String raw) => raw.replaceAll(RegExp(r'\s+'), ' ').trim();

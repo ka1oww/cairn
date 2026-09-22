@@ -13,12 +13,12 @@ import 'package:plan_extraction/plan_extraction.dart';
 const extractor = XlsxExtractor();
 
 PickedBytes named(String fileName, List<int> bytes) => PickedBytes(
-      fileName: fileName,
-      extension: fileName.contains('.')
-          ? fileName.split('.').last.toLowerCase()
-          : null,
-      bytes: Uint8List.fromList(bytes),
-    );
+  fileName: fileName,
+  extension: fileName.contains('.')
+      ? fileName.split('.').last.toLowerCase()
+      : null,
+  bytes: Uint8List.fromList(bytes),
+);
 
 PickedBytes fixture(String name) =>
     named(name, File('test/fixtures/$name').readAsBytesSync());
@@ -43,8 +43,14 @@ void main() {
         utf8.encode('Day 1'),
       ];
       for (final shape in shapes) {
-        expect(() => extractor.matches(named('x.xlsx', shape)), returnsNormally);
-        expect(() => extractor.extract(named('x.xlsx', shape)), returnsNormally);
+        expect(
+          () => extractor.matches(named('x.xlsx', shape)),
+          returnsNormally,
+        );
+        expect(
+          () => extractor.extract(named('x.xlsx', shape)),
+          returnsNormally,
+        );
       }
     });
   });
@@ -63,8 +69,10 @@ void main() {
       // The place column folds into the header instead of standing as a
       // bare place-name stop under every day.
       expect(parsed.days[0].place, 'Tokyo');
-      expect(parsed.days[0].stops.map((s) => s.text),
-          ['Senso-ji at 9:00', 'Ueno Park picnic']);
+      expect(parsed.days[0].stops.map((s) => s.text), [
+        'Senso-ji at 9:00',
+        'Ueno Park picnic',
+      ]);
       expect(parsed.days[1].date, DateTime(2027, 6, 15));
       expect(parsed.days[1].place, 'Kyoto');
       expect(parsed.days[1].stops.last.isStarred, isTrue);
@@ -108,9 +116,13 @@ void main() {
     });
 
     test('garbage wearing .xlsx is refused as unreadable', () {
-      final result = extractor.extract(named('junk.xlsx', utf8.encode('not a workbook')));
-      expect((result as ExtractionFailure).kind,
-          ExtractionFailureKind.unreadable);
+      final result = extractor.extract(
+        named('junk.xlsx', utf8.encode('not a workbook')),
+      );
+      expect(
+        (result as ExtractionFailure).kind,
+        ExtractionFailureKind.unreadable,
+      );
     });
 
     test('an oversized file is refused before reading', () {

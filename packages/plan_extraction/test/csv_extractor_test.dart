@@ -12,12 +12,12 @@ import 'package:plan_extraction/plan_extraction.dart';
 const extractor = CsvExtractor();
 
 PickedBytes named(String fileName, List<int> bytes) => PickedBytes(
-      fileName: fileName,
-      extension: fileName.contains('.')
-          ? fileName.split('.').last.toLowerCase()
-          : null,
-      bytes: Uint8List.fromList(bytes),
-    );
+  fileName: fileName,
+  extension: fileName.contains('.')
+      ? fileName.split('.').last.toLowerCase()
+      : null,
+  bytes: Uint8List.fromList(bytes),
+);
 
 PickedBytes fixture(String name) =>
     named(name, File('test/fixtures/$name').readAsBytesSync());
@@ -88,16 +88,12 @@ void main() {
       expect(parsed.days[0].date, DateTime(2027, 6, 14));
       expect(parsed.days[0].confidence, Confidence.high);
       expect(parsed.days[0].place, 'Tokyo');
-      expect(
-        parsed.days[0].stops.map((s) => s.text),
-        ['Senso-ji at 9:00, then Ueno'],
-      );
+      expect(parsed.days[0].stops.map((s) => s.text), [
+        'Senso-ji at 9:00, then Ueno',
+      ]);
       expect(parsed.days[1].date, DateTime(2027, 6, 15));
       expect(parsed.days[1].place, 'Kyoto');
-      expect(
-        parsed.days[1].stops.map((s) => s.text),
-        ['Fushimi Inari'],
-      );
+      expect(parsed.days[1].stops.map((s) => s.text), ['Fushimi Inari']);
       // The label row is furniture, dropped rather than filed as lines
       // nobody could place.
       expect(parsed.unplacedLines, isEmpty);

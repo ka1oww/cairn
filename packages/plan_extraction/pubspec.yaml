@@ -9,9 +9,9 @@ publish_to: 'none'
 environment:
   # Raised from ^3.0.0 by the PDF extractor: pdfrx_engine and its pdfium_dart
   # bindings both require ^3.10.0 (they are built on native assets and build
-  # hooks, which are not in older SDKs). Leaving the old constraint would have
-  # been a claim this package no longer meets.
-  sdk: ^3.10.0
+  # hooks, which are not in older SDKs). Aligned to the root app's ^3.13.1 so
+  # the package formats and analyzes under the same SDK the app builds with.
+  sdk: ^3.13.1
 
 dependencies:
   archive: ^3.6.1

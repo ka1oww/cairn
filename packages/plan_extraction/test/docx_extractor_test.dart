@@ -11,12 +11,12 @@ import 'package:plan_extraction/plan_extraction.dart';
 const extractor = DocxExtractor();
 
 PickedBytes named(String fileName, List<int> bytes) => PickedBytes(
-      fileName: fileName,
-      extension: fileName.contains('.')
-          ? fileName.split('.').last.toLowerCase()
-          : null,
-      bytes: Uint8List.fromList(bytes),
-    );
+  fileName: fileName,
+  extension: fileName.contains('.')
+      ? fileName.split('.').last.toLowerCase()
+      : null,
+  bytes: Uint8List.fromList(bytes),
+);
 
 PickedBytes fixture(String name) =>
     named(name, File('test/fixtures/$name').readAsBytesSync());
@@ -47,8 +47,14 @@ void main() {
         utf8.encode('Day 1'),
       ];
       for (final shape in shapes) {
-        expect(() => extractor.matches(named('x.docx', shape)), returnsNormally);
-        expect(() => extractor.extract(named('x.docx', shape)), returnsNormally);
+        expect(
+          () => extractor.matches(named('x.docx', shape)),
+          returnsNormally,
+        );
+        expect(
+          () => extractor.extract(named('x.docx', shape)),
+          returnsNormally,
+        );
       }
     });
   });
@@ -79,11 +85,11 @@ void main() {
       final parsed = parseItinerary((result as ExtractedText).text);
 
       expect(parsed.days, hasLength(3));
-      expect(
-        parsed.days.map((day) => day.stops.length),
-        [3, 3, 2],
-        reason: 'eight table rows are the eight stops a reader sees',
-      );
+      expect(parsed.days.map((day) => day.stops.length), [
+        3,
+        3,
+        2,
+      ], reason: 'eight table rows are the eight stops a reader sees');
       expect(parsed.days.expand((day) => day.stops).length, 8);
 
       final first = parsed.days.first.stops.first;
@@ -133,15 +139,19 @@ void main() {
         'never decoded as junk', () {
       final result = extractor.extract(fixture('encrypted.docx'));
       expect(result, isA<ExtractionFailure>());
-      expect((result as ExtractionFailure).kind,
-          ExtractionFailureKind.unreadable);
+      expect(
+        (result as ExtractionFailure).kind,
+        ExtractionFailureKind.unreadable,
+      );
     });
 
     test('a plain-text file wearing .docx is refused as unreadable', () {
       final result = extractor.extract(fixture('not-a-docx.docx'));
       expect(result, isA<ExtractionFailure>());
-      expect((result as ExtractionFailure).kind,
-          ExtractionFailureKind.unreadable);
+      expect(
+        (result as ExtractionFailure).kind,
+        ExtractionFailureKind.unreadable,
+      );
     });
 
     test('an empty file is refused as empty', () {
