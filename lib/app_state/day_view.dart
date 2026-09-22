@@ -528,7 +528,9 @@ class DayActions {
       );
 
   /// Corrects the whole run of stops one subheading stands over — the
-  /// contiguous stops, starting at [position], that share that stop's area.
+  /// contiguous stops, starting at [position], that share that stop's area —
+  /// including a run that shares *no* area, which is the run the day page's
+  /// `+ Add an area` stands at the head of.
   /// A run's identity is its position, not its name: a day that visits the
   /// same-named area twice non-adjacently leaves the second occurrence
   /// untouched, exactly as the confirm screen's [PasteFlow.setAreaRun] walks
