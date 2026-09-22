@@ -181,6 +181,37 @@ void main() {
     );
   });
 
+  testWidgets('a picked candidate row searches for the choice alone', (
+    tester,
+  ) async {
+    await seed([
+      Stop(
+        text: 'Flight to Milan, train to Como',
+        kind: StopKind.multiPlace,
+        placeText: 'Milan; Como',
+        placeCandidates: const ['Milan', 'Como'],
+        chosenPlace: 'Como',
+      ),
+      Stop(
+        text: 'Flight to Rome, train to Naples',
+        kind: StopKind.multiPlace,
+        placeText: 'Rome; Naples',
+        placeCandidates: const ['Rome', 'Naples'],
+      ),
+    ]);
+    await openTheDay(tester);
+
+    // The unchosen row is drawn as written and offers no gesture at all.
+    expect(find.text('Flight to Rome, train to Naples'), findsOneWidget);
+    expect(find.byKey(const Key('stop-tap-2')), findsNothing);
+
+    // The chosen row taps straight to its choice — never the joined line.
+    await tester.tap(find.byKey(const Key('stop-tap-1')));
+    await tester.pump();
+
+    expect(opener.lastUri!.queryParameters['query'], 'Como');
+  });
+
   testWidgets('a line that is not a place has no gesture at all', (
     tester,
   ) async {

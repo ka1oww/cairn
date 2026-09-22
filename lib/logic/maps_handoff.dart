@@ -166,13 +166,25 @@ bool showsPlaceCountBadge(String text, List<String> places) =>
 /// here re-decides what the parser said a line *is*.
 ///
 /// [mealRest] is what [mealLabelSplit] left of a meal line after its label.
+///
+/// [chosenPlace] is the traveller's pick among [placeCandidates], or null
+/// while unchosen. A choice constrains display and tap only: it is the one
+/// candidate searched for, while `kind` stays whatever the parser said and
+/// the candidates stay listed. An unchosen multi-candidate row stays inert.
 String? sendableSearchText({
   required bool isPlace,
   required bool isMealLabel,
   required String? placeText,
   required List<String> placeCandidates,
   required String? mealRest,
+  String? chosenPlace,
 }) {
+  final choice = chosenPlace?.trim();
+  if (choice != null && choice.isNotEmpty) {
+    if (isPlaceholderText(choice)) return null;
+    if (namesNoPlace(choice)) return null;
+    return choice;
+  }
   if (!isPlace && !isMealLabel) return null;
   final candidates = placeCandidates.isNotEmpty
       ? placeCandidates

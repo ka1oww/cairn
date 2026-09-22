@@ -3,7 +3,7 @@ import 'package:cairn/logic/parsed_areas.dart';
 import 'package:cairn/repositories/trip_repository.dart';
 import 'package:cairn/storage/drift/app_database.dart';
 import 'package:cairn_model/cairn_model.dart' as model;
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itinerary_parser/itinerary_parser.dart' as parser;
@@ -41,6 +41,27 @@ void main() {
       );
       expect(stop.opensMaps, isFalse, reason: kind.name);
     }
+  });
+
+  test('a chosen candidate row resolves for its choice only', () {
+    final chosen = DayStop(
+      position: 1,
+      text: 'Flight to Milan, train to Como',
+      kind: model.StopKind.multiPlace,
+      placeCandidates: const ['Milan', 'Como'],
+      chosenPlace: 'Como',
+      searchText: 'Como',
+    );
+    expect(chosen.opensMaps, isTrue);
+
+    final unchosen = DayStop(
+      position: 1,
+      text: 'Flight to Milan, train to Como',
+      kind: model.StopKind.multiPlace,
+      placeCandidates: const ['Milan', 'Como'],
+    );
+    expect(unchosen.searchText, isNull);
+    expect(unchosen.opensMaps, isFalse);
   });
 
   test('ordinary places and meal payloads remain resolvable', () {
@@ -102,5 +123,44 @@ void main() {
     expect(stored[1].placeCandidates, ['Prague']);
     expect(stored[2].kind, model.StopKind.multiPlace);
     expect(stored[2].placeCandidates, ['Milan', 'Como', 'Varenna']);
+    // The parser preserves ambiguity but picks nothing.
+    expect(stored[2].chosenPlace, isNull);
+  });
+
+  test('a picked candidate survives the local itinerary', () async {
+    final database = AppDatabase(
+      DatabaseConnection(
+        NativeDatabase.memory(),
+        closeStreamsSynchronously: true,
+      ),
+    );
+    addTearDown(database.close);
+    final repository = TripRepository(database);
+
+    await repository.saveItinerary(
+      ConfirmedItinerary(
+        days: [
+          ConfirmedDay(
+            number: 1,
+            stops: [
+              model.Stop(
+                text: 'Flight to Milan, train to Como',
+                kind: model.StopKind.multiPlace,
+                placeText: 'Milan; Como',
+                placeCandidates: const ['Milan', 'Como'],
+                chosenPlace: 'Como',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final stored = (await repository.watchItinerary().first)!.days.single.stops;
+    expect(stored.single.chosenPlace, 'Como');
+    // Alongside, not inside: the parser's fields stand as they were.
+    expect(stored.single.kind, model.StopKind.multiPlace);
+    expect(stored.single.placeText, 'Milan; Como');
+    expect(stored.single.placeCandidates, ['Milan', 'Como']);
   });
 }

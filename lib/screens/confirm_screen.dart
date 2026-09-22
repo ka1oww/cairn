@@ -1042,6 +1042,19 @@ Future<void> _showStopMenu(
             title: const Text('Move to another day'),
             onTap: () => Navigator.of(sheetContext).pop('move'),
           ),
+          // A line the parser could not commit to keeps its verbatim text
+          // and offers no Maps search — until the traveller picks one of its
+          // own candidates here. The pick writes a choice, never new words.
+          if (stop.placeCandidates.length > 1)
+            ListTile(
+              key: const Key('stop-menu-pick-place'),
+              leading: const Icon(Icons.place_outlined),
+              title: const Text('Pick which place'),
+              subtitle: stop.chosenPlace == null
+                  ? Text('${stop.placeCandidates.length} places on this line')
+                  : Text('Chosen: ${stop.chosenPlace}'),
+              onTap: () => Navigator.of(sheetContext).pop('pick-place'),
+            ),
           ListTile(
             key: const Key('stop-menu-remove'),
             leading: Icon(Icons.close, color: theme.colorScheme.error),
@@ -1084,9 +1097,91 @@ Future<void> _showStopMenu(
     case 'move':
       final target = await _askWhichDay(context, ref, exceptDay: day.number);
       if (target != null) notifier.moveStop(stop.id, toDayNumber: target);
+    case 'pick-place':
+      final answer = await _askWhichPlace(context, stop);
+      switch (answer) {
+        case null:
+          break;
+        case _PlacePicked(:final place):
+          notifier.choosePlace(stop.id, place);
+        case _PlaceKeptAsWritten():
+          notifier.clearChosenPlace(stop.id);
+      }
     case 'remove':
       notifier.removeStop(stop.id);
   }
+}
+
+/// What the pick-a-place sheet can answer. The dismissal itself is not a
+/// decision — re-opening the menu re-offers — so a barrier tap answers null
+/// and writes nothing, while keeping the words is an answer of its own.
+sealed class _PlaceAnswer {
+  const _PlaceAnswer();
+}
+
+final class _PlacePicked extends _PlaceAnswer {
+  const _PlacePicked(this.place);
+
+  final String place;
+}
+
+final class _PlaceKeptAsWritten extends _PlaceAnswer {
+  const _PlaceKeptAsWritten();
+}
+
+/// "Pick which place", for a line carrying several parser candidates: one
+/// tile per candidate in the parser's own order, plus the keep-as-written
+/// path. Keeping the words clears a pick already recorded — which is what
+/// makes a choice reversible — so the tile says so when there is one to
+/// clear, and the answer is a value of its own rather than the null a
+/// dismissal returns.
+Future<_PlaceAnswer?> _askWhichPlace(BuildContext context, ReviewStop stop) {
+  final theme = Theme.of(context);
+  final chosen = stop.chosenPlace;
+  return showModalBottomSheet<_PlaceAnswer>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+            child: Text(
+              'Which place is this?',
+              style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'serif'),
+            ),
+          ),
+          for (final (index, candidate) in stop.placeCandidates.indexed)
+            ListTile(
+              key: Key('pick-place-$index'),
+              leading: Icon(
+                stop.chosenPlace == candidate
+                    ? Icons.check_circle
+                    : Icons.place_outlined,
+              ),
+              title: Text(candidate),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(_PlacePicked(candidate)),
+            ),
+          const Divider(height: 1),
+          ListTile(
+            key: const Key('pick-place-none'),
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('None of these — keep as written'),
+            subtitle: Text(
+              chosen == null
+                  ? 'the line stays as you wrote it'
+                  : 'undoes “$chosen”; the line stays as you wrote it',
+            ),
+            onTap: () =>
+                Navigator.of(sheetContext).pop(const _PlaceKeptAsWritten()),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
 }
 
 TimeOfDay _initialTimeOf(ReviewStop stop) {

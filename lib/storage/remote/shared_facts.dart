@@ -211,6 +211,12 @@ class RemoteStop {
   final String? areaText;
   final String? areaSource;
 
+  /// The traveller's pick among the parser's place candidates. Travels like
+  /// the lines above — a shared fact about the plan — but a server that
+  /// predates the column answers without it (see [carriesChosenPlace]), and
+  /// that silence never clears a choice this phone holds.
+  final String? chosenPlace;
+
   /// Whether the answer carried the area columns *at all*.
   ///
   /// False is what a server that has not had migration `0013` applied looks
@@ -220,6 +226,11 @@ class RemoteStop {
   /// Anything this phone *pushes* carries them by construction.
   final bool carriesAreas;
 
+  /// Whether the answer carried the chosen-place value at all. Same contract
+  /// as [carriesAreas]: a server without the column does not know the field,
+  /// so what this phone holds stands rather than being wiped by a round trip.
+  final bool carriesChosenPlace;
+
   const RemoteStop({
     required this.position,
     required this.text,
@@ -228,6 +239,8 @@ class RemoteStop {
     this.areaText,
     this.areaSource,
     this.carriesAreas = true,
+    this.chosenPlace,
+    this.carriesChosenPlace = true,
   });
 }
 

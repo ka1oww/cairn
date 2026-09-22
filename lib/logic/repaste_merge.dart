@@ -310,6 +310,17 @@ RepasteMergeResult mergeRepaste({
       for (final stop in day.stops) _normalize(stop.text),
   };
 
+  // A candidate-place pick is the traveller's, and like an area correction it
+  // is matched plan-wide by the stop's own text: a stop the re-paste moves to
+  // another day keeps the pick somebody made for those very words. It is
+  // still only carried onto a line that still offers the thing chosen — see
+  // [_convertStops].
+  final choiceCarry = <String, String>{
+    for (final day in current)
+      for (final stop in day.stops)
+        if (stop.chosenPlace != null) _normalize(stop.text): stop.chosenPlace!,
+  };
+
   final days = <MergedDay>[];
   final setAside = <SetAsideItem>[];
 
@@ -334,6 +345,7 @@ RepasteMergeResult mergeRepaste({
         repasted[r],
         repastedTexts,
         setAside,
+        choiceCarry: choiceCarry,
         origin: pairedByContent[r] ? MergedDayOrigin.mergedByContent : null,
       ),
     );
@@ -353,7 +365,7 @@ RepasteMergeResult mergeRepaste({
               ? null
               : CalendarDate.fromDateTimeIgnoringZone(parsed.date!),
           place: parsed.place,
-          stops: _convertStops(parsed.stops),
+          stops: _convertStops(parsed.stops, choiceCarry: choiceCarry),
         ),
         origin: MergedDayOrigin.appendedNew,
         unchanged: false,
@@ -405,6 +417,7 @@ RepasteMergeResult mergeRepaste({
             kind: stop.kind,
             placeText: stop.placeText,
             placeCandidates: stop.placeCandidates,
+            chosenPlace: stop.chosenPlace,
             area: correction.area,
             areaSource: correction.areaSource,
           ),
@@ -443,9 +456,10 @@ MergedDay _mergeMatched(
   ip.ParsedDay parsed,
   Set<String> repastedTexts,
   List<SetAsideItem> setAside, {
+  Map<String, String> choiceCarry = const {},
   MergedDayOrigin? origin,
 }) {
-  final newStops = _convertStops(parsed.stops);
+  final newStops = _convertStops(parsed.stops, choiceCarry: choiceCarry);
 
   // Which current stops survive? Anything the revised plan still says, on any
   // of its days: a stop that moved to another day was moved, not displaced.
@@ -503,7 +517,10 @@ String? _contentSignature(String? place, List<String> stops) {
   return '${field(normalizedPlace)}|${normalizedStops.map(field).join('|')}';
 }
 
-List<Stop> _convertStops(List<ip.Stop> stops) => List.unmodifiable([
+List<Stop> _convertStops(
+  List<ip.Stop> stops, {
+  Map<String, String> choiceCarry = const {},
+}) => List.unmodifiable([
   for (final stop in stops)
     Stop(
       text: stop.text,
@@ -514,6 +531,11 @@ List<Stop> _convertStops(List<ip.Stop> stops) => List.unmodifiable([
       kind: stopKindOf(stop.kind),
       placeText: stop.placeText,
       placeCandidates: stop.placeCandidates,
+      chosenPlace:
+          choiceCarry[_normalize(stop.text)] != null &&
+              stop.placeCandidates.contains(choiceCarry[_normalize(stop.text)])
+          ? choiceCarry[_normalize(stop.text)]
+          : null,
       area: stop.area?.text,
       areaSource: stop.area == null ? null : areaSourceOf(stop.area!.source),
     ),

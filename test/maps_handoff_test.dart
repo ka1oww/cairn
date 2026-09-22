@@ -228,4 +228,33 @@ void main() {
       expect(offer('Ichiran', meal: true), 'Ichiran');
     });
   });
+
+  group('the choice: a picked candidate is the one search', () {
+    String? offerMulti({String? chosenPlace}) => sendableSearchText(
+      isPlace: false,
+      isMealLabel: false,
+      placeText: 'Milan; Como; Varenna',
+      placeCandidates: const ['Milan', 'Como', 'Varenna'],
+      mealRest: null,
+      chosenPlace: chosenPlace,
+    );
+
+    test('an unchosen multi-candidate row offers no tap', () {
+      expect(offerMulti(), isNull);
+    });
+
+    test('a chosen row searches for the choice alone', () {
+      expect(offerMulti(chosenPlace: 'Como'), 'Como');
+    });
+
+    test('a cleared choice returns the row to inert', () {
+      expect(offerMulti(chosenPlace: null), isNull);
+      expect(offerMulti(chosenPlace: '  '), isNull);
+    });
+
+    test('a choice that names no place still offers no tap', () {
+      expect(offerMulti(chosenPlace: 'TBD'), isNull);
+      expect(offerMulti(chosenPlace: 'Free morning'), isNull);
+    });
+  });
 }

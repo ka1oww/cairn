@@ -228,6 +228,9 @@ class PlanStop {
   final String? placeText;
   final List<String> placeCandidates;
 
+  /// The traveller's pick among [placeCandidates], or null while unchosen.
+  final String? chosenPlace;
+
   /// The area in force for this stop, and whose it is. Null is an answer: it
   /// means a search goes out as the stop's own words alone.
   final String? area;
@@ -239,6 +242,7 @@ class PlanStop {
     this.kind = StopKind.place,
     this.placeText,
     this.placeCandidates = const [],
+    this.chosenPlace,
     this.area,
     this.areaSource,
   });
@@ -272,6 +276,7 @@ TripPlan? _toPlan(ConfirmedItinerary? itinerary) {
                 kind: stop.kind,
                 placeText: stop.placeText,
                 placeCandidates: stop.placeCandidates,
+                chosenPlace: stop.chosenPlace,
                 area: stop.area,
                 areaSource: stop.areaSource,
               ),
