@@ -69,12 +69,26 @@ void main() {
         final result = parseItinerary(corpusFile.readAsStringSync());
 
         int correct = 0, wrong = 0, miss = 0, noneOk = 0;
+        // A label row must point at a line the parser actually returned a stop
+        // for. A stale line number (label written against an earlier revision
+        // of the document) resolves to nothing, and scoring that as an
+        // unassigned stop lets a broken fixture pass on NONE agreement — so an
+        // unresolved row is collected here and fails the test outright below.
+        final unresolved = <String>[];
         for (final row in gt) {
           String? assigned;
+          var resolved = false;
           for (final d in result.days) {
             for (final s in d.stops) {
-              if (s.sourceLine.lineNumber == row.line) assigned = s.area?.text;
+              if (s.sourceLine.lineNumber == row.line) {
+                assigned = s.area?.text;
+                resolved = true;
+              }
             }
+          }
+          if (!resolved) {
+            unresolved.add('line ${row.line} (${row.note})');
+            continue;
           }
           final v = areaVerdict(assigned, row.accepts);
           if (v == 'correct') {
@@ -92,6 +106,11 @@ void main() {
         print(
             '$label held-out: correct=$correct wrong=$wrong miss=$miss noneOk=$noneOk '
             'rowsOK=${rowsOk.toStringAsFixed(1)}% (n=${gt.length})');
+
+        expect(unresolved, isEmpty,
+            reason: '$label held-out: these label rows point at a line no '
+                'longer held by a stop, so they cannot be scored: '
+                '${unresolved.join('; ')}');
 
         // This figure is per *document*, which is the only level at which a
         // combined percentage still means something: the tuned corpus's own
