@@ -533,6 +533,9 @@ def main():
         "select count(*) from public.trip_itinerary_days "
         "where trip_id = :t and day_number = 20", t=japan)[0][0] == 0,
           "a member may still delete a day of the plan", repr(rows)[:90])
+    check(d.run(is_open, t=japan, d=20, u=dave)[0][0] is False,
+          "and the gate stays shut for the absent day number, guard row and all, "
+          "between the delete and the reinsert")
     guards20 = db.run(
         "select not_before from public.day_gate_date_guards "
         "where trip_id = :t and day_number = 20", t=japan)
@@ -585,6 +588,31 @@ def main():
           "shortening again cannot walk the guard down off that date", repr(rows)[:90])
     check(d.run(is_open, t=japan, d=21, u=dave)[0][0] is False,
           "so un-dating the shortened day still does not open it early")
+
+    print("\n== moving a day to a new number records a guard on the number it left ==")
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 22, :d, now())""",
+           t=japan, d=today + datetime.timedelta(days=4))
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_number = 23
+            where trip_id = :t and day_number = 22""",
+        t=japan)
+    check(status == "ok" and db.run(
+        "select count(*) from public.trip_itinerary_days "
+        "where trip_id = :t and day_number = 22", t=japan)[0][0] == 0,
+          "a member may still renumber a day of the plan", repr(rows)[:90])
+    guards22 = db.run(
+        "select not_before from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 22", t=japan)
+    check(guards22 and guards22[0][0] == today + datetime.timedelta(days=4),
+          "and the number it vacated keeps a guard for the date it carried",
+          repr(guards22))
+    check(d.run(is_open, t=japan, d=22, u=dave)[0][0] is False,
+          "so the vacated number cannot be reused to forge an early unlock")
+    check(db.run(
+        "select count(*) from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 23", t=japan)[0][0] == 0,
+          "while the number it moved to records no guard of its own")
 
     # A guard is durable across the day's own deletion but must not make
     # deleting the trip itself fail: the trip row is already gone when the

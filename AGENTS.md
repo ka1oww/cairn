@@ -923,11 +923,13 @@ Sharp edges worth knowing before touching this directory again:
   `trip_day is not null` guard any more — that guard was the hole). Since
   `0015` the permissive default cannot be forged: an unlock follows a moved
   photograph (deleting one still never re-locks its day), and re-dating,
-  un-dating, shortening, or deleting a still current or future day holds the
-  gate shut until the old date passes (`day_gate_date_guards` — since `0018`
-  recorded on every earlier date move and on the delete itself, hanging off
-  the trip so a delete-then-reinsert finds it) — `supabase/README.md`'s gate
-  section owns the detail.
+  un-dating, shortening, deleting, or renumbering a still current or future
+  day holds the gate shut until the old date passes (`day_gate_date_guards` —
+  since `0018` recorded on every earlier date move, on the delete itself, and
+  on a renumber that vacates the day, hanging off the trip so a
+  delete-then-reinsert or a renumber finds it; the gate still consults the
+  guard for a day number the plan no longer claims, rather than exempting it)
+  — `supabase/README.md`'s gate section owns the detail.
 - **Every photograph read goes through one seat.** `may_read_trip_photos`
   (`0011`) today answers exactly `is_trip_member`, and both the `photos` SELECT
   policy and `r2-download-url` go through it. It exists so that when leaving

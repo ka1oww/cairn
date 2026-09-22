@@ -2,8 +2,13 @@
 -- re-inserting it, and moving a future date earlier while it is still
 -- future. Both reach the same forgery 0015's guard exists to refuse --
 -- the walked branch opening before the date the day used to carry has
--- passed -- without taking the one path 0015 watches. This is a forward
--- migration; every earlier migration is a recorded fact and stays
+-- passed -- without taking the one path 0015 watches. Closing them durably
+-- also means the guard must hang off the trip rather than the day row, the
+-- recording trigger must fire on delete and on every update (not only one
+-- that touches `day_date`, since a day-number move vacates its old number
+-- just as a delete does), and the gate must keep asking the guard about a
+-- day number the plan no longer claims rather than exempting it. This is a
+-- forward migration; every earlier migration is a recorded fact and stays
 -- byte-for-byte unchanged.
 
 -- ---------------------------------------------------------------------------
@@ -27,25 +32,33 @@ alter table public.day_gate_date_guards
   foreign key (trip_id) references public.trips (id) on delete cascade;
 
 -- ---------------------------------------------------------------------------
--- Every earlier date move, and the delete that stands in for one
+-- Every earlier date move, and every way a row stops claiming its day
 -- ---------------------------------------------------------------------------
 --
--- The recording rule widens in two directions, and neither changes what the
--- gate already refused -- both only reach the forgeries the old condition let
+-- The recording rule widens in three directions, and none changes what the
+-- gate already refused -- each only reaches a forgery the old condition let
 -- past:
 --
---   * UPDATE: the old condition recorded a guard only when the new date fell
---     into the past or to null. Moving a future date *earlier while it is
---     still future* recorded nothing, so the day opened at its shortened date
---     -- before the date it previously carried had passed. The rule is now
---     every earlier move of a day that was current or future; a later move
---     needs no guard, because the walked branch cannot open early on a date
---     that has not arrived.
---   * DELETE: the trigger never fired, so a delete plus a re-insert was an
---     UPDATE-shaped edit that skipped the guard entirely. A day deleted while
---     still current or future now records its date, which is what the re-insert
---     then finds. Deleting an already-past or undated day records nothing:
---     those were permissive before the delete and stay permissive.
+--   * An earlier move: the old condition recorded a guard only when the new
+--     date fell into the past or to null. Moving a future date *earlier
+--     while it is still future* recorded nothing, so the day opened at its
+--     shortened date -- before the date it previously carried had passed.
+--     The rule is now every earlier move of a day that was current or
+--     future; a later move needs no guard, because the walked branch cannot
+--     open early on a date that has not arrived.
+--   * DELETE: the trigger never fired at all, so a delete plus a re-insert
+--     was an UPDATE-shaped edit that skipped the guard entirely. A day
+--     deleted while still current or future now records its date, which is
+--     what the re-insert then finds. Deleting an already-past or undated day
+--     records nothing: those were permissive before the delete and stay
+--     permissive.
+--   * A day-number move: firing only on an UPDATE of `day_date` let a write
+--     that changed `day_number` alone through untouched -- the row stops
+--     claiming its old day number, exactly as a delete does, and needs the
+--     same guard on the number and date it is leaving. So the trigger fires
+--     on every UPDATE, not only one that touches `day_date`, and a
+--     day-number change is treated as vacating the old number regardless of
+--     what date rides along with it.
 --
 -- The trip lookup deliberately happens first and may find nothing: when a trip
 -- is deleted, its rows cascade and the trip is already gone by the time this
@@ -60,35 +73,32 @@ set search_path = public, pg_temp
 as $$
 declare
   v_today date;
+  v_vacated boolean := false;
 begin
+  if tg_op = 'UPDATE'
+     and new.day_number is not distinct from old.day_number
+     and new.day_date is not distinct from old.day_date then
+    return new;
+  end if;
+
   select (now() at time zone t.timezone)::date
     into v_today
     from public.trips t
    where t.id = old.trip_id;
 
-  if tg_op = 'DELETE' then
-    if v_today is not null
-       and old.day_date is not null
-       and old.day_date >= v_today then
-      insert into public.day_gate_date_guards (trip_id, day_number, not_before)
-      values (old.trip_id, old.day_number, old.day_date)
-      on conflict (trip_id, day_number) do update
-        set not_before = greatest(
-          public.day_gate_date_guards.not_before,
-          excluded.not_before
-        );
-    end if;
-    return old;
-  end if;
-
-  if new.day_date is not distinct from old.day_date then
-    return new;
-  end if;
-
   if v_today is not null
      and old.day_date is not null
-     and old.day_date >= v_today
-     and (new.day_date is null or new.day_date < old.day_date) then
+     and old.day_date >= v_today then
+    if tg_op = 'DELETE' then
+      v_vacated := true;
+    elsif new.day_number is distinct from old.day_number then
+      v_vacated := true;
+    elsif new.day_date is null or new.day_date < old.day_date then
+      v_vacated := true;
+    end if;
+  end if;
+
+  if v_vacated then
     insert into public.day_gate_date_guards (trip_id, day_number, not_before)
     values (old.trip_id, old.day_number, old.day_date)
     on conflict (trip_id, day_number) do update
@@ -98,6 +108,9 @@ begin
       );
   end if;
 
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
   return new;
 end;
 $$;
@@ -105,20 +118,23 @@ $$;
 drop trigger if exists trip_itinerary_days_record_gate_date_guard
   on public.trip_itinerary_days;
 create trigger trip_itinerary_days_record_gate_date_guard
-  after update of day_date or delete on public.trip_itinerary_days
+  after update or delete on public.trip_itinerary_days
   for each row execute function public.record_day_gate_date_guard();
 
 -- ---------------------------------------------------------------------------
--- The walked branch asks the guard only about a day the plan still claims
+-- The walked branch still asks the guard about a day the plan no longer claims
 -- ---------------------------------------------------------------------------
 --
--- Deleting a day now leaves a guard behind, and the guard must not shut a day
--- number the plan no longer claims: an absent day reads as walked to the phone
--- (`lib/app_state/day_gate.dart`) and to this function before 0018, and
--- photographs already filed under that day number stay in the pool. What the
--- guard is for is the opposite state -- the plan claiming a day whose date is
--- past or open -- which is exactly the state a delete-then-reinsert leaves
--- behind, and there the guard holds exactly as it did for a re-dated day.
+-- Deleting a day now leaves a guard behind, and an earlier draft of this
+-- migration opened any absent day number *before* consulting it -- an
+-- explicit `not exists (day row)` branch that let a delete-then-reinsert walk
+-- straight past the very guard the delete had just recorded. There is no such
+-- branch: an absent day still asks the guard, exactly as 0015 already did,
+-- through the same `coalesce(..., true)` that reads a missing day's date as
+-- "before today" once there is no guard row to hold it. A day number the plan
+-- has never claimed still opens, because nothing has ever recorded a guard
+-- for it -- the permissive property is preserved by the absence of a guard
+-- row, not by a shortcut around the guard check.
 create or replace function public.day_page_is_open(
   p_trip_id uuid,
   p_day_number integer,
@@ -137,13 +153,7 @@ as $$
   )
   select public.is_trip_member(p_trip_id, p_user_id)
     and (
-      not exists (
-        select 1
-          from public.trip_itinerary_days d
-         where d.trip_id = p_trip_id
-           and d.day_number = p_day_number
-      )
-      or (
+      (
         coalesce(
           (select d.day_date
              from public.trip_itinerary_days d
