@@ -1041,6 +1041,29 @@ void main() {
       expect(identical(result.days.single.day, current.single), isTrue);
     });
 
+    test('a stop the re-paste moves to another day keeps its pick', () {
+      final current = [
+        day(1, date: jun14, place: 'Italy', stops: [chosenStop()]),
+        day(2, date: jun15, place: 'Italy', stops: [mStop('Duomo')]),
+      ];
+      final repasted = [
+        pDay(1, date: DateTime(2027, 6, 14), place: 'Italy', stops: []),
+        pDay(
+          2,
+          date: DateTime(2027, 6, 15),
+          place: 'Italy',
+          stops: [pStop('Duomo'), parsedChoice()],
+        ),
+      ];
+
+      final result = mergeRepaste(current: current, repasted: repasted);
+
+      // Moved, not displaced — and the pick is the traveller's, matched
+      // plan-wide by the stop's own words like an area correction.
+      expect(result.setAside, isEmpty);
+      expect(result.days[1].stops.last.chosenPlace, 'Como');
+    });
+
     test('a stop whose text no longer offers the choice drops it', () {
       final current = [
         day(1, date: jun14, place: 'Italy', stops: [chosenStop()]),

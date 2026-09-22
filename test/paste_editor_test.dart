@@ -661,7 +661,39 @@ void main() {
       await tester.tap(find.byKey(const Key('pick-place-none')));
       await tester.pumpAndSettle();
 
-      // Dismissed, not decided: re-opening re-offers with nothing chosen.
+      // Nothing was chosen and nothing is: re-opening re-offers.
+      await tester.tap(find.text('Flight to Milan, train to Como'));
+      await tester.pumpAndSettle();
+      expect(find.text('Chosen: Como'), findsNothing);
+      expect(find.text('2 places on this line'), findsOneWidget);
+    });
+
+    testWidgets('keeping a line as written undoes a pick already made', (
+      tester,
+    ) async {
+      const multiPaste = 'Day 1 - Italy\n- Flight to Milan, train to Como';
+      await launch(tester);
+      await paste(tester, multiPaste);
+
+      await tester.tap(find.text('Flight to Milan, train to Como'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('stop-menu-pick-place')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pick-place-1')));
+      await tester.pumpAndSettle();
+
+      // The tile says what keeping the words would cost, and then does it.
+      await tester.tap(find.text('Flight to Milan, train to Como'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('stop-menu-pick-place')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('undoes \u201cComo\u201d; the line stays as you wrote it'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('pick-place-none')));
+      await tester.pumpAndSettle();
+
       await tester.tap(find.text('Flight to Milan, train to Como'));
       await tester.pumpAndSettle();
       expect(find.text('Chosen: Como'), findsNothing);

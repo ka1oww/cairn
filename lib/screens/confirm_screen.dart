@@ -1100,20 +1100,47 @@ Future<void> _showStopMenu(
       final target = await _askWhichDay(context, ref, exceptDay: day.number);
       if (target != null) notifier.moveStop(stop.id, toDayNumber: target);
     case 'pick-place':
-      final picked = await _askWhichPlace(context, stop);
-      if (picked != null) notifier.choosePlace(stop.id, picked);
+      final answer = await _askWhichPlace(context, stop);
+      switch (answer) {
+        case null:
+          break;
+        case _PlacePicked(:final place):
+          notifier.choosePlace(stop.id, place);
+        case _PlaceKeptAsWritten():
+          notifier.clearChosenPlace(stop.id);
+      }
     case 'remove':
       notifier.removeStop(stop.id);
   }
 }
 
+/// What the pick-a-place sheet can answer. The dismissal itself is not a
+/// decision — re-opening the menu re-offers — so a barrier tap answers null
+/// and writes nothing, while keeping the words is an answer of its own.
+sealed class _PlaceAnswer {
+  const _PlaceAnswer();
+}
+
+final class _PlacePicked extends _PlaceAnswer {
+  const _PlacePicked(this.place);
+
+  final String place;
+}
+
+final class _PlaceKeptAsWritten extends _PlaceAnswer {
+  const _PlaceKeptAsWritten();
+}
+
 /// "Pick which place", for a line carrying several parser candidates: one
 /// tile per candidate in the parser's own order, plus the keep-as-written
-/// path. The dismissal itself is not a decision — re-opening the menu
-/// re-offers — so keeping the words returns null and writes nothing.
-Future<String?> _askWhichPlace(BuildContext context, ReviewStop stop) {
+/// path. Keeping the words clears a pick already recorded — which is what
+/// makes a choice reversible — so the tile says so when there is one to
+/// clear, and the answer is a value of its own rather than the null a
+/// dismissal returns.
+Future<_PlaceAnswer?> _askWhichPlace(BuildContext context, ReviewStop stop) {
   final theme = Theme.of(context);
-  return showModalBottomSheet<String>(
+  final chosen = stop.chosenPlace;
+  return showModalBottomSheet<_PlaceAnswer>(
     context: context,
     builder: (sheetContext) => SafeArea(
       child: Column(
@@ -1136,15 +1163,21 @@ Future<String?> _askWhichPlace(BuildContext context, ReviewStop stop) {
                     : Icons.place_outlined,
               ),
               title: Text(candidate),
-              onTap: () => Navigator.of(sheetContext).pop(candidate),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(_PlacePicked(candidate)),
             ),
           const Divider(height: 1),
           ListTile(
             key: const Key('pick-place-none'),
             leading: const Icon(Icons.edit_outlined),
             title: const Text('None of these — keep as written'),
-            subtitle: const Text('the line stays as you wrote it'),
-            onTap: () => Navigator.of(sheetContext).pop(),
+            subtitle: Text(
+              chosen == null
+                  ? 'the line stays as you wrote it'
+                  : 'undoes “$chosen”; the line stays as you wrote it',
+            ),
+            onTap: () =>
+                Navigator.of(sheetContext).pop(const _PlaceKeptAsWritten()),
           ),
           const SizedBox(height: 8),
         ],
