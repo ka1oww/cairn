@@ -189,6 +189,58 @@ class PostgrestSharedFacts implements SharedFacts {
   }
 
   @override
+  Future<TripId> redeemInvite(String code) async {
+    final auth = await _demand();
+    try {
+      final response = await _send(
+        'POST',
+        '/rest/v1/rpc/redeem_trip_invite',
+        auth,
+        body: {'p_code': code},
+      );
+      // The function returns `uuid`, which PostgREST hands back as a bare
+      // JSON string. Anything else means the server answered in a shape this
+      // phone does not recognise — a refusal, not a success.
+      if (response is! String) {
+        throw SharedFactsRefused(
+          'redeem returned ${response.runtimeType}',
+        );
+      }
+      return TripId(response);
+    } on SharedFactsRefused catch (e) {
+      // `_send` already turned the 4xx into a refusal carrying the server's
+      // message (`400: invite code not found`). Map the four verdicts onto
+      // typed kinds so the caller acts without string-matching; anything
+      // else re-raises as the plain refusal it arrived as. A
+      // [SharedFactsUnavailable] propagates untouched — transport is not a
+      // refusal.
+      throw _redeemRefusal(e.reason);
+    }
+  }
+
+  /// The four verdicts of `redeem_trip_invite`, keyed on the message the
+  /// function raised verbatim (`supabase/migrations/0005_trip_invites.sql`).
+  static SharedFactsRefused _redeemRefusal(String reason) {
+    if (reason.contains('not authenticated')) {
+      return InviteRefused(InviteRefusal.notAuthenticated, reason);
+    }
+    if (reason.contains('invite code not found')) {
+      // One kind for "not a code" and "no such code": the server merges them
+      // so a guesser cannot tell which half was wrong, and so must we.
+      return InviteRefused(InviteRefusal.codeNotFound, reason);
+    }
+    if (reason.contains('invite code has expired')) {
+      return InviteRefused(InviteRefusal.codeExpired, reason);
+    }
+    if (reason.contains('invite code has been used up')) {
+      return InviteRefused(InviteRefusal.codeUsedUp, reason);
+    }
+    // Not one of the four — a gateway rewrite, a schema drift. Still a
+    // refusal; just not one we can name.
+    return SharedFactsRefused(reason);
+  }
+
+  @override
   Future<RemoteUploadTicket> photoUploadTicket({
     required TripId tripId,
     required String photoId,
