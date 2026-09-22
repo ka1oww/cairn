@@ -84,13 +84,27 @@ class DayStop {
   final List<String> places;
 
   /// The area subheading drawn *above* this stop, or null when the stop is
-  /// under the same area as the one before it.
+  /// under the same area as the one before it — and also when its run has no
+  /// area at all, where the day page draws the add-area affordance instead.
   final String? areaHeadingBefore;
+
+  /// Whether this stop begins a run of stops sharing one area — including a
+  /// run with no area at all, which is the run the day page's `+ Add an
+  /// area` stands at the head of (the same "one affordance per run" the
+  /// confirm screen draws).
+  final bool startsAreaRun;
+
+  /// The areas the day page's add-area dialog offers for a run with no area:
+  /// [adjacentAreas] first, then every other area the plan names, in plan
+  /// order — the same order the confirm screen offers
+  /// (`addAreaCandidates` in `lib/logic/nearest_areas.dart` is the rule).
+  /// Empty for a stop that already has an area, which is asked nothing.
+  final List<String> areaCandidates;
 
   /// The areas of the nearest stops either side of this one, for a stop that
   /// has none of its own. The long-press sheet offers them worded
   /// "nearest to X" — a hint about where to look, never a claim that the
-  /// place is there.
+  /// place is there — and the add-area dialog leads with them too.
   final List<String> adjacentAreas;
 
   const DayStop({
@@ -107,6 +121,8 @@ class DayStop {
     this.areaSource,
     this.places = const [],
     this.areaHeadingBefore,
+    this.startsAreaRun = false,
+    this.areaCandidates = const [],
     this.adjacentAreas = const [],
   });
 
@@ -388,12 +404,15 @@ PlannedDay _planned(TripPlan plan, PlanDay day, {required bool isOver}) {
   final stops = day.stops;
 
   // The subheading is drawn where the area *changes*, so a run of stops in
-  // one place is headed once rather than repeated down the day.
-  String? standing;
+  // one place is headed once rather than repeated down the day. A run that
+  // has no area at all changes onto nothing: no heading, but still a run
+  // head — that is where the day page draws the add-area affordance.
   final headings = <String?>[];
-  for (final stop in stops) {
-    headings.add(stop.area == standing ? null : stop.area);
-    standing = stop.area;
+  final runHeads = <bool>[];
+  for (final (index, stop) in stops.indexed) {
+    final startsRun = index == 0 || stops[index - 1].area != stop.area;
+    runHeads.add(startsRun);
+    headings.add(startsRun ? stop.area : null);
   }
 
   // For a stop with no area of its own: the nearest area either side of it,
@@ -402,6 +421,15 @@ PlannedDay _planned(TripPlan plan, PlanDay day, {required bool isOver}) {
   // the confirm screen's add-area fallback.
   final stopAreas = [for (final stop in stops) stop.area];
   List<String> adjacentTo(int index) => nearestAreas(stopAreas, index);
+
+  // The rest of the add-area dialog's candidates: every area the whole plan
+  // names, in plan order, for the nearest-first ordering to append after
+  // its own day's nearest. The order is `addAreaCandidates`'s — the same
+  // rule the confirm screen's add-area dialog reads.
+  final planAreas = [
+    for (final planDay in plan.days)
+      for (final stop in planDay.stops) stop.area,
+  ];
 
   return PlannedDay(
     number: day.number,
@@ -418,7 +446,9 @@ PlannedDay _planned(TripPlan plan, PlanDay day, {required bool isOver}) {
           stop,
           position: index + 1,
           heading: headings[index],
+          startsRun: runHeads[index],
           adjacent: stop.area == null ? adjacentTo(index) : const [],
+          planAreas: planAreas,
         ),
     ],
     isOver: isOver,
@@ -429,7 +459,9 @@ DayStop _dayStop(
   PlanStop stop, {
   required int position,
   required String? heading,
+  required bool startsRun,
   required List<String> adjacent,
+  required List<String?> planAreas,
 }) {
   // A meal label is split off here and nowhere else: the label is the part
   // that shows, the rest is the part that is searched for.
@@ -464,6 +496,10 @@ DayStop _dayStop(
     areaSource: stop.areaSource,
     places: searchText == null ? const [] : placesOn(searchText),
     areaHeadingBefore: heading,
+    startsAreaRun: startsRun,
+    areaCandidates: stop.area == null
+        ? addAreaCandidates(nearest: adjacent, planAreas: planAreas)
+        : const [],
     adjacentAreas: adjacent,
   );
 }

@@ -29,3 +29,26 @@ List<String> nearestAreas(List<String?> areas, int index) {
   }
   return [?before, if (after != null && after != before) after];
 }
+
+/// The candidates an add-area dialog offers, in the order both of them offer
+/// them: [nearest] first — the silent run's own neighbouring areas, as
+/// [nearestAreas] ordered them — then every area [planAreas] names that is
+/// not already among them, in plan order, each named once. Nulls in
+/// [planAreas] are stops the parser stayed silent on and carry nothing to
+/// offer. Empty only when the plan names no area at all, and then the dialog
+/// is the blank field it has always been.
+///
+/// One rule, two dialogs: the confirm screen's `+ Add an area` and the day
+/// page's. Each passes its own draft or saved plan as [planAreas]; the
+/// ordering itself is written once, here.
+List<String> addAreaCandidates({
+  required List<String> nearest,
+  required Iterable<String?> planAreas,
+}) {
+  final ordered = List<String>.of(nearest);
+  final seen = ordered.toSet();
+  for (final area in planAreas) {
+    if (area != null && seen.add(area)) ordered.add(area);
+  }
+  return ordered;
+}

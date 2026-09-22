@@ -96,13 +96,14 @@ import what is written there, not here.
   date-only value (`calendarPlusDays`, `DateTime` component arithmetic —
   never `add(Duration(days: n))`, which lands a day early across a DST
   fall-back); every app-side date-chip and date-fill arithmetic goes
-  through it. `nearest_areas.dart` is the one nearest-area rule — the
-  nearest area either side of a stop that has none, nearer first, a
-  duplicate dropped — and it has two callers on purpose: the day page's
-  "nearest to" search hints (`day_view.dart`) and the head of the confirm
-  screen's add-area candidates (`PasteFlow.areaCandidates`, which then
-  appends every other area the draft names, in plan order). A second
-  spelling of that ordering is the thing to refuse in review.
+  through it. `nearest_areas.dart` holds both area-ordering rules — the
+  nearest area either side of a stop that has none (nearer first, a
+  duplicate dropped), used by the day page's "nearest to" search hints
+  (`day_view.dart`), and `addAreaCandidates`, the one candidate order both
+  add-area dialogs offer (that nearest list first, then every other area
+  the draft or saved plan names, in plan order — `PasteFlow.areaCandidates`
+  and `DayStop.areaCandidates` both call it). A second spelling of either
+  ordering is the thing to refuse in review.
   `area_edit.dart` is main's phase-1 scaffolding and is still called from
   nowhere: the frontend resolves a running area onto every stop's own
   `area` instead of re-deriving it from headings, and correcting a run
