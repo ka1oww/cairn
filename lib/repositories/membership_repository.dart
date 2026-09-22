@@ -21,11 +21,14 @@
 // nothing carries a membership between phones, so the roster this store can
 // write has exactly one person in it. The interface is the shape the
 // propagated roster lands in; the derivation above it already deals eight.
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:cairn_model/cairn_model.dart';
+import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
 import '../storage/drift/app_database.dart';
+import '../storage/remote/shared_facts.dart';
 
 /// The trip as the seam hands it up: who is on it, who started it, what it is
 /// called, and the codes minted for it.
@@ -77,11 +80,17 @@ class TripMembership {
        invites = List.unmodifiable(invites);
 }
 
-/// The trip's roster and its codes, read-only.
+/// The trip's roster and its codes, read-only, plus the one write every
+/// implementation must answer: adopting a trip somebody else started.
 abstract interface class MembershipRepository {
   /// The trip on this phone, or null while none has been started.
   /// Re-emits after every write.
   Stream<TripMembership?> watchMembership();
+
+  /// Makes this phone genuinely part of [tripId] — a trip already admitted
+  /// elsewhere, not one this phone is starting. See
+  /// [MembershipStore.adoptTrip] for the contract.
+  Future<void> adoptTrip(TripId tripId);
 }
 
 /// A trip held in memory: no store, no writes, seeded once at construction.
@@ -97,6 +106,48 @@ class InMemoryMembership implements MembershipRepository {
 
   @override
   Stream<TripMembership?> watchMembership() => Stream.value(_membership);
+
+  @override
+  Future<void> adoptTrip(TripId tripId) => throw UnsupportedError(
+    'InMemoryMembership seeds a party for reading; it holds no store to '
+    'adopt a trip into.',
+  );
+}
+
+/// Refuses [MembershipStore.adoptTrip] when this phone already holds a trip
+/// other than the one it was asked to adopt.
+///
+/// Cairn holds one trip at a time, and silently replacing a trip the person
+/// is already on would destroy local state — their own edits, their photos'
+/// index, their invite codes — that this phone cannot recover from a server
+/// that only ever answers the trip it is asked about.
+class DifferentTripHeldException implements Exception {
+  final TripId held;
+  final TripId requested;
+
+  const DifferentTripHeldException({
+    required this.held,
+    required this.requested,
+  });
+
+  @override
+  String toString() =>
+      'cannot adopt trip $requested: this phone already holds trip $held';
+}
+
+/// Refuses [MembershipStore.adoptTrip] when the server has never heard of
+/// the trip being adopted.
+///
+/// A null answer from [SharedFacts.readTrip] is an ordinary "not yet synced"
+/// for a trip this phone started, but a trip nobody has ever created cannot
+/// be adopted — there is nothing to become part of.
+class UnknownTripException implements Exception {
+  final TripId tripId;
+
+  const UnknownTripException(this.tripId);
+
+  @override
+  String toString() => 'no such trip: $tripId';
 }
 
 /// Mints the code's three numbers. A test pins them so an assertion can name
@@ -119,9 +170,21 @@ class MembershipStore implements MembershipRepository {
     this._db, {
     this.draw = _drawAtRandom,
     this.now = DateTime.now,
-  });
+    SharedFacts? facts,
+  }) : _facts = facts;
+
+  // A named `facts:` parameter reads better at every call site than the
+  // private field name an initializing formal would force
+  // (`MembershipStore(db, facts: server)`), so this stays a plain assignment
+  // rather than `this._facts`.
 
   final AppDatabase _db;
+
+  /// The backend [adoptTrip] reads and pulls from. Optional, and null for
+  /// every caller that only starts or manages a trip this phone already
+  /// holds — the whole rest of this store is local-only and never needed it.
+  /// A [StateError] refuses [adoptTrip] itself if it is called without one.
+  final SharedFacts? _facts;
 
   /// Where a code's randomness comes from. `cairn_model` has none — it turns
   /// three numbers into a code and refuses to invent them — so the draw
@@ -198,6 +261,164 @@ class MembershipStore implements MembershipRepository {
       await mintInvite(by: starter, now: now);
     }
     return tripId;
+  }
+
+  /// Makes this phone genuinely part of [tripId] — a trip this phone was
+  /// just admitted to elsewhere, not one it is starting.
+  ///
+  /// This is the local half of joining only: redeeming an invite code and
+  /// getting [tripId] back is a network call owned above this layer. Given
+  /// that id, this is everything it takes for the trip to actually be this
+  /// phone's — its facts, its roster and its plan — so that the day after
+  /// admission this phone can see the trip, read today, and be on the same
+  /// plan as everyone else.
+  ///
+  /// **Order matters, and every step either commits or leaves nothing.**
+  ///
+  /// 1. A different trip already held refuses loudly
+  /// ([DifferentTripHeldException]) rather than replacing it — Cairn holds
+  /// one trip at a time, and a silent swap would destroy local state (edits,
+  /// a photo index, invite codes) with no way back. Adopting the trip this
+  /// phone already holds is a no-op: the join succeeded once and asking
+  /// again must not re-deal the ping schedule or re-fetch a plan this phone
+  /// already has.
+  /// 2. [SharedFacts.readTrip] is asked before anything is written. A null
+  /// answer means this server has never heard of the trip — a refusal
+  /// ([UnknownTripException]), not an empty trip to adopt anyway.
+  /// 3. The trip's facts and roster are written locally, through
+  /// [AppDatabase.adoptTripFacts] (the one write [startTrip] cannot make: it
+  /// always mints its own id, and this id is the admitted trip's own) and
+  /// the existing [AppDatabase.replaceRoster].
+  /// 4. The plan is pulled: [SharedFacts.syncItinerary] is one round trip
+  /// both ways, and a phone with no plan of its own pulls by pushing
+  /// nothing — an empty day list and [beforeAnySync], which the interface's
+  /// own contract says wins nothing and deletes nothing. What comes back is
+  /// written through [AppDatabase.applyRemoteItinerary].
+  /// 5. Nothing else to do: the ping schedule is derived from
+  /// [TripMembership.tripId] on every read (`ping_schedule.dart`'s
+  /// `pingScheduleProvider`), so once step 3 has written this trip's id as
+  /// this phone's, the joiner's daily minute is already dealt like
+  /// everyone else's — exactly as it is the moment [startTrip] writes an
+  /// id, with nothing further to seed.
+  ///
+  /// **A failure after step 2 leaves no half-adopted trip.** A trip row with
+  /// no plan is worse than a clean refusal — it would show the joiner a trip
+  /// they cannot yet read today on — so any failure writing the roster or
+  /// pulling the plan deletes what this call itself just wrote
+  /// ([AppDatabase.deleteTripWholesale]) before the error reaches the
+  /// caller, leaving this phone exactly as it was before the call and free
+  /// to retry.
+  @override
+  Future<void> adoptTrip(TripId tripId) async {
+    final facts = _facts;
+    if (facts == null) {
+      throw StateError(
+        'MembershipStore.adoptTrip needs a SharedFacts backend; construct '
+        'with facts:',
+      );
+    }
+
+    final existing = await _db.readTripFacts();
+    if (existing != null) {
+      if (existing.tripId == tripId.value) return;
+      throw DifferentTripHeldException(
+        held: TripId(existing.tripId),
+        requested: tripId,
+      );
+    }
+
+    final shared = await facts.readTrip(tripId);
+    if (shared == null) {
+      throw UnknownTripException(tripId);
+    }
+
+    try {
+      await _db.adoptTripFacts(
+        tripId: tripId,
+        startedByMemberId: shared.startedBy.value,
+        name: shared.name,
+        timeZone: shared.timeZone,
+      );
+      await _db.replaceRoster(
+        members: [
+          for (final member in shared.members)
+            (
+              id: member.id.value,
+              displayName: member.displayName,
+              joinedOnDay: 1,
+            ),
+        ],
+      );
+
+      final merged = await facts.syncItinerary(
+        tripId: tripId,
+        planRevisedAt: DateTime.parse(beforeAnySync),
+        days: const [],
+        pocketRevisedAt: DateTime.parse(beforeAnySync),
+        setAside: const [],
+      );
+      await _db.applyRemoteItinerary(
+        days: [
+          for (final day in merged.days)
+            (
+              number: day.number,
+              dateIso: day.dateIso,
+              place: day.place,
+              revisedAtUtcIso: day.revisedAt.toUtc().toIso8601String(),
+            ),
+        ],
+        stops: [
+          for (final day in merged.days)
+            for (final stop in day.stops) _adoptedStop(day.number, stop),
+        ],
+        setAsides: [
+          for (final line in merged.setAside)
+            (
+              position: line.position,
+              sourceLineNumber: line.sourceLineNumber,
+              text: line.text,
+              explanation: line.explanation,
+            ),
+        ],
+        planRevisedAtUtcIso: merged.planRevisedAt.toUtc().toIso8601String(),
+        pocketRevisedAtUtcIso: merged.pocketRevisedAt.toUtc().toIso8601String(),
+        syncedAtUtcIso: now().toUtc().toIso8601String(),
+        pushedDayNumbers: const {},
+      );
+    } on Object {
+      await _db.deleteTripWholesale();
+      rethrow;
+    }
+  }
+
+  /// Rehydrates one incoming stop's kind and place text from its own words —
+  /// the same classification the sync repository runs when a stop's server
+  /// answer carries its area columns, minus the "what did this phone already
+  /// hold" fallback that reconcile needs and an adoption cannot: there is no
+  /// local copy of a trip being adopted for the first time.
+  static ItineraryStopRecord _adoptedStop(int dayNumber, RemoteStop stop) {
+    final classified = ip.classifyStop(
+      raw: stop.text,
+      isAreaHeading: stop.kind == StopKind.areaHeading.name,
+      hasTime: stop.timeIso != null,
+    );
+    final placeText = classified.kind == ip.StopKind.place
+        ? classified.placeText ?? stop.text
+        : classified.placeText;
+    return (
+      dayNumber: dayNumber,
+      position: stop.position,
+      text: stop.text,
+      timeIso: stop.timeIso,
+      kind: StopKind.values.byName(classified.kind.name).name,
+      placeText: placeText,
+      placeCandidatesJson: classified.places.isEmpty
+          ? null
+          : jsonEncode(classified.places),
+      chosenPlace: stop.chosenPlace,
+      areaText: stop.areaText,
+      areaSource: stop.areaSource,
+    );
   }
 
   /// Whether a trip has been started on this phone. One read, no stream —
