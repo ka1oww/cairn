@@ -167,6 +167,9 @@ enum InviteRefusal {
 class InviteRefused extends SharedFactsRefused {
   final InviteRefusal kind;
   const InviteRefused(this.kind, super.reason);
+
+  @override
+  String toString() => 'InviteRefused(${kind.name}): $reason';
 }
 
 /// The object store said no to a PUT — which is the opposite of what a

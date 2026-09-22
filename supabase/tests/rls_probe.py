@@ -47,6 +47,23 @@ def dart_grace_hours():
     src = open(os.path.join(MODEL, "trip_close.dart")).read()
     return int(re.search(r"graceAfterATrip = Duration\(hours: (\d+)\)", src).group(1))
 
+def dart_redeem_refusal_messages():
+    """The sentences the phone matches `redeem_trip_invite`'s refusals on.
+
+    `PostgrestSharedFacts._redeemRefusal` turns the server's message into a
+    typed `InviteRefusal` by reading the sentence the function raised, so the
+    two copies have to agree word for word: reword the SQL and every Dart test
+    still passes while a real phone quietly loses the kind and shows the
+    generic refusal. Read rather than hard-coded, for the same reason the word
+    list and the grace are.
+    """
+    src = open(os.path.join(REPO, "lib", "storage", "remote",
+                            "postgrest_shared_facts.dart")).read()
+    body = re.search(r"static SharedFactsRefused _redeemRefusal\(String reason\) \{(.*?)\n  \}",
+                     src, re.S).group(1)
+    return sorted(set(re.findall(r"reason\.contains\('([^']+)'\)", body)))
+
+
 PHOTO_A = "aaaaaaaa-0000-0000-0000-000000000001"
 PHOTO_B = "bbbbbbbb-0000-0000-0000-000000000001"
 PHOTO_C = "cccccccc-0000-0000-0000-000000000001"
@@ -784,6 +801,14 @@ def main():
     check(list(words) == dart_invite_words(),
           "the server's vocabulary is the phone's, word for word",
           f"server={len(words)} dart={len(dart_invite_words())}")
+
+    definition = db.run(
+        "select pg_get_functiondef('public.redeem_trip_invite(text)'::regprocedure)")[0][0]
+    raised = sorted(set(re.findall(r"raise exception '([^']+)'", definition)))
+    dart = dart_redeem_refusal_messages()
+    check(raised == dart,
+          "every refusal the redeem raises is one the phone can still name",
+          f"server={raised} dart={dart}")
 
     columns = [row[0] for row in db.run(
         "select column_name from information_schema.columns "
