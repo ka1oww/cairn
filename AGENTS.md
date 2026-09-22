@@ -821,9 +821,10 @@ Sharp edges worth knowing before touching this directory again:
   in place rather than re-pushed, per the bullet above;
   `0011`, the photo transport delta, `0013`, which teaches
   `sync_trip_itinerary` those columns, `0015`, the day-gate and tenancy
-  hardening, `0016`, the close derived from the itinerary, and `0017`, which
-  widens `0016`'s closed-trip guard to all four itinerary tables, are written
-  and locally probed but
+  hardening, `0016`, the close derived from the itinerary, `0017`, which
+  widens `0016`'s closed-trip guard to all four itinerary tables, and `0018`,
+  which makes the day-gate date guard durable across deletes and renumbers
+  and caps its hold at the trip's own close, are written and locally probed but
   applied nowhere else — until `0013` runs, an area correction is stripped on
   push and absent on pull, so it never leaves the phone that made it, and
   until `0016` runs hosted still closes every trip on the frozen
@@ -924,7 +925,11 @@ Sharp edges worth knowing before touching this directory again:
   photograph (deleting one still never re-locks its day), and re-dating or
   un-dating a still current or future day holds the gate shut until the old
   date passes (`day_gate_date_guards`) — `supabase/README.md`'s gate section
-  owns the detail.
+  owns the detail. `0018` widens that guard to survive a delete-then-reinsert
+  and a renumber, hangs it off the trip rather than the day row so it
+  outlives the row it describes, and caps its hold at the trip's own derived
+  close so an earlier shift or a corrected typo cannot lock a day shut past
+  the trip's own end.
 - **Every photograph read goes through one seat.** `may_read_trip_photos`
   (`0011`) today answers exactly `is_trip_member`, and both the `photos` SELECT
   policy and `r2-download-url` go through it. It exists so that when leaving
