@@ -1131,7 +1131,17 @@ class AppDatabase extends _$AppDatabase {
     required String? dateIso,
     required String? place,
     required List<
-      (int, String, String?, String?, String?, String?, String?, String?, String?)
+      (
+        int,
+        String,
+        String?,
+        String?,
+        String?,
+        String?,
+        String?,
+        String?,
+        String?,
+      )
     >
     stops,
   }) {

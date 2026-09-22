@@ -202,10 +202,7 @@ void main() {
     await openTheDay(tester);
 
     // The unchosen row is drawn as written and offers no gesture at all.
-    expect(
-      find.text('Flight to Rome, train to Naples'),
-      findsOneWidget,
-    );
+    expect(find.text('Flight to Rome, train to Naples'), findsOneWidget);
     expect(find.byKey(const Key('stop-tap-2')), findsNothing);
 
     // The chosen row taps straight to its choice — never the joined line.

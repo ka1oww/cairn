@@ -598,7 +598,8 @@ void main() {
       expect(find.textContaining('Removed by you'), findsOneWidget);
     });
 
-    testWidgets('a chip can be reworded through its menu', (tester) async {      await launch(tester);
+    testWidgets('a chip can be reworded through its menu', (tester) async {
+      await launch(tester);
       await paste(tester, fiveDaySample);
 
       await tester.tap(find.text('Dotonbori'));

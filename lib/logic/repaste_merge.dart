@@ -318,8 +318,7 @@ RepasteMergeResult mergeRepaste({
   final choiceCarry = <String, String>{
     for (final day in current)
       for (final stop in day.stops)
-        if (stop.chosenPlace != null)
-          _normalize(stop.text): stop.chosenPlace!,
+        if (stop.chosenPlace != null) _normalize(stop.text): stop.chosenPlace!,
   };
 
   final days = <MergedDay>[];
@@ -534,9 +533,7 @@ List<Stop> _convertStops(
       placeCandidates: stop.placeCandidates,
       chosenPlace:
           choiceCarry[_normalize(stop.text)] != null &&
-              stop.placeCandidates.contains(
-                choiceCarry[_normalize(stop.text)],
-              )
+              stop.placeCandidates.contains(choiceCarry[_normalize(stop.text)])
           ? choiceCarry[_normalize(stop.text)]
           : null,
       area: stop.area?.text,

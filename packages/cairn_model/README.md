@@ -265,6 +265,7 @@ one. The mapping is mechanical:
 | `Stop.isStarred` | `Stop.isStarred`, and it is still a getter over `time` |
 | `Stop.kind` (`StopKind`) | `Stop.kind` (`StopKind`) — the same eight values, carried as-is |
 | `Stop.placeText`, `Stop.placeCandidates` | `Stop.placeText`, `Stop.placeCandidates` — the extracted expression and its source-ordered candidates, carried as-is |
+| *(nothing)* | `Stop.chosenPlace` — the traveller's pick among `placeCandidates`, and the one row here with no parser counterpart. It is written verbatim from that list, is null until somebody chooses, and lives *alongside* the parser's fields: `kind` stays `multiPlace` and `placeText`/`placeCandidates` are never rewritten, so a choice cannot be mistaken for something the parser said |
 | `Stop.area` (`AreaHint`, detailed `AreaSource`) | `Stop.area` / `Stop.areaSource` (three-tier `AreaSource`) — not mechanical: the provenance fold is `lib/logic/parsed_areas.dart` in the app, not this package |
 | `Stop.sourceLine`, `ParsedDay.confidence` | stay in the parser |
 | `ParsedDay.place` | `TripDay.place` |

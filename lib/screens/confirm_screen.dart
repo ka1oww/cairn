@@ -1051,9 +1051,7 @@ Future<void> _showStopMenu(
               leading: const Icon(Icons.place_outlined),
               title: const Text('Pick which place'),
               subtitle: stop.chosenPlace == null
-                  ? Text(
-                      '${stop.placeCandidates.length} places on this line',
-                    )
+                  ? Text('${stop.placeCandidates.length} places on this line')
                   : Text('Chosen: ${stop.chosenPlace}'),
               onTap: () => Navigator.of(sheetContext).pop('pick-place'),
             ),

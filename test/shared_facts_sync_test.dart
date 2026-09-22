@@ -2236,38 +2236,41 @@ void main() {
       return id;
     }
 
-    test('a pull that carries no choice leaves the local pick standing', () async {
-      final db = inMemory();
-      addTearDown(db.close);
-      final id = await aTripWithAChoice(db);
-      // Today's server: no chosen-place column, so no key on the answer —
-      // "does not know", never "says none".
-      final server = FakeServer(trip: sharedTrip(id, const []))
-        ..holds = serverHolds([
-          RemoteDay(
-            number: 1,
-            dateIso: '2027-06-14',
-            place: 'Italy',
-            revisedAt: DateTime.utc(2027, 6, 3),
-            stops: const [
-              RemoteStop(
-                position: 0,
-                text: 'Flight to Milan, train to Como',
-                carriesChosenPlace: false,
-              ),
-            ],
-          ),
-        ]);
+    test(
+      'a pull that carries no choice leaves the local pick standing',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await aTripWithAChoice(db);
+        // Today's server: no chosen-place column, so no key on the answer —
+        // "does not know", never "says none".
+        final server = FakeServer(trip: sharedTrip(id, const []))
+          ..holds = serverHolds([
+            RemoteDay(
+              number: 1,
+              dateIso: '2027-06-14',
+              place: 'Italy',
+              revisedAt: DateTime.utc(2027, 6, 3),
+              stops: const [
+                RemoteStop(
+                  position: 0,
+                  text: 'Flight to Milan, train to Como',
+                  carriesChosenPlace: false,
+                ),
+              ],
+            ),
+          ]);
 
-      final outcome = await TripSync(
-        database: db,
-        facts: server,
-        now: duringTheTrip,
-      ).syncNow();
+        final outcome = await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
 
-      expect(outcome.standing, SyncStanding.synced);
-      expect((await db.readItineraryStops()).single.chosenPlace, 'Como');
-    });
+        expect(outcome.standing, SyncStanding.synced);
+        expect((await db.readItineraryStops()).single.chosenPlace, 'Como');
+      },
+    );
 
     test('an answer that carries a choice applies it', () async {
       final db = inMemory();
@@ -2295,16 +2298,23 @@ void main() {
       expect((await db.readItineraryStops()).single.chosenPlace, 'Milan');
     });
 
-    test('the push carries the pick for a server that learns the column', () async {
-      final db = inMemory();
-      addTearDown(db.close);
-      final id = await aTripWithAChoice(db);
-      final server = FakeServer(trip: sharedTrip(id, const []));
+    test(
+      'the push carries the pick for a server that learns the column',
+      () async {
+        final db = inMemory();
+        addTearDown(db.close);
+        final id = await aTripWithAChoice(db);
+        final server = FakeServer(trip: sharedTrip(id, const []));
 
-      await TripSync(database: db, facts: server, now: duringTheTrip).syncNow();
+        await TripSync(
+          database: db,
+          facts: server,
+          now: duringTheTrip,
+        ).syncNow();
 
-      final pushed = server.pushes.single.days.single.stops.single;
-      expect(pushed.chosenPlace, 'Como');
-    });
+        final pushed = server.pushes.single.days.single.stops.single;
+        expect(pushed.chosenPlace, 'Como');
+      },
+    );
   });
 }
