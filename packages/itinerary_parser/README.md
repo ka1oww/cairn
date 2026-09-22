@@ -451,3 +451,43 @@ including written day counts and Maps-tap outcomes, from the repository root
 with `dart run tool/measure_plan_corpus.dart`; it reports handwritten,
 AI-written, and Wanderlog documents separately and never blends wrong-area
 answers with missing-area answers.
+
+### Held-out corpus: a 2026-09-22 measurement repair
+
+`test/area_heldout_test.dart` scores the 06 (London), 07 (Kyoto) and 08
+(Tokyo) held-out fixtures — the corpus that never informed a threshold or a
+fix, and so is the only independent evidence that the parser generalises
+past what it was tuned on. On 2026-09-22 a row-by-row audit found that most
+of 06 and 07's label rows no longer pointed at the venues they name: the
+label files were written against an earlier revision of the two documents,
+and the documents were later edited without renumbering the labels. Some
+rows pointed at a line no stop occupies at all (blank lines, day headers,
+past end of file); others had drifted onto a *different* real stop, which
+silently scored as agreement whenever that neighbouring stop happened to
+share the same day's area. 08's numbering was checked against its document
+and found consistent — it needed no repair.
+
+The repair had two parts, both applied only to 06 and 07 (never to the
+`.txt` documents, and never by changing what a label expects — only where
+it points):
+
+- Each label row was re-anchored, venue by venue, to the line that actually
+  holds the venue its note names.
+- The test itself was hardened so a fixture like this cannot silently pass
+  again. A resolved row is now checked against the source line's own text,
+  not just its line number: it must contain a distinguishing word or phrase
+  from the row's note (see `_noteAnchorsLine`'s doc comment for exactly how,
+  and why a fallback to a single generic word — e.g. the day's own area name,
+  which every stop on that day mentions — would defeat the check). An
+  unresolved or misanchored row now fails the test outright instead of
+  falling through to a trivial "no area assigned" agreement.
+
+With every row now resolving against the venue it actually names, the
+honest per-document figures are **London 88.9%** (8/9 rows correct-or-none-ok)
+and **Kyoto 87.5%** (7/8) — both higher than the previously reported,
+inflated figures (66.7% and 62.5%), because those figures were undercounting
+correct rows that had failed to resolve at all rather than overcounting
+wrong ones. `Floors.minRowsOk`, `maxWrong` and `minRowsOkCount` for both
+documents were ratcheted to these measured figures (not padded above them);
+see the floors comment in `area_heldout_test.dart` for the exact numbers and
+the small floating-point safety margin on London's non-terminating 8/9.
