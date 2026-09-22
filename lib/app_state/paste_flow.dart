@@ -787,17 +787,13 @@ class PasteFlow extends Notifier<PasteFlowState> {
     final day = found.day;
     final index = day.stops.indexWhere((s) => s.id == firstStopId);
     if (index < 0) return const [];
-    final ordered = nearestAreas([
-      for (final stop in day.stops) stop.area,
-    ], index).toList();
-    final seen = ordered.toSet();
-    for (final draftDay in _draft?.days ?? const <_DraftDay>[]) {
-      for (final stop in draftDay.stops) {
-        final area = stop.area;
-        if (area != null && seen.add(area)) ordered.add(area);
-      }
-    }
-    return ordered;
+    return addAreaCandidates(
+      nearest: nearestAreas([for (final stop in day.stops) stop.area], index),
+      planAreas: [
+        for (final draftDay in _draft?.days ?? const <_DraftDay>[])
+          for (final stop in draftDay.stops) stop.area,
+      ],
+    );
   }
 
   // -- editing a stop ------------------------------------------------------

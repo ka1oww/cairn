@@ -31,6 +31,7 @@ import '../app_state/day_view.dart';
 import '../app_state/maps_handoff_flow.dart';
 import '../app_state/trip_providers.dart';
 import 'capture_screen.dart';
+import 'text_prompt.dart';
 
 class DayPage extends ConsumerWidget {
   /// The day at [date] — Today, and any dated day the Trail opens.
@@ -356,6 +357,15 @@ class _StopList extends StatelessWidget {
               area: stop.areaHeadingBefore!,
               dayNumber: dayNumber,
               position: stop.position,
+            )
+          else if (stop.startsAreaRun && stop.area == null)
+            // A run the parser stayed silent on gets the confirm screen's
+            // add-area door instead of a heading — drawn once, at the run's
+            // head, exactly where a heading would stand.
+            _AddArea(
+              dayNumber: dayNumber,
+              position: stop.position,
+              candidates: stop.areaCandidates,
             ),
           _StopRow(stop: stop, isOver: isOver, dayNumber: dayNumber),
         ],
@@ -403,6 +413,57 @@ class _AreaHeading extends ConsumerWidget {
             fontWeight: FontWeight.bold,
             color: theme.colorScheme.onSurfaceVariant,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The day page's half of the confirm screen's `+ Add an area`: drawn once
+/// at the head of a run the parser stayed silent on, in the place a heading
+/// would stand, over the same dialog with the plan's own areas as one-tap
+/// answers. An answer goes through [DayActions.setAreaRun], which writes
+/// it as the person's — so it outranks the parser from then on and rides
+/// re-paste and sync like any other correction.
+class _AddArea extends ConsumerWidget {
+  const _AddArea({
+    required this.dayNumber,
+    required this.position,
+    required this.candidates,
+  });
+
+  final int dayNumber;
+  final int position;
+  final List<String> candidates;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SizedBox(
+      width: double.infinity,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton(
+          key: Key('add-area-$dayNumber-$position'),
+          onPressed: () async {
+            final actions = ref.read(dayActionsProvider);
+            final typed = await askForText(
+              context,
+              title: 'Add an area',
+              hint: 'Ginza',
+              action: 'Add',
+              fieldKey: const Key('add-area-input'),
+              saveKey: const Key('add-area-save'),
+              candidates: candidates,
+              candidateKeyPrefix: 'add-area-choice',
+            );
+            if (typed == null || typed.trim().isEmpty) return;
+            await actions.setAreaRun(
+              dayNumber: dayNumber,
+              position: position,
+              area: typed.trim(),
+            );
+          },
+          child: const Text('+ Add an area'),
         ),
       ),
     );

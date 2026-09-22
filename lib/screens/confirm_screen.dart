@@ -39,6 +39,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_state/paste_flow.dart';
+import 'text_prompt.dart';
 
 class ConfirmScreen extends ConsumerWidget {
   const ConfirmScreen({super.key, required this.review});
@@ -397,7 +398,7 @@ Future<void> _applyAsk(
       final picked = await _pickDate(context, initial);
       if (picked != null) notifier.setDayDate(day.number, picked);
     case AddStop():
-      final text = await _askForText(
+      final text = await askForText(
         context,
         title: 'Add a stop',
         hint: 'What happens that day?',
@@ -631,7 +632,7 @@ class _AreaRow extends ConsumerWidget {
               final candidates = ref
                   .read(pasteFlowProvider.notifier)
                   .areaCandidates(stop.id);
-              final typed = await _askForText(
+              final typed = await askForText(
                 context,
                 title: 'Add an area',
                 hint: 'Ginza',
@@ -684,7 +685,7 @@ class _AreaRow extends ConsumerWidget {
               color: theme.colorScheme.primary,
               tooltip: 'Rename this area',
               onPressed: () async {
-                final typed = await _askForText(
+                final typed = await askForText(
                   context,
                   title: 'Where is this?',
                   hint: 'Ginza',
@@ -848,7 +849,7 @@ class _AddStopChip extends ConsumerWidget {
     return GestureDetector(
       key: Key('add-stop-${day.number}'),
       onTap: () async {
-        final text = await _askForText(
+        final text = await askForText(
           context,
           title: 'Add a stop',
           hint: 'What happens that day?',
@@ -1074,7 +1075,7 @@ Future<void> _showStopMenu(
 
   switch (choice) {
     case 'edit':
-      final text = await _askForText(
+      final text = await askForText(
         context,
         title: 'Edit the words',
         hint: 'What happens here?',
@@ -1525,121 +1526,6 @@ Future<DateTime?> _pickDate(BuildContext context, DateTime? initial) {
     firstDate: DateTime(now.year - 2),
     lastDate: DateTime(now.year + 5),
   );
-}
-
-Future<String?> _askForText(
-  BuildContext context, {
-  required String title,
-  required String hint,
-  required String action,
-  required Key fieldKey,
-  required Key saveKey,
-  String initial = '',
-  // One-tap answers above the field. Only the add-area fallback passes
-  // any today; every other prompt keeps the blank field it has always had.
-  List<String> candidates = const [],
-  String candidateKeyPrefix = 'area-choice',
-}) {
-  return showDialog<String>(
-    context: context,
-    builder: (dialogContext) => _TextPrompt(
-      title: title,
-      hint: hint,
-      action: action,
-      fieldKey: fieldKey,
-      saveKey: saveKey,
-      initial: initial,
-      candidates: candidates,
-      candidateKeyPrefix: candidateKeyPrefix,
-    ),
-  );
-}
-
-/// Stateful for the same reason [_DayEditorSheet] is: the dialog's exit
-/// animation rebuilds this after the pop, and a controller disposed at the
-/// pop is a controller used after disposal.
-class _TextPrompt extends StatefulWidget {
-  const _TextPrompt({
-    required this.title,
-    required this.hint,
-    required this.action,
-    required this.fieldKey,
-    required this.saveKey,
-    required this.initial,
-    this.candidates = const [],
-    this.candidateKeyPrefix = 'area-choice',
-  });
-
-  final String title;
-  final String hint;
-  final String action;
-  final Key fieldKey;
-  final Key saveKey;
-  final String initial;
-  final List<String> candidates;
-  final String candidateKeyPrefix;
-
-  @override
-  State<_TextPrompt> createState() => _TextPromptState();
-}
-
-class _TextPromptState extends State<_TextPrompt> {
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.initial,
-  );
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      // Scrollable because the candidate list is the plan's own areas and a
-      // long plan names many: without it the field below them is clipped
-      // away, and that field is the only way to name somewhere the plan
-      // never does.
-      scrollable: true,
-      title: Text(widget.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // The plan's own areas, nearest first: tapping one answers with
-          // it directly, which is the whole fallback. The field below stays
-          // for somewhere the plan never names.
-          for (final candidate in widget.candidates)
-            TextButton(
-              key: Key('${widget.candidateKeyPrefix}-$candidate'),
-              onPressed: () => Navigator.of(context).pop(candidate),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(candidate),
-              ),
-            ),
-          TextField(
-            key: widget.fieldKey,
-            controller: _controller,
-            autofocus: widget.candidates.isEmpty,
-            decoration: InputDecoration(hintText: widget.hint),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          key: widget.saveKey,
-          onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: Text(widget.action),
-        ),
-      ],
-    );
-  }
 }
 
 /// The paste that wouldn't parse — not a dead end, and never the person's

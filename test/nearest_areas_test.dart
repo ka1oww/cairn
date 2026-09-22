@@ -1,5 +1,6 @@
-// The one nearest-area ordering, shared by the day page's search hints and
-// the confirm screen's add-area fallback.
+// The one nearest-area ordering, and the one add-area candidate ordering,
+// shared by the day page's search hints and both add-area dialogs (the
+// confirm screen's and the day page's).
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:cairn/logic/nearest_areas.dart';
@@ -33,5 +34,32 @@ void main() {
     expect(nearestAreas(['Asakusa'], -1), isEmpty);
     expect(nearestAreas(['Asakusa'], 1), isEmpty);
     expect(nearestAreas(const [], 0), isEmpty);
+  });
+
+  group('addAreaCandidates', () {
+    test('nearest leads, then every other area the plan names, in plan '
+        'order, each once', () {
+      expect(
+        addAreaCandidates(
+          nearest: ['Asakusa', 'Ueno'],
+          planAreas: ['Asakusa', null, 'Ueno', 'Ginza', 'Shibuya'],
+        ),
+        ['Asakusa', 'Ueno', 'Ginza', 'Shibuya'],
+      );
+    });
+
+    test('a silent plan offers only its nearest', () {
+      expect(addAreaCandidates(nearest: ['Yanaka'], planAreas: [null, null]), [
+        'Yanaka',
+      ]);
+    });
+
+    test('nowhere named at all is empty — the blank field, not a crash', () {
+      expect(addAreaCandidates(nearest: const [], planAreas: [null]), isEmpty);
+      expect(
+        addAreaCandidates(nearest: const [], planAreas: const []),
+        isEmpty,
+      );
+    });
   });
 }
