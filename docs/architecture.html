@@ -559,8 +559,10 @@
       timezone power has nowhere to live until a trip clock is stored.</li>
       <li><b>An invite code is real and cannot let anybody in.</b> Minting, rotating, revoking and
       expiry-with-the-trip are built, and saying a code back is answered honestly for every case
-      this phone can see. The adapter can redeem a code now (<code>SharedFacts.redeemInvite</code>) and
-      nothing calls it yet; joining needs a membership that reaches another phone — Phase 2.</li>
+      this phone can see. Both halves of joining are built and neither is wired: the adapter can
+      redeem a code (<code>SharedFacts.redeemInvite</code>) and the local half
+      (<code>MembershipStore.adoptTrip</code>) makes an admitted trip this phone's, but nothing calls
+      either yet; joining still needs a membership that reaches another phone — Phase 2.</li>
       <li><b>The ping is dealt over a real roster that holds one person.</b> The party is the
       trip’s stored members now, and the collision-free promise is exercised against eight through
       a seeded roster in the tests; a phone can still only write its own row.</li>

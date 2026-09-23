@@ -12,15 +12,19 @@
 //   name a concrete implementation.
 // - **The write side is one concrete store.** [MembershipStore] is the
 //   Drift-backed implementation: it answers the read interface *and* owns
-//   starting the trip, renaming it, minting and revoking codes, and deleting
-//   the whole thing. When the Supabase adapter is built it is consumed here.
+//   starting the trip, renaming it, minting and revoking codes, deleting the
+//   whole thing, and — given a [SharedFacts] backend — adopting a trip this
+//   phone was admitted to elsewhere ([MembershipStore.adoptTrip]). That is
+//   the one place the Supabase adapter is consumed here.
 //
-// **What is local-only, and what waits for Phase 2.** Everything here is one
-// phone's record. A code minted here is real, canonical and revocable, and
-// redeeming one is answered honestly (`lib/app_state/join_flow.dart`) — but
-// nothing carries a membership between phones, so the roster this store can
-// write has exactly one person in it. The interface is the shape the
-// propagated roster lands in; the derivation above it already deals eight.
+// **What is local-only, and what still waits.** A code minted here is real,
+// canonical and revocable, and redeeming one is answered honestly
+// (`lib/app_state/join_flow.dart`) — but no code on this phone calls the
+// server to redeem it yet, and `bootstrap.dart` constructs this store with
+// no backend, so `adoptTrip` is reachable from tests alone and the roster a
+// running phone holds still has exactly one person in it. The interface is
+// the shape the propagated roster lands in; the derivation above it already
+// deals eight.
 import 'dart:math';
 
 import 'package:cairn_model/cairn_model.dart';
@@ -169,13 +173,8 @@ class MembershipStore implements MembershipRepository {
     this._db, {
     this.draw = _drawAtRandom,
     this.now = DateTime.now,
-    SharedFacts? facts,
-  }) : _facts = facts;
-
-  // A named `facts:` parameter reads better at every call site than the
-  // private field name an initializing formal would force
-  // (`MembershipStore(db, facts: server)`), so this stays a plain assignment
-  // rather than `this._facts`.
+    this._facts,
+  });
 
   final AppDatabase _db;
 
@@ -344,9 +343,7 @@ class MembershipStore implements MembershipRepository {
       setAside: const [],
     );
 
-    final dayDates = [
-      for (final day in merged.days) (day.number, day.dateIso),
-    ];
+    final dayDates = [for (final day in merged.days) (day.number, day.dateIso)];
 
     await _db.transaction(() async {
       await _db.adoptTripFacts(
