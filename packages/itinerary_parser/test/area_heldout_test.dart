@@ -112,9 +112,10 @@ void main() {
     // figure (London 66.7%, Kyoto 62.5%). With every row now resolving
     // against the venue its note actually names, the honest figures are
     // London 88.9% (8/9 rows correct-or-none-ok, exactly 800/9) and Kyoto
-    // 87.5% (7/8). Both floors below sit fractionally under the exact
-    // measured value only for floating-point safety, not as a padded
-    // margin, and `minRowsOkCount` pins the same floor as an exact integer.
+    // 87.5% (7/8). London's floor sits fractionally under its
+    // non-terminating measured value only for floating-point safety, not as
+    // a padded margin (Kyoto's 7/8 is exact and pinned as such), and
+    // `minRowsOkCount` pins the same floor as an exact integer for both.
     // `maxWrong` is new: neither document had one before, and a `wrong`
     // verdict here is a composed-Maps-query defect, so it gets a ceiling at
     // the count this measurement actually found. London's one failing row
