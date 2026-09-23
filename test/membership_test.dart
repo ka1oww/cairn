@@ -181,6 +181,10 @@ class FakeAdoptFacts implements SharedFacts {
     required String photoId,
     required String? caption,
   }) => throw UnimplementedError('adoptTrip never writes a caption');
+
+  @override
+  Future<TripId> redeemInvite(String code) =>
+      throw UnimplementedError('adoptTrip never redeems an invite');
 }
 
 void main() {
