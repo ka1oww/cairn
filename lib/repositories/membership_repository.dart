@@ -21,14 +21,13 @@
 // nothing carries a membership between phones, so the roster this store can
 // write has exactly one person in it. The interface is the shape the
 // propagated roster lands in; the derivation above it already deals eight.
-import 'dart:convert';
 import 'dart:math';
 
 import 'package:cairn_model/cairn_model.dart';
-import 'package:itinerary_parser/itinerary_parser.dart' as ip;
 
 import '../storage/drift/app_database.dart';
 import '../storage/remote/shared_facts.dart';
+import 'itinerary_sync.dart';
 
 /// The trip as the seam hands it up: who is on it, who started it, what it is
 /// called, and the codes minted for it.
@@ -273,7 +272,13 @@ class MembershipStore implements MembershipRepository {
   /// admission this phone can see the trip, read today, and be on the same
   /// plan as everyone else.
   ///
-  /// **Order matters, and every step either commits or leaves nothing.**
+  /// **Every round trip happens before the first local write, and the local
+  /// writes are one transaction.** That ordering is the whole of the
+  /// "no half-adopted trip" promise, and it is structural rather than
+  /// repaired afterwards: nothing is written until everything the write
+  /// needs is in hand, and a write that fails part-way rolls back to exactly
+  /// what this phone held before the call — an import still sitting in the
+  /// paste box included, which is why no wholesale delete is involved.
   ///
   /// 1. A different trip already held refuses loudly
   /// ([DifferentTripHeldException]) rather than replacing it — Cairn holds
@@ -282,32 +287,31 @@ class MembershipStore implements MembershipRepository {
   /// phone already holds is a no-op: the join succeeded once and asking
   /// again must not re-deal the ping schedule or re-fetch a plan this phone
   /// already has.
-  /// 2. [SharedFacts.readTrip] is asked before anything is written. A null
-  /// answer means this server has never heard of the trip — a refusal
-  /// ([UnknownTripException]), not an empty trip to adopt anyway.
-  /// 3. The trip's facts and roster are written locally, through
-  /// [AppDatabase.adoptTripFacts] (the one write [startTrip] cannot make: it
-  /// always mints its own id, and this id is the admitted trip's own) and
-  /// the existing [AppDatabase.replaceRoster].
-  /// 4. The plan is pulled: [SharedFacts.syncItinerary] is one round trip
+  /// 2. [SharedFacts.readTrip] is asked. A null answer means this server has
+  /// never heard of the trip — a refusal ([UnknownTripException]), not an
+  /// empty trip to adopt anyway.
+  /// 3. The plan is pulled: [SharedFacts.syncItinerary] is one round trip
   /// both ways, and a phone with no plan of its own pulls by pushing
   /// nothing — an empty day list and [beforeAnySync], which the interface's
-  /// own contract says wins nothing and deletes nothing. What comes back is
-  /// written through [AppDatabase.applyRemoteItinerary].
+  /// own contract says wins nothing and deletes nothing.
+  /// 4. In one transaction: the trip's row through
+  /// [AppDatabase.adoptTripFacts] (the one write [startTrip] cannot make: it
+  /// always mints its own id, and this id is the admitted trip's own), the
+  /// plan through [AppDatabase.applyRemoteItinerary], then the roster
+  /// through [AppDatabase.replaceRoster] — last, because which day each
+  /// member joined on is read off the plan just written, by the same
+  /// [TripSync.joinedOnDay] every reconcile uses. The trip's row insert is
+  /// deliberately not idempotent, so a trip started on this phone between
+  /// step 1 and here raises, the transaction rolls back, and the trip that
+  /// won the race keeps its plan. The wire name is mapped through
+  /// [localTripName] on the way in, so a trip nobody has named is not
+  /// adopted *named*.
   /// 5. Nothing else to do: the ping schedule is derived from
   /// [TripMembership.tripId] on every read (`ping_schedule.dart`'s
-  /// `pingScheduleProvider`), so once step 3 has written this trip's id as
+  /// `pingScheduleProvider`), so once step 4 has written this trip's id as
   /// this phone's, the joiner's daily minute is already dealt like
   /// everyone else's — exactly as it is the moment [startTrip] writes an
   /// id, with nothing further to seed.
-  ///
-  /// **A failure after step 2 leaves no half-adopted trip.** A trip row with
-  /// no plan is worse than a clean refusal — it would show the joiner a trip
-  /// they cannot yet read today on — so any failure writing the roster or
-  /// pulling the plan deletes what this call itself just wrote
-  /// ([AppDatabase.deleteTripWholesale]) before the error reaches the
-  /// caller, leaving this phone exactly as it was before the call and free
-  /// to retry.
   @override
   Future<void> adoptTrip(TripId tripId) async {
     final facts = _facts;
@@ -332,30 +336,25 @@ class MembershipStore implements MembershipRepository {
       throw UnknownTripException(tripId);
     }
 
-    try {
+    final merged = await facts.syncItinerary(
+      tripId: tripId,
+      planRevisedAt: DateTime.parse(beforeAnySync),
+      days: const [],
+      pocketRevisedAt: DateTime.parse(beforeAnySync),
+      setAside: const [],
+    );
+
+    final dayDates = [
+      for (final day in merged.days) (day.number, day.dateIso),
+    ];
+
+    await _db.transaction(() async {
       await _db.adoptTripFacts(
         tripId: tripId,
         startedByMemberId: shared.startedBy.value,
-        name: shared.name,
+        name: localTripName(shared.name),
+        nameRevisedAt: shared.nameRevisedAt,
         timeZone: shared.timeZone,
-      );
-      await _db.replaceRoster(
-        members: [
-          for (final member in shared.members)
-            (
-              id: member.id.value,
-              displayName: member.displayName,
-              joinedOnDay: 1,
-            ),
-        ],
-      );
-
-      final merged = await facts.syncItinerary(
-        tripId: tripId,
-        planRevisedAt: DateTime.parse(beforeAnySync),
-        days: const [],
-        pocketRevisedAt: DateTime.parse(beforeAnySync),
-        setAside: const [],
       );
       await _db.applyRemoteItinerary(
         days: [
@@ -385,36 +384,36 @@ class MembershipStore implements MembershipRepository {
         syncedAtUtcIso: now().toUtc().toIso8601String(),
         pushedDayNumbers: const {},
       );
-    } on Object {
-      await _db.deleteTripWholesale();
-      rethrow;
-    }
+      await _db.replaceRoster(
+        members: [
+          for (final member in shared.members)
+            (
+              id: member.id.value,
+              displayName: member.displayName,
+              joinedOnDay: TripSync.joinedOnDay(
+                joinedAt: member.joinedAt,
+                days: dayDates,
+              ),
+            ),
+        ],
+      );
+    });
   }
 
-  /// Rehydrates one incoming stop's kind and place text from its own words —
-  /// the same classification the sync repository runs when a stop's server
-  /// answer carries its area columns, minus the "what did this phone already
-  /// hold" fallback that reconcile needs and an adoption cannot: there is no
-  /// local copy of a trip being adopted for the first time.
+  /// One incoming stop as the store writes it, classified the way every
+  /// incoming stop is ([rehydrateLineMetadata]) — with no "what did this
+  /// phone already hold" fallback, because a trip being adopted for the
+  /// first time is held nowhere yet.
   static ItineraryStopRecord _adoptedStop(int dayNumber, RemoteStop stop) {
-    final classified = ip.classifyStop(
-      raw: stop.text,
-      isAreaHeading: stop.kind == StopKind.areaHeading.name,
-      hasTime: stop.timeIso != null,
-    );
-    final placeText = classified.kind == ip.StopKind.place
-        ? classified.placeText ?? stop.text
-        : classified.placeText;
+    final line = rehydrateLineMetadata(stop, retainedAreaHeading: false);
     return (
       dayNumber: dayNumber,
       position: stop.position,
       text: stop.text,
       timeIso: stop.timeIso,
-      kind: StopKind.values.byName(classified.kind.name).name,
-      placeText: placeText,
-      placeCandidatesJson: classified.places.isEmpty
-          ? null
-          : jsonEncode(classified.places),
+      kind: line.kind,
+      placeText: line.placeText,
+      placeCandidatesJson: line.placeCandidatesJson,
       chosenPlace: stop.chosenPlace,
       areaText: stop.areaText,
       areaSource: stop.areaSource,

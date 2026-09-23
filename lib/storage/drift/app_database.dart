@@ -1565,10 +1565,18 @@ class AppDatabase extends _$AppDatabase {
   /// call against an occupied row raise, rather than silently upserting: the
   /// caller ([MembershipStore.adoptTrip]) has already decided this phone
   /// holds no trip before calling, and a second write here succeeding would
-  /// hide the very race that check exists to catch.
+  /// hide the very race that check exists to catch. The raise is the
+  /// caller's to run inside a transaction, so that a trip started between
+  /// its check and this insert is the one that survives.
+  ///
+  /// [nameRevisedAt] is the server's clock for the name, not this phone's:
+  /// the name's last-write-wins comparison ([applySharedTripName]) starts
+  /// from where the server already is, so the next reconcile neither
+  /// re-offers the server its own name nor loses a rename made in between.
   Future<void> adoptTripFacts({
     required TripId tripId,
     required String startedByMemberId,
+    required DateTime nameRevisedAt,
     String? name,
     String? timeZone,
   }) {
@@ -1578,6 +1586,7 @@ class AppDatabase extends _$AppDatabase {
         tripId: tripId.value,
         startedByMemberId: startedByMemberId,
         name: Value(name),
+        nameRevisedAtUtcIso: Value(nameRevisedAt.toUtc().toIso8601String()),
         timeZone: Value(timeZone),
       ),
     );

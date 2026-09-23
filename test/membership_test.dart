@@ -26,6 +26,8 @@ import 'package:trip_moments/trip_moments.dart' as tm;
 import 'package:cairn/app_state/ping_schedule.dart';
 import 'package:cairn/app_state/trip_providers.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/repositories/itinerary_sync.dart'
+    show unnamedTripPlaceholder;
 import 'package:cairn/repositories/membership_repository.dart';
 import 'package:cairn/repositories/photo_repository.dart';
 import 'package:cairn/storage/drift/app_database.dart';
@@ -110,6 +112,10 @@ class FakeAdoptFacts implements SharedFacts {
   /// does, for the "no half-adopted trip" test.
   Object? failSyncItinerary;
 
+  /// Runs while [readTrip] is in flight — the window in which something
+  /// else on this phone can start a trip of its own.
+  Future<void> Function()? duringReadTrip;
+
   var readTrips = 0;
   var syncs = 0;
 
@@ -119,6 +125,7 @@ class FakeAdoptFacts implements SharedFacts {
   @override
   Future<RemoteTrip?> readTrip(TripId tripId) async {
     readTrips++;
+    await duringReadTrip?.call();
     return trip;
   }
 
@@ -593,6 +600,13 @@ void main() {
           revisedAt: DateTime.utc(2027, 6, 1),
           stops: const [RemoteStop(position: 0, text: 'Senso-ji')],
         ),
+        RemoteDay(
+          number: 2,
+          dateIso: '2027-06-15',
+          place: 'Kyoto',
+          revisedAt: DateTime.utc(2027, 6, 1),
+          stops: const [RemoteStop(position: 0, text: 'Fushimi Inari')],
+        ),
       ],
     );
 
@@ -606,6 +620,10 @@ void main() {
       expect(trip, isNotNull);
       expect(trip!.tripId, aTrip.value);
       expect(trip.name, 'Japan, June');
+      expect(
+        trip.nameRevisedAtUtcIso,
+        DateTime.utc(2027, 5, 1).toIso8601String(),
+      );
       expect(trip.timeZone, 'Asia/Tokyo');
       expect(trip.startedByMemberId, jonas.value);
 
@@ -613,12 +631,58 @@ void main() {
       expect(members.map((m) => m.id), containsAll([jonas.value, ada.value]));
 
       final days = await db.readItineraryDays();
-      expect(days, hasLength(1));
-      expect(days.single.place, 'Tokyo');
+      expect(days, hasLength(2));
+      expect(days.first.place, 'Tokyo');
 
       final stops = await db.readItineraryStops();
-      expect(stops, hasLength(1));
-      expect(stops.single.stopText, 'Senso-ji');
+      expect(stops, hasLength(2));
+      expect(stops.first.stopText, 'Senso-ji');
+      expect(stops.first.kind, isNotNull);
+    });
+
+    test('each member joins on the day the plan says, not day 1', () async {
+      final trip = aSharedTrip();
+      final late = RemoteTrip(
+        id: trip.id,
+        name: trip.name,
+        nameRevisedAt: trip.nameRevisedAt,
+        startedBy: trip.startedBy,
+        timeZone: trip.timeZone,
+        members: [
+          trip.members.first,
+          RemoteMember(
+            id: ada,
+            displayName: 'Ada',
+            joinedAt: DateTime.utc(2027, 6, 15, 9),
+          ),
+        ],
+      );
+      final facts = FakeAdoptFacts(trip: late)..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+
+      await store.adoptTrip(aTrip);
+
+      final byId = {for (final m in await db.readTripMembers()) m.id: m};
+      expect(byId[jonas.value]!.joinedOnDay, 1);
+      expect(byId[ada.value]!.joinedOnDay, 2);
+    });
+
+    test('the wire placeholder is not adopted as a name', () async {
+      final trip = aSharedTrip();
+      final unnamed = RemoteTrip(
+        id: trip.id,
+        name: unnamedTripPlaceholder,
+        nameRevisedAt: DateTime.utc(1970),
+        startedBy: trip.startedBy,
+        timeZone: trip.timeZone,
+        members: trip.members,
+      );
+      final facts = FakeAdoptFacts(trip: unnamed)..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+
+      await store.adoptTrip(aTrip);
+
+      expect((await db.readTripFacts())!.name, isNull);
     });
 
     test('adopting the trip this phone already holds is a no-op', () async {
@@ -668,6 +732,7 @@ void main() {
     test(
       'a mid-way failure pulling the plan leaves no half-adopted trip',
       () async {
+        await db.writePlanDraft('Day 1 - somewhere');
         final facts = FakeAdoptFacts(trip: aSharedTrip())
           ..failSyncItinerary = Exception('the train went into a tunnel');
         final store = MembershipStore(db, facts: facts);
@@ -679,8 +744,62 @@ void main() {
         // read today on.
         expect(await db.readTripFacts(), isNull);
         expect(await db.readTripMembers(), isEmpty);
+        // And nothing that was there before is gone: the import sitting in
+        // the paste box is not the adoption's to discard.
+        expect(await db.readPlanDraft(), 'Day 1 - somewhere');
       },
     );
+
+    test('a failed local write rolls the whole adoption back', () async {
+      final trip = aSharedTrip();
+      final twice = RemoteTrip(
+        id: trip.id,
+        name: trip.name,
+        nameRevisedAt: trip.nameRevisedAt,
+        startedBy: trip.startedBy,
+        timeZone: trip.timeZone,
+        members: [trip.members.first, trip.members.first],
+      );
+      await db.writePlanDraft('Day 1 - somewhere');
+      final facts = FakeAdoptFacts(trip: twice)..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+
+      // The roster is the last write and the duplicate row refuses it; the
+      // trip row and the plan written before it must not outlive that.
+      await expectLater(() => store.adoptTrip(aTrip), throwsA(anything));
+
+      expect(await db.readTripFacts(), isNull);
+      expect(await db.readTripMembers(), isEmpty);
+      expect(await db.readItineraryDays(), isEmpty);
+      expect(await db.readPlanDraft(), 'Day 1 - somewhere');
+    });
+
+    test('a trip started mid-call is the one that survives', () async {
+      final facts = FakeAdoptFacts(trip: aSharedTrip())..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+      late final TripId started;
+      facts.duringReadTrip = () async {
+        started = await db.startTripIfAbsent(
+          starterId: 'me',
+          starterDisplayName: 'Me',
+        );
+        await db.replaceItinerary(
+          days: const [(number: 1, dateIso: '2027-07-01', place: 'Lisbon')],
+          stops: const [],
+          setAsides: const [],
+          nowUtcIso: '2027-06-01T00:00:00.000Z',
+        );
+      };
+
+      await expectLater(() => store.adoptTrip(aTrip), throwsA(anything));
+
+      final trip = await db.readTripFacts();
+      expect(trip!.tripId, started.value);
+      expect(trip.tripId, isNot(aTrip.value));
+      final days = await db.readItineraryDays();
+      expect(days.single.place, 'Lisbon');
+      expect((await db.readTripMembers()).map((m) => m.id), ['me']);
+    });
 
     test(
       'calling adoptTrip with no backend configured refuses loudly',

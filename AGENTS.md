@@ -269,16 +269,27 @@ import what is written there, not here.
   **`MembershipStore.adoptTrip(TripId)` is `startTrip`'s
   counterpart for the other door onto a trip**: given an id already admitted
   elsewhere (redeeming an invite code is a network call this store does not
-  make), it writes that trip's facts and roster locally through the additive
-  `AppDatabase.adoptTripFacts` (an insert carrying the caller's id, never
-  minting one, kept separate from `startTripIfAbsent` on purpose) and pulls
-  its plan with `SharedFacts.syncItinerary` pushing nothing. It refuses a
-  different trip already held (`DifferentTripHeldException`) rather than
-  replacing it, treats a null `SharedFacts.readTrip` answer as a refusal
-  (`UnknownTripException`) rather than an empty trip, and is a no-op on the
-  trip already held rather than re-dealing anything. Any failure after the
-  local writes begin rolls back through `deleteTripWholesale` so a
-  half-adopted trip — a row with no plan — never survives to be read. It needs a
+  make), it reads the trip's row and pulls its plan with
+  `SharedFacts.syncItinerary` pushing nothing, **both before the first local
+  write**, then writes the trip's facts, plan and roster in one Drift
+  transaction: the additive `AppDatabase.adoptTripFacts` (an insert carrying
+  the caller's id and the server's name clock, never minting one, kept
+  separate from `startTripIfAbsent` on purpose, and deliberately not
+  idempotent so a trip started on this phone mid-call raises and the
+  transaction — not the race's winner — is what rolls back), then
+  `applyRemoteItinerary`, then `replaceRoster` last so each member's
+  `joinedOnDay` is `TripSync.joinedOnDay` over the plan just written. The
+  wire name goes through `localTripName` and every stop through
+  `rehydrateLineMetadata` (both `itinerary_sync.dart`'s, shared with the
+  reconcile — a second copy of either is the thing to refuse in review). It
+  refuses a different trip already held (`DifferentTripHeldException`)
+  rather than replacing it, treats a null `SharedFacts.readTrip` answer as a
+  refusal (`UnknownTripException`) rather than an empty trip, and is a no-op
+  on the trip already held rather than re-dealing anything. A failure at any
+  point leaves the phone exactly as it was — a pending import in
+  `plan_drafts` included, which is why the rollback is the transaction's own
+  and never `deleteTripWholesale` — so a half-adopted trip, a row with no
+  plan, never survives to be read. It needs a
   `SharedFacts` backend passed as `MembershipStore(db, facts: ...)`; every
   existing caller omits it and gets a store that can start and manage a trip
   but refuses `adoptTrip` with a `StateError`, so wiring a real backend into

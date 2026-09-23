@@ -173,9 +173,20 @@ typedef TripRowSource = Future<RemoteTripDraft?> Function(PendingTripRow);
 /// here so the two cannot drift), which is why publishing it invents nothing:
 /// the app was already saying it out loud.
 ///
-/// [TripSync._reconcileName] maps it back to null, so a trip nobody has named
-/// does not come back from the server *named*.
+/// [localTripName] maps it back to null, so a trip nobody has named does not
+/// come back from the server *named*.
 const unnamedTripPlaceholder = 'This trip';
+
+/// The name this phone stores for a name the wire carried: the placeholder
+/// is not a name and never becomes one, whichever door the trip arrived by.
+///
+/// Written once and asked twice — by [TripSync._reconcileName] when the
+/// server's name wins, and by `MembershipStore.adoptTrip` when a trip is
+/// first written from the server's row — because a second spelling of this
+/// mapping is exactly how the placeholder leaks into a rename box as a name
+/// the person typed.
+String? localTripName(String? wireName) =>
+    wireName == unnamedTripPlaceholder ? null : wireName;
 
 /// Keeps this phone's copy of the trip's *shared facts* — the itinerary and
 /// the roster — in step with the server's.
@@ -441,7 +452,7 @@ class TripSync {
             winner.name != localCargo);
     if (serverWins) {
       await database.applySharedTripName(
-        name: winner.name == unnamedTripPlaceholder ? null : winner.name,
+        name: localTripName(winner.name),
         revisedAt: winner.revisedAt,
       );
     }
@@ -599,7 +610,7 @@ class TripSync {
     final lineMetadata = {
       for (final day in merged.days)
         for (final stop in day.stops)
-          (day.number, stop.position): _rehydrateLineMetadata(
+          (day.number, stop.position): rehydrateLineMetadata(
             stop,
             retainedAreaHeading:
                 !stop.carriesAreas &&
@@ -695,26 +706,6 @@ class TripSync {
       SyncStanding.synced,
       days: merged.days.length,
       members: shared?.members.length ?? 0,
-    );
-  }
-
-  static ({String kind, String? placeText, String? placeCandidatesJson})
-  _rehydrateLineMetadata(RemoteStop stop, {required bool retainedAreaHeading}) {
-    final classified = ip.classifyStop(
-      raw: stop.text,
-      isAreaHeading:
-          retainedAreaHeading || stop.kind == StopKind.areaHeading.name,
-      hasTime: stop.timeIso != null,
-    );
-    final placeText = classified.kind == ip.StopKind.place
-        ? classified.placeText ?? stop.text
-        : classified.placeText;
-    return (
-      kind: StopKind.values.byName(classified.kind.name).name,
-      placeText: placeText,
-      placeCandidatesJson: classified.places.isEmpty
-          ? null
-          : jsonEncode(classified.places),
     );
   }
 
@@ -879,4 +870,32 @@ class TripSync {
     }
     return answer;
   }
+}
+
+/// The stop's kind, place text and place candidates, read off its own words.
+///
+/// The one classification every incoming stop gets on its way into the
+/// store, whether it arrives by a reconcile ([TripSync]) or by an adoption
+/// (`MembershipStore.adoptTrip`); a second copy of it would drift the first
+/// time one of them changed. [retainedAreaHeading] is the reconcile's "what
+/// did this phone already hold" fallback for a server that carries no area
+/// columns; an adoption holds nothing yet and passes false.
+({String kind, String? placeText, String? placeCandidatesJson})
+rehydrateLineMetadata(RemoteStop stop, {required bool retainedAreaHeading}) {
+  final classified = ip.classifyStop(
+    raw: stop.text,
+    isAreaHeading:
+        retainedAreaHeading || stop.kind == StopKind.areaHeading.name,
+    hasTime: stop.timeIso != null,
+  );
+  final placeText = classified.kind == ip.StopKind.place
+      ? classified.placeText ?? stop.text
+      : classified.placeText;
+  return (
+    kind: StopKind.values.byName(classified.kind.name).name,
+    placeText: placeText,
+    placeCandidatesJson: classified.places.isEmpty
+        ? null
+        : jsonEncode(classified.places),
+  );
 }
