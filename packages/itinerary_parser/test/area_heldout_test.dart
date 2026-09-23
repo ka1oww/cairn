@@ -87,43 +87,21 @@ bool _noteAnchorsLine(String note, String lineText) {
 
 void main() {
   group('area held-out validation', () {
-    // 06 and 07 are AI-written docs whose labels were re-anchored by hand
-    // (see git history). The documents themselves never changed — both .txt
-    // files are byte-identical to the commit that created them — so the
-    // labels were mis-numbered from the outset, never validated against the
-    // document, and the error compounds by one row per day boundary in a
-    // way consistent with an extra line (such as the blank line after each
-    // day header) being counted once too many per day. The text-anchor
-    // guard below is the check that a resolved line names the note's venue,
-    // not just any line; it applies to these two because they are the ones
-    // the mis-numbering actually hit. 08 is a captain-supplied document
-    // whose numbering was verified consistent with its labels and needed no
-    // repair.
+    // The docs whose resolved rows are also checked against the note's own
+    // venue text: 06 and 07 are the two whose labels were once mis-numbered
+    // and had to be re-anchored, while 08's numbering was verified against
+    // its document and needed no repair — the README's "Held-out corpus"
+    // section owns the full account.
     final textAnchoredDocs = {'06-london-heldout', '07-kyoto-heldout'};
 
     // Held-out docs, keyed by fixture stem: (label, floors).
     //
-    // London and Kyoto's floors were ratcheted on 2026-09-22 after the label
-    // rows were re-anchored to the lines that actually hold the venues they
-    // name (the original numbers were off from the outset, one row further
-    // per day; see the comment above) and the text-anchor guard was added.
-    // Before the repair, most rows silently failed to resolve at all and
-    // fell through to a trivial none-ok agreement, inflating the reported
-    // figure (London 66.7%, Kyoto 62.5%). With every row now resolving
-    // against the venue its note actually names, the honest figures are
-    // London 88.9% (8/9 rows correct-or-none-ok, exactly 800/9) and Kyoto
-    // 87.5% (7/8). London's floor sits fractionally under its
-    // non-terminating measured value only for floating-point safety, not as
-    // a padded margin (Kyoto's 7/8 is exact and pinned as such), and
-    // `minRowsOkCount` pins the same floor as an exact integer for both.
-    // `maxWrong` is new: neither document had one before, and a `wrong`
-    // verdict here is a composed-Maps-query defect, so it gets a ceiling at
-    // the count this measurement actually found. London's one failing row
-    // is a miss (The Clove Hitch near Borough, no area assigned), so its
-    // ceiling is 0. Kyoto's one failing row is a wrong assignment — Gion
-    // Corner (near Gion) is assigned higashiyama where the label expects
-    // gion — so its ceiling is 1, and that row is a known defect the floor
-    // records rather than hides.
+    // London and Kyoto are pinned at the figures measured on 2026-09-22 once
+    // their labels were re-anchored: London 8/9 rows correct-or-none-ok
+    // (88.9%, floor 88.8 for floating-point safety only) with 0 wrong, Kyoto
+    // 7/8 (87.5%, exact) with 1 wrong. Each is the measured value and not a
+    // padded one; the README's "Held-out corpus" section owns why they sit
+    // there and which rows are the ones that do not pass.
     final docs = {
       '06-london-heldout': (
         'London',

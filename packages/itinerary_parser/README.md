@@ -502,7 +502,12 @@ is assigned `higashiyama`, the day's heading area, where the label expects
 `gion` — a composed-Maps-query defect on the very corpus meant to show the
 parser generalises, and one the floors record rather than hide.
 `Floors.minRowsOk`, `maxWrong` and `minRowsOkCount` for both documents were
-ratcheted to these measured figures (not padded above them): `maxWrong` is 0
-for London and 1 for Kyoto, exactly that Gion Corner row. See the floors
-comment in `area_heldout_test.dart` for the exact numbers and the small
-floating-point safety margin on London's non-terminating 8/9.
+ratcheted to these measured figures (not padded above them), and the test's
+`docs` table is where the values live. `minRowsOkCount` pins the same floor
+as an exact integer (8 for London, 7 for Kyoto), which is why
+`minRowsOk` may sit fractionally under London's non-terminating 8/9 (88.8
+against 88.9) for floating-point safety alone; Kyoto's 7/8 is exact and
+pinned as such. `maxWrong` is new to both documents: a `wrong` verdict on
+this corpus is a composed-Maps-query defect, so it gets a ceiling at the
+count this measurement actually found — 0 for London, whose one failing row
+is a miss, and 1 for Kyoto, exactly that Gion Corner row.
