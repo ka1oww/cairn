@@ -147,6 +147,9 @@ class FakeServer implements SharedFacts {
     required String photoId,
     required String? caption,
   }) => throw UnimplementedError();
+
+  @override
+  Future<TripId> redeemInvite(String code) => throw UnimplementedError();
 }
 
 void main() {

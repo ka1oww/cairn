@@ -106,6 +106,13 @@ the membership row, and increments the use counter, all inside one
 elevated-privilege call whose surface area is exactly one text argument.
 Text that is not a code and a code nobody minted are refused with the same
 sentence, so a guesser is never told which half of their guess was wrong.
+The phone's half is `PostgrestSharedFacts.redeemInvite`
+(`lib/storage/remote/postgrest_shared_facts.dart`), which matches the four
+sentences this function raises **verbatim** to type its refusal, so those
+sentences are a second copy in the same sense the word list is:
+`tests/rls_probe.py` reads them out of the Dart and compares them with what
+the function raises. Reword one here alone and the phone quietly falls back to
+the generic refusal.
 Redeeming a code for a trip you are already on is a no-op and spends no use,
 so a re-tapped deep link cannot burn a limited code down.
 
@@ -1079,7 +1086,8 @@ not an artefact of one machine's setup.
   departure and account deletion, invite enumeration, timezone validation, and
   `updated_at` bumping on edit — plus the three-word invite grammar: the
   server's vocabulary compared word for word against the Dart the phone uses,
-  order- and spelling-forgiving redemption, a code refused once its trip has
+  the redeem's four refusal sentences compared against the Dart that types
+  them, order- and spelling-forgiving redemption, a code refused once its trip has
   closed, and one still admitting people inside the grace; the close itself —
   a late photograph still landing inside the grace, a member of a closed trip
   refused, that person's hold on their own photograph surviving it, a photo

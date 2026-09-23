@@ -223,6 +223,10 @@ class FakePool implements SharedFacts {
     required DateTime pocketRevisedAt,
     required List<RemoteSetAside> setAside,
   }) => throw UnimplementedError('PhotoSync never syncs the itinerary');
+
+  @override
+  Future<TripId> redeemInvite(String code) =>
+      throw UnimplementedError('PhotoSync never redeems an invite');
 }
 
 /// A die that always lands the same way, so a backoff assertion can name an

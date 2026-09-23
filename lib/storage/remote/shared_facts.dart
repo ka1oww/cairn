@@ -143,6 +143,35 @@ class SharedFactsRefused implements Exception {
   String toString() => 'SharedFactsRefused: $reason';
 }
 
+/// Why the server refused a redeem, in its own four words.
+///
+/// `not found` deliberately covers both "this text is not a code" and "no
+/// such code" — telling them apart would tell a guesser which half of a
+/// guess was wrong (`supabase/migrations/0005_trip_invites.sql`).
+enum InviteRefusal {
+  /// `auth.uid()` was null: no session reached the function.
+  notAuthenticated,
+
+  /// Text that is not a code, or a code nobody minted. One outcome on purpose.
+  codeNotFound,
+
+  /// The trip closed past its grace; the code died with it.
+  codeExpired,
+
+  /// The code hit its use limit.
+  codeUsedUp,
+}
+
+/// A [SharedFactsRefused] whose reason is one of [InviteRefusal]'s four,
+/// so the caller can act on the kind rather than matching a message string.
+class InviteRefused extends SharedFactsRefused {
+  final InviteRefusal kind;
+  const InviteRefused(this.kind, super.reason);
+
+  @override
+  String toString() => 'InviteRefused(${kind.name}): $reason';
+}
+
 /// The object store said no to a PUT — which is the opposite of what a
 /// refusal means everywhere else, and why this is its own type rather than a
 /// [SharedFactsRefused].
@@ -562,4 +591,31 @@ abstract interface class SharedFacts {
     required String photoId,
     required String? caption,
   });
+
+  /// Redeems a spoken invite code and returns the trip it opens.
+  ///
+  /// Wraps `redeem_trip_invite` (`supabase/migrations/0005_trip_invites.sql`),
+  /// which is `security definer` and does all the judging server-side: it
+  /// forgives spelling through `invite_code_key`, refuses a closed trip past
+  /// its grace, refuses a used-up code, and inserts the caller into
+  /// `trip_members`. Returns the trip's id.
+  ///
+  /// A re-redeem by someone already on the trip succeeds rather than failing
+  /// — the insert is `on conflict do nothing` and does not burn a use — so
+  /// this is safe to call again after a partial failure.
+  ///
+  /// Refusals come back as [InviteRefused], a [SharedFactsRefused] carrying
+  /// one of [InviteRefusal]'s four kinds:
+  /// * [InviteRefusal.notAuthenticated] — no session reached the function.
+  /// * [InviteRefusal.codeNotFound] — text that is not a code, or a code
+  ///   nobody minted. The server merges those two on purpose so a guesser
+  ///   cannot tell which half of a guess was wrong; the client must not
+  ///   split them either.
+  /// * [InviteRefusal.codeExpired] — the trip closed; the code died with it.
+  /// * [InviteRefusal.codeUsedUp] — the code hit its use limit.
+  ///
+  /// A transport failure — no connection, a timeout, a 5xx — is still
+  /// [SharedFactsUnavailable], never an [InviteRefused]: the caller may
+  /// retry the former and must not the latter.
+  Future<TripId> redeemInvite(String code);
 }

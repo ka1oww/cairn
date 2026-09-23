@@ -224,6 +224,10 @@ class FakeServer implements SharedFacts {
     required String photoId,
     required String? caption,
   }) => throw UnimplementedError('TripSync never writes a caption');
+
+  @override
+  Future<TripId> redeemInvite(String code) =>
+      throw UnimplementedError('TripSync never redeems an invite');
 }
 
 /// The plan as it arrives back from the server, spelled the way the RPC

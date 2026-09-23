@@ -464,6 +464,179 @@ void main() {
     });
   });
 
+  group('redeeming a spoken invite code', () {
+    late http.Request seen;
+
+    PostgrestSharedFacts answering(int status, Object? body) {
+      return facts(
+        MockClient((request) async {
+          seen = request;
+          return http.Response(
+            body is String ? body : jsonEncode(body),
+            status,
+          );
+        }),
+      );
+    }
+
+    test('goes to the redeem RPC with the code said back as typed', () async {
+      // PostgREST answers a `uuid` return as a JSON string, so the body is
+      // the quoted uuid; `answering` takes Strings as already-encoded.
+      final sync = answering(200, jsonEncode(trip.value));
+
+      final opened = await sync.redeemInvite('Oslo Blue Fox 7');
+
+      expect(seen.method, 'POST');
+      expect(seen.url.path, '/rest/v1/rpc/redeem_trip_invite');
+      expect(seen.headers['apikey'], 'publishable-anon-key');
+      expect(seen.headers['Authorization'], 'Bearer jwt-for-anna');
+      // The function takes the code as it was *said*; the canonical spelling
+      // is derived server-side by `invite_code_key`, so the phone must not
+      // rewrite the words first.
+      expect(jsonDecode(seen.body), {'p_code': 'Oslo Blue Fox 7'});
+      expect(opened, trip);
+    });
+
+    test('a blank answer is a refusal, never a crash', () async {
+      final sync = answering(200, 42);
+
+      await expectLater(
+        sync.redeemInvite('Oslo Blue Fox 7'),
+        throwsA(isA<SharedFactsRefused>()),
+        reason:
+            "a uuid comes back as a JSON string; anything else means the "
+            'server answered in a shape this phone does not recognise',
+      );
+    });
+
+    for (final malformed in ['', 'not-a-uuid', trip.value.toUpperCase()]) {
+      test(
+        "a string that is not a canonical uuid ('$malformed') is a refusal",
+        () async {
+          final sync = answering(200, jsonEncode(malformed));
+
+          await expectLater(
+            sync.redeemInvite('Oslo Blue Fox 7'),
+            throwsA(isA<SharedFactsRefused>()),
+            reason:
+                'the joined id is later written to trips.id and handed to '
+                "the outbox's UUID_RE; a shape they would refuse must be "
+                'refused here, not stored',
+          );
+        },
+      );
+    }
+
+    final verdicts = <String, (int, String, InviteRefusal)>{
+      'not authenticated': (
+        403,
+        'not authenticated',
+        InviteRefusal.notAuthenticated,
+      ),
+      'invite code not found': (
+        400,
+        'invite code not found',
+        InviteRefusal.codeNotFound,
+      ),
+      'invite code has expired': (
+        400,
+        'invite code has expired',
+        InviteRefusal.codeExpired,
+      ),
+      'invite code has been used up': (
+        400,
+        'invite code has been used up',
+        InviteRefusal.codeUsedUp,
+      ),
+    };
+
+    for (final entry in verdicts.entries) {
+      test('"${entry.key}" is a typed ${entry.value.$3.name}', () async {
+        final (status, message, kind) = entry.value;
+        final sync = answering(status, {'message': message});
+
+        await expectLater(
+          sync.redeemInvite('Oslo Blue Fox 7'),
+          throwsA(isA<InviteRefused>().having((e) => e.kind, 'kind', kind)),
+          reason: 'the caller acts on the kind, never on a message string',
+        );
+      });
+    }
+
+    test('a refusal keeps the server sentence for a log', () async {
+      final sync = answering(400, {'message': 'invite code not found'});
+
+      await expectLater(
+        sync.redeemInvite('Oslo Blue Fox 7'),
+        throwsA(
+          isA<InviteRefused>().having(
+            (e) => e.reason,
+            'reason',
+            contains('invite code not found'),
+          ),
+        ),
+      );
+    });
+
+    test('a 5xx is transport, not a refusal', () async {
+      final sync = answering(503, {'message': 'Service Unavailable'});
+
+      await expectLater(
+        sync.redeemInvite('Oslo Blue Fox 7'),
+        throwsA(isA<SharedFactsUnavailable>()),
+        reason: 'the caller may retry the former and must never the latter',
+      );
+    });
+
+    test('no route to the host is transport too', () async {
+      final sync = facts(
+        MockClient((_) async => throw const SocketException('no route')),
+      );
+
+      await expectLater(
+        sync.redeemInvite('Oslo Blue Fox 7'),
+        throwsA(isA<SharedFactsUnavailable>()),
+      );
+    });
+
+    test(
+      'an answer that is not one of the four stays a plain refusal',
+      () async {
+        // A gateway rewrite or schema drift: still a refusal, just not one we
+        // can name under InviteRefusal.
+        final sync = answering(400, {'message': 'some other verdict'});
+
+        await expectLater(
+          sync.redeemInvite('Oslo Blue Fox 7'),
+          throwsA(
+            isA<SharedFactsRefused>().having(
+              (e) => e is InviteRefused,
+              'is typed',
+              isFalse,
+            ),
+          ),
+        );
+      },
+    );
+
+    test('with nobody signed in nothing is sent', () async {
+      var calls = 0;
+      final sync = facts(
+        MockClient((_) async {
+          calls++;
+          return http.Response('{}', 200);
+        }),
+        sessions: const NobodySignedIn(),
+      );
+
+      await expectLater(
+        sync.redeemInvite('Oslo Blue Fox 7'),
+        throwsA(isA<SharedFactsUnavailable>()),
+      );
+      expect(calls, 0);
+    });
+  });
+
   group('later and no are not the same answer', () {
     Future<void> answering(int status, Matcher matcher) async {
       final sync = facts(
