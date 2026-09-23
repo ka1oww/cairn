@@ -614,6 +614,36 @@ def main():
         "where trip_id = :t and day_number = 23", t=japan)[0][0] == 0,
           "while the number it moved to records no guard of its own")
 
+    # The third way a row can stop claiming its (trip, day number): moving it
+    # to another trip. 0010's UPDATE policy admits any trip the caller belongs
+    # to on both sides, so a member of two trips could otherwise vacate a
+    # future day of one into the other and re-insert under the vacated key.
+    # The app never moves a day between trips, so the write is refused flat.
+    print("\n== a day cannot be moved to another trip, even one you also belong to ==")
+    elsewhere = str(a.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Elsewhere', :u, 'Asia/Tokyo', current_date, current_date + 5)
+           returning id""", u=alice)[0][0])
+    a.run("insert into public.trip_members (trip_id, user_id) values (:t, :u)",
+          t=elsewhere, u=dave)
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set trip_id = :other
+            where trip_id = :t and day_number = 23""",
+        other=elsewhere, t=japan)
+    check(status == "err" and "trip_itinerary_days.trip_id cannot be changed" in str(rows),
+          "a member of both trips cannot move a day from one into the other",
+          repr(rows)[:90])
+    check(db.run(
+        "select count(*) from public.trip_itinerary_days "
+        "where trip_id = :t and day_number = 23", t=japan)[0][0] == 1
+          and db.run(
+        "select count(*) from public.trip_itinerary_days where trip_id = :t",
+        t=elsewhere)[0][0] == 0,
+          "so the day remains in the trip where it was planned")
+    check(d.run(is_open, t=japan, d=23, u=dave)[0][0] is False,
+          "and its gate stays shut, with nothing vacated to re-insert under")
+    a.run("delete from public.trips where id = :t", t=elsewhere)
+
     # An uncapped hold has a real cost: correcting a mistyped far-future date
     # would otherwise lock its day for as long as the typo was far off by.
     # 0018 bounds that at the trip's own derived close, so the worst an
@@ -2019,8 +2049,10 @@ def main():
                  where t.tgrelid = 'public.trip_itinerary_days'::regclass
                    and not t.tgisinternal""")) ==
           ["trip_itinerary_days_guard_closed_trip",
+           "trip_itinerary_days_lock_trip_id",
            "trip_itinerary_days_record_gate_date_guard"],
-          "and the guard that asks it per row is the only trigger 0016 adds here")
+          "and the guard that asks it per row is the only trigger 0016 adds here -- "
+          "0015's recorder and 0018's trip lock are the other two")
 
     # 0017: four tables, four triggers, ONE body. A second copy of this rule is
     # the thing to refuse in review, so the probe asserts there is not one --

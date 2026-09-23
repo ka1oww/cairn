@@ -927,9 +927,11 @@ Sharp edges worth knowing before touching this directory again:
   date passes (`day_gate_date_guards`) — `supabase/README.md`'s gate section
   owns the detail. `0018` widens that guard to survive a delete-then-reinsert
   and a renumber, hangs it off the trip rather than the day row so it
-  outlives the row it describes, and caps its hold at the trip's own derived
-  close so an earlier shift or a corrected typo cannot lock a day shut past
-  the trip's own end.
+  outlives the row it describes, locks `trip_itinerary_days.trip_id` the way
+  `photos` and `day_pages` already are (a member of two trips could otherwise
+  vacate a day into the other one), and caps its hold at the trip's own
+  derived close so an earlier shift or a corrected typo cannot lock a day
+  shut past the trip's own end.
 - **Every photograph read goes through one seat.** `may_read_trip_photos`
   (`0011`) today answers exactly `is_trip_member`, and both the `photos` SELECT
   policy and `r2-download-url` go through it. It exists so that when leaving

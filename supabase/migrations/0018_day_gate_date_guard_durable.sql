@@ -62,6 +62,12 @@ alter table public.day_gate_date_guards
 --     on every UPDATE, not only one that touches `day_date`, and a
 --     day-number change is treated as vacating the old number regardless of
 --     what date rides along with it.
+--   * A trip move: `trip_itinerary_days.trip_id` is refused below, the way
+--     `photos_lock_trip_id` and `day_pages_lock_trip_id` already refuse it,
+--     so this branch is never reached through the lock. It is written anyway,
+--     because a row that leaves its trip has vacated `(trip_id, day_number)`
+--     exactly as a delete has, and a recording rule that depends on another
+--     trigger's presence is one dropped trigger away from the forgery.
 --
 -- A hold is capped at the trip's own close (`trip_closes_at`, `0016`), never
 -- at the raw date the day used to carry. Review of an earlier draft found the
@@ -95,6 +101,7 @@ declare
   v_vacated boolean := false;
 begin
   if tg_op = 'UPDATE'
+     and new.trip_id is not distinct from old.trip_id
      and new.day_number is not distinct from old.day_number
      and new.day_date is not distinct from old.day_date then
     return new;
@@ -110,6 +117,8 @@ begin
      and old.day_date is not null
      and old.day_date >= v_today then
     if tg_op = 'DELETE' then
+      v_vacated := true;
+    elsif new.trip_id is distinct from old.trip_id then
       v_vacated := true;
     elsif new.day_number is distinct from old.day_number then
       v_vacated := true;
@@ -143,6 +152,39 @@ drop trigger if exists trip_itinerary_days_record_gate_date_guard
 create trigger trip_itinerary_days_record_gate_date_guard
   after update or delete on public.trip_itinerary_days
   for each row execute function public.record_day_gate_date_guard();
+
+-- ---------------------------------------------------------------------------
+-- A day stays in the trip where it was planned
+-- ---------------------------------------------------------------------------
+--
+-- `0010`'s UPDATE policy admits any trip the caller belongs to on both sides,
+-- so a member of two trips could move a current or future day of one into
+-- the other: the row stops claiming `(trip_id, day_number)` exactly as a
+-- delete does, and a re-insert under the vacated key would then find no
+-- guard. The app never moves a day between trips -- `sync_trip_itinerary`
+-- upserts on `(trip_id, day_number)` -- so the write is refused outright.
+-- Same shape as `photos_lock_trip_id` (`0006`) and `day_pages_lock_trip_id`
+-- (`0015`): WITH CHECK sees only the proposed row, so immutability belongs in
+-- a BEFORE UPDATE trigger comparing old and new. It fires before the
+-- recording trigger above, which still treats a trip change as vacating in
+-- case this lock is ever dropped.
+create or replace function public.trip_itinerary_days_lock_trip_id()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.trip_id is distinct from old.trip_id then
+    raise exception 'trip_itinerary_days.trip_id cannot be changed once set';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trip_itinerary_days_lock_trip_id
+  on public.trip_itinerary_days;
+create trigger trip_itinerary_days_lock_trip_id
+  before update on public.trip_itinerary_days
+  for each row execute function public.trip_itinerary_days_lock_trip_id();
 
 -- ---------------------------------------------------------------------------
 -- The walked branch still asks the guard about a day the plan no longer claims

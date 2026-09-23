@@ -46,7 +46,7 @@ the real sign-in providers are still untouched.
 | `day_pages` | A day's finished, composed page — one image per trip per day, made lazily at share or bind time. This was `daily_moments` and modelled a four-up panel; the four-up is retired. `day_pages_lock_trip_id` (`0015`) keeps a composed row in the trip where it was created. |
 | `day_page_photos` | Which photos went into a composed page, and in what order. Ordered by `ordinal`, not seated in a 1-to-4 slot. |
 | `trip_itineraries` | One row per trip, holding the plan's two clocks: when its *shape* last moved, and when the set-aside pocket last did. Not columns on `trips`, because a phone holds a plan revision before the trip's shared row exists. See [The itinerary](#the-itinerary-a-shared-fact-merged-per-day). |
-| `trip_itinerary_days` | One row per day of the plan: its number, its date if the person has resolved one, its place, and **the instant it was last changed and by whom**. That instant is the merge atom. Since `0016` those dates are also where the trip's close comes from — see [The close follows the plan](#the-close-follows-the-plan-not-the-snapshot). |
+| `trip_itinerary_days` | One row per day of the plan: its number, its date if the person has resolved one, its place, and **the instant it was last changed and by whom**. That instant is the merge atom. Its `trip_id` is locked once set (`0018`), like `photos` and `day_pages`. Since `0016` those dates are also where the trip's close comes from — see [The close follows the plan](#the-close-follows-the-plan-not-the-snapshot). |
 | `trip_itinerary_stops` | The stops under a day, in the day's own order. Deliberately carries **no clock and no starred flag**: a stop cannot win or lose a merge independently of its day, and a stop is starred exactly when it has a time. `0012` (applied to the hosted project 2026-08-31) adds `kind`, `area_text` and `area_source` for tap-to-Maps phase 1, and `0013` (written, pending alongside `0011`) is what makes `sync_trip_itinerary` insert and return them — until it is applied a hand-made area correction is stripped on push and absent on pull, so it never leaves the phone that made it. The phone also pushes a **`chosen_place`** key per stop — the traveller's pick among the parser's place candidates — and **no migration here defines that column yet**, so today's server ignores it on push and answers without it on pull. That silence is read as "this server does not know", never "this server says none": the phone keeps its own choice, exactly as it does for the area columns, so a pick never leaves the phone that made it and a round trip never wipes one. |
 | `trip_itinerary_set_asides` | The lines the parser could not place, and the ones somebody took out of a day. Nothing a person pasted is ever deleted, so the pocket travels with the plan. One atom, one clock. |
 | `trip_roster` (view) | Not a table: `trip_members` joined to `profiles`, so a phone reads every co-member and their name in one statement. `security_invoker`, so the member's own RLS decides what it returns. It hands over `joined_at` and **never a trip day number** — which day an instant falls on is a function of the itinerary and the trip clock, and that is the phone's arithmetic. |
@@ -632,7 +632,13 @@ the check. A photograph's unlock still wins immediately. The guard table has
 RLS and no client policies, so the member making the change cannot erase or
 shorten the hold; it hangs off the trip rather than the day row (`0018`), so
 deleting or renumbering the day cannot sweep it either, while deleting the
-trip still does.
+trip still does. The third way a row could stop claiming its day number —
+moving it to another trip the member also belongs to, which `0010`'s UPDATE
+policy admits on both sides — is refused outright by
+`trip_itinerary_days_lock_trip_id` (`0018`), the same `BEFORE UPDATE` lock
+`photos` and `day_pages` carry on their `trip_id`; the app never moves a day
+between trips, and the recording trigger still treats a trip change as
+vacating in case that lock is ever dropped.
 
 That hold has a real cost worth stating plainly, not just for the day it was
 recorded on. Moving a whole plan earlier — postponing a trip by a week in the
