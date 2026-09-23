@@ -654,7 +654,22 @@ capped at the trip's own derived close (`trip_closes_at`, `0016`), so it
 never outlives the trip and a far-future typo corrected back cannot lock a
 day shut for longer than the trip already runs — but inside the trip's own
 window, an earlier shift still holds every day it touches until its old date
-passes.
+passes. That cap is a bound chosen, not a guarantee, and its edge is worth
+knowing. The recorder fires `AFTER ROW`, so the close it caps against is the
+close **as it stands after the edit**: a write that itself moves the plan's
+furthest day earlier is capped at the close that very write produced, which is
+what keeps a corrected typo from being held at the typo. And that close is
+not fixed — `trip_closes_at` follows the plan's furthest date down to the
+`trips.end_date` floor, so a member can lower it by shortening the plan's
+furthest days first, and a hold recorded against an earlier, higher close is
+then measured against a bound the same member has since depressed. As the
+recorder stands, the conflict update re-caps a standing hold at that current
+close (`least(greatest(old, new), close)`), so a later write on the same day
+number can walk a recorded hold down to the depressed close; the probe pins a
+hold as monotonic on the uncapped path only. What bounds the damage is the
+floor — nothing lowers the close below the trip's own frozen `end_date` plus
+the grace — and the two bypasses `0018` exists to close are untouched by any
+of this, because both move a day nearer to today, well inside the close.
 
 Knowing an `r2_object_key` is useless on its own — the bucket is private and
 every read needs a signature — which is what makes gating the signature rather
