@@ -508,6 +508,21 @@ void main() {
       );
     });
 
+    for (final malformed in ['', 'not-a-uuid', trip.value.toUpperCase()]) {
+      test("a string that is not a canonical uuid ('$malformed') is a refusal",
+          () async {
+        final sync = answering(200, jsonEncode(malformed));
+
+        await expectLater(
+          sync.redeemInvite('Oslo Blue Fox 7'),
+          throwsA(isA<SharedFactsRefused>()),
+          reason: 'the joined id is later written to trips.id and handed to '
+              "the outbox's UUID_RE; a shape they would refuse must be "
+              'refused here, not stored',
+        );
+      });
+    }
+
     final verdicts = <String, (int, String, InviteRefusal)>{
       'not authenticated': (
         403,

@@ -201,12 +201,16 @@ class PostgrestSharedFacts implements SharedFacts {
       // The function returns `uuid`, which PostgREST hands back as a bare
       // JSON string. Anything else means the server answered in a shape this
       // phone does not recognise — a refusal, not a success.
-      if (response is! String) {
+      if (response is! String || response.isEmpty) {
         throw SharedFactsRefused(
           'redeem returned ${response.runtimeType}',
         );
       }
-      return TripId(response);
+      final joined = TripId(response);
+      if (!joined.isCanonical) {
+        throw SharedFactsRefused('redeem returned a malformed trip id');
+      }
+      return joined;
     } on SharedFactsRefused catch (e) {
       // `_send` already turned the 4xx into a refusal carrying the server's
       // message (`400: invite code not found`). Map the four verdicts onto
