@@ -223,7 +223,9 @@ The pings are dealt across that roster now, so the stub member is gone.
 Two halves of it are honestly unfinished, and they are the same half twice: a
 phone can only ever write its own row, so the roster holds one person, and a
 code — real, canonical, revocable, dying with the trip — cannot admit anybody,
-because **nothing on this phone ever asks the server to redeem a code.** Saying
+because **no flow on this phone ever asks the server to redeem a code** — the
+transport call exists (`SharedFacts.redeemInvite`, with the server's four
+refusals typed), and nothing above the seam calls it. Saying
 a code back is built and answers every case this phone can see; for a
 well-formed code belonging to somebody else's trip it says so plainly rather
 than spinning. That last step is Phase 2 and nothing else.
@@ -293,7 +295,7 @@ tested.
 | `packages/trip_moments` | Landed. Deals one ping per person across the party. Nothing delivers what it deals. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
 | `packages/plan_extraction` | Landed. Bytes in, plan text out, with `.txt`/`.docx`/`.xlsx`/`.csv`/`.pdf` extractors. Provably repeated print controls are removed, and the Wanderlog fixture parses end to end as three days. |
-| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with migrations `0001`-`0010`, `0012` and `0014` applied (`0011` and `0013` are written and locally probed, not hosted). **No photo transport, and no phone-side call that redeems an invite.** |
+| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with migrations `0001`-`0010`, `0012` and `0014` applied (`0011` and `0013` are written and locally probed, not hosted). **No photo transport, and the phone-side call that redeems an invite exists on the adapter with nothing yet invoking it.** |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
 | The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** Paste-and-confirm persisting the itinerary locally, with two doors beside the box — a document (`.txt`, `.docx`, `.xlsx`, `.csv`, `.pdf`) or a photo/screenshot through Apple Vision — filling it and never auto-parsing; the day page it lands on, the trip's path, the three-tab container, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them, the trip as a stored fact (roster, starter, flat-but-gated powers, three-word codes that die with the trip, the sheet off the Trail's title), and the itinerary reaching the hosted project on an ordinary build with the app saying when it has not. **Nothing registered with iOS; photographs push one way only — up, bytes then the row — and that push has never been exercised against a live bucket, so no photograph has yet been seen on a second phone; no code can admit anybody.** |
@@ -341,9 +343,10 @@ anonymous GoTrue account (`supabase/README.md`). Everything else in this phase
 is untouched, and two pieces of it are the whole reason the phase exists:
 
 - **Nothing carries a membership to a second phone.** The invite code is real,
-  canonical, revocable and dies with the trip; no code on this phone ever calls
-  `redeem_trip_invite`. Until that call exists, a roster of one is all the sync
-  can converge on and the trip is not a group.
+  canonical, revocable and dies with the trip; the adapter can now call
+  `redeem_trip_invite` (`SharedFacts.redeemInvite`, its refusals typed as
+  `InviteRefused`), and no flow calls the adapter. Until one does, a roster of
+  one is all the sync can converge on and the trip is not a group.
 - **No photograph has any transport.** `SharedFacts` declares four methods and
   none is about a photo; there is no R2 client. The table and its policies are
   written and tested on the server side, and nothing on the phone can reach
@@ -462,8 +465,8 @@ are the ones that stand between Cairn and being a group at all.
   between a real invite code and somebody actually joining. Everything on this
   side of it is built — roster, powers, three-word codes that die with the
   trip, and the door that reads them back — and honestly says so when it cannot
-  reach a trip. What is missing is the call: nothing ever asks the server to
-  redeem a code.
+  reach a trip. What is missing is the flow: the adapter's `redeemInvite` can
+  ask the server to redeem a code, and nothing on a screen yet does.
 - **Undated re-paste keeps photographs with their content.** Built and pinned
   by a regression using real `PhotoRef` day numbers. `mergeRepaste` first
   claims unique unchanged content, then uses position only where no stable

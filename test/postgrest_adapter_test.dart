@@ -503,24 +503,28 @@ void main() {
       await expectLater(
         sync.redeemInvite('Oslo Blue Fox 7'),
         throwsA(isA<SharedFactsRefused>()),
-        reason: "a uuid comes back as a JSON string; anything else means the "
+        reason:
+            "a uuid comes back as a JSON string; anything else means the "
             'server answered in a shape this phone does not recognise',
       );
     });
 
     for (final malformed in ['', 'not-a-uuid', trip.value.toUpperCase()]) {
-      test("a string that is not a canonical uuid ('$malformed') is a refusal",
-          () async {
-        final sync = answering(200, jsonEncode(malformed));
+      test(
+        "a string that is not a canonical uuid ('$malformed') is a refusal",
+        () async {
+          final sync = answering(200, jsonEncode(malformed));
 
-        await expectLater(
-          sync.redeemInvite('Oslo Blue Fox 7'),
-          throwsA(isA<SharedFactsRefused>()),
-          reason: 'the joined id is later written to trips.id and handed to '
-              "the outbox's UUID_RE; a shape they would refuse must be "
-              'refused here, not stored',
-        );
-      });
+          await expectLater(
+            sync.redeemInvite('Oslo Blue Fox 7'),
+            throwsA(isA<SharedFactsRefused>()),
+            reason:
+                'the joined id is later written to trips.id and handed to '
+                "the outbox's UUID_RE; a shape they would refuse must be "
+                'refused here, not stored',
+          );
+        },
+      );
     }
 
     final verdicts = <String, (int, String, InviteRefusal)>{
@@ -595,20 +599,25 @@ void main() {
       );
     });
 
-    test('an answer that is not one of the four stays a plain refusal',
-        () async {
-      // A gateway rewrite or schema drift: still a refusal, just not one we
-      // can name under InviteRefusal.
-      final sync = answering(400, {'message': 'some other verdict'});
+    test(
+      'an answer that is not one of the four stays a plain refusal',
+      () async {
+        // A gateway rewrite or schema drift: still a refusal, just not one we
+        // can name under InviteRefusal.
+        final sync = answering(400, {'message': 'some other verdict'});
 
-      await expectLater(
-        sync.redeemInvite('Oslo Blue Fox 7'),
-        throwsA(
-          isA<SharedFactsRefused>()
-              .having((e) => e is InviteRefused, 'is typed', isFalse),
-        ),
-      );
-    });
+        await expectLater(
+          sync.redeemInvite('Oslo Blue Fox 7'),
+          throwsA(
+            isA<SharedFactsRefused>().having(
+              (e) => e is InviteRefused,
+              'is typed',
+              isFalse,
+            ),
+          ),
+        );
+      },
+    );
 
     test('with nobody signed in nothing is sent', () async {
       var calls = 0;

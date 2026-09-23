@@ -37,7 +37,7 @@ ping's schedule is real and correct; nothing is registered with iOS, and there
 is no notification library in the project), and **no photograph has yet been
 seen on a second phone** (`docs/roadmap.md` holds the exact standing of the
 upload path). Nor can anybody join a trip yet: the three-word invite code is
-real and no phone ever redeems one.
+real, the adapter can now ask the server to redeem one, and no screen yet does.
 
 The one server path that does exist — the itinerary and the roster — is live
 against a hosted Supabase project, and since 27 August 2026 it is live on an

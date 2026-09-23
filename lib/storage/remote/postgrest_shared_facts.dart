@@ -202,9 +202,7 @@ class PostgrestSharedFacts implements SharedFacts {
       // JSON string. Anything else means the server answered in a shape this
       // phone does not recognise — a refusal, not a success.
       if (response is! String || response.isEmpty) {
-        throw SharedFactsRefused(
-          'redeem returned ${response.runtimeType}',
-        );
+        throw SharedFactsRefused('redeem returned ${response.runtimeType}');
       }
       final joined = TripId(response);
       if (!joined.isCanonical) {

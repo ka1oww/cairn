@@ -260,9 +260,12 @@ import what is written there, not here.
   column in `trip_members` and there must never be one. A code carries no
   expiry of its own either: it dies when the trip closes, so
   `trip_invite_codes` has no expiry column and `TripInvite.standingAt` is
-  *told* the close. Everything about joining is local — nothing carries a
-  membership to another phone, and the join door says so rather than
-  spinning.
+  *told* the close. The transport for joining exists and nothing calls it
+  yet: `SharedFacts.redeemInvite` wraps `redeem_trip_invite` and types its
+  four refusals as `InviteRefused` (the interface's doc comment in
+  `lib/storage/remote/shared_facts.dart` is the authority), but no flow
+  above the seam asks it, so nothing carries a membership to another phone,
+  and the join door says so rather than spinning.
 - **The itinerary and the roster are shared facts, and the seam is what makes
   them shared.** `lib/repositories/itinerary_sync.dart` and its deliberate
   sibling `photo_sync.dart` (the outbox bullet, below) are the only two files
@@ -785,7 +788,12 @@ Sharp edges worth knowing before touching this directory again:
   other, so they have to agree letter for letter. `tests/rls_probe.py` reads
   the Dart word list and the grace out of those files and compares them rather
   than trusting the copies to stay in step -- extend that check, never a third
-  copy. Two traps in the SQL half: the edit distance is written out rather than
+  copy. The redeem's four refusal sentences are the same kind of pair:
+  `redeem_trip_invite` raises them and `postgrest_shared_facts.dart`'s
+  `_redeemRefusal` matches them verbatim to type an `InviteRefused`, so the
+  probe reads both and compares them too -- reword one in SQL alone and every
+  Dart test still passes while a real phone quietly falls back to the generic
+  refusal. Two traps in the SQL half: the edit distance is written out rather than
   taken from `fuzzystrmatch`, whose `levenshtein()` prices a swapped pair of
   letters at two and would refuse near-spellings the phone accepts; and
   uniqueness and lookup are both over `invite_code_key(code)`, the canonical
