@@ -662,14 +662,18 @@ what keeps a corrected typo from being held at the typo. And that close is
 not fixed — `trip_closes_at` follows the plan's furthest date down to the
 `trips.end_date` floor, so a member can lower it by shortening the plan's
 furthest days first, and a hold recorded against an earlier, higher close is
-then measured against a bound the same member has since depressed. As the
-recorder stands, the conflict update re-caps a standing hold at that current
-close (`least(greatest(old, new), close)`), so a later write on the same day
-number can walk a recorded hold down to the depressed close; the probe pins a
-hold as monotonic on the uncapped path only. What bounds the damage is the
-floor — nothing lowers the close below the trip's own frozen `end_date` plus
-the grace — and the two bypasses `0018` exists to close are untouched by any
-of this, because both move a day nearer to today, well inside the close.
+then measured against a bound the same member has since depressed. What
+stops that from walking the guard down is that a hold is **monotonic**: the
+conflict update is `greatest(standing, least(new, close))`, so the cap bounds
+only the hold being written and a recorded hold never decreases, whatever the
+close has since become. `tests/rls_probe.py` pins that on the capped path
+specifically — extend the trip past its frozen `end_date`, shorten the
+furthest day while still future, re-extend, shorten again until the close
+falls below the standing hold — as well as on the uncapped one. What bounds
+the damage at the other end is the floor — nothing lowers the close below the
+trip's own frozen `end_date` plus the grace — and the two bypasses `0018`
+exists to close are untouched by any of this, because both move a day nearer
+to today, well inside the close.
 
 Knowing an `r2_object_key` is useless on its own — the bucket is private and
 every read needs a signature — which is what makes gating the signature rather

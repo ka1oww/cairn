@@ -673,6 +673,88 @@ def main():
           "so a typo a century out cannot lock the day for a century",
           repr(guards24))
 
+    # The cap is read from the close as it stands *after* the edit, and the
+    # close follows the plan's furthest date down to the `end_date` floor. So
+    # a member can lower the very bound a hold is measured against: shorten
+    # the furthest day first, then touch the guarded day again. A conflict
+    # update that re-capped the standing hold at that depressed close walked
+    # the hold down; the monotonic form (`greatest(standing, least(new,
+    # close))`) is what stops it. Day 21 pins a hold as monotonic on the
+    # uncapped path; this pins it on the capped path specifically, where the
+    # cap and the standing hold pull in opposite directions.
+    print("\n== a capped hold can grow but is never walked down by a depressed close ==")
+
+    def japan_close_date():
+        return db.run(
+            "select (public.trip_closes_at(:t) at time zone 'Asia/Tokyo')::date",
+            t=japan)[0][0]
+
+    def hold25():
+        rows = db.run(
+            "select not_before from public.day_gate_date_guards "
+            "where trip_id = :t and day_number = 25", t=japan)
+        return rows[0][0] if rows else None
+
+    # Extend the trip past its frozen end_date: day 25 becomes the plan's
+    # furthest date, so the close now follows it rather than the floor.
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 25, :d, now())""",
+           t=japan, d=today + datetime.timedelta(days=30))
+    extended_close = japan_close_date()
+    check(extended_close > today + datetime.timedelta(days=30),
+          "a far-future day extends the trip's close past its frozen end_date",
+          repr(extended_close))
+    # Shorten the furthest day while it is still future. The close drops with
+    # it, and the hold recorded is the *new* close -- the capped path.
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :earlier
+            where trip_id = :t and day_number = 25""",
+        earlier=today + datetime.timedelta(days=20), t=japan)
+    first_close = japan_close_date()
+    first_hold = hold25()
+    check(status == "ok" and first_close < extended_close
+          and first_hold == first_close,
+          "shortening the furthest day lowers the close, and the hold it "
+          "records is capped at that lowered close",
+          repr((status, first_hold, first_close, extended_close)))
+    # Re-extend the trip. A later move records nothing, so the hold stands.
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :later
+            where trip_id = :t and day_number = 25""",
+        later=today + datetime.timedelta(days=30), t=japan)
+    check(status == "ok" and hold25() == first_hold,
+          "re-extending the trip leaves the recorded hold where it was",
+          repr((status, hold25(), first_hold)))
+    # Shorten a little: the close after the edit is still above the standing
+    # hold, so the hold grows to the new capped value.
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :earlier
+            where trip_id = :t and day_number = 25""",
+        earlier=today + datetime.timedelta(days=25), t=japan)
+    grown_close = japan_close_date()
+    grown_hold = hold25()
+    check(status == "ok" and grown_close > first_hold and grown_hold == grown_close,
+          "shortening it again while the close is still higher grows the hold "
+          "to the new capped close",
+          repr((status, grown_hold, grown_close, first_hold)))
+    # Shorten deeply: the close after this edit falls below the standing
+    # hold. The new hold is capped at that depressed close, but the standing
+    # one must not follow it down.
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :earlier
+            where trip_id = :t and day_number = 25""",
+        earlier=today + datetime.timedelta(days=8), t=japan)
+    depressed_close = japan_close_date()
+    check(status == "ok" and depressed_close < grown_hold,
+          "shortening it deeply depresses the close below the standing hold",
+          repr((status, depressed_close, grown_hold)))
+    check(hold25() == grown_hold,
+          "and the recorded hold never decreased: a close the same member "
+          "lowered cannot walk it down",
+          repr((hold25(), grown_hold, depressed_close)))
+    check(d.run(is_open, t=japan, d=25, u=dave)[0][0] is False,
+          "so the day stays shut until the hold it already earned has passed")
+
     # A guard is durable across the day's own deletion but must not make
     # deleting the trip itself fail: the trip row is already gone when the
     # day's delete trigger runs, so no guard is written for a trip that no

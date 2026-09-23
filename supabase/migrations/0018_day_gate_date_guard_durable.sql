@@ -74,15 +74,27 @@ alter table public.day_gate_date_guards
 -- uncapped version had a real cost: moving a whole plan a week earlier, or
 -- correcting a mistyped year, rewrites every day's `day_date` downward in one
 -- `sync_trip_itinerary` upsert, so the trigger fires once per day and records
--- `not_before = <the old date>` for every one of them -- and because
--- `on conflict ... set not_before = greatest(...)` only ever grows a hold,
--- none of that is repairable by any later edit. A far-future typo (`2127`)
--- corrected back would have locked its day for a hundred years. Capping at
--- the close means the worst a hold can do is what deleting the trip already
--- does -- shut every day until the trip's own end, never longer -- while the
--- two bypasses this migration exists to close (delete-then-reinsert,
--- shorten-while-future) are unaffected: both move a day to a date nearer to
--- today, well inside the trip's own close.
+-- `not_before = <the old date>` for every one of them -- and because a hold
+-- only ever grows, none of that is repairable by any later edit. A far-future
+-- typo (`2127`) corrected back would have locked its day for a hundred years.
+-- Capping at the close means the worst a hold can do is what deleting the
+-- trip already does -- shut every day until the trip's own end, never longer
+-- -- while the two bypasses this migration exists to close
+-- (delete-then-reinsert, shorten-while-future) are unaffected: both move a
+-- day to a date nearer to today, well inside the trip's own close.
+--
+-- The cap applies to the hold being *written*, never to one already standing.
+-- This trigger fires AFTER ROW, so `v_close_date` is the close as it stands
+-- after the edit -- which the same edit may have depressed, since the close
+-- follows the plan's furthest date down to the `trips.end_date` floor. A
+-- conflict update that re-capped the standing hold at that close
+-- (`least(greatest(old, new), close)`) let a member walk a recorded hold
+-- down: shorten the furthest day first, then touch the guarded day again, and
+-- the hold followed the close it had just lowered. So the update is
+-- `greatest(standing, least(new, close))`: the new hold is capped, and the
+-- result never falls below what was already recorded. `tests/rls_probe.py`
+-- pins that on the capped path specifically, and `supabase/README.md`'s gate
+-- section states the bound and its residual edge.
 --
 -- The trip lookup deliberately happens first and may find nothing: when a trip
 -- is deleted, its rows cascade and the trip is already gone by the time this
@@ -131,12 +143,9 @@ begin
     insert into public.day_gate_date_guards (trip_id, day_number, not_before)
     values (old.trip_id, old.day_number, least(old.day_date, v_close_date))
     on conflict (trip_id, day_number) do update
-      set not_before = least(
-        greatest(
-          public.day_gate_date_guards.not_before,
-          excluded.not_before
-        ),
-        v_close_date
+      set not_before = greatest(
+        public.day_gate_date_guards.not_before,
+        least(excluded.not_before, v_close_date)
       );
   end if;
 
