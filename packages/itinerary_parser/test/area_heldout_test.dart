@@ -10,10 +10,10 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:itinerary_parser/itinerary_parser.dart';
 
-/// What a held-out doc's score must clear. The two AI docs share the generic
-/// "generalises reasonably" bar; doc 08's whole value is refusal (all 25 rows
-/// accept NONE), so it is pinned exactly instead — see the floors comment on
-/// its entry below.
+/// What a held-out doc's score must clear. Every document is pinned at the
+/// figures its own measurement produced: 06 and 07 at the per-row counts
+/// found once their labels were re-anchored, and 08 at exact refusal (all
+/// 25 rows accept NONE) — see the floors comments on each entry below.
 class Floors {
   final double minRowsOk;
   final int? maxWrong;
@@ -49,20 +49,23 @@ bool _isUpperAscii(String token) {
 /// line number is checked against. Every one of these hand-written notes
 /// opens with the venue name, so this takes the note's *first* maximal run of
 /// capitalized tokens (a run breaks at the first lowercase word, e.g.
-/// "near"/"under"/"name") and tries every contiguous window of it, longest
-/// first, down to length 2 (a run that is itself only one word is used
-/// as-is). Two things are load-bearing. Sliding the window matters: a note
-/// like "Portobello Road Market Notting Hill" has no internal lowercase word
-/// to break the run before the day's area name, so the venue phrase
-/// ("Portobello Road Market") is a *sub*-window of the run, not the whole of
-/// it. And stopping at the first run matters just as much: a note like
-/// "Brick Lane Market under Shoreditch heading" has a second run
-/// ("Shoreditch") that is the day's area, not the venue, and every stop on
-/// that day mentions it — accepting it as a fallback candidate would let a
-/// label drifted onto a wrong neighbouring stop match anyway, exactly the
-/// silent failure this check exists to catch. The floor of length 2 for a
-/// multi-word run (never shrinking a real run down to one generic word) is
-/// the other half of that same guard.
+/// "near"/"under"/"name") and tries every *prefix* of it, longest first,
+/// down to length 2 (a run that is itself only one word is used as-is).
+/// Three things are load-bearing. Shrinking the prefix matters: a note like
+/// "Portobello Road Market Notting Hill" has no internal lowercase word to
+/// break the run before the day's area name, so the venue phrase
+/// ("Portobello Road Market") is a shorter prefix of the run, not the whole
+/// of it. Trying only prefixes, never a window that drops the first word,
+/// matters just as much: the tail of that same run ("Notting Hill") is the
+/// day's area, which a neighbouring stop on that day also mentions, so a
+/// sliding window would let a label drifted onto that neighbour pass — the
+/// silent failure this check exists to catch. And stopping at the first run
+/// closes the same hole from the other side: "Brick Lane Market under
+/// Shoreditch heading" has a second run ("Shoreditch") that is the day's
+/// area, not the venue. The floor of length 2 for a multi-word run (never
+/// shrinking a real run down to one generic word) is the last half of that
+/// guard. All of it rests on the premise that a note opens with its venue,
+/// so a note must be written that way, never "Borough-adjacent Clove Hitch".
 bool _noteAnchorsLine(String note, String lineText) {
   final tokens = note.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
   final run = <String>[];
@@ -77,10 +80,7 @@ bool _noteAnchorsLine(String note, String lineText) {
   if (run.length == 1) return lineText.contains(run[0]);
 
   for (var len = run.length; len >= 2; len--) {
-    for (var start = 0; start + len <= run.length; start++) {
-      final candidate = run.sublist(start, start + len).join(' ');
-      if (lineText.contains(candidate)) return true;
-    }
+    if (lineText.contains(run.sublist(0, len).join(' '))) return true;
   }
   return false;
 }
@@ -88,20 +88,25 @@ bool _noteAnchorsLine(String note, String lineText) {
 void main() {
   group('area held-out validation', () {
     // 06 and 07 are AI-written docs whose labels were re-anchored by hand
-    // (see git history) after the underlying documents drifted out from
-    // under stale line numbers. The text-anchor guard below is the check
-    // that a resolved line still names the note's venue, not just any line;
-    // it applies to these two because they are the ones the drift actually
-    // hit. 08 is a captain-supplied document whose numbering was verified
-    // consistent with its labels and needed no repair.
+    // (see git history). The documents themselves never changed — both .txt
+    // files are byte-identical to the commit that created them — so the
+    // labels were mis-numbered from the outset, never validated against the
+    // document, and the error compounds by one row per day boundary in a
+    // way consistent with an extra line (such as the blank line after each
+    // day header) being counted once too many per day. The text-anchor
+    // guard below is the check that a resolved line names the note's venue,
+    // not just any line; it applies to these two because they are the ones
+    // the mis-numbering actually hit. 08 is a captain-supplied document
+    // whose numbering was verified consistent with its labels and needed no
+    // repair.
     final textAnchoredDocs = {'06-london-heldout', '07-kyoto-heldout'};
 
     // Held-out docs, keyed by fixture stem: (label, floors).
     //
     // London and Kyoto's floors were ratcheted on 2026-09-22 after the label
     // rows were re-anchored to the lines that actually hold the venues they
-    // name (they had drifted after the documents were edited without
-    // renumbering the labels) and the text-anchor guard above was added.
+    // name (the original numbers were off from the outset, one row further
+    // per day; see the comment above) and the text-anchor guard was added.
     // Before the repair, most rows silently failed to resolve at all and
     // fell through to a trivial none-ok agreement, inflating the reported
     // figure (London 66.7%, Kyoto 62.5%). With every row now resolving
@@ -112,8 +117,12 @@ void main() {
     // margin, and `minRowsOkCount` pins the same floor as an exact integer.
     // `maxWrong` is new: neither document had one before, and a `wrong`
     // verdict here is a composed-Maps-query defect, so it gets a ceiling at
-    // the count this measurement actually found (0 for London, 1 for
-    // Kyoto's remaining miss).
+    // the count this measurement actually found. London's one failing row
+    // is a miss (The Clove Hitch near Borough, no area assigned), so its
+    // ceiling is 0. Kyoto's one failing row is a wrong assignment — Gion
+    // Corner (near Gion) is assigned higashiyama where the label expects
+    // gion — so its ceiling is 1, and that row is a known defect the floor
+    // records rather than hides.
     final docs = {
       '06-london-heldout': (
         'London',

@@ -458,11 +458,17 @@ answers with missing-area answers.
 (Tokyo) held-out fixtures — the corpus that never informed a threshold or a
 fix, and so is the only independent evidence that the parser generalises
 past what it was tuned on. On 2026-09-22 a row-by-row audit found that most
-of 06 and 07's label rows no longer pointed at the venues they name: the
-label files were written against an earlier revision of the two documents,
-and the documents were later edited without renumbering the labels. Some
-rows pointed at a line no stop occupies at all (blank lines, day headers,
-past end of file); others had drifted onto a *different* real stop, which
+of 06 and 07's label rows did not point at the venues they name. The
+documents themselves had never changed — both `.txt` files are byte-identical
+to the commit that created them — so the labels were mis-numbered from the
+outset and never validated against the document. In both files the error
+compounds by one row per day boundary (Kyoto's rows are off by 1, 2 and 3
+on days 1, 2 and 3; London's by 2, 3 and 4), which is consistent with an
+extra line — such as the blank line after each day header — being counted
+once too many per day. London starts one row further off than Kyoto for a
+reason the evidence does not show, so no single root cause is claimed beyond
+that. Some rows pointed at a line no stop occupies at all (blank lines, day
+headers, past end of file); others landed on a *different* real stop, which
 silently scored as agreement whenever that neighbouring stop happened to
 share the same day's area. 08's numbering was checked against its document
 and found consistent — it needed no repair.
@@ -475,19 +481,28 @@ it points):
   holds the venue its note names.
 - The test itself was hardened so a fixture like this cannot silently pass
   again. A resolved row is now checked against the source line's own text,
-  not just its line number: it must contain a distinguishing word or phrase
-  from the row's note (see `_noteAnchorsLine`'s doc comment for exactly how,
-  and why a fallback to a single generic word — e.g. the day's own area name,
-  which every stop on that day mentions — would defeat the check). An
-  unresolved or misanchored row now fails the test outright instead of
-  falling through to a trivial "no area assigned" agreement.
+  not just its line number: the line must contain a prefix of the venue
+  phrase the row's note opens with (see `_noteAnchorsLine`'s doc comment for
+  exactly how, and why only prefixes are tried — a window that drops the
+  venue's first word, or a fallback to a single generic word, can be the
+  day's own area name, which a neighbouring stop on that day also mentions,
+  and would defeat the check). An unresolved or misanchored row now fails
+  the test outright instead of falling through to a trivial "no area
+  assigned" agreement.
 
 With every row now resolving against the venue it actually names, the
 honest per-document figures are **London 88.9%** (8/9 rows correct-or-none-ok)
 and **Kyoto 87.5%** (7/8) — both higher than the previously reported,
 inflated figures (66.7% and 62.5%), because those figures were undercounting
 correct rows that had failed to resolve at all rather than overcounting
-wrong ones. `Floors.minRowsOk`, `maxWrong` and `minRowsOkCount` for both
-documents were ratcheted to these measured figures (not padded above them);
-see the floors comment in `area_heldout_test.dart` for the exact numbers and
-the small floating-point safety margin on London's non-terminating 8/9.
+wrong ones. The two rows that do not pass are different in kind. London's is
+a miss: `The Clove Hitch near Borough` is assigned no area where the label
+expects `borough`. Kyoto's is a wrong assignment: `Gion Corner (near Gion)`
+is assigned `higashiyama`, the day's heading area, where the label expects
+`gion` — a composed-Maps-query defect on the very corpus meant to show the
+parser generalises, and one the floors record rather than hide.
+`Floors.minRowsOk`, `maxWrong` and `minRowsOkCount` for both documents were
+ratcheted to these measured figures (not padded above them): `maxWrong` is 0
+for London and 1 for Kyoto, exactly that Gion Corner row. See the floors
+comment in `area_heldout_test.dart` for the exact numbers and the small
+floating-point safety margin on London's non-terminating 8/9.
