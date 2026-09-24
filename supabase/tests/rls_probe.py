@@ -514,6 +514,273 @@ def main():
     check(d.run(is_open, t=japan, d=TODAY_DAY, u=dave)[0][0] is False,
           "and the restored current day remains shut for that member")
 
+    # The two bypasses 0018 closes. Both reach the same forgery as re-dating a
+    # day -- the walked branch opening before the date the day used to carry
+    # has passed -- without ever taking the UPDATE path 0015 guards: deleting
+    # the row and re-inserting it, and moving a future date earlier while it is
+    # still future. Each is asserted on the durable guard row as well as on the
+    # gate, because the guard is what has to outlive the write.
+    print("\n== deleting a day and re-inserting it cannot forge an early unlock ==")
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 20, :d, now())""",
+           t=japan, d=today + datetime.timedelta(days=3))
+    check(d.run(is_open, t=japan, d=20, u=dave)[0][0] is False,
+          "a future day of the plan is shut before anything is deleted")
+    status, rows = d.try_run(
+        "delete from public.trip_itinerary_days where trip_id = :t and day_number = 20",
+        t=japan)
+    check(status == "ok" and db.run(
+        "select count(*) from public.trip_itinerary_days "
+        "where trip_id = :t and day_number = 20", t=japan)[0][0] == 0,
+          "a member may still delete a day of the plan", repr(rows)[:90])
+    check(d.run(is_open, t=japan, d=20, u=dave)[0][0] is False,
+          "and the gate stays shut for the absent day number, guard row and all, "
+          "between the delete and the reinsert")
+    guards20 = db.run(
+        "select not_before from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 20", t=japan)
+    check(guards20 and guards20[0][0] == today + datetime.timedelta(days=3),
+          "and deleting a current or future day records the date it used to carry",
+          repr(guards20))
+    status, rows = d.try_run(
+        """insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+           values (:t, 20, :past, now())""",
+        t=japan, past=today - datetime.timedelta(days=1))
+    check(status == "ok",
+          "re-inserting that day dated in the past is still a plain write", repr(rows)[:90])
+    check(d.run(is_open, t=japan, d=20, u=dave)[0][0] is False,
+          "but the re-inserted day does not open the gate before its date has passed")
+    status, rows = d.try_run(
+        "delete from public.day_gate_date_guards where trip_id = :t and day_number = 20",
+        t=japan)
+    check(status == "ok" and db.run(
+        "select count(*) from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 20", t=japan)[0][0] == 1,
+          "and the guard the delete left behind erases no more easily than any other",
+          repr(rows)[:90])
+
+    print("\n== shortening a future date holds the gate to the date it used to carry ==")
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 21, :d, now())""",
+           t=japan, d=today + datetime.timedelta(days=5))
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :earlier
+            where trip_id = :t and day_number = 21""",
+        earlier=today + datetime.timedelta(days=2), t=japan)
+    check(status == "ok",
+          "a member may move a future day's date earlier", repr(rows)[:90])
+    guards21 = db.run(
+        "select not_before from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 21", t=japan)
+    check(guards21 and guards21[0][0] == today + datetime.timedelta(days=5),
+          "and moving it earlier records the date it used to carry, "
+          "even though the new date is still future",
+          repr(guards21))
+    status, rows = d.try_run(
+        "update public.trip_itinerary_days set day_date = null "
+        "where trip_id = :t and day_number = 21",
+        t=japan)
+    guards21 = db.run(
+        "select not_before from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 21", t=japan)
+    check(status == "ok" and guards21 and guards21[0][0]
+            == today + datetime.timedelta(days=5),
+          "shortening again cannot walk the guard down off that date", repr(rows)[:90])
+    check(d.run(is_open, t=japan, d=21, u=dave)[0][0] is False,
+          "so un-dating the shortened day still does not open it early")
+
+    print("\n== moving a day to a new number records a guard on the number it left ==")
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 22, :d, now())""",
+           t=japan, d=today + datetime.timedelta(days=4))
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_number = 23
+            where trip_id = :t and day_number = 22""",
+        t=japan)
+    check(status == "ok" and db.run(
+        "select count(*) from public.trip_itinerary_days "
+        "where trip_id = :t and day_number = 22", t=japan)[0][0] == 0,
+          "a member may still renumber a day of the plan", repr(rows)[:90])
+    guards22 = db.run(
+        "select not_before from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 22", t=japan)
+    check(guards22 and guards22[0][0] == today + datetime.timedelta(days=4),
+          "and the number it vacated keeps a guard for the date it carried",
+          repr(guards22))
+    check(d.run(is_open, t=japan, d=22, u=dave)[0][0] is False,
+          "so the vacated number cannot be reused to forge an early unlock")
+    check(db.run(
+        "select count(*) from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 23", t=japan)[0][0] == 0,
+          "while the number it moved to records no guard of its own")
+
+    # The third way a row can stop claiming its (trip, day number): moving it
+    # to another trip. 0010's UPDATE policy admits any trip the caller belongs
+    # to on both sides, so a member of two trips could otherwise vacate a
+    # future day of one into the other and re-insert under the vacated key.
+    # The app never moves a day between trips, so the write is refused flat.
+    print("\n== a day cannot be moved to another trip, even one you also belong to ==")
+    elsewhere = str(a.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Elsewhere', :u, 'Asia/Tokyo', current_date, current_date + 5)
+           returning id""", u=alice)[0][0])
+    a.run("insert into public.trip_members (trip_id, user_id) values (:t, :u)",
+          t=elsewhere, u=dave)
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set trip_id = :other
+            where trip_id = :t and day_number = 23""",
+        other=elsewhere, t=japan)
+    check(status == "err" and "trip_itinerary_days.trip_id cannot be changed" in str(rows),
+          "a member of both trips cannot move a day from one into the other",
+          repr(rows)[:90])
+    check(db.run(
+        "select count(*) from public.trip_itinerary_days "
+        "where trip_id = :t and day_number = 23", t=japan)[0][0] == 1
+          and db.run(
+        "select count(*) from public.trip_itinerary_days where trip_id = :t",
+        t=elsewhere)[0][0] == 0,
+          "so the day remains in the trip where it was planned")
+    check(d.run(is_open, t=japan, d=23, u=dave)[0][0] is False,
+          "and its gate stays shut, with nothing vacated to re-insert under")
+    a.run("delete from public.trips where id = :t", t=elsewhere)
+
+    # An uncapped hold has a real cost: correcting a mistyped far-future date
+    # would otherwise lock its day for as long as the typo was far off by.
+    # 0018 bounds that at the trip's own derived close, so the worst an
+    # uncorrectable hold can do is what deleting the trip already does -- shut
+    # the day until the trip's own end, never longer.
+    print("\n== a hold is capped at the trip's own close, never at the raw superseded date ==")
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 24, :d, now())""",
+           t=japan, d=today + datetime.timedelta(days=400))
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :corrected
+            where trip_id = :t and day_number = 24""",
+        corrected=today + datetime.timedelta(days=10), t=japan)
+    check(status == "ok",
+          "a member may correct a mistyped far-future date", repr(rows)[:90])
+    close_date = db.run(
+        "select (public.trip_closes_at(:t) at time zone 'Asia/Tokyo')::date",
+        t=japan)[0][0]
+    guards24 = db.run(
+        "select not_before from public.day_gate_date_guards "
+        "where trip_id = :t and day_number = 24", t=japan)
+    check(guards24 and guards24[0][0] == close_date,
+          "and the hold is capped at the trip's derived close, "
+          "not at the far-future date it corrected",
+          repr((guards24, close_date)))
+    check(guards24 and guards24[0][0] < today + datetime.timedelta(days=400),
+          "so a typo a century out cannot lock the day for a century",
+          repr(guards24))
+
+    # The cap is read from the close as it stands *after* the edit, and the
+    # close follows the plan's furthest date down to the `end_date` floor. So
+    # a member can lower the very bound a hold is measured against: shorten
+    # the furthest day first, then touch the guarded day again. A conflict
+    # update that re-capped the standing hold at that depressed close walked
+    # the hold down; the monotonic form (`greatest(standing, least(new,
+    # close))`) is what stops it. Day 21 pins a hold as monotonic on the
+    # uncapped path; this pins it on the capped path specifically, where the
+    # cap and the standing hold pull in opposite directions.
+    print("\n== a capped hold can grow but is never walked down by a depressed close ==")
+
+    def japan_close_date():
+        return db.run(
+            "select (public.trip_closes_at(:t) at time zone 'Asia/Tokyo')::date",
+            t=japan)[0][0]
+
+    def hold25():
+        rows = db.run(
+            "select not_before from public.day_gate_date_guards "
+            "where trip_id = :t and day_number = 25", t=japan)
+        return rows[0][0] if rows else None
+
+    # Extend the trip past its frozen end_date: day 25 becomes the plan's
+    # furthest date, so the close now follows it rather than the floor.
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 25, :d, now())""",
+           t=japan, d=today + datetime.timedelta(days=30))
+    extended_close = japan_close_date()
+    check(extended_close > today + datetime.timedelta(days=30),
+          "a far-future day extends the trip's close past its frozen end_date",
+          repr(extended_close))
+    # Shorten the furthest day while it is still future. The close drops with
+    # it, and the hold recorded is the *new* close -- the capped path.
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :earlier
+            where trip_id = :t and day_number = 25""",
+        earlier=today + datetime.timedelta(days=20), t=japan)
+    first_close = japan_close_date()
+    first_hold = hold25()
+    check(status == "ok" and first_close < extended_close
+          and first_hold == first_close,
+          "shortening the furthest day lowers the close, and the hold it "
+          "records is capped at that lowered close",
+          repr((status, first_hold, first_close, extended_close)))
+    # Re-extend the trip. A later move records nothing, so the hold stands.
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :later
+            where trip_id = :t and day_number = 25""",
+        later=today + datetime.timedelta(days=30), t=japan)
+    check(status == "ok" and hold25() == first_hold,
+          "re-extending the trip leaves the recorded hold where it was",
+          repr((status, hold25(), first_hold)))
+    # Shorten a little: the close after the edit is still above the standing
+    # hold, so the hold grows to the new capped value.
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :earlier
+            where trip_id = :t and day_number = 25""",
+        earlier=today + datetime.timedelta(days=25), t=japan)
+    grown_close = japan_close_date()
+    grown_hold = hold25()
+    check(status == "ok" and grown_close > first_hold and grown_hold == grown_close,
+          "shortening it again while the close is still higher grows the hold "
+          "to the new capped close",
+          repr((status, grown_hold, grown_close, first_hold)))
+    # Shorten deeply: the close after this edit falls below the standing
+    # hold. The new hold is capped at that depressed close, but the standing
+    # one must not follow it down.
+    status, rows = d.try_run(
+        """update public.trip_itinerary_days set day_date = :earlier
+            where trip_id = :t and day_number = 25""",
+        earlier=today + datetime.timedelta(days=8), t=japan)
+    depressed_close = japan_close_date()
+    check(status == "ok" and depressed_close < grown_hold,
+          "shortening it deeply depresses the close below the standing hold",
+          repr((status, depressed_close, grown_hold)))
+    check(hold25() == grown_hold,
+          "and the recorded hold never decreased: a close the same member "
+          "lowered cannot walk it down",
+          repr((hold25(), grown_hold, depressed_close)))
+    check(d.run(is_open, t=japan, d=25, u=dave)[0][0] is False,
+          "so the day stays shut until the hold it already earned has passed")
+
+    # A guard is durable across the day's own deletion but must not make
+    # deleting the trip itself fail: the trip row is already gone when the
+    # day's delete trigger runs, so no guard is written for a trip that no
+    # longer exists, and the rows any earlier edit left are swept by the
+    # foreign key to trips.
+    print("\n== a durable date guard does not outlive its trip ==")
+    doomed = str(a.run(
+        """insert into public.trips (name, created_by, timezone, start_date, end_date)
+           values ('Doomed', :u, 'Asia/Tokyo', current_date, current_date + 5)
+           returning id""", u=alice)[0][0])
+    db.run("""insert into public.trip_itinerary_days (trip_id, day_number, day_date, revised_at)
+              values (:t, 1, :d, now())""",
+           t=doomed, d=today + datetime.timedelta(days=3))
+    a.run("delete from public.trip_itinerary_days where trip_id = :t and day_number = 1",
+          t=doomed)
+    doomed_guards = db.run(
+        "select count(*) from public.day_gate_date_guards where trip_id = :t", t=doomed)
+    check(doomed_guards[0][0] == 1,
+          "deleting a future day of this trip records its guard", repr(doomed_guards))
+    status, rows = a.try_run("delete from public.trips where id = :t", t=doomed)
+    check(status == "ok" and db.run(
+        "select count(*) from public.day_gate_date_guards where trip_id = :t",
+        t=doomed)[0][0] == 0,
+          "and the starter still deletes the trip whole, guard rows and all",
+          repr(rows)[:90])
+
     print("\n== you can delete your own photo, and the day stays open ==")
     status, _ = c.try_run("delete from public.photos where id = :id", id=PHOTO_C)
     check(status == "ok" and db.run("select count(*) from public.photos where id = :id",
@@ -1864,8 +2131,10 @@ def main():
                  where t.tgrelid = 'public.trip_itinerary_days'::regclass
                    and not t.tgisinternal""")) ==
           ["trip_itinerary_days_guard_closed_trip",
+           "trip_itinerary_days_lock_trip_id",
            "trip_itinerary_days_record_gate_date_guard"],
-          "and the guard that asks it per row is the only trigger 0016 adds here")
+          "and the guard that asks it per row is the only trigger 0016 adds here -- "
+          "0015's recorder and 0018's trip lock are the other two")
 
     # 0017: four tables, four triggers, ONE body. A second copy of this rule is
     # the thing to refuse in review, so the probe asserts there is not one --
