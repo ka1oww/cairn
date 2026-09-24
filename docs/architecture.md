@@ -360,7 +360,7 @@ That is the layering rule paying rent.
 
 | Node | State | Knows about | What breaks if it changes | Why it exists |
 | --- | --- | --- | --- | --- |
-| **Repositories** | partial — one repository over the itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store. The membership seam (`membership_repository.dart`) has the same two halves for the same reason — `MembershipRepository`, the read interface the trip's surfaces and the ping's party are written against and the only way a test can stand a party of eight up, and `MembershipStore`, the Drift implementation that also owns starting the trip, renaming it, minting and revoking codes and deleting it. The remote side has begun: `TripSync` (`itinerary_sync.dart`) reconciles the shared facts — the itinerary, the roster, and the trip's name on its own `name_revised_at` clock — against Supabase, and nothing above it knows it exists, because it makes the store every screen already reads agree with the other phones. The rest of what is listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
+| **Repositories** | partial — one repository over the itinerary tables (`ConfirmedItinerary` in and out, spoken in `cairn_model` vocabulary), unchanged by the Today and Trail slices, both of which derive from the one saved-itinerary stream rather than adding a read; plus the photo seam, which is deliberately two halves — `PhotoRepository`, the read-only interface the Pool was built against before a photo could exist, and `PhotoStore`, the Drift implementation that answers it *and* owns the write path (keep a frame, write a word, watch the pool whole or by day). The composition root binds both providers to the one store. The membership seam (`membership_repository.dart`) has the same two halves for the same reason — `MembershipRepository`, the read interface the trip's surfaces and the ping's party are written against and the only way a test can stand a party of eight up, and `MembershipStore`, the Drift implementation that also owns starting the trip, renaming it, minting and revoking codes, deleting it and — given a `SharedFacts` backend, which nothing in the app passes yet — adopting a trip admitted elsewhere (`adoptTrip`: every round trip before the first local write, then facts, plan and roster in one transaction; `AGENTS.md` holds the contract). The remote side has begun: `TripSync` (`itinerary_sync.dart`) reconciles the shared facts — the itinerary, the roster, and the trip's name on its own `name_revised_at` clock — against Supabase, and nothing above it knows it exists, because it makes the store every screen already reads agree with the other phones. The rest of what is listed under [The repositories seam](#the-repositories-seam), not started | Drift, Supabase/R2 client adapter, `cairn_model` | Everything above it — every provider, every service, every screen | See [The repositories seam](#the-repositories-seam). The only node that knows both storage backends exist. |
 
 ### Storage
 
@@ -545,12 +545,14 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
 - **An invite code is real, canonical and revocable — and cannot let anybody
   in.** Minting, rotating and revoking are implemented, expiry is derived from
   the trip's close (never stored as a second timestamp), and saying a code
-  back is answered honestly for every case this phone can see. The adapter can
-  now redeem a code (`SharedFacts.redeemInvite`), and nothing above the seam
-  calls it, so what is still missing is the only thing that would make joining
-  work: a membership that reaches another phone. Until Phase 2 lands that, a well-formed code for somebody
-  else's trip gets a written "Cairn cannot reach it yet", and the roster on
-  this phone holds exactly one person.
+  back is answered honestly for every case this phone can see. What is missing
+  is the only thing that would make joining work: a membership that reaches
+  another phone. Both halves of that are built and neither is wired: the
+  adapter can redeem a code (`SharedFacts.redeemInvite`) and
+  `MembershipStore.adoptTrip` makes an already-admitted trip this phone's,
+  but nothing above the seam calls either, so a well-formed code for somebody
+  else's trip still gets a written "Cairn cannot reach it yet", and the
+  roster on this phone holds exactly one person.
 - **The download path exists in code and has never run.** `r2-download-url`
   is written and its refusals are exercised offline, but there is no bucket,
   no deployment and no project it has been pointed at, so not one of them has

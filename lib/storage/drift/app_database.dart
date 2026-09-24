@@ -1550,6 +1550,48 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Writes the trip's row for a trip already admitted elsewhere, carrying
+  /// its own id rather than minting one.
+  ///
+  /// The counterpart of [startTripIfAbsent] for the other door onto a trip:
+  /// starting one mints an id because none exists yet, and adopting one must
+  /// not, because the id is the admitted trip's own and a second mint here
+  /// would write a trip nobody on the other seven phones recognises. This is
+  /// additive precisely because of that difference — [startTripIfAbsent]'s
+  /// contract (idempotent, mints its own id) must not change to gain a second
+  /// one.
+  ///
+  /// **Not idempotent, and deliberately so.** It inserts and lets a second
+  /// call against an occupied row raise, rather than silently upserting: the
+  /// caller ([MembershipStore.adoptTrip]) has already decided this phone
+  /// holds no trip before calling, and a second write here succeeding would
+  /// hide the very race that check exists to catch. The raise is the
+  /// caller's to run inside a transaction, so that a trip started between
+  /// its check and this insert is the one that survives.
+  ///
+  /// [nameRevisedAt] is the server's clock for the name, not this phone's:
+  /// the name's last-write-wins comparison ([applySharedTripName]) starts
+  /// from where the server already is, so the next reconcile neither
+  /// re-offers the server its own name nor loses a rename made in between.
+  Future<void> adoptTripFacts({
+    required TripId tripId,
+    required String startedByMemberId,
+    required DateTime nameRevisedAt,
+    String? name,
+    String? timeZone,
+  }) {
+    return into(tripFacts).insert(
+      TripFactsCompanion.insert(
+        id: const Value(_theOneTrip),
+        tripId: tripId.value,
+        startedByMemberId: startedByMemberId,
+        name: Value(name),
+        nameRevisedAtUtcIso: Value(nameRevisedAt.toUtc().toIso8601String()),
+        timeZone: Value(timeZone),
+      ),
+    );
+  }
+
   /// Writes the roster the server handed over, replacing this phone's copy.
   ///
   /// Wholesale, and safely so: the server only answers a member, so the

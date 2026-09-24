@@ -13,6 +13,8 @@
 // And a phone can only ever write one member row into its own roster, so the
 // party of eight the product is actually for is seeded at the read seam
 // (`bootstrapApp(membership:)`), exactly as the Pool seeds a pool.
+import 'dart:typed_data';
+
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -24,9 +26,12 @@ import 'package:trip_moments/trip_moments.dart' as tm;
 import 'package:cairn/app_state/ping_schedule.dart';
 import 'package:cairn/app_state/trip_providers.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/repositories/itinerary_sync.dart'
+    show unnamedTripPlaceholder;
 import 'package:cairn/repositories/membership_repository.dart';
 import 'package:cairn/repositories/photo_repository.dart';
 import 'package:cairn/storage/drift/app_database.dart';
+import 'package:cairn/storage/remote/shared_facts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Three dated days: 14, 15 and 17 June 2027.
@@ -84,6 +89,103 @@ PooledPhoto photoBy(String by) => PooledPhoto(
   ),
   localPath: null,
 );
+
+/// A stand-in server for [MembershipStore.adoptTrip]: it answers exactly
+/// what a test sets and hands back whatever was pushed to [syncItinerary]
+/// (the same "echo the push" baseline [FakeServer] in
+/// shared_facts_sync_test.dart uses), since the merge itself is not this
+/// store's business to reimplement.
+///
+/// Every method [adoptTrip] never calls throws, so a test that reaches one
+/// by accident fails loudly rather than reading a plausible stub answer.
+class FakeAdoptFacts implements SharedFacts {
+  FakeAdoptFacts({this.trip});
+
+  /// The shared `trips` row, or null while this server has never heard of
+  /// the trip.
+  RemoteTrip? trip;
+
+  /// What the next [syncItinerary] hands back instead of echoing the push.
+  RemoteItinerary? holds;
+
+  /// Set to make the next [syncItinerary] fail the way a mid-flight drop
+  /// does, for the "no half-adopted trip" test.
+  Object? failSyncItinerary;
+
+  /// Runs while [readTrip] is in flight — the window in which something
+  /// else on this phone can start a trip of its own.
+  Future<void> Function()? duringReadTrip;
+
+  var readTrips = 0;
+  var syncs = 0;
+
+  @override
+  Future<SharedFactsSession?> session() async => null;
+
+  @override
+  Future<RemoteTrip?> readTrip(TripId tripId) async {
+    readTrips++;
+    await duringReadTrip?.call();
+    return trip;
+  }
+
+  @override
+  Future<RemoteItinerary> syncItinerary({
+    required TripId tripId,
+    required DateTime planRevisedAt,
+    required List<RemoteDay> days,
+    required DateTime pocketRevisedAt,
+    required List<RemoteSetAside> setAside,
+  }) async {
+    syncs++;
+    if (failSyncItinerary case final error?) throw error;
+    return holds ??
+        RemoteItinerary(
+          planRevisedAt: planRevisedAt,
+          pocketRevisedAt: pocketRevisedAt,
+          days: days,
+          setAside: setAside,
+        );
+  }
+
+  @override
+  Future<void> createTrip(RemoteTripDraft draft) =>
+      throw UnimplementedError('adoptTrip never creates a shared trip');
+
+  @override
+  Future<RemoteTripName> syncTripName({
+    required TripId tripId,
+    required String name,
+    required DateTime revisedAt,
+  }) => throw UnimplementedError('adoptTrip never renames a trip');
+
+  @override
+  Future<RemoteUploadTicket> photoUploadTicket({
+    required TripId tripId,
+    required String photoId,
+    required String contentType,
+    required int byteSize,
+  }) => throw UnimplementedError('adoptTrip never mints an upload ticket');
+
+  @override
+  Future<void> putPhotoBytes(RemoteUploadTicket ticket, Uint8List bytes) =>
+      throw UnimplementedError('adoptTrip never uploads bytes');
+
+  @override
+  Future<void> recordPhoto(RemotePhoto photo) =>
+      throw UnimplementedError('adoptTrip never records a photo');
+
+  @override
+  Future<void> writePhotoCaption({
+    required TripId tripId,
+    required String photoId,
+    required String? caption,
+  }) => throw UnimplementedError('adoptTrip never writes a caption');
+
+  @override
+  Future<TripId> redeemInvite(String code) =>
+      throw UnimplementedError('adoptTrip never redeems an invite');
+}
 
 void main() {
   late AppDatabase db;
@@ -463,5 +565,255 @@ void main() {
       expect(container.read(tripPartyProvider), isA<tm.Party>());
       expect(container.read(pingScheduleProvider), hasLength(3));
     });
+  });
+
+  // ------------------------------------------------------- adopting a trip
+
+  group('adopting a trip', () {
+    final jonas = MemberId('jonas');
+    final ada = MemberId('ada');
+
+    RemoteTrip aSharedTrip() => RemoteTrip(
+      id: aTrip,
+      name: 'Japan, June',
+      nameRevisedAt: DateTime.utc(2027, 5, 1),
+      startedBy: jonas,
+      timeZone: 'Asia/Tokyo',
+      members: [
+        RemoteMember(
+          id: jonas,
+          displayName: 'Jonas',
+          joinedAt: DateTime.utc(2027, 5, 1),
+        ),
+        RemoteMember(
+          id: ada,
+          displayName: 'Ada',
+          joinedAt: DateTime.utc(2027, 6, 1),
+        ),
+      ],
+    );
+
+    RemoteItinerary aSharedPlan() => RemoteItinerary(
+      planRevisedAt: DateTime.utc(2027, 6, 1),
+      pocketRevisedAt: DateTime.utc(2027, 6, 1),
+      days: [
+        RemoteDay(
+          number: 1,
+          dateIso: '2027-06-14',
+          place: 'Tokyo',
+          revisedAt: DateTime.utc(2027, 6, 1),
+          stops: const [RemoteStop(position: 0, text: 'Senso-ji')],
+        ),
+        RemoteDay(
+          number: 2,
+          dateIso: '2027-06-15',
+          place: 'Kyoto',
+          revisedAt: DateTime.utc(2027, 6, 1),
+          stops: const [RemoteStop(position: 0, text: 'Fushimi Inari')],
+        ),
+      ],
+    );
+
+    test('adopts cleanly: facts, roster and plan all land locally', () async {
+      final facts = FakeAdoptFacts(trip: aSharedTrip())..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+
+      await store.adoptTrip(aTrip);
+
+      final trip = await db.readTripFacts();
+      expect(trip, isNotNull);
+      expect(trip!.tripId, aTrip.value);
+      expect(trip.name, 'Japan, June');
+      expect(
+        trip.nameRevisedAtUtcIso,
+        DateTime.utc(2027, 5, 1).toIso8601String(),
+      );
+      expect(trip.timeZone, 'Asia/Tokyo');
+      expect(trip.startedByMemberId, jonas.value);
+
+      final members = await db.readTripMembers();
+      expect(members.map((m) => m.id), containsAll([jonas.value, ada.value]));
+
+      final days = await db.readItineraryDays();
+      expect(days, hasLength(2));
+      expect(days.first.place, 'Tokyo');
+
+      final stops = await db.readItineraryStops();
+      expect(stops, hasLength(2));
+      expect(stops.first.stopText, 'Senso-ji');
+      expect(stops.first.kind, isNotNull);
+    });
+
+    test('each member joins on the day the plan says, not day 1', () async {
+      final trip = aSharedTrip();
+      final late = RemoteTrip(
+        id: trip.id,
+        name: trip.name,
+        nameRevisedAt: trip.nameRevisedAt,
+        startedBy: trip.startedBy,
+        timeZone: trip.timeZone,
+        members: [
+          trip.members.first,
+          RemoteMember(
+            id: ada,
+            displayName: 'Ada',
+            joinedAt: DateTime.utc(2027, 6, 15, 9),
+          ),
+        ],
+      );
+      final facts = FakeAdoptFacts(trip: late)..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+
+      await store.adoptTrip(aTrip);
+
+      final byId = {for (final m in await db.readTripMembers()) m.id: m};
+      expect(byId[jonas.value]!.joinedOnDay, 1);
+      expect(byId[ada.value]!.joinedOnDay, 2);
+    });
+
+    test('the wire placeholder is not adopted as a name', () async {
+      final trip = aSharedTrip();
+      final unnamed = RemoteTrip(
+        id: trip.id,
+        name: unnamedTripPlaceholder,
+        nameRevisedAt: DateTime.utc(1970),
+        startedBy: trip.startedBy,
+        timeZone: trip.timeZone,
+        members: trip.members,
+      );
+      final facts = FakeAdoptFacts(trip: unnamed)..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+
+      await store.adoptTrip(aTrip);
+
+      expect((await db.readTripFacts())!.name, isNull);
+    });
+
+    test('adopting the trip this phone already holds is a no-op', () async {
+      final facts = FakeAdoptFacts(trip: aSharedTrip())..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+      await store.adoptTrip(aTrip);
+      expect(facts.readTrips, 1);
+      expect(facts.syncs, 1);
+
+      // Asking again for the very same trip must not re-deal anything: no
+      // second read, no second pull.
+      await store.adoptTrip(aTrip);
+      expect(facts.readTrips, 1);
+      expect(facts.syncs, 1);
+    });
+
+    test('refuses a different trip while one is already held', () async {
+      final facts = FakeAdoptFacts(trip: aSharedTrip())..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+      await store.adoptTrip(aTrip);
+
+      final anotherTrip = TripId.mint(List.filled(16, 0x5c));
+      await expectLater(
+        () => store.adoptTrip(anotherTrip),
+        throwsA(isA<DifferentTripHeldException>()),
+      );
+      // The refusal is decided before any network call, since a trip is
+      // already known to be held.
+      expect(facts.readTrips, 1);
+
+      // And the held trip is untouched.
+      final trip = await db.readTripFacts();
+      expect(trip!.tripId, aTrip.value);
+    });
+
+    test('refuses a trip the server has never heard of', () async {
+      final facts = FakeAdoptFacts(trip: null);
+      final store = MembershipStore(db, facts: facts);
+
+      await expectLater(
+        () => store.adoptTrip(aTrip),
+        throwsA(isA<UnknownTripException>()),
+      );
+      expect(await db.readTripFacts(), isNull);
+    });
+
+    test(
+      'a mid-way failure pulling the plan leaves no half-adopted trip',
+      () async {
+        await db.writePlanDraft('Day 1 - somewhere');
+        final facts = FakeAdoptFacts(trip: aSharedTrip())
+          ..failSyncItinerary = Exception('the train went into a tunnel');
+        final store = MembershipStore(db, facts: facts);
+
+        await expectLater(() => store.adoptTrip(aTrip), throwsException);
+
+        // Nothing survives the failed adoption: no trip row, no roster —
+        // a clean state the person can retry from, not a trip they cannot
+        // read today on.
+        expect(await db.readTripFacts(), isNull);
+        expect(await db.readTripMembers(), isEmpty);
+        // And nothing that was there before is gone: the import sitting in
+        // the paste box is not the adoption's to discard.
+        expect(await db.readPlanDraft(), 'Day 1 - somewhere');
+      },
+    );
+
+    test('a failed local write rolls the whole adoption back', () async {
+      final trip = aSharedTrip();
+      final twice = RemoteTrip(
+        id: trip.id,
+        name: trip.name,
+        nameRevisedAt: trip.nameRevisedAt,
+        startedBy: trip.startedBy,
+        timeZone: trip.timeZone,
+        members: [trip.members.first, trip.members.first],
+      );
+      await db.writePlanDraft('Day 1 - somewhere');
+      final facts = FakeAdoptFacts(trip: twice)..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+
+      // The roster is the last write and the duplicate row refuses it; the
+      // trip row and the plan written before it must not outlive that.
+      await expectLater(() => store.adoptTrip(aTrip), throwsA(anything));
+
+      expect(await db.readTripFacts(), isNull);
+      expect(await db.readTripMembers(), isEmpty);
+      expect(await db.readItineraryDays(), isEmpty);
+      expect(await db.readPlanDraft(), 'Day 1 - somewhere');
+    });
+
+    test('a trip started mid-call is the one that survives', () async {
+      final facts = FakeAdoptFacts(trip: aSharedTrip())..holds = aSharedPlan();
+      final store = MembershipStore(db, facts: facts);
+      late final TripId started;
+      facts.duringReadTrip = () async {
+        started = await db.startTripIfAbsent(
+          starterId: 'me',
+          starterDisplayName: 'Me',
+        );
+        await db.replaceItinerary(
+          days: const [(number: 1, dateIso: '2027-07-01', place: 'Lisbon')],
+          stops: const [],
+          setAsides: const [],
+          nowUtcIso: '2027-06-01T00:00:00.000Z',
+        );
+      };
+
+      await expectLater(() => store.adoptTrip(aTrip), throwsA(anything));
+
+      final trip = await db.readTripFacts();
+      expect(trip!.tripId, started.value);
+      expect(trip.tripId, isNot(aTrip.value));
+      final days = await db.readItineraryDays();
+      expect(days.single.place, 'Lisbon');
+      expect((await db.readTripMembers()).map((m) => m.id), ['me']);
+    });
+
+    test(
+      'calling adoptTrip with no backend configured refuses loudly',
+      () async {
+        final store = MembershipStore(db);
+        await expectLater(
+          () => store.adoptTrip(aTrip),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
   });
 }
