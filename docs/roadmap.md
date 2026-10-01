@@ -202,10 +202,11 @@ before it or the morning after. It is one rule (`cairn_model`'s
 private opinion about it; the deliberate "shut forever" test that pinned the
 opposite is gone rather than worked around, as
 [grill round one](decisions/2026-08-22-grill-round-one.md) §1 asked. Its reach
-is honestly small today: the Pool is the only surface that draws a photograph,
-so it is the only one with anything to withhold, and with no roster every photo
-on this phone is this phone's own — so the day being lived opens as soon as you
-answer it and there is nobody else's picture to hold back yet.
+is honestly small today: both the Pool and the day page now draw photographs
+through this gate, and the day page preserves each photo's time and contributor
+while withholding its image. But no photo pulls from another phone yet, so
+there is not yet a co-member's photograph on this phone for the live app to
+withhold.
 
 **The trip is now a stored thing rather than an implied one.** Accepting a
 plan starts a trip: a roster in Drift, the fact of who started it, and three
@@ -250,9 +251,10 @@ the “Bug sweep trip”, its itinerary and its one unambiguous linked anonymous
 account were deleted. Six anonymous accounts created that day had no link to
 the trip and were deliberately left alone rather than guessed to be residue.
 
-Still not built: the day page's photo timeline, the Trail's filled node, and
-the gate's face on the day page — the rule is there, the page has no
-photographs to withhold yet.
+Still not built: the Trail's photo-filled node and the late-photo path for a
+missed ping. The day page now draws the local photo timeline and applies the
+shared gate; photos from another phone still cannot arrive until the pull path
+is built.
 
 **The paste box now has two doors beside it.** A plan can arrive as a file
 rather than as pasted text: the pill under the box opens the document picker,
@@ -370,15 +372,13 @@ project is live. No secret is ever committed (`supabase/README.md`).*
 
 ### Phase 3 — the trip surfaces
 
-The day page's *other* half — the photo timeline that makes the day an
-artefact, its plan half having landed early with Today — and with it the gate's
-face on that page, the rule itself having landed early too; capture, which
-landed early too, and the late-photo path for a missed ping. The Trail's own path landed early alongside Today;
+The day page's photo timeline and gate face, plus capture, all landed early;
+what remains here is the late-photo path for a missed ping. The Trail's own path landed early alongside Today;
 what is left of it here is the node a day's photos fill, which is the whole
 reward of that screen and cannot be drawn before photos exist. The Pool's
-structure landed early the same way, over a read seam with nothing behind it;
-what is left of it here is the photograph in the tile, and the taker's initial
-chip once a roster exists.
+structure and local photo tiles also landed early; the taker's initial chip
+waits for a roster that can include other members, and photos from another
+phone wait for the pull path.
 
 **Why third:** these are the parts people actually see and the parts most likely
 to change once you have used them. Building them on top of a working pool means

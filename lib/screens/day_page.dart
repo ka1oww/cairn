@@ -16,21 +16,28 @@
 // The structure is 2f's: the day's identity, then a flat ordered list of the
 // stops as pasted. No progress tracking, no morning/afternoon split, no
 // "we're up to here" — every one of those is rejected in the decision
-// record. The photo timeline arrives in a later slice and is deliberately
-// not stubbed here.
+// record. The photo timeline follows the day artefact in the round-7 design
+// handoff: capture-time order, alternating prints, with hour and contributor
+// on each mount.
 //
 // One thing did arrive: **the call to your moment**, at the top of the day,
 // which is where the design puts it (the wash card of surface 12a's "later,
 // in the app"). It draws nothing at all unless today is asking something of
 // you, so a day you are only reading is unchanged.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_state/capture_flow.dart';
+import '../app_state/day_gate.dart';
 import '../app_state/day_view.dart';
 import '../app_state/maps_handoff_flow.dart';
+import '../app_state/ping_schedule.dart';
 import '../app_state/trip_providers.dart';
 import 'capture_screen.dart';
+import 'house_style.dart';
+import 'photo_frame.dart';
 import 'text_prompt.dart';
 
 class DayPage extends ConsumerWidget {
@@ -68,7 +75,7 @@ class DayPage extends ConsumerWidget {
   }
 }
 
-class _Day extends StatelessWidget {
+class _Day extends ConsumerWidget {
   const _Day({required this.view, this.date});
 
   final DayView view;
@@ -79,7 +86,24 @@ class _Day extends StatelessWidget {
   final DateTime? date;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final photoState = ref.watch(tripPhotosProvider);
+    if (photoState case AsyncError(:final error)) {
+      return Center(child: Text('Failed to read: $error'));
+    }
+    final storedPhotos = photoState.value ?? const [];
+    final members =
+        ref.watch(tripMembershipProvider).value?.members ?? const [];
+    final viewer = ref.watch(viewerProvider);
+    final timeZone = ref.watch(tripTimeZoneProvider);
+    List<DayPhoto> photosFor(PlannedDay day) => dayPhotosFor(
+      dayNumber: day.number,
+      photos: storedPhotos,
+      members: members,
+      viewer: viewer,
+      gate: ref.watch(dayGateProvider(day.number)),
+    );
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -98,22 +122,38 @@ class _Day extends StatelessWidget {
           ),
         if (date != null) _CaptureCall(date: date!),
         ...switch (view) {
-          final PlannedDay day => _plannedDay(day),
+          final PlannedDay day => _plannedDay(day, photosFor(day), timeZone),
           final GapDay day => _gapDay(day),
-          final BeforeTheTrip pre => _beforeTheTrip(pre),
-          final AfterTheTrip post => _afterTheTrip(post),
+          final BeforeTheTrip pre => _beforeTheTrip(
+            pre,
+            photosFor(pre.nextUp),
+            timeZone,
+          ),
+          final AfterTheTrip post => _afterTheTrip(
+            post,
+            photosFor(post.lastDay),
+            timeZone,
+          ),
         },
       ],
     );
   }
 
-  List<Widget> _plannedDay(PlannedDay day) => [
+  List<Widget> _plannedDay(
+    PlannedDay day,
+    List<DayPhoto> photos,
+    String? timeZone,
+  ) => [
     _DayIdentity(day: day),
     const SizedBox(height: 18),
     if (day.stops.isEmpty)
       const _NothingPlanned()
     else
       _StopList(stops: day.stops, isOver: day.isOver, dayNumber: day.number),
+    if (photos.isNotEmpty) ...[
+      const SizedBox(height: 28),
+      _PhotoTimeline(photos: photos, timeZone: timeZone),
+    ],
   ];
 
   List<Widget> _gapDay(GapDay day) => [
@@ -126,7 +166,11 @@ class _Day extends StatelessWidget {
     const _NothingPlanned(),
   ];
 
-  List<Widget> _beforeTheTrip(BeforeTheTrip view) => [
+  List<Widget> _beforeTheTrip(
+    BeforeTheTrip view,
+    List<DayPhoto> photos,
+    String? timeZone,
+  ) => [
     _Announcement(
       key: const Key('pre-trip'),
       headline: view.headline,
@@ -145,9 +189,17 @@ class _Day extends StatelessWidget {
         isOver: false,
         dayNumber: view.nextUp.number,
       ),
+    if (photos.isNotEmpty) ...[
+      const SizedBox(height: 28),
+      _PhotoTimeline(photos: photos, timeZone: timeZone),
+    ],
   ];
 
-  List<Widget> _afterTheTrip(AfterTheTrip view) => [
+  List<Widget> _afterTheTrip(
+    AfterTheTrip view,
+    List<DayPhoto> photos,
+    String? timeZone,
+  ) => [
     _Announcement(
       key: const Key('post-trip'),
       headline: view.headline,
@@ -170,7 +222,157 @@ class _Day extends StatelessWidget {
         isOver: true,
         dayNumber: view.lastDay.number,
       ),
+    if (photos.isNotEmpty) ...[
+      const SizedBox(height: 28),
+      _PhotoTimeline(photos: photos, timeZone: timeZone),
+    ],
   ];
+}
+
+/// Prints from this day, read oldest first like the day artefact in the
+/// round-7 handoff. The path never reaches [_DayPhotoTile] while the shared
+/// gate is shut; those mounts keep the time and contributor visible, as the
+/// gate design requires, while replacing only the image with a lock.
+class _PhotoTimeline extends StatelessWidget {
+  const _PhotoTimeline({required this.photos, required this.timeZone});
+
+  final List<DayPhoto> photos;
+  final String? timeZone;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Text(
+            '${photos.length} ${photos.length == 1 ? 'photo' : 'photos'}',
+            key: const Key('day-photo-count'),
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        for (final (index, photo) in photos.indexed) ...[
+          if (index > 0) const _PhotoThread(),
+          Align(
+            alignment: index.isEven
+                ? Alignment.centerLeft
+                : Alignment.centerRight,
+            child: _DayPhotoTile(photo: photo, timeZone: timeZone),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// A quiet dotted thread between prints, echoing the handoff's timeline.
+class _PhotoThread extends StatelessWidget {
+  const _PhotoThread();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Center(
+      child: Column(
+        children: [
+          for (var dot = 0; dot < 3; dot++)
+            Container(
+              width: 3,
+              height: 3,
+              margin: const EdgeInsets.symmetric(vertical: 2),
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: houseMuted,
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _DayPhotoTile extends StatelessWidget {
+  const _DayPhotoTile({required this.photo, required this.timeZone});
+
+  final DayPhoto photo;
+  final String? timeZone;
+
+  @override
+  Widget build(BuildContext context) {
+    final time = clockLabel(photo.takenAtUtc, null, timeZone: timeZone);
+    final theme = Theme.of(context);
+    return Container(
+      key: Key('day-photo-${photo.id}'),
+      width: 220,
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: houseSticker,
+        border: Border.all(color: houseInk.withAlpha(18)),
+        boxShadow: const [
+          BoxShadow(
+            color: houseStickerShadow,
+            blurRadius: 7,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AspectRatio(
+            aspectRatio: 4 / 3,
+            child: switch ((photo.isWithheld, photo.imagePath)) {
+              (true, _) => ColoredBox(
+                key: Key('day-photo-${photo.id}-withheld'),
+                color: houseWash,
+                child: const Icon(Icons.lock_outline, color: houseMuted),
+              ),
+              (false, null) => ColoredBox(
+                key: Key('day-photo-${photo.id}-awaiting'),
+                color: houseWash,
+                child: const Icon(Icons.photo_outlined, color: houseMuted),
+              ),
+              (false, final String path) => PhotoFrame(
+                file: File(path),
+                imageKey: Key('day-photo-${photo.id}-image'),
+                fit: BoxFit.cover,
+              ),
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 7, 2, 1),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  time ?? 'Time unavailable',
+                  key: Key('day-photo-${photo.id}-time'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: houseInk,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Flexible(
+                  child: Text(
+                    photo.contributor,
+                    key: Key('day-photo-${photo.id}-contributor'),
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: houseMuted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// What today is asking of you, at the top of the day — or nothing at all,
