@@ -140,6 +140,9 @@ void main() {
                   'day_number': 2,
                   'captured_at': '2027-06-15T12:00:00Z',
                   'created_at': '2027-06-15T12:00:01Z',
+                  'captured_latitude': 59.9139,
+                  'captured_longitude': 10.7522,
+                  'capture_timezone': 'Europe/Oslo',
                   'caption': 'hello',
                 },
               ]),
@@ -174,6 +177,14 @@ void main() {
       expect(photos.single.caption, 'hello');
       expect(photos.single.dayNumber, 2);
       expect(photos.single.createdAtIso, '2027-06-15T12:00:01Z');
+      expect(
+        seen.first.url.queryParameters['select'],
+        'id,trip_id,contributor_id,r2_object_key,content_type,byte_size,'
+        'width,height,captured_at,created_at,day_number,trip_day,caption',
+      );
+      expect(photos.single.capturedLatitude, isNull);
+      expect(photos.single.capturedLongitude, isNull);
+      expect(photos.single.captureTimezone, isNull);
       final tickets = await sync.photoDownloadTickets(
         tripId: trip,
         photoIds: [photos.single.id],
