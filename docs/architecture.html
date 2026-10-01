@@ -172,9 +172,10 @@
   shutter, unlimited retakes against the same deadline, one line of words, and a row in the photo
   index — which the Pool, reading
   the same store, draws. Back-only, which is
-  the line's own scope. Two honest holes remain in it — nothing is registered with iOS, so no
-  pocket buzzes; and where there is no camera the app draws its own frame, so a green Simulator
-  run says nothing about the real camera path.
+  the line's own scope. Two honest holes remain in it — real-device notification delivery has not
+  been verified, although the production local-notification edge registers the schedule with iOS;
+  and where there is no camera the app draws its own frame, so a green Simulator run says nothing
+  about the real camera path.
   The gate now agrees with the record: today's photographs stay shut to you until you have put
   something into today, and every day that is over is open to everyone who was there. It is one
   rule (<code>GateState.decide</code>), answered in the app in one place, and the Pool is the only
@@ -362,9 +363,9 @@
 </div>
 
 <!-- ======================= platform edges ======================= -->
-<div class="node nb" style="left:60px;top:445px;width:220px">
-  <span class="chip">not built</span><h4>Local notifications</h4>
-  <p>Ordinary alert level — never pierces Do&nbsp;Not&nbsp;Disturb. Delivery is the OS’s to refuse. The schedule reaches a seam and stops there: nothing registers it with iOS, which is the ping's last missing inch.</p>
+<div class="node built" style="left:60px;top:445px;width:220px">
+  <span class="chip">built</span><h4>Local notifications</h4>
+  <p><code>LocalNotificationEdge</code> registers the schedule with iOS through <code>flutter_local_notifications</code>. Automated tests use a fake plugin, so real-device delivery remains unverified. Ordinary alert level — never pierces Do&nbsp;Not&nbsp;Disturb; delivery is the OS’s to refuse.</p>
 </div>
 <div class="node built" style="left:505px;top:445px;width:118px">
   <span class="chip">built</span><h4>File picker</h4>
@@ -566,8 +567,9 @@
       <li><b>The ping is dealt over a real roster that holds one person.</b> The party is the
       trip’s stored members now, and the collision-free promise is exercised against eight through
       a seeded roster in the tests; a phone can still only write its own row.</li>
-      <li><b>Nothing is registered with iOS.</b> The schedule reaches a <code>NotificationEdge</code>
-      and stops. The whole ping path is real except its last inch — the one the user would notice.</li>
+      <li><b>Real-device notification delivery is unverified.</b> <code>LocalNotificationEdge</code>
+      registers the derived schedule with iOS; automated tests use a fake plugin, so they do not
+      establish delivery on a phone.</li>
       <li><b>No viewfinder, and a drawn frame where there is no camera.</b> Capture takes a back
       frame and then a front one without showing the live preview, and falls back to a single
       generated image on the Simulator. That

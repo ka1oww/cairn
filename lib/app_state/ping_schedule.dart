@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trip_moments/trip_moments.dart' as tm;
 
 import 'day_view.dart';
+import 'local_notification_edge.dart';
 import 'trip_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -317,10 +318,8 @@ abstract interface class NotificationEdge {
 
 /// The edge that remembers instead of ringing.
 ///
-/// **This is what the app binds today**, and it is the one genuinely unbuilt
-/// piece of the ping: the derivation, the pass and the replace-not-append
-/// rule are all real, and registering them with iOS is a class that
-/// implements this interface. Nothing above this line changes when it lands.
+/// Test edge that records the requested schedule without registering it with
+/// the platform. The app binds [LocalNotificationEdge] in production.
 class RecordingNotificationEdge implements NotificationEdge {
   List<ScheduledPing> registered = const [];
 
@@ -331,7 +330,7 @@ class RecordingNotificationEdge implements NotificationEdge {
 }
 
 final notificationEdgeProvider = Provider<NotificationEdge>(
-  (ref) => RecordingNotificationEdge(),
+  (ref) => LocalNotificationEdge(),
 );
 
 /// Registers every ping still to come, in one pass, and re-registers when the
