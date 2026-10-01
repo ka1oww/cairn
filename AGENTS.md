@@ -578,7 +578,7 @@ import what is written there, not here.
   durable states — `queued`, `uploaded`, `caption`, `refused` — are exactly
   the places a kill can leave you, and `test/photo_outbox_test.dart` replays
   each. Four rules to keep. The driver watches `photo_outbox` and **never
-  `photos`**, so the pull (unbuilt) can apply rows without re-triggering the
+  `photos`**, so the receive pass can apply rows without re-triggering the
   push. An upload ticket is minted per attempt, never persisted, and **never
   re-minted once a PUT has returned 200** — past that line the `photos` row
   may land any moment and a row's existence is what makes `r2-upload-url`
@@ -644,9 +644,11 @@ import what is written there, not here.
   alone. Two rules the screen depends on: a photo's day is
   the `dayNumber` already on its `PhotoRef` — never re-derived from
   `photo_day_assignment` on read, since a person may have overridden it — and
-  a day's photos are ordered by `cairn_model.DayPool`, not by the screen. A
-  tile whose bytes are not on this phone is a permanent state of a pool eight
-  people share, not a loading spinner.
+  a day's photos are ordered by `cairn_model.DayPool`, not by the screen. The
+  receive pass writes shared metadata and downloaded originals through the
+  same store that capture uses; until its cache succeeds, the row remains a
+  waiting tile. A tile whose bytes are not on this phone is a valid state of a
+  pool eight people share, not a loading spinner.
 - **A trip ends, and where it stands is one rule written once.**
   `cairn_model`'s `tripStandingAt` turns `(now, endsAt)` into underway / grace
   / archived, and every surface and write path asks it through

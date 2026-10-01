@@ -28,8 +28,9 @@ in the local probe, as do `0015`, `0016`, `0017` and `0018`. The app
 points at it by default — see
 [Pointing the app at it](#pointing-the-app-at-it) — and
 [Verification](#verification-what-was-actually-run) at the bottom says what has
-actually been exercised against it and what has not. R2, the edge functions and
-the real sign-in providers are still untouched.
+actually been exercised against it and what has not. R2 has no bucket yet; the
+edge functions have source code but are not deployed, and the real sign-in
+providers are still untouched.
 
 ## The model
 
@@ -1046,14 +1047,15 @@ pause, and unbounded accumulation over years.
 
 Being honest about the edges:
 
-- **The download path is written and has never run.** `r2-download-url`
-  exists and its refusals are exercised offline, but there is no bucket, no
-  deployment and no project it has been pointed at, so **not one of its
-  refusals has been observed**. `tool/photo_pipe_probe.dart` is the harness
-  that would observe them — three real accounts over the real stack, which is
-  the only place an RLS refusal is watchable at all — and it is unrun for the
-  same reason. Written-and-unrun is a smaller blank than not-built; it is
-  still the worst one here.
+- **The download path is wired in the phone and has never run live.** The
+  adapter and `PhotoSync` request signed downloads and cache originals;
+  `r2-download-url` exists and its refusals are exercised offline. But there
+  is no bucket, no deployment and no project it has been pointed at, so **not
+  one of its refusals has been observed**. `tool/photo_pipe_probe.dart` is the
+  harness that would observe them — three real accounts over the real stack,
+  which is the only place an RLS refusal is watchable at all — and it is unrun
+  for the same reason. Written-and-unrun is a smaller blank than not-built; it
+  is still the worst one here.
 - **No derived-variant pipeline.** `photos.r2_thumbnail_key` and `day_pages`
   allow for a smaller derived image and a composed page being uploaded, but
   nothing here generates either — that's phone-side image work. Note what such

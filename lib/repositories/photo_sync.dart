@@ -26,9 +26,9 @@
 // existence is what makes the mint refuse.
 //
 // **The driver never watches `photos`.** Its trigger is the outbox table
-// alone, so the pull half (when it is built) can write photo rows without
-// re-triggering the push — the unbounded-loop lesson `itinerary_sync.dart`
-// guards against is designed out here instead.
+// alone, so the receive pass can write photo rows without re-triggering the
+// push — the unbounded-loop lesson `itinerary_sync.dart` guards against is
+// designed out here instead.
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';

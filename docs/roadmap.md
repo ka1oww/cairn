@@ -105,24 +105,25 @@ The captain set a condition on the seven's half of the product: **by 31 October
 the ping must fire on a real phone, and a photograph must cross between two real
 phones — or that half gets cut.**
 
-**Both conditions currently sit at zero, and neither is close in the sense of
-"nearly working".**
+**Neither condition has been demonstrated on a real phone.** The photo send and
+receive implementation is now present and fake-backed; the real-phone test
+still depends on membership and backend rollout. The ping delivery path remains
+unwritten.
 
 - *The ping firing on a real phone* needs an implementation of
   `NotificationEdge` against iOS. There is none, and there is **no notification
   dependency in `pubspec.yaml` at all** — not `flutter_local_notifications`,
   not Firebase, nothing. What exists is the schedule that decides the minute,
   which is correct and tested.
-- *A photograph crossing between two phones* needs photo methods on
-  `SharedFacts` and an R2 client. Neither exists. `SharedFacts` has four
-  methods and none of them mentions a photograph; every occurrence of "R2" in
-  `lib/` is inside a comment describing an adapter that was never written.
+- *A photograph crossing between two real phones* still has not been
+  demonstrated. `SharedFacts`, `PostgrestSharedFacts` and `PhotoSync` now have
+  send and receive paths, exercised against fakes; live delivery still needs
+  membership on a second phone and the backend rollout described in
+  `supabase/README.md`.
 
-Both are **unwritten rather than broken**, which is better news than the
-alternative — the server-side table (`supabase/migrations/0006_photos.sql`) and
-the gate rule are already in place and tested, so what was built was built
-well. But nothing about either is partly done, and no estimate here should be
-read as though it were.
+The server-side photo table and gate rule are already in place and tested, and
+the phone-side transport is partly implemented. The remaining gap is end-to-end
+delivery against the rolled-out backend, not an absent client implementation.
 
 ---
 
@@ -295,10 +296,10 @@ tested.
 | `packages/trip_moments` | Landed. Deals one ping per person across the party. Nothing delivers what it deals. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
 | `packages/plan_extraction` | Landed. Bytes in, plan text out, with `.txt`/`.docx`/`.xlsx`/`.csv`/`.pdf` extractors. Provably repeated print controls are removed, and the Wanderlog fixture parses end to end as three days. |
-| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with migrations `0001`-`0010`, `0012` and `0014` applied (`0011` and `0013` are written and locally probed, not hosted). **No photo transport, and the phone-side call that redeems an invite exists on the adapter with nothing yet invoking it.** |
+| `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with migrations `0001`-`0010`, `0012` and `0014` applied (`0011` and `0013` are written and locally probed, not hosted). Photo transport code now covers push and receive, but has not run against a live bucket; the phone-side call that redeems an invite exists on the adapter with nothing yet invoking it. |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** Paste-and-confirm persisting the itinerary locally, with two doors beside the box — a document (`.txt`, `.docx`, `.xlsx`, `.csv`, `.pdf`) or a photo/screenshot through Apple Vision — filling it and never auto-parsing; the day page it lands on, the trip's path, the three-tab container, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them, the trip as a stored fact (roster, starter, flat-but-gated powers, three-word codes that die with the trip, the sheet off the Trail's title), and the itinerary reaching the hosted project on an ordinary build with the app saying when it has not. **Nothing registered with iOS; photographs push one way only — up, bytes then the row — and that push has never been exercised against a live bucket, so no photograph has yet been seen on a second phone; no code can admit anybody.** |
+| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** Paste-and-confirm persisting the itinerary locally, with two doors beside the box — a document (`.txt`, `.docx`, `.xlsx`, `.csv`, `.pdf`) or a photo/screenshot through Apple Vision — filling it and never auto-parsing; the day page it lands on, the trip's path, the three-tab container, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them, the trip as a stored fact (roster, starter, flat-but-gated powers, three-word codes that die with the trip, the sheet off the Trail's title), and the itinerary reaching the hosted project on an ordinary build with the app saying when it has not. **Nothing registered with iOS; photo push and receive code are built and exercised against fakes, but neither has run against a live bucket, so no photograph has yet been seen on a second phone; no code can admit anybody.** |
 
 ---
 
@@ -339,18 +340,20 @@ roster or a stale plan
 build.** The itinerary and the roster are stored, merged last-write-wins per
 day, and reconciled by `lib/repositories/itinerary_sync.dart` over a first
 slice of the Supabase adapter — against a hosted project, signed in as an
-anonymous GoTrue account (`supabase/README.md`). Everything else in this phase
-is untouched, and two pieces of it are the whole reason the phase exists:
+anonymous GoTrue account (`supabase/README.md`). The other delivery slices are
+still outstanding, including the two that keep the app from being a group:
 
 - **Nothing carries a membership to a second phone.** The invite code is real,
   canonical, revocable and dies with the trip; the adapter can now call
   `redeem_trip_invite` (`SharedFacts.redeemInvite`, its refusals typed as
   `InviteRefused`), and no flow calls the adapter. Until one does, a roster of
   one is all the sync can converge on and the trip is not a group.
-- **No photograph has any transport.** `SharedFacts` declares four methods and
-  none is about a photo; there is no R2 client. The table and its policies are
-  written and tested on the server side, and nothing on the phone can reach
-  them.
+- **A photo has not crossed between real phones.** `SharedFacts` and
+  `PhotoSync` now implement index listing, signed downloads, local metadata
+  ingestion and original caching, alongside the existing upload path. The
+  receive and send logic has only been exercised against fakes. The hosted
+  project has not applied migration `0011`, the download function is not
+  deployed, and membership still cannot be carried to another phone.
 
 The pool stores **originals**; resizing is for display only (§3 of the same
 decision). The bill has now been measured rather than guessed at:
@@ -451,12 +454,13 @@ are the ones that stand between Cairn and being a group at all.
 
 **First release:**
 
-- **Move a photograph between phones.** Never built: `SharedFacts` has no photo
-  method, and no R2 client exists in `lib/` — only comments describing the
-  adapter that would be one. The server half is written and tested
-  (`supabase/migrations/0006_photos.sql`, the upload-URL edge function). Until
-  this exists a person's Pool shows only their own photographs, forever, with
-  no error and no explanation. One half of the 31 October tripwire.
+- **Demonstrate a photograph crossing between real phones.** The app-side send
+  and receive implementation now exists (`PhotoSync`, `SharedFacts` and
+  `PostgrestSharedFacts`) and is exercised against fakes. It has not run against
+  a live bucket: the hosted project still needs migration `0011`, the download
+  function deployment and a way to admit a second phone. Until those are in
+  place, the Pool on a real phone still shows only locally available photos.
+  One half of the 31 October tripwire.
 - **Make a phone buzz.** Never built: `NotificationEdge` has exactly one
   implementation, `RecordingNotificationEdge`, which appends to a list — and
   there is no notification dependency in `pubspec.yaml` at all. The schedule it
