@@ -3,6 +3,8 @@
 // a real device -- the replace-not-append rule and the degrade-safely paths
 // are the only things this seam promises, and both are channel-level
 // behaviour.
+import 'dart:async';
+
 import 'package:cairn/app_state/local_notification_edge.dart';
 import 'package:cairn/app_state/ping_schedule.dart';
 import 'package:flutter/foundation.dart';
@@ -73,6 +75,66 @@ void main() {
           .toList();
       expect(secondBatchSchedules, hasLength(1));
     });
+
+    test(
+      'serializes overlapping replacements so the latest deal wins',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        IOSFlutterLocalNotificationsPlugin.registerWith();
+
+        final calls = <MethodCall>[];
+        final firstScheduleStarted = Completer<void>();
+        final releaseFirstSchedule = Completer<void>();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(_channel, (call) async {
+              calls.add(call);
+              switch (call.method) {
+                case 'initialize':
+                  return true;
+                case 'requestPermissions':
+                  return true;
+                case 'zonedSchedule':
+                  if (!firstScheduleStarted.isCompleted) {
+                    firstScheduleStarted.complete();
+                    await releaseFirstSchedule.future;
+                  }
+                  return null;
+                default:
+                  return null;
+              }
+            });
+
+        final edge = LocalNotificationEdge(
+          plugin: FlutterLocalNotificationsPlugin(),
+        );
+        final firstReplacement = edge.replaceScheduledPings(
+          _pings([DateTime.utc(2027, 6, 14, 8), DateTime.utc(2027, 6, 15, 9)]),
+        );
+        await firstScheduleStarted.future;
+
+        final latestReplacement = edge.replaceScheduledPings(
+          _pings([DateTime.utc(2027, 6, 16, 10)]),
+        );
+        await Future<void>.delayed(Duration.zero);
+        final cancelsWhileFirstScheduleBlocked = calls
+            .where((call) => call.method == 'cancelAll')
+            .length;
+
+        releaseFirstSchedule.complete();
+        await Future.wait([firstReplacement, latestReplacement]);
+
+        expect(cancelsWhileFirstScheduleBlocked, 1);
+        expect(calls.map((call) => call.method), [
+          'initialize',
+          'requestPermissions',
+          'cancelAll',
+          'zonedSchedule',
+          'zonedSchedule',
+          'cancelAll',
+          'zonedSchedule',
+        ]);
+      },
+    );
   });
 
   group('degrades safely', () {
@@ -132,50 +194,56 @@ void main() {
       );
     });
 
-    test('when the platform channel is unavailable, without throwing or hanging', () async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-      IOSFlutterLocalNotificationsPlugin.registerWith();
-      // No mock handler installed at all: every invokeMethod call throws
-      // MissingPluginException, the same shape a device with no native host
-      // registered would produce.
+    test(
+      'when the platform channel is unavailable, without throwing or hanging',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        IOSFlutterLocalNotificationsPlugin.registerWith();
+        // No mock handler installed at all: every invokeMethod call throws
+        // MissingPluginException, the same shape a device with no native host
+        // registered would produce.
 
-      final edge = LocalNotificationEdge(
-        plugin: FlutterLocalNotificationsPlugin(),
-      );
+        final edge = LocalNotificationEdge(
+          plugin: FlutterLocalNotificationsPlugin(),
+        );
 
-      await expectLater(
-        edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 14, 8)])),
-        completes,
-      );
+        await expectLater(
+          edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 14, 8)])),
+          completes,
+        );
 
-      // A second call after the failed first must not retry `initialize`
-      // forever, but it still must not throw.
-      await expectLater(
-        edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 15, 8)])),
-        completes,
-      );
-    });
+        // A second call after the failed first must not retry `initialize`
+        // forever, but it still must not throw.
+        await expectLater(
+          edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 15, 8)])),
+          completes,
+        );
+      },
+    );
 
-    test('when initialize itself throws, without throwing or hanging', () async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-      IOSFlutterLocalNotificationsPlugin.registerWith();
+    test(
+      'when initialize itself throws, without throwing or hanging',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        IOSFlutterLocalNotificationsPlugin.registerWith();
 
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(_channel, (call) async {
-            if (call.method == 'initialize') {
-              throw PlatformException(code: 'unavailable');
-            }
-            return null;
-          });
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(_channel, (call) async {
+              if (call.method == 'initialize') {
+                throw PlatformException(code: 'unavailable');
+              }
+              return null;
+            });
 
-      final edge = LocalNotificationEdge(
-        plugin: FlutterLocalNotificationsPlugin(),
-      );
+        final edge = LocalNotificationEdge(
+          plugin: FlutterLocalNotificationsPlugin(),
+        );
 
-      await expectLater(
-        edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 14, 8)])),
-        completes,
-      );
-    });
+        await expectLater(
+          edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 14, 8)])),
+          completes,
+        );
+      },
+    );
   });
 }

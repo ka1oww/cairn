@@ -36,6 +36,8 @@ class LocalNotificationEdge implements NotificationEdge {
 
   final FlutterLocalNotificationsPlugin _plugin;
 
+  Future<void> _replacementTail = Future<void>.value();
+
   /// Null until the first attempt; then true or false for good, so a
   /// platform channel that is truly absent (never a transient failure -- the
   /// plugin's own `initialize` is not that kind of call) is not retried once
@@ -53,9 +55,7 @@ class LocalNotificationEdge implements NotificationEdge {
         requestSoundPermission: false,
       );
       final ok = await _plugin.initialize(
-        settings: const InitializationSettings(
-          iOS: iosSettings,
-        ),
+        settings: const InitializationSettings(iOS: iosSettings),
       );
       _initialized = ok ?? true;
       if (_initialized == true) await _requestPermission();
@@ -82,7 +82,21 @@ class LocalNotificationEdge implements NotificationEdge {
   }
 
   @override
-  Future<void> replaceScheduledPings(List<ScheduledPing> pings) async {
+  Future<void> replaceScheduledPings(List<ScheduledPing> pings) {
+    final snapshot = List<ScheduledPing>.unmodifiable(pings);
+    final replacement = _replacementTail.then(
+      (_) => _replaceScheduledPings(snapshot),
+    );
+    _replacementTail = replacement.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        _logRefusal('register pings', error, stackTrace);
+      },
+    );
+    return _replacementTail;
+  }
+
+  Future<void> _replaceScheduledPings(List<ScheduledPing> pings) async {
     if (!await _ensureInitialized()) return;
     try {
       // Cancel-then-register is the whole of the replace rule: this plugin
