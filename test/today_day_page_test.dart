@@ -113,7 +113,11 @@ void main() {
   /// key makes it a new scope instead. It fails the moment `bootstrapApp`
   /// binds a provider this helper does not, which is exactly what happened
   /// when the Pool's seam arrived — and again when capture's did.
-  Widget dayPageAt(DateTime date, {required DateTime today}) {
+  Widget dayPageAt(
+    DateTime date, {
+    required DateTime today,
+    Stream<List<PooledPhoto>>? photoStream,
+  }) {
     final photos = PhotoStore(
       db,
       framePaths: FramePaths(() async => '/frames'),
@@ -135,6 +139,8 @@ void main() {
         ),
         tripTimeZoneProvider.overrideWithValue('Etc/UTC'),
         todayProvider.overrideWithValue(today),
+        if (photoStream != null)
+          tripPhotosProvider.overrideWith((ref) => photoStream),
       ],
       child: MaterialApp(home: DayPage(date: date)),
     );
@@ -173,6 +179,31 @@ void main() {
     expect(find.text('Fushimi Inari'), findsOneWidget);
     expect(find.text('Senso-ji'), findsNothing);
     expect(find.text('Dotonbori'), findsNothing);
+  });
+
+  testWidgets('a photo read failure remains visible on the day page', (
+    tester,
+  ) async {
+    await launch(tester, today: day(14));
+    await accept(tester, tripPaste);
+
+    await tester.pumpWidget(
+      dayPageAt(
+        day(14),
+        today: day(14),
+        photoStream: Stream<List<PooledPhoto>>.error(
+          StateError('photo read failed'),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text('Failed to read: Bad state: photo read failed'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('day-photo-count')), findsNothing);
   });
 
   testWidgets(

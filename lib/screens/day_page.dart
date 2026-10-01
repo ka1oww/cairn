@@ -87,7 +87,11 @@ class _Day extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final storedPhotos = ref.watch(tripPhotosProvider).value ?? const [];
+    final photoState = ref.watch(tripPhotosProvider);
+    if (photoState case AsyncError(:final error)) {
+      return Center(child: Text('Failed to read: $error'));
+    }
+    final storedPhotos = photoState.value ?? const [];
     final members =
         ref.watch(tripMembershipProvider).value?.members ?? const [];
     final viewer = ref.watch(viewerProvider);
