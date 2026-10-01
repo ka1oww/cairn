@@ -72,6 +72,7 @@ class FakePool implements SharedFacts {
   /// Runs while the record insert is "in flight", so a test can land an edit
   /// mid-call and prove nothing is lost to the race.
   Future<void> Function()? onRecord;
+  Future<void> Function()? onList;
 
   /// R2: what bytes sit at which key.
   final objects = <String, List<int>>{};
@@ -185,6 +186,7 @@ class FakePool implements SharedFacts {
   @override
   Future<List<RemotePhoto>> listPhotos(TripId tripId) async {
     _gate();
+    await onList?.call();
     return [
       for (final photo in recorded.values)
         if (photo.tripId == tripId.value) photo,
@@ -679,6 +681,88 @@ void main() {
         } finally {
           await recipient.close();
           recipientFrames.deleteSync(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'a listing from a trip deleted during fetch is not ingested',
+      () async {
+        final tripId = await startTrip();
+        final objectKey =
+            'trips/${tripId.value}/photos/old-trip-photo/original.jpg';
+        pool.recorded['old-trip-photo'] = RemotePhoto(
+          id: 'old-trip-photo',
+          tripId: tripId.value,
+          contributorId: anna,
+          r2ObjectKey: objectKey,
+          contentType: 'image/jpeg',
+          byteSize: frameBytes.length,
+          dayNumber: 1,
+        );
+        pool.objects[objectKey] = frameBytes;
+        pool.onList = () async {
+          await db.deleteTripWholesale();
+          await db.startTripIfAbsent(
+            starterId: anna,
+            starterDisplayName: 'Anna',
+          );
+        };
+
+        await driver().syncNow();
+
+        expect((await db.readTripFacts())!.tripId, isNot(tripId.value));
+        expect(await db.readPhotos(), isEmpty);
+        expect(pool.downloadedBytes, 0);
+      },
+    );
+
+    test(
+      'a local cache filesystem failure leaves the row waiting and retries',
+      () async {
+        final tripId = await startTrip();
+        await keepOne();
+        await driver().syncNow();
+
+        final recipient = inMemory();
+        try {
+          await recipient.adoptTripFacts(
+            tripId: tripId,
+            startedByMemberId: anna,
+            nameRevisedAt: DateTime.utc(2027),
+          );
+          pool.auth = SharedFactsSession(
+            accessToken: 'ben-token',
+            userId: MemberId('b0000000-0000-4000-8000-000000000002'),
+          );
+          final blockedPath = File('${frames.path}/not-a-directory')
+            ..writeAsStringSync('block');
+          final receivePaths = FramePaths(() async => blockedPath.path);
+          final receive = PhotoSync(
+            database: recipient,
+            facts: pool,
+            framePaths: receivePaths,
+            now: () => clock,
+            utcOffset: () => Duration.zero,
+          );
+
+          await receive.syncNow();
+
+          expect((await recipient.readPhotos()).single.filePath, isNull);
+          blockedPath.deleteSync();
+          Directory(blockedPath.path).createSync();
+          await receive.syncNow();
+
+          final received = (await recipient.readPhotos()).single;
+          expect(received.filePath, startsWith('frames/remote-'));
+          expect(
+            await File(await receivePaths.resolve(received.filePath!))
+                .readAsBytes(),
+            frameBytes,
+          );
+          expect(tripId.value, (await recipient.readTripFacts())!.tripId);
+        } finally {
+          await recipient.close();
         }
       },
     );
@@ -1558,6 +1642,7 @@ void main() {
   });
 
   test('remote caption replay does not update an unchanged row', () async {
+    await startTrip();
     await db.insertPhoto((
       id: 'remote-photo',
       dayNumber: 1,
@@ -1577,18 +1662,22 @@ void main() {
       'BEGIN UPDATE photo_update_count SET count = count + 1; END',
     );
 
-    await db.ingestRemotePhotos([
-      (
-        id: 'remote-photo',
-        dayNumber: 1,
-        contributorId: anna,
-        takenAtUtcIso: '2027-06-14T09:15:00.000Z',
-        origin: 'imported',
-        word: 'same caption',
-        filePath: null,
-        contentType: 'image/jpeg',
-      ),
-    ]);
+    final tripId = TripId((await db.readTripFacts())!.tripId);
+    await db.ingestRemotePhotos(
+      tripId: tripId,
+      records: [
+        (
+          id: 'remote-photo',
+          dayNumber: 1,
+          contributorId: anna,
+          takenAtUtcIso: '2027-06-14T09:15:00.000Z',
+          origin: 'imported',
+          word: 'same caption',
+          filePath: null,
+          contentType: 'image/jpeg',
+        ),
+      ],
+    );
 
     final unchangedCount =
         (await db
@@ -1597,18 +1686,21 @@ void main() {
             .read<int>('count');
     expect(unchangedCount, 0);
 
-    await db.ingestRemotePhotos([
-      (
-        id: 'remote-photo',
-        dayNumber: 1,
-        contributorId: anna,
-        takenAtUtcIso: '2027-06-14T09:15:00.000Z',
-        origin: 'imported',
-        word: 'edited caption',
-        filePath: null,
-        contentType: 'image/jpeg',
-      ),
-    ]);
+    await db.ingestRemotePhotos(
+      tripId: tripId,
+      records: [
+        (
+          id: 'remote-photo',
+          dayNumber: 1,
+          contributorId: anna,
+          takenAtUtcIso: '2027-06-14T09:15:00.000Z',
+          origin: 'imported',
+          word: 'edited caption',
+          filePath: null,
+          contentType: 'image/jpeg',
+        ),
+      ],
+    );
     expect((await db.readPhotos()).single.word, 'edited caption');
     final changedCount =
         (await db

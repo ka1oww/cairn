@@ -205,47 +205,55 @@ class PhotoSync {
   }
 
   Future<void> _pull(TripId tripId) async {
-    final remote = await facts.listPhotos(tripId);
-    await database.ingestRemotePhotos([
-      for (final photo in remote)
-        (
-          id: photo.id,
-          dayNumber: photo.dayNumber,
-          contributorId: photo.contributorId,
-          takenAtUtcIso: _takenAt(photo),
-          origin: PhotoOrigin.imported.name,
-          word: photo.caption,
-          filePath: null,
-          contentType: photo.contentType,
-        ),
-    ]);
-
-    final local = {
-      for (final photo in await database.readPhotos()) photo.id: photo,
-    };
-    final pending = <RemotePhoto>[];
-    for (final photo in remote) {
-      final row = local[photo.id];
-      if (row == null) continue;
-      final stored = row.filePath;
-      final path = stored == null ? null : await framePaths.resolve(stored);
-      if (path != null && await File(path).exists()) continue;
-      pending.add(photo);
-    }
-
-    // The function accepts up to 64 ids; 24 originals bounds one pass to the
-    // same practical memory budget documented by its owner.
-    for (var offset = 0; offset < pending.length; offset += 24) {
-      final batch = pending.skip(offset).take(24).toList();
-      final tickets = await facts.photoDownloadTickets(
+    try {
+      final remote = await facts.listPhotos(tripId);
+      final ingested = await database.ingestRemotePhotos(
         tripId: tripId,
-        photoIds: [for (final photo in batch) photo.id],
+        records: [
+          for (final photo in remote)
+            (
+              id: photo.id,
+              dayNumber: photo.dayNumber,
+              contributorId: photo.contributorId,
+              takenAtUtcIso: _takenAt(photo),
+              origin: PhotoOrigin.imported.name,
+              word: photo.caption,
+              filePath: null,
+              contentType: photo.contentType,
+            ),
+        ],
       );
-      for (final photo in batch) {
-        final ticket = tickets[photo.id];
-        if (ticket == null) continue; // The function's flat refusal.
-        await _cacheOriginal(photo, ticket);
+      if (!ingested) return;
+
+      final local = {
+        for (final photo in await database.readPhotos()) photo.id: photo,
+      };
+      final pending = <RemotePhoto>[];
+      for (final photo in remote) {
+        final row = local[photo.id];
+        if (row == null) continue;
+        final stored = row.filePath;
+        final path = stored == null ? null : await framePaths.resolve(stored);
+        if (path != null && await File(path).exists()) continue;
+        pending.add(photo);
       }
+
+      // The function accepts up to 64 ids; 24 originals bounds one pass to the
+      // same practical memory budget documented by its owner.
+      for (var offset = 0; offset < pending.length; offset += 24) {
+        final batch = pending.skip(offset).take(24).toList();
+        final tickets = await facts.photoDownloadTickets(
+          tripId: tripId,
+          photoIds: [for (final photo in batch) photo.id],
+        );
+        for (final photo in batch) {
+          final ticket = tickets[photo.id];
+          if (ticket == null) continue; // The function's flat refusal.
+          await _cacheOriginal(photo, ticket);
+        }
+      }
+    } on FileSystemException catch (e) {
+      throw SharedFactsUnavailable('local photo cache failed: ${e.message}');
     }
   }
 

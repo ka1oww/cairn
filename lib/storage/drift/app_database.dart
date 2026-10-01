@@ -1268,34 +1268,38 @@ class AppDatabase extends _$AppDatabase {
   /// Adds rows learned from the shared pool without creating upload debt.
   /// Replayed listings are harmless; an existing local caption is retained
   /// while its own outbox has an unsent caption change.
-  Future<void> ingestRemotePhotos(List<PhotoRecord> records) async {
-    await transaction(() async {
-      for (final photo in records) {
-        await into(photos).insert(
-          PhotosCompanion.insert(
-            id: photo.id,
-            dayNumber: photo.dayNumber,
-            contributorId: photo.contributorId,
-            takenAtUtcIso: photo.takenAtUtcIso,
-            origin: photo.origin,
-            word: Value(photo.word),
-            filePath: Value(photo.filePath),
-            contentType: Value(photo.contentType),
-          ),
-          onConflict: DoNothing(target: [photos.id]),
-        );
-        final pendingCaption = await (select(
-          photoOutbox,
-        )..where((t) => t.photoId.equals(photo.id))).getSingleOrNull();
-        final current = await (select(
-          photos,
-        )..where((t) => t.id.equals(photo.id))).getSingleOrNull();
-        if (pendingCaption == null && current?.word != photo.word) {
-          await updatePhotoWord(id: photo.id, word: photo.word);
-        }
+  Future<bool> ingestRemotePhotos({
+    required TripId tripId,
+    required List<PhotoRecord> records,
+  }) => transaction(() async {
+    final currentTrip = await select(tripFacts).getSingleOrNull();
+    if (currentTrip?.tripId != tripId.value) return false;
+    for (final photo in records) {
+      await into(photos).insert(
+        PhotosCompanion.insert(
+          id: photo.id,
+          dayNumber: photo.dayNumber,
+          contributorId: photo.contributorId,
+          takenAtUtcIso: photo.takenAtUtcIso,
+          origin: photo.origin,
+          word: Value(photo.word),
+          filePath: Value(photo.filePath),
+          contentType: Value(photo.contentType),
+        ),
+        onConflict: DoNothing(target: [photos.id]),
+      );
+      final pendingCaption = await (select(
+        photoOutbox,
+      )..where((t) => t.photoId.equals(photo.id))).getSingleOrNull();
+      final current = await (select(
+        photos,
+      )..where((t) => t.id.equals(photo.id))).getSingleOrNull();
+      if (pendingCaption == null && current?.word != photo.word) {
+        await updatePhotoWord(id: photo.id, word: photo.word);
       }
-    });
-  }
+    }
+    return true;
+  });
 
   /// Makes already downloaded original bytes visible to the Pool.
   Future<int> setPhotoLocalPath({required String id, required String path}) =>
