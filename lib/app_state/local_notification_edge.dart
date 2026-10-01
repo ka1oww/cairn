@@ -1,8 +1,6 @@
 // APP STATE band (docs/architecture.md): the platform edge behind
-// `NotificationEdge` (ping_schedule.dart). This is the piece that file's own
-// doc comment names as the one genuinely unbuilt part of the ping -- the
-// derivation, the pass and the replace-not-append rule are all real there;
-// this class is what actually asks iOS to ring.
+// `NotificationEdge` (ping_schedule.dart). The derivation and replacement
+// pass live there; this class registers the resulting schedule with iOS.
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';

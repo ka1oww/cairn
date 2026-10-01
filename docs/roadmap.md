@@ -5,11 +5,11 @@
 This file records **what is built, what is not, and the order the rest arrives in** —
 and, where the order is not obvious, why it is that order.
 
-Last true as of 1 September 2026, reconciled claim by claim against a full bug
+Last fully reconciled on 1 September 2026, claim by claim against a full bug
 sweep run on a simulator against the live backend and the subsequent hosted
-cleanup and member-rename rollout. Where this file used to
-claim something that turned out not to be true, the claim has been replaced
-rather than annotated.
+cleanup and member-rename rollout. The local-notifications status was updated
+on 1 October 2026. Where this file used to claim something that turned out not
+to be true, the claim has been replaced rather than annotated.
 
 ---
 
@@ -33,10 +33,10 @@ That is the entire product. Everything below is in service of it.
 **Everything Cairn has built works. What is not built is the part that makes it
 a group.** As of today the itinerary does leave the phone on an ordinary build —
 that was fixed on 27 August and had been silently broken since the sync was
-written — but **no photograph has any way to reach another phone, and no phone
-has any way to buzz.** Neither is broken; both are unwritten. On today's build,
-for the seven people who are not the planner, Cairn is a very good single-player
-app.
+written — and the local notification edge now registers the derived schedule.
+But **no photograph has any way to reach another phone, and real-device ping
+delivery has not yet been verified.** On today's build, for the seven people who
+are not the planner, Cairn is a very good single-player app.
 
 That sentence is the honest headline, and the rest of this file should be read
 against it.
@@ -59,7 +59,8 @@ it makes the rest of this file orderable:
 
 Of those five, **one and a half are built**: the itinerary is pasted and now
 genuinely reaches the server (nobody else can read it yet, because nobody else
-can join). Joining, buzzing, and the shared pool are all unwritten.
+can join). Joining and the shared pool are unwritten; ping scheduling is built,
+though delivery on a real device has not yet been verified.
 
 **Explicitly after it — deliberate choices, not omissions:**
 
@@ -108,11 +109,10 @@ phones — or that half gets cut.**
 **Both conditions currently sit at zero, and neither is close in the sense of
 "nearly working".**
 
-- *The ping firing on a real phone* needs an implementation of
-  `NotificationEdge` against iOS. There is none, and there is **no notification
-  dependency in `pubspec.yaml` at all** — not `flutter_local_notifications`,
-  not Firebase, nothing. What exists is the schedule that decides the minute,
-  which is correct and tested.
+- *The ping firing on a real phone* has a production `LocalNotificationEdge`
+  implementation against iOS and the `flutter_local_notifications`
+  dependency. The schedule and registration path are implemented; real-device
+  delivery still needs to be verified.
 - *A photograph crossing between two phones* needs photo methods on
   `SharedFacts` and an R2 client. Neither exists. `SharedFacts` has four
   methods and none of them mentions a photograph; every occurrence of "R2" in
@@ -187,9 +187,10 @@ photo index with the frame beside it on disk — where the Pool, reading the sam
 store, draws it. A missed slot is never a lockout: the door stays open till
 midnight and what you take then lands at the hour it was taken.
 
-Two pieces of it are honestly unfinished. **Nothing is registered with iOS and
-no notification library is in the project at all**, so no pocket buzzes; and
-where there is no camera (the Simulator) the app draws its own frame, so a
+Two pieces of it are honestly unfinished. **Real-device notification delivery
+has not been verified**, although `LocalNotificationEdge` registers the derived
+schedule with iOS; and where there is no camera (the Simulator) the app draws
+its own frame, so a
 green run there is not evidence the real camera path works — and *that fallback
 is silent*, which is a hazard on a real phone as well as a convenience on a
 simulator (see the bites, below).
@@ -292,13 +293,13 @@ tested.
 | Every product decision | **Settled.** See `docs/decisions/`. |
 | `packages/itinerary_parser` | Landed. Parses pasted trip plans into days and stops. Explicit numbered-day structure outranks inferred bare-place headers, and numeric ranges do not become dates. |
 | `packages/photo_day_assignment` | Landed. Decides which day a photo belongs to. |
-| `packages/trip_moments` | Landed. Deals one ping per person across the party. Nothing delivers what it deals. |
+| `packages/trip_moments` | Landed. Deals one ping per person across the party; `LocalNotificationEdge` registers the schedule with iOS, though real-device delivery remains unverified. |
 | `packages/cairn_model` | Landed. The shared vocabulary. |
 | `packages/plan_extraction` | Landed. Bytes in, plan text out, with `.txt`/`.docx`/`.xlsx`/`.csv`/`.pdf` extractors. Provably repeated print controls are removed, and the Wanderlog fixture parses end to end as three days. |
 | `supabase/` | Landed. Blockers fixed, decisions encoded, verified on real Postgres. Hosted, with migrations `0001`-`0010`, `0012` and `0014` applied (`0011` and `0013` are written and locally probed, not hosted). **No photo transport, and the phone-side call that redeems an invite exists on the adapter with nothing yet invoking it.** |
 | CI | Landed. Package tests, the JS-safety golden, the RLS probe — and the app — run on every pull request. |
 | `learning/dual-camera-spike` | Landed. Settled the capture as a back-then-front sequence. |
-| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** Paste-and-confirm persisting the itinerary locally, with two doors beside the box — a document (`.txt`, `.docx`, `.xlsx`, `.csv`, `.pdf`) or a photo/screenshot through Apple Vision — filling it and never auto-parsing; the day page it lands on, the trip's path, the three-tab container, the shared pool and the screen over it, the daily moment that fills it (schedule, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them, the trip as a stored fact (roster, starter, flat-but-gated powers, three-word codes that die with the trip, the sheet off the Trail's title), and the itinerary reaching the hosted project on an ordinary build with the app saying when it has not. **Nothing registered with iOS; photographs push one way only — up, bytes then the row — and that push has never been exercised against a live bucket, so no photograph has yet been seen on a second phone; no code can admit anybody.** |
+| The Flutter app | **The way in, Today, the Trail, the Pool, capture and the trip itself.** Paste-and-confirm persisting the itinerary locally, with two doors beside the box — a document (`.txt`, `.docx`, `.xlsx`, `.csv`, `.pdf`) or a photo/screenshot through Apple Vision — filling it and never auto-parsing; the day page it lands on, the trip's path, the three-tab container, the shared pool and the screen over it, the daily moment that fills it (schedule, iOS notification registration, camera behind a seam, the pause and the word, written into a local photo index the Pool reads), the gate's rule landed with them, the trip as a stored fact (roster, starter, flat-but-gated powers, three-word codes that die with the trip, the sheet off the Trail's title), and the itinerary reaching the hosted project on an ordinary build with the app saying when it has not. **Real-device notification delivery remains unverified; photographs push one way only — up, bytes then the row — and that push has never been exercised against a live bucket, so no photograph has yet been seen on a second phone; no code can admit anybody.** |
 
 ---
 
@@ -457,10 +458,9 @@ are the ones that stand between Cairn and being a group at all.
   (`supabase/migrations/0006_photos.sql`, the upload-URL edge function). Until
   this exists a person's Pool shows only their own photographs, forever, with
   no error and no explanation. One half of the 31 October tripwire.
-- **Make a phone buzz.** Never built: `NotificationEdge` has exactly one
-  implementation, `RecordingNotificationEdge`, which appends to a list — and
-  there is no notification dependency in `pubspec.yaml` at all. The schedule it
-  would deliver is correct and tested. The other half of the tripwire.
+- **Verify a phone buzz.** `LocalNotificationEdge` registers the derived
+  schedule with iOS through `flutter_local_notifications`; real-device delivery
+  remains unverified. The other half of the tripwire.
 - **Carry a membership to another phone**, which is the one thing standing
   between a real invite code and somebody actually joining. Everything on this
   side of it is built — roster, powers, three-word codes that die with the
