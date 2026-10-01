@@ -21,10 +21,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trip_moments/trip_moments.dart' as tm;
 
-import 'package:cairn_model/cairn_model.dart' show AreaSource, StopKind;
+import 'package:cairn_model/cairn_model.dart'
+    show AreaSource, GateState, Member, MemberId, StopKind;
 
 import '../logic/maps_handoff.dart';
 import '../logic/nearest_areas.dart';
+import '../repositories/photo_repository.dart';
 import 'date_labels.dart';
 import 'ping_schedule.dart';
 import 'trip_lifecycle.dart';
@@ -141,6 +143,56 @@ class DayStop {
   /// Whether the row is drawn short with an "N places" badge. Length decides,
   /// so a row that fits is drawn as written however many places it names.
   bool get showsPlaceCount => showsPlaceCountBadge(text, places);
+}
+
+/// One photograph in a day's timeline. Its image path is deliberately null
+/// while [isWithheld] is true, so a screen cannot accidentally decode bytes
+/// behind a shut gate.
+class DayPhoto {
+  final String id;
+  final String? imagePath;
+  final DateTime takenAtUtc;
+  final String contributor;
+  final bool isWithheld;
+
+  const DayPhoto({
+    required this.id,
+    required this.imagePath,
+    required this.takenAtUtc,
+    required this.contributor,
+    required this.isWithheld,
+  });
+}
+
+/// The day's photographs, in the domain's capture-time order, with the
+/// already-decided shared gate applied. This maps names and hides paths; it
+/// does not decide who may see the images.
+List<DayPhoto> dayPhotosFor({
+  required int dayNumber,
+  required List<PooledPhoto> photos,
+  required List<Member> members,
+  required MemberId viewer,
+  required GateState gate,
+}) {
+  final names = {for (final member in members) member.id: member.displayName};
+  final selected =
+      photos.where((photo) => photo.ref.dayNumber == dayNumber).toList()
+        ..sort((a, b) {
+          final time = a.ref.takenAt.compareTo(b.ref.takenAt);
+          return time != 0 ? time : a.ref.id.value.compareTo(b.ref.id.value);
+        });
+  return [
+    for (final photo in selected)
+      DayPhoto(
+        id: photo.ref.id.value,
+        imagePath: gate.isOpen ? photo.localPath : null,
+        takenAtUtc: photo.ref.takenAt,
+        contributor:
+            names[photo.ref.contributor] ??
+            (photo.ref.contributor == viewer ? 'You' : 'Trip member'),
+        isWithheld: !gate.isOpen,
+      ),
+  ];
 }
 
 /// What the day page renders for one date. Four shapes, each drawn.

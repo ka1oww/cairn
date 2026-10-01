@@ -11,6 +11,8 @@
 // derives today from the device date in this slice (no trip clock is stored
 // yet), so a test that let the real clock through would assert one thing in
 // 2026 and another in June 2027.
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -20,12 +22,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:cairn/app_state/day_view.dart';
 import 'package:cairn/app_state/capture_flow.dart';
+import 'package:cairn/app_state/ping_schedule.dart';
 import 'package:cairn/app_state/trip_providers.dart';
 import 'package:cairn/bootstrap.dart';
+import 'package:cairn/repositories/membership_repository.dart';
 import 'package:cairn/repositories/photo_repository.dart';
 import 'package:cairn/repositories/trip_repository.dart';
 import 'package:cairn/screens/day_page.dart';
 import 'package:cairn/storage/drift/app_database.dart';
+import 'package:cairn_model/cairn_model.dart';
 
 /// Three dated days over four dates: 16 June is a gap the plan skips.
 /// Day 1 carries a starred stop, an unstarred one, and a hedged time the
@@ -125,6 +130,10 @@ void main() {
             framePaths: FramePaths(() async => '/frames'),
           ),
         ),
+        membershipRepositoryProvider.overrideWithValue(
+          InMemoryMembership(null),
+        ),
+        tripTimeZoneProvider.overrideWithValue('Etc/UTC'),
         todayProvider.overrideWithValue(today),
       ],
       child: MaterialApp(home: DayPage(date: date)),
@@ -165,6 +174,96 @@ void main() {
     expect(find.text('Senso-ji'), findsNothing);
     expect(find.text('Dotonbori'), findsNothing);
   });
+
+  testWidgets(
+    'today photos stream into the timeline and open only after I contribute',
+    (tester) async {
+      final frame = File(
+        '${Directory.current.path}/ios/Runner/Assets.xcassets/'
+        'AppIcon.appiconset/Icon-App-29x29@2x.png',
+      );
+
+      final photoStore = PhotoStore(
+        db,
+        framePaths: FramePaths(() async => '${Directory.current.path}/frames'),
+        mintId: () => 'my-photo',
+      );
+      final roster = InMemoryMembership(
+        TripMembership(
+          tripId: TripId('00000000-0000-4000-8000-000000000001'),
+          startedBy: MemberId('me'),
+          timeZone: 'Etc/UTC',
+          members: [
+            Member(id: MemberId('me'), displayName: 'You', joinedOnDay: 1),
+            Member(
+              id: MemberId('co-member'),
+              displayName: 'Mum',
+              joinedOnDay: 1,
+            ),
+          ],
+        ),
+      );
+
+      tester.view.physicalSize = const Size(800, 2600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        bootstrapApp(
+          database: db,
+          today: day(14),
+          tripTimeZone: 'Etc/UTC',
+          photos: photoStore,
+          membership: roster,
+        ),
+      );
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('paste-input')), tripPaste);
+      await tester.tap(find.byKey(const Key('read-button')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('accept-button')));
+      await tester.pump();
+      await tester.pump();
+
+      // A co-member's row arriving in the existing local stream adds its mount
+      // immediately, but a non-contributor receives no image widget or path.
+      await db.insertPhoto((
+        id: 'co-photo',
+        dayNumber: 1,
+        contributorId: 'co-member',
+        takenAtUtcIso: DateTime.utc(2027, 6, 14, 9, 25).toIso8601String(),
+        origin: 'pinged',
+        word: null,
+        filePath: frame.path,
+        contentType: 'image/png',
+      ));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const Key('day-photo-co-photo-withheld')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('day-photo-co-photo-image')), findsNothing);
+      expect(find.text('Mum'), findsOneWidget);
+      expect(find.text('09:25'), findsOneWidget);
+
+      // Keeping today's capture writes through PhotoStore. The same shared gate
+      // now opens both images, including the co-member's image already present.
+      await photoStore.keep(
+        dayNumber: 1,
+        contributor: MemberId('me'),
+        takenAt: DateTime.utc(2027, 6, 14, 11, 40),
+        origin: PhotoOrigin.pinged,
+        filePath: frame.path,
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('day-photo-co-photo-image')), findsOneWidget);
+      expect(find.byKey(const Key('day-photo-my-photo-image')), findsOneWidget);
+      expect(find.text('09:25'), findsOneWidget);
+      expect(find.text('11:40'), findsOneWidget);
+      expect(find.text('You'), findsOneWidget);
+    },
+  );
 
   testWidgets('a starred stop shows its star and its time; an unstarred one '
       'shows no time', (tester) async {
