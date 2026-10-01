@@ -1271,7 +1271,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> ingestRemotePhotos(List<PhotoRecord> records) async {
     await transaction(() async {
       for (final photo in records) {
-        final inserted = await into(photos).insert(
+        await into(photos).insert(
           PhotosCompanion.insert(
             id: photo.id,
             dayNumber: photo.dayNumber,
@@ -1284,11 +1284,13 @@ class AppDatabase extends _$AppDatabase {
           ),
           onConflict: DoNothing(target: [photos.id]),
         );
-        if (inserted != 0) continue;
         final pendingCaption = await (select(
           photoOutbox,
         )..where((t) => t.photoId.equals(photo.id))).getSingleOrNull();
-        if (pendingCaption == null) {
+        final current = await (select(
+          photos,
+        )..where((t) => t.id.equals(photo.id))).getSingleOrNull();
+        if (pendingCaption == null && current?.word != photo.word) {
           await updatePhotoWord(id: photo.id, word: photo.word);
         }
       }

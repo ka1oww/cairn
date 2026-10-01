@@ -556,6 +556,28 @@ void main() {
   });
 
   group('the crash matrix, replayed from durable state', () {
+    test('a missing capture instant uses stable index creation time', () async {
+      final tripId = await startTrip();
+      final objectKey =
+          'trips/${tripId.value}/photos/remote-photo/original.jpg';
+      pool.recorded['remote-photo'] = RemotePhoto(
+        id: 'remote-photo',
+        tripId: tripId.value,
+        contributorId: anna,
+        r2ObjectKey: objectKey,
+        contentType: 'image/jpeg',
+        byteSize: frameBytes.length,
+        dayNumber: 1,
+        createdAtIso: '2027-06-14T09:15:00Z',
+      );
+      pool.objects[objectKey] = frameBytes;
+
+      await driver().syncNow();
+
+      final received = (await db.readPhotos()).single;
+      expect(received.takenAtUtcIso, '2027-06-14T09:15:00.000Z');
+    });
+
     test(
       'a second account pulls the same row and original exactly once',
       () async {
@@ -768,7 +790,6 @@ void main() {
         contentType: 'image/jpeg',
         byteSize: frameBytes.length,
         dayNumber: 1,
-        updatedAtIso: '2027-06-15T11:59:00.000Z',
       );
       pool.recorded['photo-1'] = already;
 
@@ -1534,5 +1555,66 @@ void main() {
         expect(await db.readPendingCapture(), isNotNull);
       },
     );
+  });
+
+  test('remote caption replay does not update an unchanged row', () async {
+    await db.insertPhoto((
+      id: 'remote-photo',
+      dayNumber: 1,
+      contributorId: anna,
+      takenAtUtcIso: '2027-06-14T09:15:00.000Z',
+      origin: 'imported',
+      word: 'same caption',
+      filePath: null,
+      contentType: 'image/jpeg',
+    ));
+    await db.customStatement(
+      'CREATE TABLE photo_update_count (count INTEGER NOT NULL)',
+    );
+    await db.customStatement('INSERT INTO photo_update_count VALUES (0)');
+    await db.customStatement(
+      'CREATE TRIGGER count_photo_update AFTER UPDATE ON photos '
+      'BEGIN UPDATE photo_update_count SET count = count + 1; END',
+    );
+
+    await db.ingestRemotePhotos([
+      (
+        id: 'remote-photo',
+        dayNumber: 1,
+        contributorId: anna,
+        takenAtUtcIso: '2027-06-14T09:15:00.000Z',
+        origin: 'imported',
+        word: 'same caption',
+        filePath: null,
+        contentType: 'image/jpeg',
+      ),
+    ]);
+
+    final unchangedCount =
+        (await db
+                .customSelect('SELECT count FROM photo_update_count')
+                .getSingle())
+            .read<int>('count');
+    expect(unchangedCount, 0);
+
+    await db.ingestRemotePhotos([
+      (
+        id: 'remote-photo',
+        dayNumber: 1,
+        contributorId: anna,
+        takenAtUtcIso: '2027-06-14T09:15:00.000Z',
+        origin: 'imported',
+        word: 'edited caption',
+        filePath: null,
+        contentType: 'image/jpeg',
+      ),
+    ]);
+    expect((await db.readPhotos()).single.word, 'edited caption');
+    final changedCount =
+        (await db
+                .customSelect('SELECT count FROM photo_update_count')
+                .getSingle())
+            .read<int>('count');
+    expect(changedCount, 1);
   });
 }

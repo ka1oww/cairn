@@ -408,17 +408,25 @@ class PostgrestSharedFacts implements SharedFacts {
   @override
   Future<List<RemotePhoto>> listPhotos(TripId tripId) async {
     final auth = await _demand();
-    final rows = _rows(
-      await _get(
-        '/rest/v1/photos?trip_id=eq.${tripId.value}'
-        '&select=id,trip_id,contributor_id,r2_object_key,content_type,'
-        'byte_size,width,height,captured_at,captured_latitude,'
-        'captured_longitude,capture_timezone,day_number,trip_day,caption,'
-        'updated_at&order=updated_at.asc,id.asc',
-        auth,
-      ),
-    );
-    return [for (final row in rows) _remotePhoto(row)];
+    const pageSize = 500;
+    final photos = <RemotePhoto>[];
+    var offset = 0;
+    while (true) {
+      final rows = _rows(
+        await _get(
+          '/rest/v1/photos?trip_id=eq.${tripId.value}'
+          '&select=id,trip_id,contributor_id,r2_object_key,content_type,'
+          'byte_size,width,height,captured_at,created_at,captured_latitude,'
+          'captured_longitude,capture_timezone,day_number,trip_day,caption'
+          '&order=id.asc&limit=$pageSize&offset=$offset',
+          auth,
+        ),
+      );
+      if (rows.isEmpty) break;
+      photos.addAll(rows.map(_remotePhoto));
+      offset += rows.length;
+    }
+    return photos;
   }
 
   @override
@@ -492,13 +500,13 @@ class PostgrestSharedFacts implements SharedFacts {
     width: (row['width'] as num?)?.toInt(),
     height: (row['height'] as num?)?.toInt(),
     capturedAtIso: row['captured_at'] as String?,
+    createdAtIso: row['created_at'] as String?,
     capturedLatitude: (row['captured_latitude'] as num?)?.toDouble(),
     capturedLongitude: (row['captured_longitude'] as num?)?.toDouble(),
     captureTimezone: row['capture_timezone'] as String?,
     dayNumber: (row['day_number'] as num).toInt(),
     tripDayIso: row['trip_day'] as String?,
     caption: row['caption'] as String?,
-    updatedAtIso: row['updated_at'] as String,
   );
 
   @override

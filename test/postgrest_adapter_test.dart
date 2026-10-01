@@ -124,6 +124,9 @@ void main() {
         MockClient((request) async {
           seen.add(request);
           if (request.url.path == '/rest/v1/photos') {
+            if (request.url.queryParameters['offset'] != '0') {
+              return http.Response(jsonEncode([]), 200);
+            }
             return http.Response(
               jsonEncode([
                 {
@@ -136,8 +139,8 @@ void main() {
                   'byte_size': 3,
                   'day_number': 2,
                   'captured_at': '2027-06-15T12:00:00Z',
+                  'created_at': '2027-06-15T12:00:01Z',
                   'caption': 'hello',
-                  'updated_at': '2027-06-15T12:01:00Z',
                 },
               ]),
               200,
@@ -170,6 +173,7 @@ void main() {
       final photos = await sync.listPhotos(trip);
       expect(photos.single.caption, 'hello');
       expect(photos.single.dayNumber, 2);
+      expect(photos.single.createdAtIso, '2027-06-15T12:00:01Z');
       final tickets = await sync.photoDownloadTickets(
         tripId: trip,
         photoIds: [photos.single.id],
@@ -178,7 +182,46 @@ void main() {
         await sync.getPhotoBytes(tickets.values.single),
         Uint8List.fromList([7, 8, 9]),
       );
-      expect(seen.map((request) => request.method), ['GET', 'POST', 'GET']);
+      expect(seen.map((request) => request.method), [
+        'GET',
+        'GET',
+        'POST',
+        'GET',
+      ]);
+    });
+
+    test('photo listing fetches every page in stable id order', () async {
+      final offsets = <int>[];
+      final sync = facts(
+        MockClient((request) async {
+          final offset = int.parse(request.url.queryParameters['offset']!);
+          offsets.add(offset);
+          final rows = [
+            for (var id = offset; id < 1001 && id < offset + 500; id++)
+              {
+                'id':
+                    '00000000-0000-4000-8000-${id.toString().padLeft(12, '0')}',
+                'trip_id': trip.value,
+                'contributor_id': anna,
+                'r2_object_key': 'trips/${trip.value}/photos/$id/original.jpg',
+                'content_type': 'image/jpeg',
+                'byte_size': 1,
+                'day_number': 1,
+                'captured_at': null,
+                'created_at': '2027-06-14T09:00:00Z',
+                'caption': null,
+              },
+          ];
+          return http.Response(jsonEncode(rows), 200);
+        }),
+      );
+
+      final photos = await sync.listPhotos(trip);
+
+      expect(photos, hasLength(1001));
+      expect(offsets, [0, 500, 1000, 1001]);
+      expect(photos.first.id, '00000000-0000-4000-8000-000000000000');
+      expect(photos.last.id, '00000000-0000-4000-8000-000000001000');
     });
 
     test('the anon key and the bearer token both go up', () async {
@@ -974,7 +1017,6 @@ void main() {
       dayNumber: 1,
       tripDayIso: '2027-06-14',
       caption: 'first light',
-      updatedAtIso: '2027-06-15T12:00:00.000Z',
     );
 
     test('an idempotent insert: on_conflict, ignore-duplicates, and the '

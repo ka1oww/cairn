@@ -423,6 +423,9 @@ class RemotePhoto {
   /// When it was taken, as a UTC instant. Null tolerated on a pull.
   final String? capturedAtIso;
 
+  /// When the server first indexed the photo. Stable across caption edits.
+  final String? createdAtIso;
+
   final double? capturedLatitude, capturedLongitude;
   final String? captureTimezone;
 
@@ -439,10 +442,6 @@ class RemotePhoto {
   /// contributor's latest write wins, no conflict machinery.
   final String? caption;
 
-  /// The server's `updated_at` — the pull cursor's clock. Ignored on a push:
-  /// the server's touch trigger owns it.
-  final String updatedAtIso;
-
   const RemotePhoto({
     required this.id,
     required this.tripId,
@@ -453,13 +452,13 @@ class RemotePhoto {
     this.width,
     this.height,
     this.capturedAtIso,
+    this.createdAtIso,
     this.capturedLatitude,
     this.capturedLongitude,
     this.captureTimezone,
     required this.dayNumber,
     this.tripDayIso,
     this.caption,
-    required this.updatedAtIso,
   });
 }
 

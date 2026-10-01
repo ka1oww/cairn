@@ -281,7 +281,10 @@ class PhotoSync {
   }
 
   static String _takenAt(RemotePhoto photo) {
-    final raw = photo.capturedAtIso ?? photo.updatedAtIso;
+    final raw =
+        photo.capturedAtIso ??
+        photo.createdAtIso ??
+        DateTime.utc(1970).toIso8601String();
     return DateTime.parse(raw).toUtc().toIso8601String();
   }
 
@@ -372,7 +375,6 @@ class PhotoSync {
         dayNumber: item.photo.dayNumber,
         tripDayIso: dayDates[item.photo.dayNumber],
         caption: item.photo.word,
-        updatedAtIso: now().toUtc().toIso8601String(),
       ),
     );
     await database.settleOutboxPushed(
