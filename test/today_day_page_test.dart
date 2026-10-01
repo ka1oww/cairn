@@ -230,7 +230,7 @@ void main() {
         id: 'co-photo',
         dayNumber: 1,
         contributorId: 'co-member',
-        takenAtUtcIso: DateTime.utc(2027, 6, 14, 9, 25).toIso8601String(),
+        takenAtUtcIso: DateTime.utc(2027, 6, 14, 11, 40).toIso8601String(),
         origin: 'pinged',
         word: null,
         filePath: frame.path,
@@ -244,14 +244,14 @@ void main() {
       );
       expect(find.byKey(const Key('day-photo-co-photo-image')), findsNothing);
       expect(find.text('Mum'), findsOneWidget);
-      expect(find.text('09:25'), findsOneWidget);
+      expect(find.text('11:40'), findsOneWidget);
 
       // Keeping today's capture writes through PhotoStore. The same shared gate
       // now opens both images, including the co-member's image already present.
       await photoStore.keep(
         dayNumber: 1,
         contributor: MemberId('me'),
-        takenAt: DateTime.utc(2027, 6, 14, 11, 40),
+        takenAt: DateTime.utc(2027, 6, 14, 9, 25),
         origin: PhotoOrigin.pinged,
         filePath: frame.path,
       );
@@ -262,6 +262,16 @@ void main() {
       expect(find.text('09:25'), findsOneWidget);
       expect(find.text('11:40'), findsOneWidget);
       expect(find.text('You'), findsOneWidget);
+      expect(
+        tester
+            .getTopLeft(find.byKey(const Key('day-photo-my-photo-image')))
+            .dy,
+        lessThan(
+          tester
+              .getTopLeft(find.byKey(const Key('day-photo-co-photo-image')))
+              .dy,
+        ),
+      );
     },
   );
 

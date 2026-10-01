@@ -22,7 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trip_moments/trip_moments.dart' as tm;
 
 import 'package:cairn_model/cairn_model.dart'
-    show AreaSource, GateState, Member, MemberId, StopKind;
+    show AreaSource, DayPool, GateState, Member, MemberId, StopKind;
 
 import '../logic/maps_handoff.dart';
 import '../logic/nearest_areas.dart';
@@ -175,21 +175,23 @@ List<DayPhoto> dayPhotosFor({
   required GateState gate,
 }) {
   final names = {for (final member in members) member.id: member.displayName};
-  final selected =
-      photos.where((photo) => photo.ref.dayNumber == dayNumber).toList()
-        ..sort((a, b) {
-          final time = a.ref.takenAt.compareTo(b.ref.takenAt);
-          return time != 0 ? time : a.ref.id.value.compareTo(b.ref.id.value);
-        });
+  final selected = {
+    for (final photo in photos)
+      if (photo.ref.dayNumber == dayNumber) photo.ref.id: photo,
+  };
+  final ordered = DayPool.of(
+    dayNumber,
+    selected.values.map((photo) => photo.ref),
+  ).photos;
   return [
-    for (final photo in selected)
+    for (final ref in ordered)
       DayPhoto(
-        id: photo.ref.id.value,
-        imagePath: gate.isOpen ? photo.localPath : null,
-        takenAtUtc: photo.ref.takenAt,
+        id: ref.id.value,
+        imagePath: gate.isOpen ? selected[ref.id]!.localPath : null,
+        takenAtUtc: ref.takenAt,
         contributor:
-            names[photo.ref.contributor] ??
-            (photo.ref.contributor == viewer ? 'You' : 'Trip member'),
+            names[ref.contributor] ??
+            (ref.contributor == viewer ? 'You' : 'Trip member'),
         isWithheld: !gate.isOpen,
       ),
   ];
