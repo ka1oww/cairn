@@ -106,8 +106,8 @@ The captain set a condition on the seven's half of the product: **by 31 October
 the ping must fire on a real phone, and a photograph must cross between two real
 phones — or that half gets cut.**
 
-**Both conditions currently sit at zero, and neither is close in the sense of
-"nearly working".**
+**Neither condition is met:** ping delivery remains unverified on a real
+device, and photo transport is unwritten.
 
 - *The ping firing on a real phone* has a production `LocalNotificationEdge`
   implementation against iOS and the `flutter_local_notifications`
@@ -118,11 +118,12 @@ phones — or that half gets cut.**
   methods and none of them mentions a photograph; every occurrence of "R2" in
   `lib/` is inside a comment describing an adapter that was never written.
 
-Both are **unwritten rather than broken**, which is better news than the
-alternative — the server-side table (`supabase/migrations/0006_photos.sql`) and
-the gate rule are already in place and tested, so what was built was built
-well. But nothing about either is partly done, and no estimate here should be
-read as though it were.
+The photo transport is **unwritten rather than broken**, which is better news
+than the alternative — the server-side table
+(`supabase/migrations/0006_photos.sql`) and the gate rule are already in place
+and tested, so what was built was built well. The ping's schedule and iOS
+registration are implemented, but real-device delivery is unverified. Neither
+tripwire condition is met; no estimate here should imply otherwise.
 
 ---
 
