@@ -294,9 +294,7 @@ void main() {
       expect(find.text('11:40'), findsOneWidget);
       expect(find.text('You'), findsOneWidget);
       expect(
-        tester
-            .getTopLeft(find.byKey(const Key('day-photo-my-photo-image')))
-            .dy,
+        tester.getTopLeft(find.byKey(const Key('day-photo-my-photo-image'))).dy,
         lessThan(
           tester
               .getTopLeft(find.byKey(const Key('day-photo-co-photo-image')))

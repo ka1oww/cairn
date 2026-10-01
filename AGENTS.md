@@ -684,8 +684,9 @@ import what is written there, not here.
   `day_unlocks` (deleting your photo must never re-shut a day you opened). The
   only other copy of the rule is `day_page_is_open` in SQL, and that one is
   deliberate (`docs/architecture.md`, invariant 2). A copy per surface is the
-  thing to refuse in review. The Pool is its one live consumer today, because
-  the gate withholds photographs and no other built surface draws one.
+  thing to refuse in review. The built consumers are listed in
+  `docs/architecture.md`; each must use the shared provider rather than
+  re-decide the gate.
 - Widget tests over the stack must open Drift with
   `closeStreamsSynchronously: true` or teardown hangs silently at 0% CPU —
   the header comment in `test/paste_confirm_flow_test.dart` explains the
