@@ -34,7 +34,7 @@ class LocalNotificationEdge implements NotificationEdge {
 
   final FlutterLocalNotificationsPlugin _plugin;
 
-  Future<void> _replacementTail = Future<void>.value();
+  static Future<void> _replacementTail = Future<void>.value();
 
   /// Null until the first attempt; then true or false for good, so a
   /// platform channel that is truly absent (never a transient failure -- the

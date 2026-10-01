@@ -161,7 +161,10 @@ void main() {
         );
         await firstScheduleStarted.future;
 
-        final latestReplacement = edge.replaceScheduledPings(
+        final recreatedEdge = LocalNotificationEdge(
+          plugin: FlutterLocalNotificationsPlugin(),
+        );
+        final latestReplacement = recreatedEdge.replaceScheduledPings(
           _pings([DateTime.utc(2027, 6, 16, 10)]),
         );
         await Future<void>.delayed(Duration.zero);
@@ -179,7 +182,9 @@ void main() {
           'requestPermissions',
           'zonedSchedule',
           'zonedSchedule',
+          'initialize',
           'cancelAll',
+          'requestPermissions',
           'zonedSchedule',
         ]);
       },
