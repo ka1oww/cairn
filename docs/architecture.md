@@ -617,10 +617,10 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   membership propagates (Phase 2). The destination IANA zone is already a
   stored trip fact and each schedule day converts through that date's DST
   rule; an unknown zone schedules no pings.
-- **Nothing has been registered with iOS.** The schedule reaches a
-  `NotificationEdge` and stops there. Until an implementation calls into the
-  OS, nobody's pocket buzzes: the whole ping path is real except its last
-  inch, which is the inch the user would notice.
+- **Real-device notification delivery remains unverified.** The production
+  `LocalNotificationEdge` registers the derived schedule with iOS through
+  `flutter_local_notifications`; automated tests use a fake plugin, so they
+  do not establish delivery on a phone.
 - **The camera opens, but there is no viewfinder.** Capture drives the camera
   through a controller — on a device, one back frame and then one front frame —
   and never shows the live preview behind the shutter. That is a visual-treatment question the design round

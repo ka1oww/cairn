@@ -496,8 +496,8 @@ import what is written there, not here.
   camera path works. Judge that on a device only.
   `NSCameraUsageDescription` is in `ios/Runner/Info.plist`; audio is off, so
   no microphone string is needed. The ping's schedule is real
-  (`trip_moments`) but dealt for a stub party of one, and `NotificationEdge`
-  is not implemented against iOS -- nothing actually buzzes yet.
+  (`trip_moments`); `LocalNotificationEdge` registers it with iOS, but
+  real-device delivery remains unverified.
 - **One `takeOne()` is one capture *event*: the back frame, then the front
   one.** Sequential and never simultaneous — the spike settled that
   (`learning/dual-camera-spike/`), and `BackCameraSource` opens and disposes
