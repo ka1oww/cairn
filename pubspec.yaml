@@ -79,8 +79,7 @@ dependencies:
   # the APP STATE band, reached only through
   # lib/app_state/local_notification_edge.dart). Chosen over
   # awesome_notifications and rhyme/flutter_native_timezone-era alternatives
-  # because it is the actively maintained cross-platform (iOS + Android)
-  # local-notification plugin -- last published 2026-09-13 -- with a
+  # because it is the actively maintained local-notification plugin with a
   # `zonedSchedule` API that takes a `timezone` TZDateTime directly, which is
   # what lets this app hand it the UTC instant `trip_moments` already
   # computed without a second timezone conversion. `timezone` is its

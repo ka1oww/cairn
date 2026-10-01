@@ -27,59 +27,52 @@ void main() {
   });
 
   group('replace, not append', () {
-    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
-      test('on $platform, cancels every prior ping before registering new ones', () async {
-        debugDefaultTargetPlatformOverride = platform;
-        if (platform == TargetPlatform.iOS) {
-          IOSFlutterLocalNotificationsPlugin.registerWith();
-        } else {
-          AndroidFlutterLocalNotificationsPlugin.registerWith();
-        }
+    test('cancels every prior ping before registering new ones', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      IOSFlutterLocalNotificationsPlugin.registerWith();
 
-        final calls = <MethodCall>[];
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(_channel, (call) async {
-              calls.add(call);
-              switch (call.method) {
-                case 'initialize':
-                  return true;
-                case 'requestPermissions':
-                case 'requestNotificationsPermission':
-                  return true;
-                default:
-                  return null;
-              }
-            });
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(_channel, (call) async {
+            calls.add(call);
+            switch (call.method) {
+              case 'initialize':
+                return true;
+              case 'requestPermissions':
+                return true;
+              default:
+                return null;
+            }
+          });
 
-        final edge = LocalNotificationEdge(
-          plugin: FlutterLocalNotificationsPlugin(),
-        );
+      final edge = LocalNotificationEdge(
+        plugin: FlutterLocalNotificationsPlugin(),
+      );
 
-        final first = DateTime.utc(2027, 6, 14, 8);
-        final second = DateTime.utc(2027, 6, 15, 9);
-        await edge.replaceScheduledPings(_pings([first, second]));
+      final first = DateTime.utc(2027, 6, 14, 8);
+      final second = DateTime.utc(2027, 6, 15, 9);
+      await edge.replaceScheduledPings(_pings([first, second]));
 
-        expect(calls.map((c) => c.method), containsAllInOrder(['cancelAll']));
-        final firstBatchSchedules = calls
-            .where((c) => c.method == 'zonedSchedule')
-            .toList();
-        expect(firstBatchSchedules, hasLength(2));
+      expect(calls.map((c) => c.method), containsAllInOrder(['cancelAll']));
+      final firstBatchSchedules = calls
+          .where((c) => c.method == 'zonedSchedule')
+          .toList();
+      expect(firstBatchSchedules, hasLength(2));
 
-        calls.clear();
+      calls.clear();
 
-        // A second, narrower deal — one ping, not two — must leave nothing
-        // of the first deal behind: a real device firing both would be the
-        // two-interruptions-in-a-day bug the interface's doc comment names.
-        final third = DateTime.utc(2027, 6, 16, 10);
-        await edge.replaceScheduledPings(_pings([third]));
+      // A second, narrower deal — one ping, not two — must leave nothing
+      // of the first deal behind: a real device firing both would be the
+      // two-interruptions-in-a-day bug the interface's doc comment names.
+      final third = DateTime.utc(2027, 6, 16, 10);
+      await edge.replaceScheduledPings(_pings([third]));
 
-        expect(calls.first.method, 'cancelAll');
-        final secondBatchSchedules = calls
-            .where((c) => c.method == 'zonedSchedule')
-            .toList();
-        expect(secondBatchSchedules, hasLength(1));
-      });
-    }
+      expect(calls.first.method, 'cancelAll');
+      final secondBatchSchedules = calls
+          .where((c) => c.method == 'zonedSchedule')
+          .toList();
+      expect(secondBatchSchedules, hasLength(1));
+    });
   });
 
   group('degrades safely', () {

@@ -2,7 +2,7 @@
 // `NotificationEdge` (ping_schedule.dart). This is the piece that file's own
 // doc comment names as the one genuinely unbuilt part of the ping -- the
 // derivation, the pass and the replace-not-append rule are all real there;
-// this class is what actually asks iOS/Android to ring.
+// this class is what actually asks iOS to ring.
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
@@ -11,11 +11,6 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'ping_schedule.dart';
-
-const _androidChannelId = 'cairn_ping';
-const _androidChannelName = 'Cairn moment';
-const _androidChannelDescription =
-    "The one daily nudge to look up -- 'Cairn now'.";
 
 /// The real [NotificationEdge]: registers pings as ordinary local
 /// notifications through `flutter_local_notifications`.
@@ -27,11 +22,7 @@ const _androidChannelDescription =
 /// `critical`, which is the one parameter that would require Apple's
 /// critical-alerts entitlement -- and delivers at
 /// [InterruptionLevel.active], never `.timeSensitive` or `.critical`. On
-/// Android it asks only `requestNotificationsPermission` (`POST_
-/// NOTIFICATIONS` on 13+, a no-op below it) and schedules with
-/// [AndroidScheduleMode.inexactAllowWhileIdle], which needs no exact-alarm
-/// permission either. Widening either ask is the bug this class exists to
-/// refuse.
+/// iOS it requests no other permission.
 ///
 /// **Degrades safely.** Initialisation, permission requests and scheduling
 /// are all wrapped: a refused permission, a missing platform channel (no
@@ -56,9 +47,6 @@ class LocalNotificationEdge implements NotificationEdge {
     if (done != null) return done;
     try {
       tz_data.initializeTimeZones();
-      const androidSettings = AndroidInitializationSettings(
-        '@mipmap/ic_launcher',
-      );
       const iosSettings = DarwinInitializationSettings(
         requestAlertPermission: false,
         requestBadgePermission: false,
@@ -66,7 +54,6 @@ class LocalNotificationEdge implements NotificationEdge {
       );
       final ok = await _plugin.initialize(
         settings: const InitializationSettings(
-          android: androidSettings,
           iOS: iosSettings,
         ),
       );
@@ -88,14 +75,7 @@ class LocalNotificationEdge implements NotificationEdge {
       if (ios != null) {
         // Ordinary alert level only -- no `critical`, no `provisional`.
         await ios.requestPermissions(alert: true, badge: false, sound: true);
-        return;
       }
-      final android = _plugin
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >();
-      // POST_NOTIFICATIONS only, never the exact-alarm permission.
-      await android?.requestNotificationsPermission();
     } catch (error, stackTrace) {
       _logRefusal('request permission', error, stackTrace);
     }
@@ -119,13 +99,6 @@ class LocalNotificationEdge implements NotificationEdge {
           scheduledDate: tz.TZDateTime.from(ping.at, tz.UTC),
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           notificationDetails: const NotificationDetails(
-            android: AndroidNotificationDetails(
-              _androidChannelId,
-              _androidChannelName,
-              channelDescription: _androidChannelDescription,
-              importance: Importance.defaultImportance,
-              priority: Priority.defaultPriority,
-            ),
             iOS: DarwinNotificationDetails(
               interruptionLevel: InterruptionLevel.active,
             ),
