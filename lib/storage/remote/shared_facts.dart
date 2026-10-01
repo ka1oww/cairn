@@ -490,6 +490,13 @@ class RemoteUploadTicket {
   });
 }
 
+/// A short-lived read capability for one original. The URL is a bearer
+/// capability and is kept in memory only.
+class RemoteDownloadTicket {
+  final Uri downloadUrl;
+  const RemoteDownloadTicket({required this.downloadUrl});
+}
+
 /// The backend, as one interface.
 ///
 /// Nothing above `repositories/` may name it, and nothing in the app outside
@@ -579,6 +586,20 @@ abstract interface class SharedFacts {
   /// the ticket mint refuses claimed ids — nobody else's bytes can be behind
   /// this phone's id.
   Future<void> recordPhoto(RemotePhoto photo);
+
+  /// Lists the rows this member may read in the trip. The existing `photos`
+  /// SELECT policy is authoritative for membership and visibility.
+  Future<List<RemotePhoto>> listPhotos(TripId tripId);
+
+  /// Requests signed GET URLs for readable photo ids. Refused ids are absent
+  /// from the returned map; the server deliberately does not explain why.
+  Future<Map<String, RemoteDownloadTicket>> photoDownloadTickets({
+    required TripId tripId,
+    required List<String> photoIds,
+  });
+
+  /// Fetches bytes through a short-lived signed URL, without Supabase headers.
+  Future<Uint8List> getPhotoBytes(RemoteDownloadTicket ticket);
 
   /// Rewrites the caption on this phone's own photo row, or clears it.
   ///

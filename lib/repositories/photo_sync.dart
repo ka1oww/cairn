@@ -39,11 +39,11 @@ import '../storage/drift/app_database.dart';
 import '../storage/remote/shared_facts.dart';
 import 'photo_repository.dart';
 
-/// Pushes this phone's photographs into the trip's shared pool, one at a
-/// time, oldest first, and keeps trying until each has crossed or the server
-/// has ruled.
+/// Reconciles this phone's originals with the trip's shared pool. The durable
+/// outbox push remains bytes first, row second; the receive side records
+/// visible metadata first and caches each original atomically when available.
 ///
-/// Push half only. No standings stream, deliberately: the awaiting tile is
+/// No standings stream, deliberately: the awaiting tile is
 /// the status surface the design has, and a photo-transport surface is a
 /// design decision nobody has made — reporting is not smuggled in ahead of
 /// it.
@@ -79,8 +79,8 @@ class PhotoSync {
   Future<void>? _queued;
   var _started = false;
 
-  /// Starts pushing: once now, again whenever the outbox changes, and every
-  /// [pollEvery] if one is given.
+  /// Starts reconciling: once now, again whenever the outbox changes, and
+  /// every [pollEvery] if one is given.
   ///
   /// The poll is what retries a backed-off item and what recovers from a
   /// tunnel; no websocket, for the reason `TripSync.start` gives. Defaults
@@ -158,52 +158,131 @@ class PhotoSync {
       now: now().toUtc(),
       endsAt: await _endsAt(),
     );
-    if (!standing.takesPhotos) return;
+    if (standing.takesPhotos) {
+      final work = await database.readOutboxWork();
+      final nowIso = now().toUtc().toIso8601String();
+      final dayDates = {
+        for (final day in await database.readItineraryDays())
+          day.number: day.dateIso,
+      };
 
-    final work = await database.readOutboxWork();
-    if (work.isEmpty) return;
-    final nowIso = now().toUtc().toIso8601String();
-    final dayDates = {
-      for (final day in await database.readItineraryDays())
-        day.number: day.dateIso,
-    };
-
-    for (final item in work) {
-      // Due-ness is the item's own; a backed-off photo waits without holding
-      // up the one behind it.
-      if (item.outbox.nextAttemptAtUtcIso.compareTo(nowIso) > 0) continue;
-      try {
-        await _pushOne(tripId, item, dayDates);
-      } on SharedFactsUnavailable {
-        // The offline rule: the server could not be reached, so the whole
-        // pass stops and **no item is penalised** — a tunnel is not the
-        // photograph's fault, and whatever durable progress this item made
-        // (an `uploaded` mark) is already written. The poll retries.
-        return;
-      } on UploadTicketRejected catch (e) {
-        // A retryable failure on this photograph: a dead PUT ticket, an
-        // unavailable upload function, an aborted size-bounded transfer, or
-        // a PostgREST schema-cache miss after the bytes crossed. The store
-        // keeps `uploaded` progress when there is any; otherwise the ticket
-        // is discarded. Either way the failure is visible in `lastError`
-        // and climbs the backoff rather than terminating wrongly.
-        final attempts = item.outbox.attempts + 1;
-        await database.delayOutboxRetry(
-          photoId: item.outbox.photoId,
-          attempts: attempts,
-          nextAttemptAtUtcIso: _backedOff(attempts),
-          lastError: e.reason,
-        );
-      } on SharedFactsRefused catch (e) {
-        // The server understood and said no — not a member, the trip closed
-        // past its grace, the id claimed. Terminal; retrying changes
-        // nothing, so nothing here does.
-        await database.markOutboxRefused(
-          photoId: item.outbox.photoId,
-          lastError: e.reason,
-        );
+      for (final item in work) {
+        // Due-ness is the item's own; a backed-off photo waits without holding
+        // up the one behind it.
+        if (item.outbox.nextAttemptAtUtcIso.compareTo(nowIso) > 0) continue;
+        try {
+          await _pushOne(tripId, item, dayDates);
+        } on SharedFactsUnavailable {
+          // The offline rule: no item is penalised — a tunnel is not the
+          // photograph's fault, and durable upload progress is retained.
+          break;
+        } on UploadTicketRejected catch (e) {
+          final attempts = item.outbox.attempts + 1;
+          await database.delayOutboxRetry(
+            photoId: item.outbox.photoId,
+            attempts: attempts,
+            nextAttemptAtUtcIso: _backedOff(attempts),
+            lastError: e.reason,
+          );
+        } on SharedFactsRefused catch (e) {
+          await database.markOutboxRefused(
+            photoId: item.outbox.photoId,
+            lastError: e.reason,
+          );
+        }
       }
     }
+
+    try {
+      await _pull(tripId);
+    } on SharedFactsUnavailable {
+      // Metadata rows already ingested and completed cache files are durable;
+      // the next poll resumes the remaining downloads.
+    } on SharedFactsRefused {
+      // RLS or the download function may refuse a caller whose access changed
+      // during the pass. There is no local repair to make or error to surface.
+    }
+  }
+
+  Future<void> _pull(TripId tripId) async {
+    final remote = await facts.listPhotos(tripId);
+    await database.ingestRemotePhotos([
+      for (final photo in remote)
+        (
+          id: photo.id,
+          dayNumber: photo.dayNumber,
+          contributorId: photo.contributorId,
+          takenAtUtcIso: _takenAt(photo),
+          origin: PhotoOrigin.imported.name,
+          word: photo.caption,
+          filePath: null,
+          contentType: photo.contentType,
+        ),
+    ]);
+
+    final local = {
+      for (final photo in await database.readPhotos()) photo.id: photo,
+    };
+    final pending = <RemotePhoto>[];
+    for (final photo in remote) {
+      final row = local[photo.id];
+      if (row == null) continue;
+      final stored = row.filePath;
+      final path = stored == null ? null : await framePaths.resolve(stored);
+      if (path != null && await File(path).exists()) continue;
+      pending.add(photo);
+    }
+
+    // The function accepts up to 64 ids; 24 originals bounds one pass to the
+    // same practical memory budget documented by its owner.
+    for (var offset = 0; offset < pending.length; offset += 24) {
+      final batch = pending.skip(offset).take(24).toList();
+      final tickets = await facts.photoDownloadTickets(
+        tripId: tripId,
+        photoIds: [for (final photo in batch) photo.id],
+      );
+      for (final photo in batch) {
+        final ticket = tickets[photo.id];
+        if (ticket == null) continue; // The function's flat refusal.
+        await _cacheOriginal(photo, ticket);
+      }
+    }
+  }
+
+  Future<void> _cacheOriginal(
+    RemotePhoto photo,
+    RemoteDownloadTicket ticket,
+  ) async {
+    final extension = switch (photo.contentType) {
+      'image/png' => 'png',
+      'image/heic' => 'heic',
+      _ => 'jpg',
+    };
+    final storedName = 'frames/remote-${photo.id}.$extension';
+    final target = File(await framePaths.resolve(storedName));
+    await target.parent.create(recursive: true);
+    if (!await target.exists()) {
+      final bytes = await facts.getPhotoBytes(ticket);
+      final temporary = File('${target.path}.part');
+      try {
+        await temporary.writeAsBytes(bytes, flush: true);
+        // Same-directory rename is atomic. An interrupted transfer never
+        // becomes a visible original; a completed one can be adopted after a
+        // crash before the SQLite path update.
+        await temporary.rename(target.path);
+      } finally {
+        if (await temporary.exists()) await temporary.delete();
+      }
+    }
+    await database.setPhotoLocalPath(
+      id: photo.id,
+      path: await framePaths.stored(target.path),
+    );
+  }
+
+  static String _takenAt(RemotePhoto photo) {
+    final raw = photo.capturedAtIso ?? photo.updatedAtIso;
+    return DateTime.parse(raw).toUtc().toIso8601String();
   }
 
   Future<void> _pushOne(

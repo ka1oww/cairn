@@ -90,8 +90,8 @@ class PooledPhoto {
   /// people and stores originals
   /// (`docs/decisions/2026-08-22-grill-round-one.md` §3); a photo somebody
   /// else took is a real row in the index long before its bytes have been
-  /// fetched here. Today it is non-null for exactly the photos this phone took
-  /// itself, because nothing fetches anyone else's yet.
+  /// fetched here. The receive side fills this path after an atomic local
+  /// download, and the Pool keeps its waiting tile visible until then.
   final String? localPath;
 
   /// The line written at the capture breath, or null. Null is the usual.

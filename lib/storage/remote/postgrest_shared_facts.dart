@@ -406,6 +406,102 @@ class PostgrestSharedFacts implements SharedFacts {
   }
 
   @override
+  Future<List<RemotePhoto>> listPhotos(TripId tripId) async {
+    final auth = await _demand();
+    final rows = _rows(
+      await _get(
+        '/rest/v1/photos?trip_id=eq.${tripId.value}'
+        '&select=id,trip_id,contributor_id,r2_object_key,content_type,'
+        'byte_size,width,height,captured_at,captured_latitude,'
+        'captured_longitude,capture_timezone,day_number,trip_day,caption,'
+        'updated_at&order=updated_at.asc,id.asc',
+        auth,
+      ),
+    );
+    return [for (final row in rows) _remotePhoto(row)];
+  }
+
+  @override
+  Future<Map<String, RemoteDownloadTicket>> photoDownloadTickets({
+    required TripId tripId,
+    required List<String> photoIds,
+  }) async {
+    if (photoIds.isEmpty) return const {};
+    final auth = await _demand();
+    final response = await _request(
+      'POST',
+      '/functions/v1/r2-download-url',
+      auth,
+      body: {'tripId': tripId.value, 'photoIds': photoIds},
+    );
+    if (response.statusCode >= 500) {
+      throw SharedFactsUnavailable(
+        'the server answered ${response.statusCode}',
+      );
+    }
+    if (response.statusCode >= 400) {
+      throw SharedFactsRefused(_message(response));
+    }
+    try {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final urls = body['urls'] as Map<String, dynamic>;
+      return {
+        for (final entry in urls.entries)
+          if (entry.value is String)
+            entry.key: RemoteDownloadTicket(
+              downloadUrl: Uri.parse(entry.value as String),
+            ),
+      };
+    } on Object catch (e) {
+      throw SharedFactsUnavailable('the download function answered badly: $e');
+    }
+  }
+
+  @override
+  Future<Uint8List> getPhotoBytes(RemoteDownloadTicket ticket) async {
+    final http.Response response;
+    try {
+      // This is an R2 bearer URL: do not attach the Supabase API key or
+      // session token, just as the upload transport avoids those headers.
+      response = await _client.get(ticket.downloadUrl).timeout(timeout);
+    } on TimeoutException {
+      throw const SharedFactsUnavailable('the photo download timed out');
+    } on SocketException catch (e) {
+      throw SharedFactsUnavailable('no route to the store: ${e.message}');
+    } on http.ClientException catch (e) {
+      throw SharedFactsUnavailable('the photo download failed: ${e.message}');
+    }
+    if (response.statusCode >= 500) {
+      throw SharedFactsUnavailable('the store answered ${response.statusCode}');
+    }
+    if (response.statusCode >= 400) {
+      throw SharedFactsUnavailable(
+        'the signed photo URL answered ${response.statusCode}',
+      );
+    }
+    return response.bodyBytes;
+  }
+
+  static RemotePhoto _remotePhoto(Map<String, dynamic> row) => RemotePhoto(
+    id: row['id'] as String,
+    tripId: row['trip_id'] as String,
+    contributorId: row['contributor_id'] as String,
+    r2ObjectKey: row['r2_object_key'] as String,
+    contentType: row['content_type'] as String? ?? 'image/jpeg',
+    byteSize: (row['byte_size'] as num).toInt(),
+    width: (row['width'] as num?)?.toInt(),
+    height: (row['height'] as num?)?.toInt(),
+    capturedAtIso: row['captured_at'] as String?,
+    capturedLatitude: (row['captured_latitude'] as num?)?.toDouble(),
+    capturedLongitude: (row['captured_longitude'] as num?)?.toDouble(),
+    captureTimezone: row['capture_timezone'] as String?,
+    dayNumber: (row['day_number'] as num).toInt(),
+    tripDayIso: row['trip_day'] as String?,
+    caption: row['caption'] as String?,
+    updatedAtIso: row['updated_at'] as String,
+  );
+
+  @override
   Future<void> writePhotoCaption({
     required TripId tripId,
     required String photoId,

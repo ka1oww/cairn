@@ -24,7 +24,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cairn_model/cairn_model.dart';
-import 'package:drift/drift.dart' show DatabaseConnection;
+import 'package:drift/drift.dart' show DatabaseConnection, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -66,6 +66,8 @@ class FakePool implements SharedFacts {
   String? recordRetryable;
   String? recordUnavailable;
   String? captionRefuses;
+  String? downloadUnavailable;
+  var downloadedBytes = 0;
 
   /// Runs while the record insert is "in flight", so a test can land an edit
   /// mid-call and prove nothing is lost to the race.
@@ -181,6 +183,43 @@ class FakePool implements SharedFacts {
   }
 
   @override
+  Future<List<RemotePhoto>> listPhotos(TripId tripId) async {
+    _gate();
+    return [
+      for (final photo in recorded.values)
+        if (photo.tripId == tripId.value) photo,
+    ];
+  }
+
+  @override
+  Future<Map<String, RemoteDownloadTicket>> photoDownloadTickets({
+    required TripId tripId,
+    required List<String> photoIds,
+  }) async {
+    _gate();
+    return {
+      for (final id in photoIds)
+        if (recorded[id]?.tripId == tripId.value)
+          id: RemoteDownloadTicket(
+            downloadUrl: Uri.parse('https://r2.example/download/$id'),
+          ),
+    };
+  }
+
+  @override
+  Future<Uint8List> getPhotoBytes(RemoteDownloadTicket ticket) async {
+    _gate();
+    if (downloadUnavailable != null) {
+      throw SharedFactsUnavailable(downloadUnavailable!);
+    }
+    final id = ticket.downloadUrl.pathSegments.last;
+    final photo = recorded[id];
+    if (photo == null) throw const SharedFactsUnavailable('missing fake row');
+    downloadedBytes++;
+    return Uint8List.fromList(objects[photo.r2ObjectKey]!);
+  }
+
+  @override
   Future<void> writePhotoCaption({
     required TripId tripId,
     required String photoId,
@@ -247,6 +286,10 @@ ConfirmedDay confirmed(int number, String place, {CalendarDate? date}) =>
     ConfirmedDay(number: number, date: date, place: place, stops: const []);
 
 void main() {
+  // The receive tests model two separate app databases; Drift's warning is
+  // only about accidentally sharing one executor between them.
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
   late AppDatabase db;
   late FakePool pool;
   late Directory frames;
@@ -513,6 +556,111 @@ void main() {
   });
 
   group('the crash matrix, replayed from durable state', () {
+    test(
+      'a second account pulls the same row and original exactly once',
+      () async {
+        final tripId = await startTrip();
+        await keepOne(word: 'from Anna');
+        await driver().syncNow();
+
+        final recipient = inMemory();
+        final recipientFrames = Directory.systemTemp.createTempSync(
+          'cairn-photo-recipient',
+        );
+        final recipientPaths = FramePaths(() async => recipientFrames.path);
+        try {
+          await recipient.adoptTripFacts(
+            tripId: tripId,
+            startedByMemberId: anna,
+            nameRevisedAt: DateTime.utc(2027),
+          );
+          pool.auth = SharedFactsSession(
+            accessToken: 'ben-token',
+            userId: MemberId('b0000000-0000-4000-8000-000000000002'),
+          );
+          final receive = PhotoSync(
+            database: recipient,
+            facts: pool,
+            framePaths: recipientPaths,
+            now: () => clock,
+            utcOffset: () => Duration.zero,
+          );
+
+          await receive.syncNow();
+          await receive.syncNow();
+
+          final rows = await recipient.readPhotos();
+          expect(rows, hasLength(1));
+          expect(rows.single.id, 'photo-1');
+          expect(rows.single.contributorId, anna);
+          expect(rows.single.word, 'from Anna');
+          final original = File(
+            await recipientPaths.resolve(rows.single.filePath!),
+          );
+          expect(await original.readAsBytes(), frameBytes);
+          final pooled = await PhotoStore(
+            recipient,
+            framePaths: recipientPaths,
+          ).watchTripPhotos().first;
+          expect(pooled, hasLength(1));
+          expect(
+            await File(pooled.single.localPath!).readAsBytes(),
+            frameBytes,
+          );
+          expect(pool.downloadedBytes, 1);
+        } finally {
+          await recipient.close();
+          recipientFrames.deleteSync(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'an interrupted download leaves one waiting row and resumes cleanly',
+      () async {
+        final tripId = await startTrip();
+        await keepOne();
+        await driver().syncNow();
+
+        final recipient = inMemory();
+        final recipientFrames = Directory.systemTemp.createTempSync(
+          'cairn-photo-resume',
+        );
+        try {
+          await recipient.adoptTripFacts(
+            tripId: tripId,
+            startedByMemberId: anna,
+            nameRevisedAt: DateTime.utc(2027),
+          );
+          pool.auth = SharedFactsSession(
+            accessToken: 'ben-token',
+            userId: MemberId('b0000000-0000-4000-8000-000000000002'),
+          );
+          final receive = PhotoSync(
+            database: recipient,
+            facts: pool,
+            framePaths: FramePaths(() async => recipientFrames.path),
+            now: () => clock,
+            utcOffset: () => Duration.zero,
+          );
+          pool.downloadUnavailable = 'tunnel closed';
+          await receive.syncNow();
+          expect(await recipient.readPhotos(), hasLength(1));
+          expect((await recipient.readPhotos()).single.filePath, isNull);
+
+          pool.downloadUnavailable = null;
+          await receive.syncNow();
+          await receive.syncNow();
+          expect(await recipient.readPhotos(), hasLength(1));
+          expect((await recipient.readPhotos()).single.filePath, isNotNull);
+          expect(pool.downloadedBytes, 1);
+        } finally {
+          await recipient.close();
+          recipientFrames.deleteSync(recursive: true);
+        }
+      },
+    );
+
     test('queued with nothing remote: a fresh driver runs the full '
         'attempt', () async {
       await startTrip();

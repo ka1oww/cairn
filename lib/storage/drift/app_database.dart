@@ -1265,6 +1265,42 @@ class AppDatabase extends _$AppDatabase {
     ),
   );
 
+  /// Adds rows learned from the shared pool without creating upload debt.
+  /// Replayed listings are harmless; an existing local caption is retained
+  /// while its own outbox has an unsent caption change.
+  Future<void> ingestRemotePhotos(List<PhotoRecord> records) async {
+    await transaction(() async {
+      for (final photo in records) {
+        final inserted = await into(photos).insert(
+          PhotosCompanion.insert(
+            id: photo.id,
+            dayNumber: photo.dayNumber,
+            contributorId: photo.contributorId,
+            takenAtUtcIso: photo.takenAtUtcIso,
+            origin: photo.origin,
+            word: Value(photo.word),
+            filePath: Value(photo.filePath),
+            contentType: Value(photo.contentType),
+          ),
+          onConflict: DoNothing(target: [photos.id]),
+        );
+        if (inserted != 0) continue;
+        final pendingCaption = await (select(
+          photoOutbox,
+        )..where((t) => t.photoId.equals(photo.id))).getSingleOrNull();
+        if (pendingCaption == null) {
+          await updatePhotoWord(id: photo.id, word: photo.word);
+        }
+      }
+    });
+  }
+
+  /// Makes already downloaded original bytes visible to the Pool.
+  Future<int> setPhotoLocalPath({required String id, required String path}) =>
+      (update(photos)..where((t) => t.id.equals(id))).write(
+        PhotosCompanion(filePath: Value(path)),
+      );
+
   /// Rewrites one photo's word, or clears it.
   ///
   /// The word stays writable on your own print until the trip closes

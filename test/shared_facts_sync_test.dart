@@ -219,6 +219,20 @@ class FakeServer implements SharedFacts {
       throw UnimplementedError('TripSync never records a photo');
 
   @override
+  Future<List<RemotePhoto>> listPhotos(TripId tripId) =>
+      throw UnimplementedError('TripSync never lists photos');
+
+  @override
+  Future<Map<String, RemoteDownloadTicket>> photoDownloadTickets({
+    required TripId tripId,
+    required List<String> photoIds,
+  }) => throw UnimplementedError('TripSync never signs photo downloads');
+
+  @override
+  Future<Uint8List> getPhotoBytes(RemoteDownloadTicket ticket) =>
+      throw UnimplementedError('TripSync never downloads photo bytes');
+
+  @override
   Future<void> writePhotoCaption({
     required TripId tripId,
     required String photoId,

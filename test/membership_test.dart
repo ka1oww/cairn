@@ -176,6 +176,20 @@ class FakeAdoptFacts implements SharedFacts {
       throw UnimplementedError('adoptTrip never records a photo');
 
   @override
+  Future<List<RemotePhoto>> listPhotos(TripId tripId) =>
+      throw UnimplementedError('adoptTrip never lists photos');
+
+  @override
+  Future<Map<String, RemoteDownloadTicket>> photoDownloadTickets({
+    required TripId tripId,
+    required List<String> photoIds,
+  }) => throw UnimplementedError('adoptTrip never signs photo downloads');
+
+  @override
+  Future<Uint8List> getPhotoBytes(RemoteDownloadTicket ticket) =>
+      throw UnimplementedError('adoptTrip never downloads photo bytes');
+
+  @override
   Future<void> writePhotoCaption({
     required TripId tripId,
     required String photoId,

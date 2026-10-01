@@ -118,6 +118,69 @@ PostgrestSharedFacts facts(
 
 void main() {
   group('a request carries the key and the session, and nothing else', () {
+    test('photo receive lists metadata, asks the function, then gets bytes', () async {
+      final seen = <http.BaseRequest>[];
+      final sync = facts(
+        MockClient((request) async {
+          seen.add(request);
+          if (request.url.path == '/rest/v1/photos') {
+            return http.Response(
+              jsonEncode([
+                {
+                  'id': '11111111-0000-4000-8000-000000000001',
+                  'trip_id': trip.value,
+                  'contributor_id': anna,
+                  'r2_object_key':
+                      'trips/${trip.value}/photos/11111111-0000-4000-8000-000000000001/original.jpg',
+                  'content_type': 'image/jpeg',
+                  'byte_size': 3,
+                  'day_number': 2,
+                  'captured_at': '2027-06-15T12:00:00Z',
+                  'caption': 'hello',
+                  'updated_at': '2027-06-15T12:01:00Z',
+                },
+              ]),
+              200,
+            );
+          }
+          if (request.url.path == '/functions/v1/r2-download-url') {
+            expect(request.headers['Authorization'], 'Bearer jwt-for-anna');
+            expect(jsonDecode(request.body), {
+              'tripId': trip.value,
+              'photoIds': ['11111111-0000-4000-8000-000000000001'],
+            });
+            return http.Response(
+              jsonEncode({
+                'urls': {
+                  '11111111-0000-4000-8000-000000000001':
+                      'https://r2.example/signed',
+                },
+                'refused': [],
+                'expiresInSeconds': 900,
+              }),
+              200,
+            );
+          }
+          expect(request.url.host, 'r2.example');
+          expect(request.headers, isNot(contains('Authorization')));
+          return http.Response.bytes([7, 8, 9], 200);
+        }),
+      );
+
+      final photos = await sync.listPhotos(trip);
+      expect(photos.single.caption, 'hello');
+      expect(photos.single.dayNumber, 2);
+      final tickets = await sync.photoDownloadTickets(
+        tripId: trip,
+        photoIds: [photos.single.id],
+      );
+      expect(
+        await sync.getPhotoBytes(tickets.values.single),
+        Uint8List.fromList([7, 8, 9]),
+      );
+      expect(seen.map((request) => request.method), ['GET', 'POST', 'GET']);
+    });
+
     test('the anon key and the bearer token both go up', () async {
       late http.BaseRequest seen;
       final sync = facts(
