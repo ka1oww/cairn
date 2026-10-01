@@ -97,7 +97,10 @@ class LocalNotificationEdge implements NotificationEdge {
   }
 
   Future<void> _replaceScheduledPings(List<ScheduledPing> pings) async {
-    if (!await _ensureInitialized()) return;
+    if (!await _ensureInitialized()) {
+      await _cancelPendingBestEffort('cancel after initialization failure');
+      return;
+    }
     try {
       // Cancel-then-register is the whole of the replace rule: this plugin
       // instance is the only surface in the app that ever schedules a local
@@ -121,15 +124,15 @@ class LocalNotificationEdge implements NotificationEdge {
       }
     } catch (error, stackTrace) {
       _logRefusal('register pings', error, stackTrace);
-      try {
-        await _plugin.cancelAll();
-      } catch (cleanupError, cleanupStackTrace) {
-        _logRefusal(
-          'cancel failed registration',
-          cleanupError,
-          cleanupStackTrace,
-        );
-      }
+      await _cancelPendingBestEffort('cancel failed registration');
+    }
+  }
+
+  Future<void> _cancelPendingBestEffort(String what) async {
+    try {
+      await _plugin.cancelAll();
+    } catch (error, stackTrace) {
+      _logRefusal(what, error, stackTrace);
     }
   }
 

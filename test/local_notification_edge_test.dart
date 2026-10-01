@@ -312,10 +312,16 @@ void main() {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
         IOSFlutterLocalNotificationsPlugin.registerWith();
 
+        final pending = <int>{99};
+        var cancelCalls = 0;
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(_channel, (call) async {
               if (call.method == 'initialize') {
                 throw PlatformException(code: 'unavailable');
+              }
+              if (call.method == 'cancelAll') {
+                cancelCalls++;
+                pending.clear();
               }
               return null;
             });
@@ -328,7 +334,39 @@ void main() {
           edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 14, 8)])),
           completes,
         );
+
+        expect(cancelCalls, 1);
+        expect(pending, isEmpty);
       },
     );
+
+    test('cancels pending notifications when initialize returns false', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      IOSFlutterLocalNotificationsPlugin.registerWith();
+
+      final pending = <int>{99};
+      var cancelCalls = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(_channel, (call) async {
+            if (call.method == 'initialize') return false;
+            if (call.method == 'cancelAll') {
+              cancelCalls++;
+              pending.clear();
+            }
+            return null;
+          });
+
+      final edge = LocalNotificationEdge(
+        plugin: FlutterLocalNotificationsPlugin(),
+      );
+
+      await expectLater(
+        edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 14, 8)])),
+        completes,
+      );
+
+      expect(cancelCalls, 1);
+      expect(pending, isEmpty);
+    });
   });
 }
