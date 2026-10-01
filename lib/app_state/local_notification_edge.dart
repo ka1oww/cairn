@@ -43,6 +43,7 @@ class LocalNotificationEdge implements NotificationEdge {
   /// plugin's own `initialize` is not that kind of call) is not retried once
   /// per ping-schedule rebuild.
   bool? _initialized;
+  bool _permissionRequested = false;
 
   Future<bool> _ensureInitialized() async {
     final done = _initialized;
@@ -58,7 +59,6 @@ class LocalNotificationEdge implements NotificationEdge {
         settings: const InitializationSettings(iOS: iosSettings),
       );
       _initialized = ok ?? true;
-      if (_initialized == true) await _requestPermission();
     } catch (error, stackTrace) {
       _logRefusal('initialise', error, stackTrace);
       _initialized = false;
@@ -107,6 +107,10 @@ class LocalNotificationEdge implements NotificationEdge {
       // notification, so cancelling everything it holds is cancelling
       // exactly the pings this app previously registered.
       await _plugin.cancelAll();
+      if (pings.isNotEmpty && !_permissionRequested) {
+        _permissionRequested = true;
+        await _requestPermission();
+      }
       for (var i = 0; i < pings.length; i++) {
         final ping = pings[i];
         await _plugin.zonedSchedule(

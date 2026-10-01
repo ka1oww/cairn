@@ -77,6 +77,55 @@ void main() {
     });
 
     test(
+      'empty replacement cancels pending pings without requesting permission',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        IOSFlutterLocalNotificationsPlugin.registerWith();
+
+        final pending = <int>{99};
+        var permissionCalls = 0;
+        var cancelCalls = 0;
+        var scheduleCalls = 0;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(_channel, (call) async {
+              switch (call.method) {
+                case 'initialize':
+                  return true;
+                case 'requestPermissions':
+                  permissionCalls++;
+                  return true;
+                case 'cancelAll':
+                  cancelCalls++;
+                  pending.clear();
+                  return null;
+                case 'zonedSchedule':
+                  scheduleCalls++;
+                  return null;
+                default:
+                  return null;
+              }
+            });
+
+        final edge = LocalNotificationEdge(
+          plugin: FlutterLocalNotificationsPlugin(),
+        );
+
+        await edge.replaceScheduledPings(const []);
+
+        expect(cancelCalls, 1);
+        expect(permissionCalls, 0);
+        expect(pending, isEmpty);
+
+        await edge.replaceScheduledPings(
+          _pings([DateTime.utc(2027, 6, 14, 8)]),
+        );
+
+        expect(permissionCalls, 1);
+        expect(scheduleCalls, 1);
+      },
+    );
+
+    test(
       'serializes overlapping replacements so the latest deal wins',
       () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
@@ -126,8 +175,8 @@ void main() {
         expect(cancelsWhileFirstScheduleBlocked, 1);
         expect(calls.map((call) => call.method), [
           'initialize',
-          'requestPermissions',
           'cancelAll',
+          'requestPermissions',
           'zonedSchedule',
           'zonedSchedule',
           'cancelAll',
@@ -340,33 +389,36 @@ void main() {
       },
     );
 
-    test('cancels pending notifications when initialize returns false', () async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-      IOSFlutterLocalNotificationsPlugin.registerWith();
+    test(
+      'cancels pending notifications when initialize returns false',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        IOSFlutterLocalNotificationsPlugin.registerWith();
 
-      final pending = <int>{99};
-      var cancelCalls = 0;
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(_channel, (call) async {
-            if (call.method == 'initialize') return false;
-            if (call.method == 'cancelAll') {
-              cancelCalls++;
-              pending.clear();
-            }
-            return null;
-          });
+        final pending = <int>{99};
+        var cancelCalls = 0;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(_channel, (call) async {
+              if (call.method == 'initialize') return false;
+              if (call.method == 'cancelAll') {
+                cancelCalls++;
+                pending.clear();
+              }
+              return null;
+            });
 
-      final edge = LocalNotificationEdge(
-        plugin: FlutterLocalNotificationsPlugin(),
-      );
+        final edge = LocalNotificationEdge(
+          plugin: FlutterLocalNotificationsPlugin(),
+        );
 
-      await expectLater(
-        edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 14, 8)])),
-        completes,
-      );
+        await expectLater(
+          edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 14, 8)])),
+          completes,
+        );
 
-      expect(cancelCalls, 1);
-      expect(pending, isEmpty);
-    });
+        expect(cancelCalls, 1);
+        expect(pending, isEmpty);
+      },
+    );
   });
 }
