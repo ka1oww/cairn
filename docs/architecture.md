@@ -636,11 +636,11 @@ acknowledged and queued (`docs/roadmap.md`, "Work already queued").
   real phone's failure never files a generated frame as a photograph. The
   stand-in makes the flow walkable on the simulator, and it means a green
   run there is not evidence the real capture path works. Only a device is.
-- **The pool holds one phone's photos.** Capture writes into it and the Pool
-  draws it, which is the whole loop on one device — but nothing fetches
-  anybody else's bytes, so `PooledPhoto.localPath` is non-null for exactly the
-  photos this phone took. A pool eight people share is Phase 2, and the tile
-  that says it is waiting for bytes is already drawn for it.
+- **The pool holds photos cached on this phone.** Capture writes into it, and
+  the receive path adds shared metadata before atomically caching originals;
+  until that cache succeeds, `PooledPhoto.localPath` stays null and the Pool
+  draws its waiting tile. The receive implementation is fake-backed, not yet
+  live against the backend.
 - **The day page derives today from the destination date when it is known.**
   `todayProvider` (`lib/app_state/day_view.dart`) reads the persisted IANA
   zone through `trip_moments`, so a traveller's phone never moves Milan's

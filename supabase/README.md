@@ -1100,11 +1100,11 @@ Being honest about the edges:
   on purpose and that trade is the decision's, not an oversight — but the
   throttle it assumes does not exist yet, at the database level or above it.
   This is the largest open gap in this directory.
-- **Deletions are invisible to a pull cursor.** `updated_at` lets an *edit*
-  sync; a row someone deleted on another phone is only noticed by refetching.
-  Fine at this size (a roster is eight rows, a trip's photos are one query),
-  but it is a real limit of the cursor, not an oversight. The itinerary is the
-  one place it is already solved, and solved narrowly:
+- **Photo deletions are not reconciled on a phone.** The receive pass refetches
+  the full photo index in stable pages rather than using an `updated_at` cursor,
+  but ingestion is additive: a row missing from a later listing does not remove
+  its local copy. The itinerary is the one place deletion is already solved,
+  and solved narrowly:
   `trip_itineraries.plan_revised_at` is a *shape* revision, so a deleted day
   is expressible without a tombstone table. Nothing else here has one.
 - **The itinerary merge is last-write-wins on the writing phone's clock.** A

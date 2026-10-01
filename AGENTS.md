@@ -634,7 +634,7 @@ import what is written there, not here.
   plan skips gets a `GapDay` page but never a node, because every drawing
   numbers the path over the plan's own days ("Day 4 of 8"). The winding
   geometry is the screen's identity, not decoration.
-- **The Pool reads; capture writes; they meet at one store.**
+- **The Pool reads; capture and receive write; they meet at one store.**
   `PhotoRepository` (`lib/repositories/photo_repository.dart`) is the trip's
   photo *read* seam, and `PhotoStore` is the Drift implementation that answers
   it and owns the write path. `bootstrap.dart` binds `photoRepositoryProvider`
@@ -647,8 +647,13 @@ import what is written there, not here.
   a day's photos are ordered by `cairn_model.DayPool`, not by the screen. The
   receive pass writes shared metadata and downloaded originals through the
   same store that capture uses; until its cache succeeds, the row remains a
-  waiting tile. A tile whose bytes are not on this phone is a valid state of a
-  pool eight people share, not a loading spinner.
+  waiting tile. Remote listing pages use stable id order, and a missing capture
+  timestamp falls back to the immutable index creation time, never the mutable
+  caption-edit clock. The active trip id is checked inside ingestion, and an
+  original becomes visible only after an atomic cache-file rename; a failed
+  cache leaves the row waiting for a later retry. A tile whose bytes are not on
+  this phone is a valid state of a pool eight people share, not a loading
+  spinner.
 - **A trip ends, and where it stands is one rule written once.**
   `cairn_model`'s `tripStandingAt` turns `(now, endsAt)` into underway / grace
   / archived, and every surface and write path asks it through

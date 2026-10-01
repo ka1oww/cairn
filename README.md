@@ -11,8 +11,8 @@ The trip renders as a winding path with one node per day and a flag on today; da
 advance by the clock, never by completing anything. Everyone opens it in the morning to see what the day holds.
 During the day, photos are taken — including BeReal-style dual shots — and photos
 from the camera roll are swept in when the app is opened (iOS offers no background
-import, and the app promises nothing more than that). Everything lands in a shared
-pool sorted by day, and the pool becomes a book when the trip ends.
+import, and the app promises nothing more than that). The design gathers them in
+a shared pool sorted by day, and the pool becomes a book when the trip ends.
 
 This is a passion project, not a business. There is no monetisation goal.
 

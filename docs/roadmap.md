@@ -5,9 +5,9 @@
 This file records **what is built, what is not, and the order the rest arrives in** —
 and, where the order is not obvious, why it is that order.
 
-Last true as of 1 September 2026, reconciled claim by claim against a full bug
-sweep run on a simulator against the live backend and the subsequent hosted
-cleanup and member-rename rollout. Where this file used to
+Last reconciled against a full simulator/live-backend bug sweep on 1 September
+2026, followed by the hosted cleanup and member-rename rollout. Later changes
+are reflected with the evidence available for them. Where this file used to
 claim something that turned out not to be true, the claim has been replaced
 rather than annotated.
 
@@ -33,10 +33,11 @@ That is the entire product. Everything below is in service of it.
 **Everything Cairn has built works. What is not built is the part that makes it
 a group.** As of today the itinerary does leave the phone on an ordinary build —
 that was fixed on 27 August and had been silently broken since the sync was
-written — but **no photograph has any way to reach another phone, and no phone
-has any way to buzz.** Neither is broken; both are unwritten. On today's build,
-for the seven people who are not the planner, Cairn is a very good single-player
-app.
+written. Photo send and receive code now exists and is exercised against fakes,
+but the backend is not rolled out and no photograph has reached another phone;
+no phone has any way to buzz. The ping delivery remains unwritten. On today's
+build, for the seven people who are not the planner, Cairn is a very good
+single-player app.
 
 That sentence is the honest headline, and the rest of this file should be read
 against it.
@@ -59,7 +60,8 @@ it makes the rest of this file orderable:
 
 Of those five, **one and a half are built**: the itinerary is pasted and now
 genuinely reaches the server (nobody else can read it yet, because nobody else
-can join). Joining, buzzing, and the shared pool are all unwritten.
+can join). Joining and buzzing are unwritten; photo transport exists on the
+phone, but the shared pool has not been demonstrated against a live backend.
 
 **Explicitly after it — deliberate choices, not omissions:**
 
@@ -243,8 +245,9 @@ trip sheet, and an unnamed trip still publishes under its placeholder. See
 [the destination clock](decisions/2026-09-08-the-trip-clock-is-the-destination.md).
 What remains false about "syncs for real" is the audience: **no itinerary has
 ever been read by a second phone**, because nothing carries a membership to one.
-A pool of one phone's photos is likewise only half the Pool, and that is what
-the gate is waiting on to matter.
+A pool of one phone's photos is likewise only half the Pool; the phone-side
+receive path is implemented, but the shared pool has not yet been demonstrated
+against the live backend, and that is what the gate is waiting on to matter.
 
 The 27 August proof rows are gone from the hosted project as of 1 September:
 the “Bug sweep trip”, its itinerary and its one unambiguous linked anonymous
@@ -379,9 +382,10 @@ face on that page, the rule itself having landed early too; capture, which
 landed early too, and the late-photo path for a missed ping. The Trail's own path landed early alongside Today;
 what is left of it here is the node a day's photos fill, which is the whole
 reward of that screen and cannot be drawn before photos exist. The Pool's
-structure landed early the same way, over a read seam with nothing behind it;
-what is left of it here is the photograph in the tile, and the taker's initial
-chip once a roster exists.
+structure landed early the same way, over a read seam that now receives shared
+metadata and caches originals; that receive path is not yet live against the
+backend. What remains is the taker's initial chip once a roster exists, the
+dashed "+" tile, full-screen viewing and the house treatment.
 
 **Why third:** these are the parts people actually see and the parts most likely
 to change once you have used them. Building them on top of a working pool means
