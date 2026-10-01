@@ -135,6 +135,91 @@ void main() {
         ]);
       },
     );
+
+    test('cancels partial registrations when scheduling fails', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      IOSFlutterLocalNotificationsPlugin.registerWith();
+
+      final pending = <int>{};
+      var scheduleCalls = 0;
+      var cancelCalls = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(_channel, (call) async {
+            switch (call.method) {
+              case 'initialize':
+              case 'requestPermissions':
+                return true;
+              case 'cancelAll':
+                cancelCalls++;
+                pending.clear();
+                return null;
+              case 'zonedSchedule':
+                scheduleCalls++;
+                pending.add(scheduleCalls);
+                if (scheduleCalls == 2) {
+                  throw PlatformException(code: 'schedule failed');
+                }
+                return null;
+              default:
+                return null;
+            }
+          });
+
+      final edge = LocalNotificationEdge(
+        plugin: FlutterLocalNotificationsPlugin(),
+      );
+
+      await edge.replaceScheduledPings(
+        _pings([
+          DateTime.utc(2027, 6, 14, 8),
+          DateTime.utc(2027, 6, 15, 9),
+          DateTime.utc(2027, 6, 16, 10),
+        ]),
+      );
+
+      expect(scheduleCalls, 2);
+      expect(cancelCalls, 2);
+      expect(pending, isEmpty);
+    });
+
+    test('retries cancellation after the replacement cancel fails', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      IOSFlutterLocalNotificationsPlugin.registerWith();
+
+      final pending = <int>{99};
+      var cancelCalls = 0;
+      var scheduleCalls = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(_channel, (call) async {
+            switch (call.method) {
+              case 'initialize':
+              case 'requestPermissions':
+                return true;
+              case 'cancelAll':
+                cancelCalls++;
+                if (cancelCalls == 1) {
+                  throw PlatformException(code: 'cancel failed');
+                }
+                pending.clear();
+                return null;
+              case 'zonedSchedule':
+                scheduleCalls++;
+                return null;
+              default:
+                return null;
+            }
+          });
+
+      final edge = LocalNotificationEdge(
+        plugin: FlutterLocalNotificationsPlugin(),
+      );
+
+      await edge.replaceScheduledPings(_pings([DateTime.utc(2027, 6, 14, 8)]));
+
+      expect(cancelCalls, 2);
+      expect(scheduleCalls, 0);
+      expect(pending, isEmpty);
+    });
   });
 
   group('degrades safely', () {

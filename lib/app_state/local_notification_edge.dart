@@ -121,6 +121,15 @@ class LocalNotificationEdge implements NotificationEdge {
       }
     } catch (error, stackTrace) {
       _logRefusal('register pings', error, stackTrace);
+      try {
+        await _plugin.cancelAll();
+      } catch (cleanupError, cleanupStackTrace) {
+        _logRefusal(
+          'cancel failed registration',
+          cleanupError,
+          cleanupStackTrace,
+        );
+      }
     }
   }
 
